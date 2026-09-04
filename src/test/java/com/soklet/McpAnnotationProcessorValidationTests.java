@@ -698,7 +698,8 @@ public class McpAnnotationProcessorValidationTests {
 		assertThat(compilation).hadErrorContaining(
 				"URI template must not declare size").inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"resource cache TTL must not be negative").inFile(source);
+				"@McpResource cacheTimeToLiveInMilliseconds must not be negative")
+				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
 				"@McpResourceUriParameter parameters must be String")
 				.inFile(source);
@@ -718,6 +719,58 @@ public class McpAnnotationProcessorValidationTests {
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
 				"@McpResourceUriParameter parameters must belong to an @McpResource method")
+				.inFile(source);
+	}
+
+	@Test
+	void diagnosticsUseCurrentAnnotationPropertyNames() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.InvalidAnnotationProperties", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+
+						@McpServerEndpoint(
+						    path = "/mcp",
+						    name = "test",
+						    version = "1",
+						    toolRateLimiterName = " ",
+						    resourceListCacheTimeToLiveInMilliseconds = -1,
+						    resourceTemplateListCacheTimeToLiveInMilliseconds = -1)
+						public final class InvalidAnnotationProperties {
+						  @McpTool(name = "tool", rateLimiterName = " ")
+						  public String tool() { return "tool"; }
+
+						  @McpResource(
+						      uri = "test://resource",
+						      name = "resource",
+						      cacheTimeToLiveInMilliseconds = -1)
+						  public McpResourceOutput resource() { return null; }
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpServerEndpoint toolRateLimiterName must not be blank")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpServerEndpoint resourceListCacheTimeToLiveInMilliseconds must not be negative")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpServerEndpoint resourceTemplateListCacheTimeToLiveInMilliseconds must not be negative")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpTool rateLimiterName must not be blank")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpResource cacheTimeToLiveInMilliseconds must not be negative")
 				.inFile(source);
 	}
 

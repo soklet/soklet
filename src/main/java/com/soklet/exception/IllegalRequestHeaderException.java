@@ -59,7 +59,7 @@ public final class IllegalRequestHeaderException extends BadRequestException {
 	}
 
 	@NonNull
-	public Optional<String> getRequestHeaderValue() {
+	public Optional<@NonNull String> getRequestHeaderValue() {
 		return Optional.ofNullable(this.requestHeaderValue);
 	}
 }

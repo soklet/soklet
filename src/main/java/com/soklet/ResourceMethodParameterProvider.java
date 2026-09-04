@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 
 /**
@@ -31,6 +32,7 @@ import java.util.List;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface ResourceMethodParameterProvider {
 	/**
 	 * For the given {@code request} and {@code resourceMethod}, vends the list of parameters to use when invoking the

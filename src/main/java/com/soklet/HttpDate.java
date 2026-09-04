@@ -119,7 +119,7 @@ public final class HttpDate {
 	}
 
 	@NonNull
-	public static Optional<Instant> fromHeaderValue(@Nullable String headerValue) {
+	public static Optional<@NonNull Instant> fromHeaderValue(@Nullable String headerValue) {
 		String trimmed = Utilities.trimAggressivelyToNull(headerValue);
 
 		if (trimmed == null)

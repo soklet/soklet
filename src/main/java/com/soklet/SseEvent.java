@@ -152,24 +152,54 @@ public final class SseEvent {
 			// Nothing to do
 		}
 
+		/**
+		 * Sets this event's {@code id} value. Passing {@code null} clears any
+		 * previously configured value. A non-null value must not contain NUL, CR, or
+		 * LF characters.
+		 *
+		 * @param id the event ID, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder id(@Nullable String id) {
 			this.id = id;
 			return this;
 		}
 
+		/**
+		 * Sets this event's {@code event} value. Passing {@code null} clears any
+		 * previously configured value. A non-null value must not contain CR or LF
+		 * characters.
+		 *
+		 * @param event the event value, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder event(@Nullable String event) {
 			this.event = event;
 			return this;
 		}
 
+		/**
+		 * Sets this event's {@code data} payload. Passing {@code null} clears any
+		 * previously configured payload.
+		 *
+		 * @param data the data payload, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder data(@Nullable String data) {
 			this.data = data;
 			return this;
 		}
 
+		/**
+		 * Sets this event's non-negative {@code retry} duration. Passing {@code null}
+		 * clears any previously configured duration.
+		 *
+		 * @param retry the retry duration, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder retry(@Nullable Duration retry) {
 			this.retry = retry;
@@ -188,13 +218,13 @@ public final class SseEvent {
 		List<String> components = new ArrayList<>(4);
 
 		if (this.event != null)
-			components.add(format("event=%s", this.event));
+			components.add("event=<redacted>");
 		if (this.id != null)
-			components.add(format("id=%s", this.id));
+			components.add("id=<redacted>");
 		if (this.retry != null)
 			components.add(format("retry=%s", this.retry));
 		if (this.data != null)
-			components.add(format("data=%s", this.data.trim()));
+			components.add(format("data=[%d characters]", this.data.length()));
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
@@ -207,7 +237,7 @@ public final class SseEvent {
 	 * @return the optional {@code id} for this Server-Sent Event
 	 */
 	@NonNull
-	public Optional<String> getId() {
+	public Optional<@NonNull String> getId() {
 		return Optional.ofNullable(this.id);
 	}
 
@@ -219,7 +249,7 @@ public final class SseEvent {
 	 * @return the optional {@code event} value for this Server-Sent Event
 	 */
 	@NonNull
-	public Optional<String> getEvent() {
+	public Optional<@NonNull String> getEvent() {
 		return Optional.ofNullable(this.event);
 	}
 
@@ -231,7 +261,7 @@ public final class SseEvent {
 	 * @return the optional {@code data} payload for this Server-Sent Event
 	 */
 	@NonNull
-	public Optional<String> getData() {
+	public Optional<@NonNull String> getData() {
 		return Optional.ofNullable(this.data);
 	}
 
@@ -243,7 +273,7 @@ public final class SseEvent {
 	 * @return the optional {@code retry} duration for this Server-Sent Event
 	 */
 	@NonNull
-	public Optional<Duration> getRetry() {
+	public Optional<@NonNull Duration> getRetry() {
 		return Optional.ofNullable(this.retry);
 	}
 }

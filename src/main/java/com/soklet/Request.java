@@ -411,6 +411,7 @@ public final class Request {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{id=<redacted>, httpMethod=%s, path=<redacted>, cookies=<redacted>, "
 					+ "queryParameters=<redacted>, headers=<redacted>, body=%d bytes}",
@@ -626,7 +627,7 @@ public final class Request {
 	 * @return the raw query for this request, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<String> getRawQuery() {
+	public Optional<@NonNull String> getRawQuery() {
 		return Optional.ofNullable(this.rawQuery);
 	}
 
@@ -654,7 +655,7 @@ public final class Request {
 	 * @return the remote address for this request, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	public Optional<InetSocketAddress> getRemoteAddress() {
+	public Optional<@NonNull InetSocketAddress> getRemoteAddress() {
 		return Optional.ofNullable(this.remoteAddress);
 	}
 
@@ -681,7 +682,7 @@ public final class Request {
 	 * @return the trace context, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	public Optional<TraceContext> getTraceContext() {
+	public Optional<@NonNull TraceContext> getTraceContext() {
 		return Optional.ofNullable(this.traceContext);
 	}
 
@@ -691,7 +692,7 @@ public final class Request {
 	 * @return the request's {@code Content-Type} header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<String> getContentType() {
+	public Optional<@NonNull String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
@@ -701,7 +702,7 @@ public final class Request {
 	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Charset> getCharset() {
+	public Optional<@NonNull Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
@@ -785,7 +786,7 @@ public final class Request {
 	 * @return the request body bytes, or {@link Optional#empty()} if none was supplied
 	 */
 	@NonNull
-	public Optional<byte[]> getBody() {
+	public Optional<byte @NonNull []> getBody() {
 		return Optional.ofNullable(this.body);
 
 		// Note: it would be nice to defensively copy, but it's inefficient
@@ -822,7 +823,7 @@ public final class Request {
 	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
 	 */
 	@NonNull
-	public Optional<String> getBodyAsString() {
+	public Optional<@NonNull String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		String result = this.bodyAsString;
 
@@ -852,7 +853,7 @@ public final class Request {
 	 * @return non-preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<Cors> getCors() {
+	public Optional<@NonNull Cors> getCors() {
 		return Optional.ofNullable(this.cors);
 	}
 
@@ -864,7 +865,7 @@ public final class Request {
 	 * @return preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<CorsPreflight> getCorsPreflight() {
+	public Optional<@NonNull CorsPreflight> getCorsPreflight() {
 		return Optional.ofNullable(this.corsPreflight);
 	}
 
@@ -1040,7 +1041,7 @@ public final class Request {
 	 * @throws IllegalQueryParameterException if the query parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getQueryParameter(@NonNull String name) {
+	public Optional<@NonNull String> getQueryParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1073,7 +1074,7 @@ public final class Request {
 	 * @throws IllegalFormParameterException if the form parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getFormParameter(@NonNull String name) {
+	public Optional<@NonNull String> getFormParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1101,7 +1102,7 @@ public final class Request {
 	 * @throws IllegalRequestHeaderException if the header with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getHeader(@NonNull String name) {
+	public Optional<@NonNull String> getHeader(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1135,7 +1136,7 @@ public final class Request {
 	 * @throws IllegalRequestCookieException if the cookie with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getCookie(@NonNull String name) {
+	public Optional<@NonNull String> getCookie(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1163,7 +1164,7 @@ public final class Request {
 	 * @throws IllegalMultipartFieldException if the multipart field with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<MultipartField> getMultipartField(@NonNull String name) {
+	public Optional<@NonNull MultipartField> getMultipartField(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1501,24 +1502,48 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures the request identifier.
+		 *
+		 * @param id request identifier, or {@code null} to generate one when the request is built
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
 
+		/**
+		 * Configures the request identifier generator.
+		 *
+		 * @param idGenerator identifier generator, or {@code null} to use Soklet's default generator
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
+		/**
+		 * Configures the multipart request-body parser.
+		 *
+		 * @param multipartParser multipart parser, or {@code null} to use Soklet's default parser
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
+		/**
+		 * Replaces the request headers.
+		 *
+		 * @param headers request headers, or {@code null} or an empty map to configure no headers
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
@@ -1526,6 +1551,14 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures the request's trace context explicitly.
+		 * <p>
+		 * Passing {@code null} configures no trace context and disables inference from request headers.
+		 *
+		 * @param traceContext trace context, or {@code null} to configure none
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder traceContext(@Nullable TraceContext traceContext) {
 			this.traceContext = traceContext;
@@ -1540,12 +1573,24 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures the remote network address associated with the request.
+		 *
+		 * @param remoteAddress remote address, or {@code null} if it is unavailable
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.remoteAddress = remoteAddress;
 			return this;
 		}
 
+		/**
+		 * Configures the retained request-body bytes.
+		 *
+		 * @param body request-body bytes, or {@code null} to configure no retained body
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder body(byte @Nullable [] body) {
 			this.body = body;
@@ -1558,6 +1603,14 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures whether the request body exceeded the permitted size.
+		 * <p>
+		 * A value of {@code true} discards any retained body bytes.
+		 *
+		 * @param contentTooLarge whether the body was too large, or {@code null} to use the default of {@code false}
+		 * @return this builder
+		 */
 		@NonNull
 		public RawBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
@@ -1654,36 +1707,74 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures the request identifier.
+		 *
+		 * @param id request identifier, or {@code null} to generate one when the request is built
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
 
+		/**
+		 * Configures the request identifier generator.
+		 *
+		 * @param idGenerator identifier generator, or {@code null} to use Soklet's default generator
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
+		/**
+		 * Configures the multipart request-body parser.
+		 *
+		 * @param multipartParser multipart parser, or {@code null} to use Soklet's default parser
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
+		/**
+		 * Replaces the decoded query parameters.
+		 *
+		 * @param queryParameters decoded query parameters, or {@code null} or an empty map to configure no query parameters
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
 			this.queryParameters = queryParameters;
 			return this;
 		}
 
+		/**
+		 * Replaces the request headers.
+		 *
+		 * @param headers request headers, or {@code null} or an empty map to configure no headers
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
+		/**
+		 * Configures the request's trace context explicitly.
+		 * <p>
+		 * Passing {@code null} configures no trace context and disables inference from request headers.
+		 *
+		 * @param traceContext trace context, or {@code null} to configure none
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder traceContext(@Nullable TraceContext traceContext) {
 			this.traceContext = traceContext;
@@ -1691,12 +1782,24 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures the remote network address associated with the request.
+		 *
+		 * @param remoteAddress remote address, or {@code null} if it is unavailable
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.remoteAddress = remoteAddress;
 			return this;
 		}
 
+		/**
+		 * Configures the retained request-body bytes.
+		 *
+		 * @param body request-body bytes, or {@code null} to configure no retained body
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder body(byte @Nullable [] body) {
 			this.body = body;
@@ -1709,6 +1812,14 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Configures whether the request body exceeded the permitted size.
+		 * <p>
+		 * A value of {@code true} discards any retained body bytes.
+		 *
+		 * @param contentTooLarge whether the body was too large, or {@code null} to use the default of {@code false}
+		 * @return this builder
+		 */
 		@NonNull
 		public PathBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
@@ -1788,12 +1899,26 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request identifier.
+		 *
+		 * @param id request identifier, or {@code null} to generate a new one when the copy is finished
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier id(@Nullable Object id) {
 			this.builder.id(id);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request's decoded query parameters.
+		 * <p>
+		 * Finishing the copy regenerates its raw query representation from these values.
+		 *
+		 * @param queryParameters decoded query parameters, or {@code null} or an empty map to clear them
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
 			this.builder.queryParameters(queryParameters);
@@ -1803,7 +1928,14 @@ public final class Request {
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the copied request's decoded query parameters in place.
+		 * <p>
+		 * The consumer receives a mutable empty map if no query parameters are currently configured, and may add, replace, remove, or clear entries. Finishing the copy regenerates the raw query representation from the resulting values.
+		 *
+		 * @param queryParametersConsumer performs mutations on the decoded query parameters
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier queryParameters(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
@@ -1818,6 +1950,12 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request headers.
+		 *
+		 * @param headers request headers, or {@code null} or an empty map to clear them
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
@@ -1825,6 +1963,14 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request's trace context explicitly.
+		 * <p>
+		 * Passing {@code null} configures no trace context and disables inference from request headers.
+		 *
+		 * @param traceContext trace context, or {@code null} to configure none
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier traceContext(@Nullable TraceContext traceContext) {
 			this.builder.traceContext(traceContext);
@@ -1832,13 +1978,26 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request's remote network address.
+		 *
+		 * @param remoteAddress remote address, or {@code null} if it is unavailable
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.builder.remoteAddress(remoteAddress);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the copied request headers in place.
+		 * <p>
+		 * The consumer receives a mutable empty map if no headers are currently configured, and may add, replace, remove, or clear entries.
+		 *
+		 * @param headersConsumer performs mutations on the request headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
@@ -1851,12 +2010,28 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request's retained body bytes.
+		 * <p>
+		 * Passing {@code null} removes the retained body but preserves the copied request's encoded body size.
+		 *
+		 * @param body request-body bytes, or {@code null} to configure no retained body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(byte @Nullable [] body) {
 			this.builder.body(body);
 			return this;
 		}
 
+		/**
+		 * Replaces whether the copied request body exceeded the permitted size.
+		 * <p>
+		 * A value of {@code true} discards any retained body bytes.
+		 *
+		 * @param contentTooLarge whether the body was too large, or {@code null} to use the default of {@code false}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.builder.contentTooLarge(contentTooLarge);

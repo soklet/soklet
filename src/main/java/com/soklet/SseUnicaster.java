@@ -18,6 +18,8 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> or comment payload to a specific client listening on a {@link ResourcePath}.
  * <p>
@@ -65,6 +67,7 @@ import org.jspecify.annotations.NonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface SseUnicaster {
 	/**
 	 * Unicasts a single Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.

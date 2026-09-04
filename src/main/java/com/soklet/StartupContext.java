@@ -26,8 +26,10 @@ import java.util.function.LongSupplier;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Framework-created advisory timing and cancelation information for transport
- * startup.
+ * Framework-created advisory timing and cancelation information borrowed by a
+ * transport during attachment and startup. Soklet owns the context and its
+ * deadlines. A transport may read it from the attaching or startup thread but
+ * must not attempt to mutate or extend either boundary.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

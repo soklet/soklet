@@ -1273,7 +1273,7 @@ final class InternalTransportDelegateAttachment {
 	}
 
 	@NonNull
-	CompletionStage<Void> whenTerminated() {
+	CompletionStage<@Nullable Void> whenTerminated() {
 		return this.group.subtreeProofStage(this.member);
 	}
 }

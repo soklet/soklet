@@ -769,15 +769,17 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * headerName=<name>}, where {@code <path>} is the registered endpoint path
 		 * and {@code <name>} is the sanitized, truncated received field name.
 		 *
-		 * @param enabled whether bounded name-bearing diagnostics are enabled, or
-		 *                null to restore the default
+		 * @param unknownMirroredHeaderNameDiagnostics whether bounded name-bearing
+		 *                                             diagnostics are enabled, or
+		 *                                             null to restore the default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder unknownMirroredHeaderNameDiagnostics(
-				@Nullable Boolean enabled) {
-			this.unknownMirroredHeaderNameDiagnostics = enabled == null ? false
-					: enabled;
+				@Nullable Boolean unknownMirroredHeaderNameDiagnostics) {
+			this.unknownMirroredHeaderNameDiagnostics =
+					unknownMirroredHeaderNameDiagnostics == null ? false
+							: unknownMirroredHeaderNameDiagnostics;
 			return this;
 		}
 
@@ -816,13 +818,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * APM join and account for the identifier's high cardinality and correlation
 		 * reach.</p>
 		 *
-		 * @param enabled whether raw validated trace IDs may appear in logs, or
-		 *                null to restore the default
+		 * @param logRawValidatedTraceIds whether raw validated trace IDs may appear
+		 *                                in logs, or null to restore the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder logRawValidatedTraceIds(@Nullable Boolean enabled) {
-			this.logRawValidatedTraceIds = enabled == null ? false : enabled;
+		public Builder logRawValidatedTraceIds(
+				@Nullable Boolean logRawValidatedTraceIds) {
+			this.logRawValidatedTraceIds = logRawValidatedTraceIds == null ? false
+					: logRawValidatedTraceIds;
 			return this;
 		}
 
@@ -845,8 +849,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Replaces the hostname-only values accepted by MCP Host validation. Host
-		 * ports must still equal the effective bound port. The default is the empty
-		 * set.
+		 * ports must still equal the effective bound port. Each invocation replaces,
+		 * rather than appends to, the previous set. Soklet snapshots the supplied
+		 * values during the call. The default is the empty set.
 		 *
 		 * @param allowedHosts allowed hostnames or IP literals, or null to restore
 		 *                     the empty set

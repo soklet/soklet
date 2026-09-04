@@ -117,7 +117,7 @@ public final class StreamTermination {
 	 * @return the underlying cause, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	public Optional<Throwable> getCause() {
+	public Optional<@NonNull Throwable> getCause() {
 		return Optional.ofNullable(this.cause);
 	}
 

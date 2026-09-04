@@ -31,11 +31,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -56,6 +59,10 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Instances can be acquired via the {@link #withResponse(Response)}, {@link #withStatusCode(Integer)}, or {@link #withFile(Path, Request)} builder factory methods.
  * Convenience instance factories are also available via {@link #fromResponse(Response)} and {@link #fromStatusCode(Integer)}.
+ * <p>
+ * Header and cookie collections are immutable snapshots. Response-body descriptors retain caller-supplied backing
+ * resources; callers must honor the ownership and mutation requirements documented by {@link MarshaledResponseBody}
+ * and {@link StreamingResponseBody}.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -181,20 +188,12 @@ public final class MarshaledResponse {
 		requireNonNull(builder);
 
 		this.statusCode = builder.statusCode;
-		this.headers = builder.headers == null ? Map.of() : new LinkedCaseInsensitiveMap<>(builder.headers);
-		this.cookies = builder.cookies == null ? Set.of() : new LinkedHashSet<>(builder.cookies);
+		this.headers = immutableHeaders(builder.headers);
+		this.cookies = builder.cookies == null ? Set.of()
+				: Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
 		this.body = builder.body;
 		this.stream = builder.stream;
 		this.headResponseGzipCandidate = builder.headResponseGzipCandidate;
-
-		// Verify headers are legal
-		for (Entry<String, Set<String>> entry : this.headers.entrySet()) {
-			String headerName = entry.getKey();
-			Set<String> headerValues = entry.getValue();
-
-			for (String headerValue : headerValues)
-				Utilities.validateHeaderNameAndValue(headerName, headerValue);
-		}
 
 		if (getBody().isPresent() && getStream().isPresent())
 			throw new IllegalStateException("A MarshaledResponse may not specify both a known-length body and a streaming response body.");
@@ -212,10 +211,11 @@ public final class MarshaledResponse {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
-		return format("%s{statusCode=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
-				getStatusCode(), getHeaders(), getCookies(),
-				format("%d bytes", getBodyLength()));
+		return format("%s{statusCode=%s, headers=<redacted>, cookies=<redacted>, body=%s}",
+				getClass().getSimpleName(), getStatusCode(),
+				getStream().isPresent() ? "<streaming>" : format("%d bytes", getBodyLength()));
 	}
 
 	/**
@@ -233,6 +233,8 @@ public final class MarshaledResponse {
 	 * <p>
 	 * Soklet writes one header line per value. If order matters, provide either a {@link java.util.SortedSet} or
 	 * {@link java.util.LinkedHashSet} to preserve the desired ordering; otherwise values are naturally sorted for consistency.
+	 * <p>
+	 * The returned map and its value sets are immutable snapshots.
 	 *
 	 * @return the headers to write
 	 */
@@ -243,6 +245,8 @@ public final class MarshaledResponse {
 
 	/**
 	 * The HTTP cookies to write for this response.
+	 * <p>
+	 * The returned set is an immutable snapshot.
 	 *
 	 * @return the cookies to write
 	 */
@@ -251,13 +255,50 @@ public final class MarshaledResponse {
 		return this.cookies;
 	}
 
+	@NonNull
+	private static Map<@NonNull String, @NonNull Set<@NonNull String>> immutableHeaders(
+			@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		if (headers == null || headers.isEmpty())
+			return Map.of();
+
+		Map<String, Set<String>> copiedHeaders = new LinkedCaseInsensitiveMap<>(headers.size());
+
+		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+			String headerName = requireNonNull(entry.getKey());
+			Set<String> headerValues = requireNonNull(entry.getValue());
+
+			for (String headerValue : headerValues)
+				Utilities.validateHeaderNameAndValue(headerName, requireNonNull(headerValue));
+
+			Set<String> copiedHeaderValues;
+			if (headerValues instanceof SortedSet<?>) {
+				copiedHeaderValues = immutableSortedCopy(headerValues);
+			} else if (headerValues.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
+				copiedHeaderValues = Collections.unmodifiableSet(new LinkedHashSet<>(headerValues));
+			} else {
+				copiedHeaderValues = Collections.unmodifiableSortedSet(new TreeSet<>(headerValues));
+			}
+
+			copiedHeaders.put(headerName, copiedHeaderValues);
+		}
+
+		return Collections.unmodifiableMap(copiedHeaders);
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	private static SortedSet<@NonNull String> immutableSortedCopy(@NonNull Set<@NonNull String> values) {
+		SortedSet<String> sortedValues = (SortedSet<String>) values;
+		return Collections.unmodifiableSortedSet(new TreeSet<>(sortedValues));
+	}
+
 	/**
 	 * The finalized HTTP response body to write, if available.
 	 *
 	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
 	 */
 	@NonNull
-	public Optional<MarshaledResponseBody> getBody() {
+	public Optional<@NonNull MarshaledResponseBody> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 
@@ -267,7 +308,7 @@ public final class MarshaledResponse {
 	 * @return the streaming response body to write, or {@link Optional#empty()} if no stream should be written
 	 */
 	@NonNull
-	public Optional<StreamingResponseBody> getStream() {
+	public Optional<@NonNull StreamingResponseBody> getStream() {
 		return Optional.ofNullable(this.stream);
 	}
 
@@ -361,12 +402,24 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the configured response cookies.
+		 *
+		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
 
+		/**
+		 * Replaces the configured response headers.
+		 *
+		 * @param headers headers to write, or {@code null} or an empty map to configure no headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
@@ -556,42 +609,91 @@ public final class MarshaledResponse {
 			this.requestContext = FileResponse.RequestContext.fromRequest(request);
 		}
 
+		/**
+		 * Sets the {@code Content-Type} header for the file representation.
+		 *
+		 * @param contentType the content type, or {@code null} or a blank string to clear the configured value and omit the
+		 *                    header
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder contentType(@Nullable String contentType) {
 			this.builder.contentType(contentType);
 			return this;
 		}
 
+		/**
+		 * Sets the {@code Content-Encoding} header for the file representation.
+		 *
+		 * @param contentEncoding the content encoding, or {@code null} or a blank string to clear the configured value and
+		 *                        omit the header
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder contentEncoding(@Nullable String contentEncoding) {
 			this.builder.contentEncoding(contentEncoding);
 			return this;
 		}
 
+		/**
+		 * Sets the entity tag used for conditional requests and the {@code ETag} header.
+		 *
+		 * @param entityTag the entity tag, or {@code null} to clear the configured value and omit the header
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder entityTag(@Nullable EntityTag entityTag) {
 			this.builder.entityTag(entityTag);
 			return this;
 		}
 
+		/**
+		 * Sets the last-modified time used for conditional requests and the {@code Last-Modified} header.
+		 *
+		 * @param lastModified the last-modified time, or {@code null} to clear the configured value and omit the header
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder lastModified(@Nullable Instant lastModified) {
 			this.builder.lastModified(lastModified);
 			return this;
 		}
 
+		/**
+		 * Sets the {@code Cache-Control} header.
+		 *
+		 * @param cacheControl the cache-control value, or {@code null} or a blank string to clear the configured value and
+		 *                     omit the header
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder cacheControl(@Nullable String cacheControl) {
 			this.builder.cacheControl(cacheControl);
 			return this;
 		}
 
+		/**
+		 * Replaces the additional response headers.
+		 * <p>
+		 * Headers controlled by the file response are rejected during {@link #build()}; use the corresponding dedicated
+		 * builder methods where available.
+		 *
+		 * @param headers additional headers to write, or {@code null} or an empty map to configure no additional headers
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
+		/**
+		 * Controls whether byte-range requests are honored.
+		 *
+		 * @param rangeRequests {@code true} to honor byte-range requests, {@code false} to ignore them, or {@code null} to
+		 *                      restore the default of {@code true}
+		 * @return this builder
+		 */
 		@NonNull
 		public FileBuilder rangeRequests(@Nullable Boolean rangeRequests) {
 			this.builder.rangeRequests(rangeRequests);
@@ -641,13 +743,27 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied response headers.
+		 *
+		 * @param headers headers to write
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the currently configured response headers in place.
+		 * <p>
+		 * The consumer may add, replace, remove, or clear header entries. If no header map is configured, the consumer
+		 * receives a new mutable, empty map.
+		 *
+		 * @param headersConsumer consumer that mutates the response headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
@@ -659,13 +775,27 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied response cookies.
+		 *
+		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the currently configured response cookies in place.
+		 * <p>
+		 * The consumer may add, remove, or clear cookies. If no cookie set is configured, the consumer receives a new
+		 * mutable, empty set.
+		 *
+		 * @param cookiesConsumer consumer that mutates the response cookies
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier cookies(@NonNull Consumer<Set<@NonNull ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
@@ -677,18 +807,39 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the known-length response body with a byte-array-backed body, or removes the current known-length body
+		 * if {@code bytes} is {@code null}.
+		 *
+		 * @param bytes the response bytes to write, or {@code null} for no known-length body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(byte @Nullable [] bytes) {
 			this.builder.body(bytes);
 			return this;
 		}
 
+		/**
+		 * Replaces the known-length response body, or removes the current known-length body if {@code body} is
+		 * {@code null}.
+		 *
+		 * @param body the response body descriptor to write, or {@code null} for no known-length body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(@Nullable MarshaledResponseBody body) {
 			this.builder.body(body);
 			return this;
 		}
 
+		/**
+		 * Replaces the known-length response body with a path-backed body, or removes the current known-length body if
+		 * {@code path} is {@code null}.
+		 *
+		 * @param path the file path to write, or {@code null} for no known-length body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(@Nullable Path path) {
 			this.builder.body(path);
@@ -710,12 +861,28 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the known-length response body with a byte-buffer-backed body, or removes the current known-length body
+		 * if {@code byteBuffer} is {@code null}.
+		 *
+		 * @param byteBuffer the byte buffer to write, or {@code null} for no known-length body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(@Nullable ByteBuffer byteBuffer) {
 			this.builder.body(byteBuffer);
 			return this;
 		}
 
+		/**
+		 * Replaces the streaming response body, or removes the current stream if {@code stream} is {@code null}.
+		 * <p>
+		 * This does not remove a known-length response body; {@link #finish()} rejects a response that still specifies
+		 * both body modes.
+		 *
+		 * @param stream the streaming response body to write, or {@code null} for no stream
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier stream(@Nullable StreamingResponseBody stream) {
 			this.builder.stream(stream);

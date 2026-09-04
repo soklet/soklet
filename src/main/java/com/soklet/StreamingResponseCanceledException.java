@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.util.Optional;
 
@@ -30,6 +31,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 public class StreamingResponseCanceledException extends IOException {
 	private static final long serialVersionUID = 1L;
 
@@ -75,7 +77,7 @@ public class StreamingResponseCanceledException extends IOException {
 	 * @return the underlying cancelation cause
 	 */
 	@NonNull
-	public Optional<Throwable> getCancelationCause() {
+	public Optional<@NonNull Throwable> getCancelationCause() {
 		return Optional.ofNullable(getCause());
 	}
 }

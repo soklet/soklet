@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.file.Path;
 
 import static java.util.Objects.requireNonNull;
@@ -27,9 +28,15 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This type describes the body to write; it is not itself responsible for writing to a transport. Bodies may be backed
  * by bytes, files, file channels, or byte buffers.
+ * <p>
+ * These descriptors are thread-safe value holders, but they do not take ownership of or make immutable their backing
+ * content. From construction until every response using a descriptor has completed, callers must not concurrently
+ * mutate a backing byte array or byte-buffer content, modify a path-backed file region, or close or modify a borrowed
+ * file channel. A channel configured with {@link FileChannel#getCloseOnComplete()} is closed by Soklet after use.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Bytes, MarshaledResponseBody.File, MarshaledResponseBody.FileChannel, MarshaledResponseBody.ByteBuffer {
 	/**
 	 * The number of bytes this body will write.
@@ -44,6 +51,7 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	final class Bytes implements MarshaledResponseBody {
 		@NonNull
 		private final byte[] bytes;
@@ -55,12 +63,12 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		/**
 		 * The byte array backing this body.
 		 * <p>
-		 * For compatibility with prior {@link MarshaledResponse} behavior, this array is not defensively copied.
+		 * For compatibility with prior {@link MarshaledResponse} behavior, this array is not defensively copied. Callers
+		 * must not mutate it from construction until every response using this body has completed.
 		 *
 		 * @return the bytes to write
 		 */
-		@NonNull
-		public byte[] getBytes() {
+		public byte @NonNull [] getBytes() {
 			return this.bytes;
 		}
 
@@ -73,9 +81,12 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 
 	/**
 	 * A finalized response body backed by a file path.
+	 * <p>
+	 * The referenced file region remains caller-owned and must not be modified while a response is using it.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	final class File implements MarshaledResponseBody {
 		@NonNull
 		private final Path path;
@@ -130,9 +141,13 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 
 	/**
 	 * A finalized response body backed by a {@link java.nio.channels.FileChannel}.
+	 * <p>
+	 * The channel remains caller-owned while a response is using it. Callers must not close it or modify the referenced
+	 * region concurrently. Soklet closes the channel after use only when {@link #getCloseOnComplete()} is {@code true}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	final class FileChannel implements MarshaledResponseBody {
 		private final java.nio.channels.@NonNull FileChannel channel;
 		@NonNull
@@ -202,10 +217,13 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	/**
 	 * A finalized response body backed by a {@link java.nio.ByteBuffer}.
 	 * <p>
-	 * The buffer's position and limit at construction time define the response slice.
+	 * The buffer's position and limit at construction time define the response slice. The descriptor retains a
+	 * read-only view, but the caller's original buffer may still share its content; callers must not mutate that content
+	 * while a response is using this body.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	final class ByteBuffer implements MarshaledResponseBody {
 		private final java.nio.@NonNull ByteBuffer buffer;
 

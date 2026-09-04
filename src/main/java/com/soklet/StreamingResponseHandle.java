@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import java.util.Optional;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface StreamingResponseHandle {
 	/**
 	 * The server type that wrote the stream.
@@ -49,7 +51,7 @@ public interface StreamingResponseHandle {
 	 * @return the resource method, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	Optional<ResourceMethod> getResourceMethod();
+	Optional<@NonNull ResourceMethod> getResourceMethod();
 
 	/**
 	 * The streaming response.

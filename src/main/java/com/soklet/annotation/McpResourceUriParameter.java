@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -41,6 +41,6 @@ public @interface McpResourceUriParameter {
 	 *
 	 * @return variable name, or an empty string to use the Java parameter name
 	 */
-	@Nullable
+	@NonNull
 	String name() default "";
 }

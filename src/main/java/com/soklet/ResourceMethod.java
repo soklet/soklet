@@ -84,6 +84,7 @@ public static ResourceMethod fromComponents(@NonNull HttpMethod httpMethod,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{httpMethod=%s, resourcePathDeclaration=%s, method=%s, sseEventSource=%s}", getClass().getSimpleName(),
 				getHttpMethod(), getResourcePathDeclaration(), getMethod(), isSseEventSource());

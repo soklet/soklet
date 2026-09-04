@@ -223,6 +223,7 @@ public static ResourcePath fromPath(@NonNull String path) {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{path=%s, components=%s}", getClass().getSimpleName(), getPath(), getComponents());
 	}

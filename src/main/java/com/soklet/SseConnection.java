@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -30,6 +31,7 @@ import java.util.Optional;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface SseConnection {
 	/**
 	 * The request made by the client to the <em>Event Source Method</em> which accepted the SSE handshake and established the connection.
@@ -63,7 +65,7 @@ public interface SseConnection {
 	 * @return the connection-specific context, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	Optional<Object> getClientContext();
+	Optional<@NonNull Object> getClientContext();
 
 	/**
 	 * Categorizes why a Server-Sent Event handshake failed.

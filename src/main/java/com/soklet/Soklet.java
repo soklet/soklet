@@ -76,6 +76,13 @@ import static java.util.Objects.requireNonNull;
  * {@link McpServer})
  * using the provided system configuration.
  * <p>
+ * This is the direct, embedded lifecycle API. The caller owns process-signal,
+ * shutdown-trigger, and standard-input integration and requests termination
+ * through {@link #shutdown()}. Standalone processes that want Soklet to own a
+ * JVM shutdown hook or {@link ShutdownTrigger} registration should use
+ * {@link SokletApplication} instead. Do not mix both ownership models for one
+ * lifecycle.
+ * <p>
  * <pre>{@code // Use out-of-the-box defaults
  * SokletConfig config = SokletConfig.withHttpServer(
  *   HttpServer.fromPort(8080)
@@ -225,6 +232,10 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Publishes Soklet-wide shutdown intent promptly and returns the one cached,
 	 * read-only completion stage for this lifecycle attempt.
+	 * <p>
+	 * This method does not install or own process hooks, operating-system signal
+	 * handlers, or standard-input listeners; direct lifecycle callers own those
+	 * integrations.
 	 *
 	 * @return cached shutdown-result stage
 	 */
@@ -2666,7 +2677,8 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		@Override
-		public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+		public Optional<? extends @NonNull SseBroadcaster> acquireBroadcaster(
+				@Nullable ResourcePath resourcePath) {
 			if (resourcePath == null)
 				return Optional.empty();
 

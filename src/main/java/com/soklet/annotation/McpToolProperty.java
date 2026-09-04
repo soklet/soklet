@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -43,7 +43,7 @@ public @interface McpToolProperty {
 	 * @return the property name, or an empty string to use the Java
 	 * record-component name
 	 */
-	@Nullable
+	@NonNull
 	String name() default "";
 
 	/**
@@ -51,7 +51,7 @@ public @interface McpToolProperty {
 	 *
 	 * @return the title, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String title() default "";
 
 	/**
@@ -59,6 +59,6 @@ public @interface McpToolProperty {
 	 *
 	 * @return the description, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String description() default "";
 }

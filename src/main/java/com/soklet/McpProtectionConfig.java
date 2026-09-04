@@ -189,10 +189,11 @@ public final class McpProtectionConfig {
 		}
 
 		/**
-		 * Sets the maximum encoded request-state size.
+		 * Sets the maximum encoded request-state size. The default is 65,536 bytes.
 		 *
 		 * @param maximumEncodedRequestStateSizeInBytes positive byte limit, or
-		 *                                        {@code null} to use the default
+		 *                                             {@code null} to restore the
+		 *                                             default
 		 * @return this builder
 		 */
 		@NonNull
@@ -207,10 +208,11 @@ public final class McpProtectionConfig {
 		}
 
 		/**
-		 * Sets the maximum decoded request-state size.
+		 * Sets the maximum decoded request-state size. The default is 49,152 bytes.
 		 *
 		 * @param maximumDecodedRequestStateSizeInBytes positive byte limit, or
-		 *                                        {@code null} to use the default
+		 *                                             {@code null} to restore the
+		 *                                             default
 		 * @return this builder
 		 */
 		@NonNull
@@ -225,10 +227,10 @@ public final class McpProtectionConfig {
 		}
 
 		/**
-		 * Sets the maximum request-state lifetime.
+		 * Sets the maximum request-state lifetime. The default is 15 minutes.
 		 *
 		 * @param maximumRequestStateLifetime positive finite lifetime, or
-		 *                                    {@code null} to use the default
+		 *                                    {@code null} to restore the default
 		 * @return this builder
 		 */
 		@NonNull
@@ -242,10 +244,10 @@ public final class McpProtectionConfig {
 		}
 
 		/**
-		 * Sets the maximum request-state round count.
+		 * Sets the maximum request-state round count. The default is {@code 10}.
 		 *
 		 * @param maximumRequestStateRounds positive round limit, or {@code null}
-		 *                                  to use the default
+		 *                                  to restore the default
 		 * @return this builder
 		 */
 		@NonNull

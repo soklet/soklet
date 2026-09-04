@@ -105,7 +105,7 @@ public static SseComment fromComment(@NonNull String comment) {
 	 * @return the comment payload
 	 */
 	@NonNull
-	public Optional<String> getComment() {
+	public Optional<@NonNull String> getComment() {
 		return Optional.ofNullable(this.comment);
 	}
 
@@ -123,6 +123,8 @@ public static SseComment fromComment(@NonNull String comment) {
 	@NonNull
 	public String toString() {
 		return format("%s{commentType=%s, comment=%s}", getClass().getSimpleName(),
-				getCommentType(), getComment().orElse(""));
+				getCommentType(), this.comment == null
+						? "[not available]"
+						: format("[%d characters]", this.comment.length()));
 	}
 }

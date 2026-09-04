@@ -18,7 +18,6 @@ package com.soklet.annotation;
 
 import com.soklet.McpRequestStateMode;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -53,7 +52,7 @@ public @interface McpTool {
 	 *
 	 * @return the title, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String title() default "";
 
 	/**
@@ -61,7 +60,7 @@ public @interface McpTool {
 	 *
 	 * @return the description, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String description() default "";
 
 	/**
@@ -73,7 +72,7 @@ public @interface McpTool {
 	 *
 	 * @return the rate-limiter name, or an empty string to inherit
 	 */
-	@Nullable
+	@NonNull
 	String rateLimiterName() default "";
 
 	/**

@@ -278,7 +278,7 @@ public final class McpToolRegistration<A> {
 	 * @return normalized handler
 	 */
 	@NonNull
-	public McpToolHandler<A> getHandler() {
+	public McpToolHandler<@NonNull A> getHandler() {
 		return this.handler;
 	}
 
@@ -355,7 +355,7 @@ public final class McpToolRegistration<A> {
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
+		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
 				@NonNull Class<T> argumentType,
 				@NonNull Class<R> outputType) {
 			return typedStage(argumentType, outputType);
@@ -371,7 +371,7 @@ public final class McpToolRegistration<A> {
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
+		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
 				@NonNull Class<T> argumentType,
 				@NonNull TypeReference<R> outputType) {
 			requireNonNull(outputType);
@@ -388,7 +388,7 @@ public final class McpToolRegistration<A> {
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
+		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
 				@NonNull TypeReference<T> argumentType,
 				@NonNull Class<R> outputType) {
 			requireNonNull(argumentType);
@@ -405,7 +405,7 @@ public final class McpToolRegistration<A> {
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
+		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
 				@NonNull TypeReference<T> argumentType,
 				@NonNull TypeReference<R> outputType) {
 			requireNonNull(argumentType);
@@ -421,7 +421,7 @@ public final class McpToolRegistration<A> {
 		 * @return advanced handler-selection stage
 		 */
 		@NonNull
-		public <T> OperationHandlerStage<T> argumentType(
+		public <T> OperationHandlerStage<@NonNull T> argumentType(
 				@NonNull Class<T> argumentType) {
 			return operationStage(argumentType);
 		}
@@ -434,7 +434,7 @@ public final class McpToolRegistration<A> {
 		 * @return advanced handler-selection stage
 		 */
 		@NonNull
-		public <T> OperationHandlerStage<T> argumentType(
+		public <T> OperationHandlerStage<@NonNull T> argumentType(
 				@NonNull TypeReference<T> argumentType) {
 			requireNonNull(argumentType);
 			return operationStage(argumentType.getType());
@@ -449,7 +449,8 @@ public final class McpToolRegistration<A> {
 		 * @return raw-JSON handler-selection stage
 		 */
 		@NonNull
-		public OperationHandlerStage<McpJsonObject> jsonObjectArguments() {
+		public OperationHandlerStage<@NonNull McpJsonObject>
+				jsonObjectArguments() {
 			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
 					JSON_OBJECT_SCHEMA, EMPTY_MIRRORED_HEADER_PLAN,
 					rawArguments -> rawArguments);
@@ -543,7 +544,7 @@ public final class McpToolRegistration<A> {
 		 * @return optional-metadata builder
 		 */
 		@NonNull
-		public CompleteBuilder<A> handler(
+		public CompleteBuilder<@NonNull A> handler(
 				@NonNull McpCompleteToolHandler<A, R> handler) {
 			requireNonNull(handler);
 			McpToolHandler<A> normalizedHandler = (request, arguments, features) -> {
@@ -604,7 +605,7 @@ public final class McpToolRegistration<A> {
 		 * @return optional-metadata builder
 		 */
 		@NonNull
-		public OperationBuilder<A> handler(@NonNull McpToolHandler<A> handler) {
+		public OperationBuilder<@NonNull A> handler(@NonNull McpToolHandler<A> handler) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
 					null, null, null,
@@ -632,7 +633,7 @@ public final class McpToolRegistration<A> {
 		/** @param title human-readable title
 		 * @return this builder */
 		@NonNull
-		public OperationBuilder<A> title(@NonNull String title) {
+		public OperationBuilder<@NonNull A> title(@NonNull String title) {
 			this.state.title = requireNonNull(title);
 			return this;
 		}
@@ -640,7 +641,7 @@ public final class McpToolRegistration<A> {
 		/** @param description human-readable description
 		 * @return this builder */
 		@NonNull
-		public OperationBuilder<A> description(@NonNull String description) {
+		public OperationBuilder<@NonNull A> description(@NonNull String description) {
 			this.state.description = requireNonNull(description);
 			return this;
 		}
@@ -652,7 +653,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public OperationBuilder<A> addIcon(@NonNull McpIcon icon) {
+		public OperationBuilder<@NonNull A> addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -660,7 +661,7 @@ public final class McpToolRegistration<A> {
 		/** @param annotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public OperationBuilder<A> annotations(
+		public OperationBuilder<@NonNull A> annotations(
 				@NonNull McpToolAnnotations annotations) {
 			this.state.annotations = requireNonNull(annotations);
 			return this;
@@ -671,12 +672,13 @@ public final class McpToolRegistration<A> {
 		 *
 		 * <p>Named and direct setter calls are last-call-wins.
 		 *
-		 * @param limiterName nonblank name in the server limiter registry
+		 * @param rateLimiterName nonblank name in the server limiter registry
 		 * @return this builder
 		 */
 		@NonNull
-		public OperationBuilder<A> rateLimiterName(@NonNull String limiterName) {
-			this.state.rateLimiterName = requireNonBlank(limiterName,
+		public OperationBuilder<@NonNull A> rateLimiterName(
+				@NonNull String rateLimiterName) {
+			this.state.rateLimiterName = requireNonBlank(rateLimiterName,
 					"Rate-limiter name");
 			this.state.rateLimiter = null;
 			return this;
@@ -691,7 +693,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public OperationBuilder<A> rateLimiter(
+		public OperationBuilder<@NonNull A> rateLimiter(
 				@NonNull McpRateLimiter rateLimiter) {
 			this.state.rateLimiter = requireNonNull(rateLimiter);
 			this.state.rateLimiterName = null;
@@ -706,15 +708,16 @@ public final class McpToolRegistration<A> {
 		 * only through a separately reviewed profile/API policy amendment; do not
 		 * infer an automatic "latest revision" behavior.
 		 *
-		 * @param enabled whether mirroring is enabled
+		 * @param structuredContentMirroredAsText whether mirroring is enabled
 		 * @return this builder
-		 * @throws NullPointerException if {@code enabled} is null
+		 * @throws NullPointerException if {@code structuredContentMirroredAsText}
+		 *                              is null
 		 */
 		@NonNull
-		public OperationBuilder<A> structuredContentMirroredAsText(
-				@NonNull Boolean enabled) {
+		public OperationBuilder<@NonNull A> structuredContentMirroredAsText(
+				@NonNull Boolean structuredContentMirroredAsText) {
 			this.state.structuredContentMirroredAsText =
-					requireNonNull(enabled);
+					requireNonNull(structuredContentMirroredAsText);
 			return this;
 		}
 
@@ -726,7 +729,7 @@ public final class McpToolRegistration<A> {
 		 * @throws NullPointerException if the declaration is null
 		 */
 		@NonNull
-		public OperationBuilder<A> addInputRequestDeclaration(
+		public OperationBuilder<@NonNull A> addInputRequestDeclaration(
 				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
 			this.state.inputRequestDeclarations.add(
 					requireNonNull(inputRequestDeclaration));
@@ -743,7 +746,7 @@ public final class McpToolRegistration<A> {
 		 * @throws NullPointerException if the array or a declaration is null
 		 */
 		@NonNull
-		public OperationBuilder<A> addInputRequestDeclarations(
+		public OperationBuilder<@NonNull A> addInputRequestDeclarations(
 				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
 			requireNonNull(declarations);
 			List<McpInputRequestDeclaration> copiedDeclarations =
@@ -761,7 +764,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public OperationBuilder<A> requestStateMode(
+		public OperationBuilder<@NonNull A> requestStateMode(
 				@NonNull McpRequestStateMode requestStateMode) {
 			this.state.requestStateMode = requireNonNull(requestStateMode);
 			return this;
@@ -770,14 +773,14 @@ public final class McpToolRegistration<A> {
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
-		public OperationBuilder<A> metadata(@NonNull McpJsonObject metadata) {
+		public OperationBuilder<@NonNull A> metadata(@NonNull McpJsonObject metadata) {
 			this.state.metadata = requireNonNull(metadata);
 			return this;
 		}
 
 		/** @return immutable tool registration */
 		@NonNull
-		public McpToolRegistration<A> build() {
+		public McpToolRegistration<@NonNull A> build() {
 			return new McpToolRegistration<>(this.state);
 		}
 	}
@@ -805,7 +808,7 @@ public final class McpToolRegistration<A> {
 		/** @param title human-readable title
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A> title(@NonNull String title) {
+		public CompleteBuilder<@NonNull A> title(@NonNull String title) {
 			this.state.title = requireNonNull(title);
 			return this;
 		}
@@ -813,7 +816,7 @@ public final class McpToolRegistration<A> {
 		/** @param description human-readable description
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A> description(
+		public CompleteBuilder<@NonNull A> description(
 				@NonNull String description) {
 			this.state.description = requireNonNull(description);
 			return this;
@@ -826,7 +829,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A> addIcon(@NonNull McpIcon icon) {
+		public CompleteBuilder<@NonNull A> addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -834,7 +837,7 @@ public final class McpToolRegistration<A> {
 		/** @param annotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A> annotations(
+		public CompleteBuilder<@NonNull A> annotations(
 				@NonNull McpToolAnnotations annotations) {
 			this.state.annotations = requireNonNull(annotations);
 			return this;
@@ -845,13 +848,13 @@ public final class McpToolRegistration<A> {
 		 *
 		 * <p>Named and direct setter calls are last-call-wins.
 		 *
-		 * @param limiterName nonblank name in the server limiter registry
+		 * @param rateLimiterName nonblank name in the server limiter registry
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A> rateLimiterName(
-				@NonNull String limiterName) {
-			this.state.rateLimiterName = requireNonBlank(limiterName,
+		public CompleteBuilder<@NonNull A> rateLimiterName(
+				@NonNull String rateLimiterName) {
+			this.state.rateLimiterName = requireNonBlank(rateLimiterName,
 					"Rate-limiter name");
 			this.state.rateLimiter = null;
 			return this;
@@ -866,7 +869,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A> rateLimiter(
+		public CompleteBuilder<@NonNull A> rateLimiter(
 				@NonNull McpRateLimiter rateLimiter) {
 			this.state.rateLimiter = requireNonNull(rateLimiter);
 			this.state.rateLimiterName = null;
@@ -881,22 +884,23 @@ public final class McpToolRegistration<A> {
 		 * only through a separately reviewed profile/API policy amendment; do not
 		 * infer an automatic "latest revision" behavior.
 		 *
-		 * @param enabled whether mirroring is enabled
+		 * @param structuredContentMirroredAsText whether mirroring is enabled
 		 * @return this builder
-		 * @throws NullPointerException if {@code enabled} is null
+		 * @throws NullPointerException if {@code structuredContentMirroredAsText}
+		 *                              is null
 		 */
 		@NonNull
-		public CompleteBuilder<A> structuredContentMirroredAsText(
-				@NonNull Boolean enabled) {
+		public CompleteBuilder<@NonNull A> structuredContentMirroredAsText(
+				@NonNull Boolean structuredContentMirroredAsText) {
 			this.state.structuredContentMirroredAsText =
-					requireNonNull(enabled);
+					requireNonNull(structuredContentMirroredAsText);
 			return this;
 		}
 
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A> metadata(
+		public CompleteBuilder<@NonNull A> metadata(
 				@NonNull McpJsonObject metadata) {
 			this.state.metadata = requireNonNull(metadata);
 			return this;
@@ -904,7 +908,7 @@ public final class McpToolRegistration<A> {
 
 		/** @return immutable tool registration */
 		@NonNull
-		public McpToolRegistration<A> build() {
+		public McpToolRegistration<@NonNull A> build() {
 			return new McpToolRegistration<>(this.state);
 		}
 	}

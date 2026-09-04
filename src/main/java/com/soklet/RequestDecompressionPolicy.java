@@ -140,7 +140,7 @@ public final class RequestDecompressionPolicy {
 	 * @return the maximum decompressed body size, or {@link Optional#empty()} to use the server's request size limit
 	 */
 	@NonNull
-	public Optional<Integer> getMaximumDecompressedBodySizeInBytes() {
+	public Optional<@NonNull Integer> getMaximumDecompressedBodySizeInBytes() {
 		return Optional.ofNullable(this.maximumDecompressedBodySizeInBytes);
 	}
 

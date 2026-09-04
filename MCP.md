@@ -205,6 +205,14 @@ instances. If an application directly invokes a generated registration handler
 outside a Soklet-managed request, no owning configuration exists and the handler
 uses `InstanceProvider.defaultInstance()`.
 
+Java annotation elements are never nullable. Optional annotation text and
+name overrides use the non-null empty string to mean absent, inherited, or
+source-parameter-named as documented by each element. Annotation spelling
+matches the programmatic surface: `rateLimiterName`, `toolRateLimiterName`,
+`sizeInBytes`, and the fully spelled-out
+`cacheTimeToLiveInMilliseconds` family. The time-to-live elements use whole
+milliseconds because Java annotations cannot accept `Duration` values.
+
 ### Programmatic registration
 
 Programmatic endpoints use the same immutable runtime model. Start with

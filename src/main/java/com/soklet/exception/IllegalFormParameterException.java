@@ -59,7 +59,7 @@ public final class IllegalFormParameterException extends BadRequestException {
 	}
 
 	@NonNull
-	public Optional<String> getFormParameterValue() {
+	public Optional<@NonNull String> getFormParameterValue() {
 		return Optional.ofNullable(this.formParameterValue);
 	}
 }

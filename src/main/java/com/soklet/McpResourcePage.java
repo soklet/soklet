@@ -174,15 +174,16 @@ public final class McpResourcePage implements McpOperationResult {
 		/**
 		 * Overrides only the endpoint's default time to live for this page.
 		 *
-		 * @param timeToLive nonnegative whole-millisecond duration
+		 * @param cacheTimeToLiveOverride nonnegative whole-millisecond duration
 		 * @return this builder
 		 * @throws IllegalArgumentException if the duration is negative or has
 		 * sub-millisecond precision
 		 */
 		@NonNull
-		public Builder cacheTimeToLiveOverride(@NonNull Duration timeToLive) {
+		public Builder cacheTimeToLiveOverride(
+				@NonNull Duration cacheTimeToLiveOverride) {
 			this.cacheTimeToLiveOverride =
-					McpCachePolicy.requireTimeToLive(timeToLive);
+					McpCachePolicy.requireTimeToLive(cacheTimeToLiveOverride);
 			return this;
 		}
 

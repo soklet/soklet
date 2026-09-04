@@ -104,6 +104,18 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					"McpPromptArgumentDeclaration.withName(\"subject\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
+					".argumentAndOutputTypes(Tool0Arguments.class"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"endpointBuilder.toolRateLimiterName(\"catalog-endpoint\")"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"toolBuilder0.rateLimiterName(\"catalog-tool\")"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"toolBuilder0.structuredContentMirroredAsText(false)"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
 					"@com.soklet.annotation.McpHeader(name = \"Tenant\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(

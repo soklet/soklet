@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,6 +28,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for types that authorize <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">CORS</a> requests.
+ * <p>
+ * Soklet may invoke an authorizer concurrently for independent requests. Implementations must support concurrent
+ * invocation.
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
@@ -41,6 +45,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface CorsAuthorizer {
 	/**
 	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> request.
@@ -135,6 +140,7 @@ public interface CorsAuthorizer {
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} matches a value in the provided set of {@code whitelistedOrigins}.
 	 * <p>
 	 * The provided {@code allowCredentialsResolver} is used to control the value of {@code Access-Control-Allow-Credentials}: it's a function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
+	 * The resolver may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
 	 * <p>
@@ -157,6 +163,7 @@ public interface CorsAuthorizer {
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} is allowed by the provided {@code whitelistAuthorizer} function.
 	 * <p>
 	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
+	 * The function may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
 	 * <p>
@@ -177,6 +184,7 @@ public interface CorsAuthorizer {
 	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
 	 * <p>
 	 * The provided {@code allowCredentialsResolver} is used to control the value of {@code Access-Control-Allow-Credentials}: it's a function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
+	 * Both functions may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *

@@ -125,46 +125,46 @@ public final class McpToolAnnotations {
 		}
 
 		/**
-		 * @param readOnly whether the tool is read-only
+		 * @param readOnlyHint whether the tool is read-only
 		 * @return this builder
-		 * @throws NullPointerException if {@code readOnly} is null
+		 * @throws NullPointerException if {@code readOnlyHint} is null
 		 */
 		@NonNull
-		public Builder readOnlyHint(@NonNull Boolean readOnly) {
-			this.readOnlyHint = requireNonNull(readOnly);
+		public Builder readOnlyHint(@NonNull Boolean readOnlyHint) {
+			this.readOnlyHint = requireNonNull(readOnlyHint);
 			return this;
 		}
 
 		/**
-		 * @param destructive whether the tool may perform destructive updates
+		 * @param destructiveHint whether the tool may perform destructive updates
 		 * @return this builder
-		 * @throws NullPointerException if {@code destructive} is null
+		 * @throws NullPointerException if {@code destructiveHint} is null
 		 */
 		@NonNull
-		public Builder destructiveHint(@NonNull Boolean destructive) {
-			this.destructiveHint = requireNonNull(destructive);
+		public Builder destructiveHint(@NonNull Boolean destructiveHint) {
+			this.destructiveHint = requireNonNull(destructiveHint);
 			return this;
 		}
 
 		/**
-		 * @param idempotent whether repeated calls have no additional effect
+		 * @param idempotentHint whether repeated calls have no additional effect
 		 * @return this builder
-		 * @throws NullPointerException if {@code idempotent} is null
+		 * @throws NullPointerException if {@code idempotentHint} is null
 		 */
 		@NonNull
-		public Builder idempotentHint(@NonNull Boolean idempotent) {
-			this.idempotentHint = requireNonNull(idempotent);
+		public Builder idempotentHint(@NonNull Boolean idempotentHint) {
+			this.idempotentHint = requireNonNull(idempotentHint);
 			return this;
 		}
 
 		/**
-		 * @param openWorld whether the tool may interact with external entities
+		 * @param openWorldHint whether the tool may interact with external entities
 		 * @return this builder
-		 * @throws NullPointerException if {@code openWorld} is null
+		 * @throws NullPointerException if {@code openWorldHint} is null
 		 */
 		@NonNull
-		public Builder openWorldHint(@NonNull Boolean openWorld) {
-			this.openWorldHint = requireNonNull(openWorld);
+		public Builder openWorldHint(@NonNull Boolean openWorldHint) {
+			this.openWorldHint = requireNonNull(openWorldHint);
 			return this;
 		}
 

@@ -99,6 +99,7 @@ public final class HttpRequestResult {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		List<String> components = new ArrayList<>(5);
 
@@ -165,7 +166,7 @@ public final class HttpRequestResult {
 	 * @return the logical response
 	 */
 	@NonNull
-	public Optional<Response> getResponse() {
+	public Optional<@NonNull Response> getResponse() {
 		return Optional.ofNullable(this.response);
 	}
 
@@ -175,7 +176,7 @@ public final class HttpRequestResult {
 	 * @return the CORS preflight logical response
 	 */
 	@NonNull
-	public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
+	public Optional<@NonNull CorsPreflightResponse> getCorsPreflightResponse() {
 		return Optional.ofNullable(this.corsPreflightResponse);
 	}
 
@@ -185,7 +186,7 @@ public final class HttpRequestResult {
 	 * @return the <em>Resource Method</em> that handled the request
 	 */
 	@NonNull
-	public Optional<ResourceMethod> getResourceMethod() {
+	public Optional<@NonNull ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
@@ -232,18 +233,39 @@ public final class HttpRequestResult {
 			return this;
 		}
 
+		/**
+		 * Sets the logical response that produced the marshaled response. Passing
+		 * {@code null} clears any previously configured logical response.
+		 *
+		 * @param response the logical response, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder response(@Nullable Response response) {
 			this.response = response;
 			return this;
 		}
 
+		/**
+		 * Sets the CORS preflight response associated with this result. Passing
+		 * {@code null} clears any previously configured CORS preflight response.
+		 *
+		 * @param corsPreflightResponse the CORS preflight response, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
 			this.corsPreflightResponse = corsPreflightResponse;
 			return this;
 		}
 
+		/**
+		 * Sets the <em>Resource Method</em> that handled the request. Passing
+		 * {@code null} clears any previously configured <em>Resource Method</em>.
+		 *
+		 * @param resourceMethod the <em>Resource Method</em>, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.resourceMethod = resourceMethod;

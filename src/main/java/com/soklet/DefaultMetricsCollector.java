@@ -1773,9 +1773,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("method", key.method().name());
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("status_class", key.statusClass());
+		labels.put("method", key.getMethod().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("status_class", key.getStatusClass());
 		return new LabelSet(labels);
 	}
 
@@ -1784,8 +1784,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("method", key.method().name());
-		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("method", key.getMethod().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
 		return new LabelSet(labels);
 	}
 
@@ -1794,8 +1794,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("server_type", key.serverType().name());
-		labels.put("reason", key.reason().name());
+		labels.put("server_type", key.getServerType().name());
+		labels.put("reason", key.getReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1815,7 +1815,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
-		labels.put("reason", key.reason().name());
+		labels.put("reason", key.getReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1824,7 +1824,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
-		labels.put("reason", key.reason().name());
+		labels.put("reason", key.getReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1906,7 +1906,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
 		return new LabelSet(labels);
 	}
 
@@ -1915,8 +1915,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("outcome", key.outcome().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("outcome", key.getOutcome().name());
 		return new LabelSet(labels);
 	}
 
@@ -1925,9 +1925,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("comment_type", key.commentType().name());
-		labels.put("outcome", key.outcome().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("comment_type", key.getCommentType().name());
+		labels.put("outcome", key.getOutcome().name());
 		return new LabelSet(labels);
 	}
 
@@ -1936,8 +1936,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("drop_reason", key.dropReason().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("drop_reason", key.getDropReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1946,9 +1946,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("comment_type", key.commentType().name());
-		labels.put("drop_reason", key.dropReason().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("comment_type", key.getCommentType().name());
+		labels.put("drop_reason", key.getDropReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1957,8 +1957,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("handshake_failure_reason", key.handshakeFailureReason().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("handshake_failure_reason",
+				key.getHandshakeFailureReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -1967,8 +1968,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("comment_type", key.commentType().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("comment_type", key.getCommentType().name());
 		return new LabelSet(labels);
 	}
 
@@ -1977,8 +1978,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.routeType(), key.route()));
-		labels.put("termination_reason", key.terminationReason().name());
+		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("termination_reason", key.getTerminationReason().name());
 		return new LabelSet(labels);
 	}
 

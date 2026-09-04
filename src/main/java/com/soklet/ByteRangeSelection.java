@@ -118,11 +118,12 @@ public final class ByteRangeSelection {
 	}
 
 	@NonNull
-	public Optional<ByteRange> getRange() {
+	public Optional<@NonNull ByteRange> getRange() {
 		return Optional.ofNullable(this.range);
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{type=%s, range=%s}", getClass().getSimpleName(), getType(), getRange().orElse(null));
 	}

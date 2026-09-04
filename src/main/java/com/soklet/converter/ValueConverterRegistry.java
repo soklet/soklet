@@ -196,7 +196,7 @@ public final class ValueConverterRegistry {
 	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
 	 */
 	@NonNull
-	public <F, T> Optional<ValueConverter<F, T>> get(@NonNull TypeReference<F> fromTypeReference,
+	public <F, T> Optional<@NonNull ValueConverter<@NonNull F, @NonNull T>> get(@NonNull TypeReference<F> fromTypeReference,
 																									 @NonNull TypeReference<T> toTypeReference) {
 		requireNonNull(fromTypeReference);
 		requireNonNull(toTypeReference);
@@ -212,7 +212,7 @@ public final class ValueConverterRegistry {
 	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
 	 */
 	@NonNull
-	public Optional<ValueConverter<Object, Object>> get(@NonNull Type fromType,
+	public Optional<@NonNull ValueConverter<@NonNull Object, @NonNull Object>> get(@NonNull Type fromType,
 																											@NonNull Type toType) {
 		requireNonNull(fromType);
 		requireNonNull(toType);

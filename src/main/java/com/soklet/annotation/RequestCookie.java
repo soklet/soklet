@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -36,11 +36,12 @@ public @interface RequestCookie {
 	/**
 	 * The name of the HTTP request cookie.
 	 * <p>
-	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
+	 * If blank, defaults to the name of the Java method parameter if your
+	 * application is built with the {@code -parameters} compiler option.
 	 *
 	 * @return the name of the HTTP request cookie to inject into this <em>Resource Method</em> parameter
 	 */
-	@Nullable
+	@NonNull
 	String name() default "";
 
 	/**

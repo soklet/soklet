@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -35,6 +36,7 @@ import java.util.Optional;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface MimeTypeResolver {
 	/**
 	 * Resolves the {@code Content-Type} for {@code path}.
@@ -47,7 +49,7 @@ public interface MimeTypeResolver {
 	 * @return the content type to emit, or {@link Optional#empty()} to omit it
 	 */
 	@NonNull
-	Optional<String> contentTypeFor(@NonNull Path path);
+	Optional<@NonNull String> contentTypeFor(@NonNull Path path);
 
 	/**
 	 * Acquires Soklet's default threadsafe {@link MimeTypeResolver}.

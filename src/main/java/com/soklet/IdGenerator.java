@@ -18,6 +18,8 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -37,6 +39,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface IdGenerator<T> {
 	/**
 	 * Generates an identifier for the given {@link Request}.
@@ -60,7 +63,7 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} with default settings
 	 */
 	@NonNull
-	static IdGenerator<String> defaultInstance() {
+	static IdGenerator<@NonNull String> defaultInstance() {
 		return DefaultIdGenerator.defaultInstance();
 	}
 
@@ -73,7 +76,7 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} configured with the given prefix
 	 */
 	@NonNull
-	static IdGenerator<String> fromPrefix(@NonNull String prefix) {
+	static IdGenerator<@NonNull String> fromPrefix(@NonNull String prefix) {
 		requireNonNull(prefix);
 		return DefaultIdGenerator.fromPrefix(prefix);
 	}

@@ -51,7 +51,7 @@ public final class EntityTag {
 	}
 
 	@NonNull
-	public static Optional<EntityTag> fromHeaderValue(@Nullable String headerValue) {
+	public static Optional<@NonNull EntityTag> fromHeaderValue(@Nullable String headerValue) {
 		String trimmed = Utilities.trimAggressivelyToNull(headerValue);
 
 		if (trimmed == null || "*".equals(trimmed))
@@ -116,6 +116,7 @@ public final class EntityTag {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{value=%s, weak=%s}", getClass().getSimpleName(), getValue(), isWeak());
 	}

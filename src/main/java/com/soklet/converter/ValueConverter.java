@@ -19,6 +19,7 @@ package com.soklet.converter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
 import java.util.Optional;
 
@@ -38,6 +39,7 @@ import java.util.Optional;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface ValueConverter<F, T> {
 	/**
 	 * Converts {@code from} to an instance of {@code T}.
@@ -47,7 +49,7 @@ public interface ValueConverter<F, T> {
 	 * @throws ValueConversionException if an error occurs during conversion
 	 */
 	@NonNull
-	Optional<T> convert(@Nullable F from) throws ValueConversionException;
+	Optional<@NonNull T> convert(@Nullable F from) throws ValueConversionException;
 
 	/**
 	 * The 'converting from' type.

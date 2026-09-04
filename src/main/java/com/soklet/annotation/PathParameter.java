@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -36,10 +36,11 @@ public @interface PathParameter {
 	/**
 	 * The name of the URL path parameter.
 	 * <p>
-	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
+	 * If blank, defaults to the name of the Java method parameter if your
+	 * application is built with the {@code -parameters} compiler option.
 	 *
 	 * @return the name of the URL path parameter to inject into this <em>Resource Method</em> parameter
 	 */
-	@Nullable
+	@NonNull
 	String name() default "";
 }

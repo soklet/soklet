@@ -237,6 +237,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{sseHandshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getSseHandshakeResult());
 		}
@@ -359,6 +360,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{sseHandshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getSseHandshakeResult(), getHttpRequestResult());
 		}
@@ -407,6 +409,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{requestResult=%s}", RequestFailed.class.getSimpleName(), getHttpRequestResult());
 		}

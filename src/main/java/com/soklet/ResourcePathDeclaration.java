@@ -150,7 +150,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	 * @return the {@link ComponentType#VARARGS} component in this declaration, or {@link Optional#empty()} if none exists.
 	 */
 	@NonNull
-	public Optional<Component> getVarargsComponent() {
+	public Optional<@NonNull Component> getVarargsComponent() {
 		if (getComponents().size() == 0)
 			return Optional.empty();
 
@@ -364,6 +364,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{path=%s, components=%s}", getClass().getSimpleName(), getPath(), getComponents());
 	}
@@ -467,6 +468,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{value=%s, type=%s}", getClass().getSimpleName(), getValue(), getType());
 		}

@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +35,11 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * A Soklet application which supports Server-Sent Events will be configured with a {@link SseServer}.
  * A regular {@link HttpServer} is only required if the same application also serves ordinary HTTP <em>Resource Methods</em>.
+ * <p>
+ * Implementations must be thread-safe. Soklet owns lifecycle invocation of the
+ * runtime returned by {@link #attach(SseTransportAttachmentContext,
+ * StartupContext)}, while the transport remains responsible for the external
+ * resources and activity represented by that runtime.
  * <p>
  * For example:
  * <pre>{@code // Set up our SSE server
@@ -51,6 +58,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface SseServer {
 	/**
 	 * Acquires the stable identity for this server's complete lifecycle graph.
@@ -62,15 +70,27 @@ public interface SseServer {
 	TransportIdentity getTransportIdentity();
 
 	/**
-	 * Attaches this server to one Soklet lifecycle. Attachment is invoked once,
-	 * remains in-memory and side-effect-free, and returns the runtime that owns
-	 * binding and termination.
+	 * Attaches this server to one Soklet lifecycle. If startup reaches attachment,
+	 * the framework invokes this method at most once after claiming the transport
+	 * identity. Attachment must remain in-memory and side-effect-free; external
+	 * binding begins only when the runtime owner
+	 * invokes {@link TransportRuntime#start(StartupContext)} on the returned
+	 * runtime.
+	 * <p>
+	 * The attachment context is a framework-owned, dynamic-extent capability and
+	 * must not be retained after this method returns. Values obtained from it may
+	 * be retained according to their individual contracts, including its request
+	 * handler and termination signal. Soklet invokes a configured outer runtime;
+	 * a termination-owning enclosing transport invokes the child runtime it
+	 * attached. This transport owns the work its runtime methods start and must
+	 * report honest terminal evidence through the supplied signal.
 	 *
 	 * @param attachmentContext framework-owned composition and termination context
 	 * @param startupContext startup timing and cancelation information
 	 * @return this server's one-shot runtime
 	 */
 	@NonNull
+	@CheckReturnValue
 	TransportRuntime attach(@NonNull SseTransportAttachmentContext attachmentContext,
 			@NonNull StartupContext startupContext);
 
@@ -87,7 +107,8 @@ public interface SseServer {
 	 * @return a broadcaster for the given {@link ResourcePath}, or {@link Optional#empty()} if there is no broadcaster available
 	 */
 	@NonNull
-	Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
+	Optional<? extends @NonNull SseBroadcaster> acquireBroadcaster(
+			@Nullable ResourcePath resourcePath);
 
 	/**
 	 * Request/response processing contract for {@link SseServer} implementations.
@@ -99,6 +120,7 @@ public interface SseServer {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	@FunctionalInterface
 	interface RequestHandler {
 		/**
@@ -117,7 +139,8 @@ public interface SseServer {
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link SseServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@NonNull Request request,
-											 @NonNull Consumer<HttpRequestResult> requestResultConsumer);
+											 @NonNull Consumer<@NonNull HttpRequestResult>
+													 requestResultConsumer);
 	}
 
 	/**
@@ -179,7 +202,7 @@ public interface SseServer {
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
 		@Nullable
-		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
 		Integer concurrentConnectionLimit;
 		@Nullable
@@ -198,6 +221,12 @@ public interface SseServer {
 			this.port = port;
 		}
 
+		/**
+		 * Replaces the TCP port on which the server will listen.
+		 *
+		 * @param port port in the range supported by the server
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
@@ -205,6 +234,13 @@ public interface SseServer {
 			return this;
 		}
 
+		/**
+		 * Sets the local host or address on which the server will listen. Passing
+		 * {@code null} restores the built-in wildcard-address default.
+		 *
+		 * @param host local host or address, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder host(@Nullable String host) {
 			this.host = host;
@@ -214,7 +250,7 @@ public interface SseServer {
 		/**
 		 * Sets the maximum duration for reading the SSE handshake request line and headers.
 		 * <p>
-		 * If this value is not specified, Soklet uses the server default.
+		 * Passing {@code null} restores the built-in server default.
 		 *
 		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
 		 * @return this builder
@@ -225,18 +261,43 @@ public interface SseServer {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum duration of application handshake handling. Passing
+		 * {@code null} restores the built-in timeout.
+		 *
+		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
+		 * the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
 			this.requestHandlerTimeout = requestHandlerTimeout;
 			return this;
 		}
 
+		/**
+		 * Sets the maximum number of application handshake handlers that may
+		 * execute concurrently. Passing {@code null} restores the
+		 * processor-derived default.
+		 *
+		 * @param requestHandlerConcurrency request-handler concurrency, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerConcurrency(@Nullable Integer requestHandlerConcurrency) {
 			this.requestHandlerConcurrency = requestHandlerConcurrency;
 			return this;
 		}
 
+		/**
+		 * Sets the handshake-handler executor queue capacity. Passing {@code null}
+		 * restores the default derived from request-handler concurrency.
+		 *
+		 * @param requestHandlerQueueCapacity queue capacity, or {@code null} for the
+		 * default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerQueueCapacity(@Nullable Integer requestHandlerQueueCapacity) {
 			this.requestHandlerQueueCapacity = requestHandlerQueueCapacity;
@@ -258,6 +319,14 @@ public interface SseServer {
 			return this;
 		}
 
+		/**
+		 * Sets the interval between SSE heartbeat comments. Passing {@code null}
+		 * restores the built-in interval.
+		 *
+		 * @param heartbeatInterval heartbeat interval, or {@code null} for the
+		 * default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
 			this.heartbeatInterval = heartbeatInterval;
@@ -319,54 +388,129 @@ public interface SseServer {
 			return this;
 		}
 
+		/**
+		 * Sets the socket handshake-read buffer size in bytes. Passing {@code null}
+		 * restores the built-in default.
+		 *
+		 * @param requestReadBufferSizeInBytes request-read buffer size, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
 			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 
+		/**
+		 * Sets the supplier used to create the handshake-handler executor. The
+		 * supplier must return a non-null, fresh, running executor for this one server
+		 * lifecycle; it must not return a shared executor. The server owns the
+		 * supplied executor and calls {@link ExecutorService#shutdown()} during
+		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
+		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
+		 * framework-managed executor default.
+		 *
+		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+		public Builder requestHandlerExecutorServiceSupplier(
+				@Nullable Supplier<@NonNull ExecutorService>
+						requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
 			return this;
 		}
 
+		/**
+		 * Sets the maximum number of concurrent SSE connections. Zero disables the
+		 * cap. Passing {@code null} restores the built-in default.
+		 *
+		 * @param concurrentConnectionLimit concurrent connection limit, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
 			this.concurrentConnectionLimit = concurrentConnectionLimit;
 			return this;
 		}
 
+		/**
+		 * Sets the capacity used for active and idle broadcaster lookup. Passing
+		 * {@code null} restores the built-in default.
+		 *
+		 * @param broadcasterCacheCapacity broadcaster cache capacity, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder broadcasterCacheCapacity(@Nullable Integer broadcasterCacheCapacity) {
 			this.broadcasterCacheCapacity = broadcasterCacheCapacity;
 			return this;
 		}
 
+		/**
+		 * Sets the Resource Path declaration cache capacity. Passing {@code null}
+		 * restores the built-in default.
+		 *
+		 * @param resourcePathCacheCapacity Resource Path cache capacity, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder resourcePathCacheCapacity(@Nullable Integer resourcePathCacheCapacity) {
 			this.resourcePathCacheCapacity = resourcePathCacheCapacity;
 			return this;
 		}
 
+		/**
+		 * Sets each established connection's pending-write queue capacity. Passing
+		 * {@code null} restores the built-in default.
+		 *
+		 * @param connectionQueueCapacity connection queue capacity, or {@code null}
+		 * for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder connectionQueueCapacity(@Nullable Integer connectionQueueCapacity) {
 			this.connectionQueueCapacity = connectionQueueCapacity;
 			return this;
 		}
 
+		/**
+		 * Sets whether Soklet verifies that an SSE connection remains usable after
+		 * its handshake. Passing {@code null} restores the built-in enabled default.
+		 *
+		 * @param verifyConnectionOnceEstablished whether to verify established
+		 * connections, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder verifyConnectionOnceEstablished(@Nullable Boolean verifyConnectionOnceEstablished) {
 			this.verifyConnectionOnceEstablished = verifyConnectionOnceEstablished;
 			return this;
 		}
 
+		/**
+		 * Sets the request ID generator. Passing {@code null} restores
+		 * {@link IdGenerator#defaultInstance()}.
+		 *
+		 * @param idGenerator request ID generator, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
+		/**
+		 * Builds one stopped, one-shot SSE transport.
+		 *
+		 * @return configured SSE server
+		 */
 		@NonNull
 		public SseServer build() {
 			return new DefaultSseServer(this);

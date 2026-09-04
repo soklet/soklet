@@ -47,7 +47,7 @@ public final class TraceStateEntry {
 	 * @return the parsed entry, or {@link Optional#empty()} if malformed
 	 */
 	@NonNull
-	public static Optional<TraceStateEntry> fromMember(@Nullable String member) {
+	public static Optional<@NonNull TraceStateEntry> fromMember(@Nullable String member) {
 		String trimmedMember = trimOws(member);
 
 		if (trimmedMember == null || trimmedMember.isEmpty())

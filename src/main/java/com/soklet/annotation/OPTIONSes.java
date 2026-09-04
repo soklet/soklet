@@ -37,5 +37,5 @@ public @interface OPTIONSes {
 	 * @return the {@link OPTIONS} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	OPTIONS[] value() default {};
+	OPTIONS @NonNull [] value() default {};
 }

@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
@@ -32,6 +34,11 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Most Soklet applications will use the default {@link HttpServer} (constructed via the {@link #withPort(Integer)} builder factory method) and therefore do not need to implement this interface directly.</strong>
  * <p>
+ * Implementations must be thread-safe. Soklet owns lifecycle invocation of the
+ * runtime returned by {@link #attach(HttpTransportAttachmentContext,
+ * StartupContext)}, while the transport remains responsible for the external
+ * resources and activity represented by that runtime.
+ * <p>
  * For example:
  * <pre>{@code  SokletConfig config = SokletConfig.withHttpServer(
  *   HttpServer.fromPort(8080)
@@ -42,6 +49,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface HttpServer {
 	/**
 	 * Acquires the stable identity for this server's complete lifecycle graph.
@@ -53,15 +61,27 @@ public interface HttpServer {
 	TransportIdentity getTransportIdentity();
 
 	/**
-	 * Attaches this server to one Soklet lifecycle. Attachment is invoked once,
-	 * remains in-memory and side-effect-free, and returns the runtime that owns
-	 * binding and termination.
+	 * Attaches this server to one Soklet lifecycle. If startup reaches attachment,
+	 * the framework invokes this method at most once after claiming the transport
+	 * identity. Attachment must remain in-memory and side-effect-free; external
+	 * binding begins only when the runtime owner
+	 * invokes {@link TransportRuntime#start(StartupContext)} on the returned
+	 * runtime.
+	 * <p>
+	 * The attachment context is a framework-owned, dynamic-extent capability and
+	 * must not be retained after this method returns. Values obtained from it may
+	 * be retained according to their individual contracts, including its request
+	 * handler and termination signal. Soklet invokes a configured outer runtime;
+	 * a termination-owning enclosing transport invokes the child runtime it
+	 * attached. This transport owns the work its runtime methods start and must
+	 * report honest terminal evidence through the supplied signal.
 	 *
 	 * @param attachmentContext framework-owned composition and termination context
 	 * @param startupContext startup timing and cancelation information
 	 * @return this server's one-shot runtime
 	 */
 	@NonNull
+	@CheckReturnValue
 	TransportRuntime attach(@NonNull HttpTransportAttachmentContext attachmentContext,
 			@NonNull StartupContext startupContext);
 
@@ -74,6 +94,7 @@ public interface HttpServer {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
+	@ThreadSafe
 	@FunctionalInterface
 	interface RequestHandler {
 		/**
@@ -87,7 +108,8 @@ public interface HttpServer {
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link HttpServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@NonNull Request request,
-											 @NonNull Consumer<HttpRequestResult> requestResultConsumer);
+											 @NonNull Consumer<@NonNull HttpRequestResult>
+													 requestResultConsumer);
 	}
 
 	/**
@@ -163,9 +185,9 @@ public interface HttpServer {
 		@Nullable
 		MultipartParser multipartParser;
 		@Nullable
-		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
-		Supplier<ExecutorService> streamingExecutorServiceSupplier;
+		Supplier<@NonNull ExecutorService> streamingExecutorServiceSupplier;
 		@Nullable
 		Integer streamingQueueCapacityInBytes;
 		@Nullable
@@ -182,6 +204,12 @@ public interface HttpServer {
 			this.port = port;
 		}
 
+		/**
+		 * Replaces the TCP port on which the server will listen.
+		 *
+		 * @param port port in the range supported by the server
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
@@ -189,12 +217,26 @@ public interface HttpServer {
 			return this;
 		}
 
+		/**
+		 * Sets the local host or address on which the server will listen. Passing
+		 * {@code null} restores the built-in wildcard-address default.
+		 *
+		 * @param host local host or address, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder host(@Nullable String host) {
 			this.host = host;
 			return this;
 		}
 
+		/**
+		 * Sets the transport event-loop concurrency. Passing {@code null} restores
+		 * the built-in processor-derived default.
+		 *
+		 * @param concurrency event-loop concurrency, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder concurrency(@Nullable Integer concurrency) {
 			this.concurrency = concurrency;
@@ -204,7 +246,7 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum duration for reading the HTTP request line and headers.
 		 * <p>
-		 * If this value is not specified, Soklet uses the server default.
+		 * Passing {@code null} restores the built-in server default.
 		 *
 		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
 		 * @return this builder
@@ -219,7 +261,7 @@ public interface HttpServer {
 		 * Sets the maximum duration for reading the HTTP request body after the request
 		 * line and headers have been received.
 		 * <p>
-		 * If this value is not specified, Soklet uses the server default.
+		 * Passing {@code null} restores the built-in server default.
 		 *
 		 * @param requestBodyTimeout the request body timeout, or {@code null} for the default
 		 * @return this builder
@@ -236,7 +278,7 @@ public interface HttpServer {
 		 * The timeout is reset each time response bytes are written to the socket.
 		 * Use {@link Duration#ZERO} to disable this timeout.
 		 * <p>
-		 * If this value is not specified, Soklet uses the server default.
+		 * Passing {@code null} restores the built-in server default.
 		 *
 		 * @param responseWriteIdleTimeout the response write idle timeout, or {@code null} for the default
 		 * @return this builder
@@ -254,7 +296,7 @@ public interface HttpServer {
 		 * Soklet invokes this policy only after its own HTTP protocol checks pass. For example,
 		 * {@code Accept-Encoding} must permit {@code gzip}, and Soklet will skip streaming, file,
 		 * range, already-encoded, transfer-encoded, bodyless, and otherwise ineligible responses.
-		 * If this value is not specified, response gzip is disabled.
+		 * Passing {@code null} restores the built-in disabled policy.
 		 *
 		 * @param responseGzipPolicy the response gzip policy to use, or {@code null} for the default
 		 * @return this builder
@@ -269,7 +311,7 @@ public interface HttpServer {
 		 * Sets the policy used by the standard HTTP server to decide whether and how gzip-compressed
 		 * request bodies are transparently decompressed before request handling.
 		 * <p>
-		 * If this value is not specified, request decompression is disabled and request bodies are passed
+		 * Passing {@code null} restores the built-in disabled policy, under which request bodies are passed
 		 * to handlers exactly as received. See {@link RequestDecompressionPolicy} for enabled-mode behavior,
 		 * including decompression-bomb limits and rejection status codes.
 		 *
@@ -282,36 +324,84 @@ public interface HttpServer {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum duration of application request handling. Passing
+		 * {@code null} restores the built-in timeout.
+		 *
+		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
+		 * the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
 			this.requestHandlerTimeout = requestHandlerTimeout;
 			return this;
 		}
 
+		/**
+		 * Sets the maximum number of application request handlers that may execute
+		 * concurrently. Passing {@code null} restores the transport-derived default.
+		 *
+		 * @param requestHandlerConcurrency request-handler concurrency, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerConcurrency(@Nullable Integer requestHandlerConcurrency) {
 			this.requestHandlerConcurrency = requestHandlerConcurrency;
 			return this;
 		}
 
+		/**
+		 * Sets the request-handler executor queue capacity. Passing {@code null}
+		 * restores the default derived from request-handler concurrency.
+		 *
+		 * @param requestHandlerQueueCapacity queue capacity, or {@code null} for the
+		 * default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestHandlerQueueCapacity(@Nullable Integer requestHandlerQueueCapacity) {
 			this.requestHandlerQueueCapacity = requestHandlerQueueCapacity;
 			return this;
 		}
 
+		/**
+		 * Sets the maximum duration of one socket-selection wait. Passing
+		 * {@code null} restores the built-in default.
+		 *
+		 * @param socketSelectTimeout socket-selection timeout, or {@code null} for
+		 * the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
 			this.socketSelectTimeout = socketSelectTimeout;
 			return this;
 		}
 
+		/**
+		 * Sets the pending TCP connection limit supplied to the listening socket.
+		 * Passing {@code null} restores the built-in default.
+		 *
+		 * @param socketPendingConnectionLimit pending connection limit, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
 			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
 			return this;
 		}
 
+		/**
+		 * Sets the maximum number of concurrent client connections. Passing
+		 * {@code null} restores the built-in default.
+		 *
+		 * @param concurrentConnectionLimit concurrent connection limit, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
 			this.concurrentConnectionLimit = concurrentConnectionLimit;
@@ -373,20 +463,50 @@ public interface HttpServer {
 			return this;
 		}
 
+		/**
+		 * Sets the socket request-read buffer size in bytes. Passing {@code null}
+		 * restores the built-in default.
+		 *
+		 * @param requestReadBufferSizeInBytes request-read buffer size, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
 			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 
+		/**
+		 * Sets the multipart parser. Passing {@code null} restores
+		 * {@link MultipartParser#defaultInstance()}.
+		 *
+		 * @param multipartParser multipart parser, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
+		/**
+		 * Sets the supplier used to create the request-handler executor. The
+		 * supplier must return a non-null, fresh, running executor for this one server
+		 * lifecycle; it must not return a shared executor. The server owns the
+		 * supplied executor and calls {@link ExecutorService#shutdown()} during
+		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
+		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
+		 * framework-managed executor default.
+		 *
+		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+		public Builder requestHandlerExecutorServiceSupplier(
+				@Nullable Supplier<@NonNull ExecutorService>
+						requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
 			return this;
 		}
@@ -394,11 +514,20 @@ public interface HttpServer {
 		/**
 		 * Sets the executor service supplier used to run streaming response producers.
 		 *
+		 * The supplier must return a non-null, fresh, running executor for this one
+		 * server lifecycle; it must not return a shared executor. The server owns the
+		 * supplied executor and calls {@link ExecutorService#shutdown()} during
+		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
+		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
+		 * framework-managed executor default.
+		 *
 		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder streamingExecutorServiceSupplier(@Nullable Supplier<ExecutorService> streamingExecutorServiceSupplier) {
+		public Builder streamingExecutorServiceSupplier(
+				@Nullable Supplier<@NonNull ExecutorService>
+						streamingExecutorServiceSupplier) {
 			this.streamingExecutorServiceSupplier = streamingExecutorServiceSupplier;
 			return this;
 		}
@@ -455,12 +584,24 @@ public interface HttpServer {
 			return this;
 		}
 
+		/**
+		 * Sets the request ID generator. Passing {@code null} restores
+		 * {@link IdGenerator#defaultInstance()}.
+		 *
+		 * @param idGenerator request ID generator, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
+		/**
+		 * Builds one stopped, one-shot HTTP transport.
+		 *
+		 * @return configured HTTP server
+		 */
 		@NonNull
 		public HttpServer build() {
 			return new DefaultHttpServer(this);

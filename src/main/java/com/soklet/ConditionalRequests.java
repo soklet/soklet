@@ -76,7 +76,7 @@ public final class ConditionalRequests {
 	 * @return a short-circuit response, or {@link Optional#empty()} when the application should continue normally
 	 */
 	@NonNull
-	public static Optional<Response> responseFor(@NonNull Request request,
+	public static Optional<@NonNull Response> responseFor(@NonNull Request request,
 																						 @Nullable EntityTag entityTag,
 																						 @Nullable Instant lastModified) {
 		return responseFor(request, entityTag, lastModified, null);
@@ -96,7 +96,7 @@ public final class ConditionalRequests {
 	 * @return a short-circuit response, or {@link Optional#empty()} when the application should continue normally
 	 */
 	@NonNull
-	public static Optional<Response> responseFor(@NonNull Request request,
+	public static Optional<@NonNull Response> responseFor(@NonNull Request request,
 																						 @Nullable EntityTag entityTag,
 																						 @Nullable Instant lastModified,
 																						 @Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {

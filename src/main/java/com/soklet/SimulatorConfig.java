@@ -437,12 +437,13 @@ public final class SimulatorConfig {
 		/**
 		 * Replaces the configured lifecycle observers in iteration order.
 		 *
-		 * @param lifecycleObservers observers, or {@code null} for no observers
+		 * @param lifecycleObservers non-null observers, or {@code null} for no
+		 * observers; elements must be non-null
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder lifecycleObservers(
-				@Nullable Collection<? extends LifecycleObserver>
+				@Nullable Collection<? extends @NonNull LifecycleObserver>
 						lifecycleObservers) {
 			requireMutable();
 			this.sokletConfigBuilder.lifecycleObservers(lifecycleObservers);

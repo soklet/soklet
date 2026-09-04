@@ -37,5 +37,5 @@ public @interface POSTs {
 	 * @return the {@link POST} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	POST[] value() default {};
+	POST @NonNull [] value() default {};
 }

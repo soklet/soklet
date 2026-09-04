@@ -1618,7 +1618,8 @@ final class DefaultHttpServer implements HttpServer {
 
 		List<String> normalizedValues;
 
-		if (values instanceof SortedSet || values instanceof LinkedHashSet) {
+		if (values instanceof SortedSet || values instanceof LinkedHashSet
+				|| values.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
 			normalizedValues = new ArrayList<>(values.size());
 			for (String value : values)
 				normalizedValues.add(value == null ? "" : value);

@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -31,6 +32,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface RequestInterceptor {
 	/**
 	 * Called before Soklet begins request processing, allowing the request to be wrapped or replaced.

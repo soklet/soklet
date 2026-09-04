@@ -37,5 +37,5 @@ public @interface HEADs {
 	 * @return the {@link HEAD} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	HEAD[] value() default {};
+	HEAD @NonNull [] value() default {};
 }

@@ -123,14 +123,13 @@ public final class MultipartField {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{name=%s, filename=%s, contentType=%s, data=%s}",
-				getClass().getSimpleName(), getName(),
-				getFilename().orElse("[not available]"),
-				getContentType().orElse("[not available]"),
-				(getData().isPresent()
-						? (getFilename().isPresent() ? format("[%d bytes]", getData().get().length) : getDataAsString().orElse("[not available]"))
-						: "[not available]"));
+				getClass().getSimpleName(), "<redacted>",
+				this.filename == null ? "[not available]" : "<redacted>",
+				this.contentType == null ? "[not available]" : "<redacted>",
+				this.data == null ? "[not available]" : format("[%d bytes]", this.data.length));
 	}
 
 	@Override
@@ -192,24 +191,55 @@ public final class MultipartField {
 			return this;
 		}
 
+		/**
+		 * Sets the binary value of this field. Passing {@code null} or an empty
+		 * array clears any previously configured value.
+		 *
+		 * @param data the binary value, or {@code null} or an empty array to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder data(byte @Nullable [] data) {
 			this.data = data;
 			return this;
 		}
 
+		/**
+		 * Sets the filename associated with this field. Passing {@code null} or a
+		 * blank value clears any previously configured filename when the field is
+		 * built.
+		 *
+		 * @param filename the filename, or {@code null} or blank to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder filename(@Nullable String filename) {
 			this.filename = filename;
 			return this;
 		}
 
+		/**
+		 * Sets the content type associated with this field. Passing {@code null} or
+		 * a blank value clears any previously configured content type when the field
+		 * is built.
+		 *
+		 * @param contentType the content type, or {@code null} or blank to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder contentType(@Nullable String contentType) {
 			this.contentType = contentType;
 			return this;
 		}
 
+		/**
+		 * Sets the charset used to derive this field's string value. Passing
+		 * {@code null} clears the explicit charset; UTF-8 is used when a string value
+		 * is requested without one.
+		 *
+		 * @param charset the charset, or {@code null} to use UTF-8 implicitly
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder charset(@Nullable Charset charset) {
 			this.charset = charset;
@@ -286,7 +316,7 @@ public final class MultipartField {
 	 * @return the string value, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<String> getDataAsString() {
+	public Optional<@NonNull String> getDataAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		if (this.data != null && this.dataAsString == null) {
 			getLock().lock();
@@ -317,7 +347,7 @@ public final class MultipartField {
 	 * @return the filename, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<String> getFilename() {
+	public Optional<@NonNull String> getFilename() {
 		return Optional.ofNullable(this.filename);
 	}
 
@@ -327,7 +357,7 @@ public final class MultipartField {
 	 * @return the content type, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<String> getContentType() {
+	public Optional<@NonNull String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
@@ -337,7 +367,7 @@ public final class MultipartField {
 	 * @return the charset, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<Charset> getCharset() {
+	public Optional<@NonNull Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
@@ -347,7 +377,7 @@ public final class MultipartField {
 	 * @return the binary value, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<byte[]> getData() {
+	public Optional<byte @NonNull []> getData() {
 		return Optional.ofNullable(this.data);
 	}
 

@@ -179,16 +179,16 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			@Nullable
 			private Object clientContext;
 			@Nullable
-			private Consumer<SseUnicaster> clientInitializer;
+			private Consumer<@NonNull SseUnicaster> clientInitializer;
 
 			private Builder() {
 				// Only permit construction through Handshake builder methods
 			}
 
 			/**
-			 * Specifies custom response headers to be sent with the handshake.
+			 * Replaces the custom response headers to be sent with the handshake.
 			 *
-			 * @param headers custom response headers to send
+			 * @param headers custom response headers to send, or {@code null} or an empty map to configure no custom headers
 			 * @return this builder, for chaining
 			 */
 			@NonNull
@@ -198,9 +198,9 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			}
 
 			/**
-			 * Specifies custom response cookies to be sent with the handshake.
+			 * Replaces the custom response cookies to be sent with the handshake.
 			 *
-			 * @param cookies custom response cookies to send
+			 * @param cookies custom response cookies to send, or {@code null} or an empty set to configure no custom cookies
 			 * @return this builder, for chaining
 			 */
 			@NonNull
@@ -216,7 +216,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * <p>
 			 * Server-Sent Events can then be broadcast per-locale via {@link SseBroadcaster#broadcastEvent(Function, Function)}.
 			 *
-			 * @param clientContext custom context
+			 * @param clientContext custom context, or {@code null} to configure no client context
 			 * @return this builder, for chaining
 			 */
 			@NonNull
@@ -232,11 +232,11 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * <p>
 			 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
 			 *
-			 * @param clientInitializer custom function to run to initialize the client
+			 * @param clientInitializer custom function to run to initialize the client, or {@code null} to configure no client initializer
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder clientInitializer(@Nullable Consumer<SseUnicaster> clientInitializer) {
+			public Builder clientInitializer(@Nullable Consumer<@NonNull SseUnicaster> clientInitializer) {
 				this.clientInitializer = clientInitializer;
 				return this;
 			}
@@ -247,14 +247,14 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			}
 		}
 
-		@Nullable
+		@NonNull
 		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
-		@Nullable
+		@NonNull
 		private final Set<@NonNull ResponseCookie> cookies;
 		@Nullable
 		private final Object clientContext;
 		@Nullable
-		private final Consumer<SseUnicaster> clientInitializer;
+		private final Consumer<@NonNull SseUnicaster> clientInitializer;
 
 		private Accepted(@NonNull Builder builder) {
 			requireNonNull(builder);
@@ -274,7 +274,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 *
 		 * @return the headers explicitly specified when this handshake was accepted
 		 */
-		@Nullable
+		@NonNull
 		public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
@@ -284,7 +284,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 *
 		 * @return the cookies explicitly specified when this handshake was accepted
 		 */
-		@Nullable
+		@NonNull
 		public Set<@NonNull ResponseCookie> getCookies() {
 			return this.cookies;
 		}
@@ -297,7 +297,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 * @return the client context, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<Object> getClientContext() {
+		public Optional<@NonNull Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
@@ -307,11 +307,12 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<Consumer<SseUnicaster>> getClientInitializer() {
+		public Optional<@NonNull Consumer<@NonNull SseUnicaster>> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{headers=%s, cookies=%s, clientContext=%s clientInitializer=%s}",
 					Accepted.class.getSimpleName(), getHeaders(), getCookies(),
@@ -370,6 +371,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{response=%s}", Rejected.class.getSimpleName(), getResponse());
 		}

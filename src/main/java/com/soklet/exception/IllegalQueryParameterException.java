@@ -59,7 +59,7 @@ public final class IllegalQueryParameterException extends BadRequestException {
 	}
 
 	@NonNull
-	public Optional<String> getQueryParameterValue() {
+	public Optional<@NonNull String> getQueryParameterValue() {
 		return Optional.ofNullable(this.queryParameterValue);
 	}
 }

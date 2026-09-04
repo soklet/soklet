@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.CompletionStage;
@@ -26,6 +27,10 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Framework-created result of termination-owning unary delegate attachment.
+ * Soklet owns the delegate subtree's completion state. The enclosing transport
+ * may retain this immutable handle to drive the child runtime as part of its own
+ * lifecycle response and to observe, but never complete, the subtree's
+ * termination stage.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -66,7 +71,7 @@ public final class TransportDelegateAttachment {
 	 */
 	@NonNull
 	@CheckReturnValue
-	public CompletionStage<Void> whenTerminated() {
+	public CompletionStage<@Nullable Void> whenTerminated() {
 		return this.internalAttachment.whenTerminated();
 	}
 }

@@ -15,15 +15,17 @@ state amendment, the 2026-08-27 lifecycle cutover, the 2026-08-28 pre-G3 API
 correction, and the 2026-09-01 shutdown-component, direct-run, and cleanup-value
 amendments, followed by the 2026-09-03 application-wide instance-provider,
 MCP value-contract, invocation/input-declaration, and focused naming/surface
-amendments. The
+amendments, followed by the 2026-09-04 public-contract annotation and
+transport-ownership documentation amendment and the 2026-09-04 non-MCP
+public-record elimination amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 621 records and has SHA-256
-`38356e712db3eb747e9b525a8f2645a95ea59c50fa8de25dcfb4c21e79dc3e2e`.
+4.0.0 source tree. It currently contains 670 records and has SHA-256
+`8b29282aaf333e5b84b3ee74c55b19e6f8419433b7311aef6da5084b81320256`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -68,9 +70,9 @@ scope has exactly one owner:
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 0 | empty after the reviewed telemetry amendment |
-| `non-mcp-public-api.allowlist` | 38 | reviewed lifecycle, runner, and transport-SPI owners |
+| `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
 
-The 233-entry MCP union plus the 38-entry non-MCP allowlist owns exactly 271 current types.
+The 233-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 284 current types.
 Ownership records when a type is intended to stabilize; they do not themselves freeze it.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
@@ -376,7 +378,7 @@ selected owners: 64 classes, zero constructors, 41 fields, and 318 methods.
 Its SHA-256 is
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
 Their current reflection/nullability digests are respectively
-`7f5fe43e23b6da1cc3f18d431e9a4576aa57cad8ac83a7fae050a249e9e9d04f`,
+`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`,
 `682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`,
 and
 `3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`.
@@ -1556,7 +1558,7 @@ Phase 5, and 423 Phase 6 signatures. Phase 4 contains 133 classes, one
 constructor, 79 fields, and 845 methods, with SHA-256
 `41c717baa9353bfe794601f9ee5da1ebf5e3317afb9a656343683287da88290c`
 and exact nullability digest
-`7f5fe43e23b6da1cc3f18d431e9a4576aa57cad8ac83a7fae050a249e9e9d04f`.
+`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 134 methods,
 with SHA-256
 `0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`
@@ -2261,3 +2263,52 @@ reviewed current-side owners. The released-3.5.1 compatibility ledger remains
 The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. They remain local development checks rather
 than release-candidate provenance or publication evidence.
+
+### 2026-09-04 public-contract annotation amendment
+
+The owner-approved Revision 2 contract pass completes the source-level
+nullability, thread-safety, builder-reset, collection, and lifecycle/transport
+ownership audit. Java annotation elements and repeatable-annotation arrays now
+state their truthful non-null contracts; reviewed nested generic payloads carry
+explicit JSpecify type use; and public parameter names and generated processor
+diagnostics use the same property vocabulary. Lifecycle observers now document
+failed, timed-out, and canceled startup, while the runner and transport SPI
+document who owns hooks, runtime invocation, executor shutdown, and terminal
+evidence.
+
+No Java descriptor or reviewed compatibility record changes. The frozen
+Phase 4/5/6 snapshots remain byte-identical at 1,058/189/423 records with
+signature SHA-256 values
+`41c717baa9353bfe794601f9ee5da1ebf5e3317afb9a656343683287da88290c`,
+`0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`,
+and
+`991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
+The deliberately refreshed Phase 4 reflection/nullability SHA-256 is
+`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`;
+Phase 5 and Phase 6 retain
+`682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`
+and
+`3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`.
+The owner partition remains 133/36/64/0 and the released-3.5.1 compatibility
+ledger remains 621 records with SHA-256
+`38356e712db3eb747e9b525a8f2645a95ea59c50fa8de25dcfb4c21e79dc3e2e`.
+
+### 2026-09-04 non-MCP public-record elimination amendment
+
+The 13 legacy public key records nested in `MetricsCollector` are now immutable
+final classes. They retain their public constructors, validation, structural
+equality, hash codes, and diagnostic string representations, while replacing
+record component accessors with Soklet-style getters. This removes the last
+public records from Soklet's supported exported API and permits future internal
+representation changes without exposing record structure as part of the Java
+contract. The public API contract test now rejects any exported record in every
+supported Soklet package, not only MCP packages.
+
+This non-MCP-only change does not alter the Phase 4/5/6 MCP snapshots, which
+remain at 1,058/189/423 records. It adds 13 reviewed non-MCP owners and 49
+released-3.5.1 comparison records: 13 superclass changes from `Record` to
+`Object` and 36 removed record-component accessors. The current owner total is
+284, the 51-entry non-MCP allowlist has SHA-256
+`e56656835910a549fa3d6edf8fe073ca11759eede86daa5f760a423ce133f006`,
+and the 670-record compatibility ledger has SHA-256
+`8b29282aaf333e5b84b3ee74c55b19e6f8419433b7311aef6da5084b81320256`.

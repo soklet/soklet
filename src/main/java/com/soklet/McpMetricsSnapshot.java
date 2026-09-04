@@ -983,11 +983,11 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative server-stop counts grouped by fixed shutdown
-		 * disposition.
+		 * Replaces the server-stop counts grouped by fixed shutdown disposition.
+		 * Passing {@code null} or an empty map clears all server-stop counts.
 		 *
-		 * @param serverStops nonnegative server-stop counts, or {@code null} for
-		 *                    an empty map
+		 * @param serverStops nonnegative server-stop counts, or {@code null} to
+		 *                    clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1031,10 +1031,11 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative MCP transport-failure counts grouped by fixed reason.
+		 * Replaces the MCP transport-failure counts grouped by fixed reason.
+		 * Passing {@code null} or an empty map clears all transport-failure counts.
 		 *
 		 * @param transportFailures nonnegative MCP transport-failure counts, or
-		 *                          {@code null} for an empty map
+		 *                          {@code null} to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1106,11 +1107,11 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative completed-request counts grouped by bounded endpoint,
-		 * method, and terminal outcome dimensions.
+		 * Replaces completed-request counts grouped by bounded endpoint, method,
+		 * and terminal outcome dimensions. Passing {@code null} or an empty map
+		 * clears all completed-request counts.
 		 *
-		 * @param requests completed-request counts, or {@code null} for an empty
-		 *                 map
+		 * @param requests completed-request counts, or {@code null} to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1122,11 +1123,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets request-duration histograms grouped by bounded endpoint, method,
-		 * and terminal outcome dimensions.
+		 * Replaces request-duration histograms grouped by bounded endpoint, method,
+		 * and terminal outcome dimensions. Passing {@code null} or an empty map
+		 * clears all request-duration histograms.
 		 *
-		 * @param requestDurations request-duration histograms, or {@code null} for
-		 *                         an empty map
+		 * @param requestDurations request-duration histograms, or {@code null} to
+		 *                         clear them
 		 * @return this builder
 		 */
 		@NonNull
@@ -1153,11 +1155,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets request-stream duration histograms grouped by bounded endpoint,
-		 * method, and fixed termination reason dimensions.
+		 * Replaces request-stream duration histograms grouped by bounded endpoint,
+		 * method, and fixed termination reason dimensions. Passing {@code null} or
+		 * an empty map clears all request-stream duration histograms.
 		 *
 		 * @param requestStreamDurations request-stream duration histograms, or
-		 *                               {@code null} for an empty map
+		 *                               {@code null} to clear them
 		 * @return this builder
 		 */
 		@NonNull
@@ -1186,11 +1189,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets subscription-duration histograms grouped by bounded endpoint and
-		 * fixed termination reason dimensions.
+		 * Replaces subscription-duration histograms grouped by bounded endpoint and
+		 * fixed termination reason dimensions. Passing {@code null} or an empty map
+		 * clears all subscription-duration histograms.
 		 *
 		 * @param subscriptionDurations subscription-duration histograms, or
-		 *                              {@code null} for an empty map
+		 *                              {@code null} to clear them
 		 * @return this builder
 		 */
 		@NonNull
@@ -1205,11 +1209,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative cooperative request-cancelation signals grouped by
-		 * bounded endpoint and method dimensions.
+		 * Replaces cooperative request-cancelation signal counts grouped by bounded
+		 * endpoint and method dimensions. Passing {@code null} or an empty map
+		 * clears all cancelation-signal counts.
 		 *
 		 * @param cancelationsSignaled cancelation-signaled counts, or {@code null}
-		 *                             for an empty map
+		 *                             to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1225,11 +1230,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative progress notifications accepted for delivery grouped by
-		 * bounded endpoint and method dimensions.
+		 * Replaces progress-notification counts accepted for delivery grouped by
+		 * bounded endpoint and method dimensions. Passing {@code null} or an empty
+		 * map clears all progress-notification counts.
 		 *
-		 * @param progressEmitted progress-emitted counts, or {@code null} for an
-		 *                        empty map
+		 * @param progressEmitted progress-emitted counts, or {@code null} to clear
+		 *                        them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1258,11 +1264,10 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative client-visible MCP protocol-error counts grouped by
-		 * error code.
+		 * Replaces client-visible MCP protocol-error counts grouped by error code.
+		 * Passing {@code null} or an empty map clears all protocol-error counts.
 		 *
-		 * @param protocolErrors protocol-error counts, or {@code null} for an empty
-		 *                       map
+		 * @param protocolErrors protocol-error counts, or {@code null} to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
@@ -1275,11 +1280,12 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative unknown mirrored-header occurrences grouped by bounded
-		 * endpoint and method dimensions.
+		 * Replaces unknown mirrored-header occurrence counts grouped by bounded
+		 * endpoint and method dimensions. Passing {@code null} or an empty map
+		 * clears all unknown mirrored-header counts.
 		 *
 		 * @param unknownMirroredHeaders unknown mirrored-header counts, or
-		 *                               {@code null} for an empty map
+		 *                               {@code null} to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */

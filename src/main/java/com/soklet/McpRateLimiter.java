@@ -74,13 +74,13 @@ public interface McpRateLimiter {
 	 * fails closed when no fully replenished partition can be reclaimed. The
 	 * limiter is local to this JVM and provides no cross-instance coordination.
 	 *
-	 * @param configuration finite token-bucket configuration
+	 * @param tokenBucketConfig finite token-bucket configuration
 	 * @return a new independent in-memory limiter
 	 */
 	@NonNull
 	static McpRateLimiter fromInMemoryTokenBucket(
-			@NonNull McpTokenBucketConfig configuration) {
-		return new DefaultMcpRateLimiter(requireNonNull(configuration));
+			@NonNull McpTokenBucketConfig tokenBucketConfig) {
+		return new DefaultMcpRateLimiter(requireNonNull(tokenBucketConfig));
 	}
 }
 

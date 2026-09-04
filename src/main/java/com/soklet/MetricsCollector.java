@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -513,7 +514,7 @@ public interface MetricsCollector {
 	 * @return an optional metrics snapshot
 	 */
 	@NonNull
-	default Optional<Snapshot> snapshot() {
+	default Optional<@NonNull Snapshot> snapshot() {
 		return Optional.empty();
 	}
 
@@ -526,7 +527,7 @@ public interface MetricsCollector {
 	 * @return a textual metrics snapshot, or {@link Optional#empty()} if unsupported
 	 */
 	@NonNull
-	default Optional<String> snapshotText(@NonNull SnapshotTextOptions options) {
+	default Optional<@NonNull String> snapshotText(@NonNull SnapshotTextOptions options) {
 		requireNonNull(options);
 		return Optional.empty();
 	}
@@ -624,7 +625,7 @@ public interface MetricsCollector {
 		 * @return the filter, if present
 		 */
 		@NonNull
-		public Optional<Predicate<MetricSample>> getMetricFilter() {
+		public Optional<@NonNull Predicate<@NonNull MetricSample>> getMetricFilter() {
 			return Optional.ofNullable(this.metricFilter);
 		}
 
@@ -673,6 +674,7 @@ public interface MetricsCollector {
 		 * the sample name includes {@code _bucket} and the labels include {@code le}.
 		 * Label maps are immutable and preserve insertion order.
 		 */
+		@ThreadSafe
 		public static final class MetricSample {
 			@NonNull
 			private final String name;
@@ -717,7 +719,7 @@ public interface MetricsCollector {
 		 * <p>
 		 * Defaults are {@link HistogramFormat#FULL_BUCKETS} and {@code includeZeroBuckets=true}.
 		 */
-		@ThreadSafe
+		@NotThreadSafe
 		public static final class Builder {
 			@NonNull
 			private final MetricsFormat metricsFormat;
@@ -737,7 +739,7 @@ public interface MetricsCollector {
 			/**
 			 * Sets an optional per-sample filter.
 			 *
-			 * @param metricFilter the filter to apply, or {@code null} to disable filtering
+			 * @param metricFilter the filter to apply, or {@code null} to disable filtering (the default)
 			 * @return this builder
 			 */
 			@NonNull
@@ -761,7 +763,8 @@ public interface MetricsCollector {
 			/**
 			 * Controls whether zero-count buckets are emitted.
 			 *
-			 * @param includeZeroBuckets {@code true} to include zero-count buckets, {@code false} to omit them
+			 * @param includeZeroBuckets {@code true} to include zero-count buckets, {@code false} to omit them,
+			 *                           or {@code null} to restore the default of {@code true}
 			 * @return this builder
 			 */
 			@NonNull
@@ -1417,9 +1420,11 @@ public interface MetricsCollector {
 
 
 			/**
-			 * Sets transport failure counters keyed by server type and failure reason.
+			 * Replaces all previously configured transport failure counters keyed by server type and failure reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param transportFailures the transport failure counters
+			 * @param transportFailures the replacement transport failure counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1430,9 +1435,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP request read failure counters keyed by failure reason.
+			 * Replaces all previously configured HTTP request read failure counters keyed by failure reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param httpRequestReadFailures the HTTP request read failure counters
+			 * @param httpRequestReadFailures the replacement HTTP request read failure counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1443,9 +1450,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP request rejection counters keyed by rejection reason.
+			 * Replaces all previously configured HTTP request rejection counters keyed by rejection reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param httpRequestRejections the HTTP request rejection counters
+			 * @param httpRequestRejections the replacement HTTP request rejection counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1456,9 +1465,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE request read failure counters keyed by failure reason.
+			 * Replaces all previously configured SSE request read failure counters keyed by failure reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseRequestReadFailures the SSE request read failure counters
+			 * @param sseRequestReadFailures the replacement SSE request read failure counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1469,9 +1480,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE request rejection counters keyed by rejection reason.
+			 * Replaces all previously configured SSE request rejection counters keyed by rejection reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseRequestRejections the SSE request rejection counters
+			 * @param sseRequestRejections the replacement SSE request rejection counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1483,9 +1496,11 @@ public interface MetricsCollector {
 
 
 			/**
-			 * Sets HTTP request duration histograms keyed by server route and status class.
+			 * Replaces all previously configured HTTP request duration histograms keyed by server route and status class.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param httpRequestDurations the HTTP request duration histograms
+			 * @param httpRequestDurations the replacement HTTP request duration histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1496,9 +1511,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP handler duration histograms keyed by server route and status class.
+			 * Replaces all previously configured HTTP handler duration histograms keyed by server route and status class.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param httpHandlerDurations the HTTP handler duration histograms
+			 * @param httpHandlerDurations the replacement HTTP handler duration histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1509,9 +1526,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP time-to-first-byte histograms keyed by server route and status class.
+			 * Replaces all previously configured HTTP time-to-first-byte histograms keyed by server route and status class.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param httpTimeToFirstByte the HTTP time-to-first-byte histograms
+			 * @param httpTimeToFirstByte the replacement HTTP time-to-first-byte histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1522,9 +1541,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP request body size histograms keyed by server route.
+			 * Replaces all previously configured HTTP request body size histograms keyed by server route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param httpRequestBodyBytes the HTTP request body size histograms
+			 * @param httpRequestBodyBytes the replacement HTTP request body size histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1535,9 +1556,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets HTTP response body size histograms keyed by server route and status class.
+			 * Replaces all previously configured HTTP response body size histograms keyed by server route and status class.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param httpResponseBodyBytes the HTTP response body size histograms
+			 * @param httpResponseBodyBytes the replacement HTTP response body size histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1548,9 +1571,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE handshake acceptance counters keyed by route.
+			 * Replaces all previously configured SSE handshake acceptance counters keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseHandshakesAccepted SSE handshake acceptance counters
+			 * @param sseHandshakesAccepted the replacement SSE handshake acceptance counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1561,9 +1586,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE handshake rejection counters keyed by route and failure reason.
+			 * Replaces all previously configured SSE handshake rejection counters keyed by route and failure reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseHandshakesRejected SSE handshake rejection counters
+			 * @param sseHandshakesRejected the replacement SSE handshake rejection counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1574,9 +1601,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event enqueue outcome counters keyed by route and outcome.
+			 * Replaces all previously configured SSE event enqueue outcome counters keyed by route and outcome.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseEventEnqueueOutcomes the SSE event enqueue outcome counters
+			 * @param sseEventEnqueueOutcomes the replacement SSE event enqueue outcome counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1587,9 +1616,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE comment enqueue outcome counters keyed by route, comment type, and outcome.
+			 * Replaces all previously configured SSE comment enqueue outcome counters keyed by route, comment type, and outcome.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseCommentEnqueueOutcomes the SSE comment enqueue outcome counters
+			 * @param sseCommentEnqueueOutcomes the replacement SSE comment enqueue outcome counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1600,9 +1631,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event drop counters keyed by route and drop reason.
+			 * Replaces all previously configured SSE event drop counters keyed by route and drop reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseEventDrops the SSE event drop counters
+			 * @param sseEventDrops the replacement SSE event drop counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1613,9 +1646,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE comment drop counters keyed by route, comment type, and drop reason.
+			 * Replaces all previously configured SSE comment drop counters keyed by route, comment type, and drop reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
 			 *
-			 * @param sseCommentDrops the SSE comment drop counters
+			 * @param sseCommentDrops the replacement SSE comment drop counters, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1626,9 +1661,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE time-to-first-event histograms keyed by route.
+			 * Replaces all previously configured SSE time-to-first-event histograms keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseTimeToFirstEvent the SSE time-to-first-event histograms
+			 * @param sseTimeToFirstEvent the replacement SSE time-to-first-event histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1639,9 +1676,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event write duration histograms keyed by route.
+			 * Replaces all previously configured SSE event write duration histograms keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseEventWriteDurations the SSE event write duration histograms
+			 * @param sseEventWriteDurations the replacement SSE event write duration histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1652,9 +1691,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event delivery lag histograms keyed by route.
+			 * Replaces all previously configured SSE event delivery lag histograms keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseEventDeliveryLag the SSE event delivery lag histograms
+			 * @param sseEventDeliveryLag the replacement SSE event delivery lag histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1665,9 +1706,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event size histograms keyed by route.
+			 * Replaces all previously configured SSE event size histograms keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseEventSizes the SSE event size histograms
+			 * @param sseEventSizes the replacement SSE event size histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1678,9 +1721,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE queue depth histograms keyed by route.
+			 * Replaces all previously configured SSE queue depth histograms keyed by route.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseQueueDepth the SSE queue depth histograms
+			 * @param sseQueueDepth the replacement SSE queue depth histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1691,9 +1736,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE comment delivery lag histograms keyed by route and comment type.
+			 * Replaces all previously configured SSE comment delivery lag histograms keyed by route and comment type.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseCommentDeliveryLag the SSE comment delivery lag histograms
+			 * @param sseCommentDeliveryLag the replacement SSE comment delivery lag histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1704,9 +1751,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE comment size histograms keyed by route and comment type.
+			 * Replaces all previously configured SSE comment size histograms keyed by route and comment type.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseCommentSizes the SSE comment size histograms
+			 * @param sseCommentSizes the replacement SSE comment size histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1717,9 +1766,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE comment queue depth histograms keyed by route and comment type.
+			 * Replaces all previously configured SSE comment queue depth histograms keyed by route and comment type.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseCommentQueueDepth the SSE comment queue depth histograms
+			 * @param sseCommentQueueDepth the replacement SSE comment queue depth histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -1730,9 +1781,11 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE stream duration histograms keyed by route and termination reason.
+			 * Replaces all previously configured SSE stream duration histograms keyed by route and termination reason.
+			 * <p>
+			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *
-			 * @param sseStreamDurations the SSE stream duration histograms
+			 * @param sseStreamDurations the replacement SSE stream duration histograms, or {@code null} to clear them
 			 * @return this builder
 			 */
 			@NonNull
@@ -2024,6 +2077,7 @@ public interface MetricsCollector {
 		 * @return histogram summary
 		 */
 		@Override
+		@NonNull
 		public String toString() {
 			return String.format("%s{count=%d, min=%d, max=%d, sum=%d, bucketBoundaries=%s}",
 					getClass().getSimpleName(), this.count, this.min, this.max, this.sum, Arrays.toString(this.bucketBoundaries));
@@ -2161,69 +2215,170 @@ public interface MetricsCollector {
 	/**
 	 * Key for transport failures grouped by server type and reason.
 	 *
-	 * @param serverType server that recorded the failure
-	 * @param reason fixed transport failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record TransportFailureKey(@NonNull ServerType serverType,
-												 @NonNull TransportFailureReason reason) {
+	@ThreadSafe
+	final class TransportFailureKey {
+		@NonNull
+		private final ServerType serverType;
+		@NonNull
+		private final TransportFailureReason reason;
+
 		/**
 		 * Creates a transport failure key.
 		 *
 		 * @param serverType server that recorded the failure
 		 * @param reason fixed transport failure reason
 		 */
-		public TransportFailureKey {
-			requireNonNull(serverType);
-			requireNonNull(reason);
+		public TransportFailureKey(@NonNull ServerType serverType,
+				@NonNull TransportFailureReason reason) {
+			this.serverType = requireNonNull(serverType);
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return server that recorded the failure */
+		@NonNull
+		public ServerType getServerType() {
+			return this.serverType;
+		}
+
+		/** @return fixed transport failure reason */
+		@NonNull
+		public TransportFailureReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether both transport-failure dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof TransportFailureKey key))
+				return false;
+			return this.serverType == key.serverType && this.reason == key.reason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.serverType, this.reason);
+		}
+
+		/** @return diagnostic rendering of the transport-failure dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "TransportFailureKey{serverType=" + this.serverType
+					+ ", reason=" + this.reason + "}";
 		}
 	}
 
 	/**
 	 * Key for request read failures grouped by reason.
 	 *
-	 * @param reason fixed request read failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record RequestReadFailureKey(@NonNull RequestReadFailureReason reason) {
+	@ThreadSafe
+	final class RequestReadFailureKey {
+		@NonNull
+		private final RequestReadFailureReason reason;
+
 		/**
 		 * Creates a request read failure key.
 		 *
 		 * @param reason fixed request read failure reason
 		 */
-		public RequestReadFailureKey {
-			requireNonNull(reason);
+		public RequestReadFailureKey(@NonNull RequestReadFailureReason reason) {
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return fixed request read failure reason */
+		@NonNull
+		public RequestReadFailureReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether both keys have the same reason */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return this == other || (other instanceof RequestReadFailureKey key
+					&& this.reason == key.reason);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.reason.hashCode();
+		}
+
+		/** @return diagnostic rendering of the request-read failure reason */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestReadFailureKey{reason=" + this.reason + "}";
 		}
 	}
 
 	/**
 	 * Key for request rejections grouped by reason.
 	 *
-	 * @param reason fixed request rejection reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record RequestRejectionKey(@NonNull RequestRejectionReason reason) {
+	@ThreadSafe
+	final class RequestRejectionKey {
+		@NonNull
+		private final RequestRejectionReason reason;
+
 		/**
 		 * Creates a request rejection key.
 		 *
 		 * @param reason fixed request rejection reason
 		 */
-		public RequestRejectionKey {
-			requireNonNull(reason);
+		public RequestRejectionKey(@NonNull RequestRejectionReason reason) {
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return fixed request rejection reason */
+		@NonNull
+		public RequestRejectionReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether both keys have the same reason */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return this == other || (other instanceof RequestRejectionKey key
+					&& this.reason == key.reason);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.reason.hashCode();
+		}
+
+		/** @return diagnostic rendering of the request-rejection reason */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestRejectionKey{reason=" + this.reason + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by HTTP method and route match information.
 	 *
-	 * @param method HTTP method
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record HttpServerRouteKey(@NonNull HttpMethod method,
-										@NonNull RouteType routeType,
-										@Nullable ResourcePathDeclaration route) {
+	@ThreadSafe
+	final class HttpServerRouteKey {
+		@NonNull
+		private final HttpMethod method;
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+
 		/**
 		 * Creates an HTTP route key.
 		 *
@@ -2231,29 +2386,75 @@ public interface MetricsCollector {
 		 * @param routeType whether a route matched
 		 * @param route matched route, or {@code null} when unmatched
 		 */
-		public HttpServerRouteKey {
-			requireNonNull(method);
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+		public HttpServerRouteKey(@NonNull HttpMethod method,
+				@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route) {
+			this.method = requireNonNull(method);
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+		}
+
+		/** @return HTTP method */
+		@NonNull
+		public HttpMethod getMethod() {
+			return this.method;
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return whether all HTTP route dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof HttpServerRouteKey key))
+				return false;
+			return this.method == key.method && this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.method, this.routeType, this.route);
+		}
+
+		/** @return diagnostic rendering of the HTTP route dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HttpServerRouteKey{method=" + this.method + ", routeType="
+					+ this.routeType + ", route=" + this.route + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by HTTP method, route match information, and status class (e.g. 2xx).
 	 *
-	 * @param method HTTP method
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param statusClass HTTP status class
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record HttpServerRouteStatusKey(@NonNull HttpMethod method,
-															@NonNull RouteType routeType,
-																	@Nullable ResourcePathDeclaration route,
-																	@NonNull String statusClass) {
+	@ThreadSafe
+	final class HttpServerRouteStatusKey {
+		@NonNull
+		private final HttpMethod method;
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		@NonNull
+		private final String statusClass;
+
 		/**
 		 * Creates an HTTP route and status key.
 		 *
@@ -2262,28 +2463,83 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param statusClass HTTP status class
 		 */
-		public HttpServerRouteStatusKey {
-			requireNonNull(method);
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(statusClass);
+		public HttpServerRouteStatusKey(@NonNull HttpMethod method,
+				@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				@NonNull String statusClass) {
+			this.method = requireNonNull(method);
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.statusClass = requireNonNull(statusClass);
+		}
+
+		/** @return HTTP method */
+		@NonNull
+		public HttpMethod getMethod() {
+			return this.method;
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return HTTP status class */
+		@NonNull
+		public String getStatusClass() {
+			return this.statusClass;
+		}
+
+		/** @return whether all HTTP route and status dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof HttpServerRouteStatusKey key))
+				return false;
+			return this.method == key.method && this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.statusClass.equals(key.statusClass);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.method, this.routeType, this.route,
+					this.statusClass);
+		}
+
+		/** @return diagnostic rendering of the HTTP route and status dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HttpServerRouteStatusKey{method=" + this.method
+					+ ", routeType=" + this.routeType + ", route=" + this.route
+					+ ", statusClass=" + this.statusClass + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type and route match information.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param commentType SSE comment type
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseCommentRouteKey(@NonNull RouteType routeType,
-																																@Nullable ResourcePathDeclaration route,
-																																SseComment.@NonNull CommentType commentType) {
+	@ThreadSafe
+	final class SseCommentRouteKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		private final SseComment.@NonNull CommentType commentType;
+
 		/**
 		 * Creates an SSE comment route key.
 		 *
@@ -2291,51 +2547,136 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param commentType SSE comment type
 		 */
-		public SseCommentRouteKey {
-			requireNonNull(routeType);
-			requireNonNull(commentType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+		public SseCommentRouteKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				SseComment.@NonNull CommentType commentType) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.commentType = requireNonNull(commentType);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return SSE comment type */
+		public SseComment.@NonNull CommentType getCommentType() {
+			return this.commentType;
+		}
+
+		/** @return whether all SSE comment route dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseCommentRouteKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.commentType == key.commentType;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route, this.commentType);
+		}
+
+		/** @return diagnostic rendering of the SSE comment route dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseCommentRouteKey{routeType=" + this.routeType + ", route="
+					+ this.route + ", commentType=" + this.commentType + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseEventRouteKey(@NonNull RouteType routeType,
-																		 @Nullable ResourcePathDeclaration route) {
+	@ThreadSafe
+	final class SseEventRouteKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+
 		/**
 		 * Creates an SSE event route key.
 		 *
 		 * @param routeType whether a route matched
 		 * @param route matched route, or {@code null} when unmatched
 		 */
-		public SseEventRouteKey {
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+		public SseEventRouteKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return whether both SSE event route dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseEventRouteKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route);
+		}
+
+		/** @return diagnostic rendering of the SSE event route dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseEventRouteKey{routeType=" + this.routeType + ", route="
+					+ this.route + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and handshake failure reason.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param handshakeFailureReason fixed handshake failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
-																																				 @Nullable ResourcePathDeclaration route,
-																																				 SseConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
+	@ThreadSafe
+	final class SseEventRouteHandshakeFailureKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		private final SseConnection.@NonNull HandshakeFailureReason
+				handshakeFailureReason;
+
 		/**
 		 * Creates an SSE handshake failure key.
 		 *
@@ -2343,27 +2684,78 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param handshakeFailureReason fixed handshake failure reason
 		 */
-		public SseEventRouteHandshakeFailureKey {
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(handshakeFailureReason);
+		public SseEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				SseConnection.@NonNull HandshakeFailureReason
+						handshakeFailureReason) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.handshakeFailureReason = requireNonNull(handshakeFailureReason);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return fixed handshake failure reason */
+		public SseConnection.@NonNull HandshakeFailureReason
+		getHandshakeFailureReason() {
+			return this.handshakeFailureReason;
+		}
+
+		/** @return whether all SSE handshake-failure dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseEventRouteHandshakeFailureKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.handshakeFailureReason == key.handshakeFailureReason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route,
+					this.handshakeFailureReason);
+		}
+
+		/** @return diagnostic rendering of the SSE handshake-failure dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseEventRouteHandshakeFailureKey{routeType="
+					+ this.routeType + ", route=" + this.route
+					+ ", handshakeFailureReason=" + this.handshakeFailureReason
+					+ "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and enqueue outcome.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param outcome fixed enqueue outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
-																																	 @Nullable ResourcePathDeclaration route,
-																																	 @NonNull SseEventEnqueueOutcome outcome) {
+	@ThreadSafe
+	final class SseEventRouteEnqueueOutcomeKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		@NonNull
+		private final SseEventEnqueueOutcome outcome;
+
 		/**
 		 * Creates an SSE enqueue outcome key.
 		 *
@@ -2371,29 +2763,76 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param outcome fixed enqueue outcome
 		 */
-		public SseEventRouteEnqueueOutcomeKey {
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(outcome);
+		public SseEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				@NonNull SseEventEnqueueOutcome outcome) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.outcome = requireNonNull(outcome);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return fixed enqueue outcome */
+		@NonNull
+		public SseEventEnqueueOutcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether all SSE enqueue-outcome dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseEventRouteEnqueueOutcomeKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.outcome == key.outcome;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route, this.outcome);
+		}
+
+		/** @return diagnostic rendering of the SSE enqueue-outcome dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseEventRouteEnqueueOutcomeKey{routeType="
+					+ this.routeType + ", route=" + this.route + ", outcome="
+					+ this.outcome + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and enqueue outcome.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param commentType SSE comment type
-	 * @param outcome fixed enqueue outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseCommentRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
-																											@Nullable ResourcePathDeclaration route,
-																																																SseComment.@NonNull CommentType commentType,
-																																																@NonNull SseEventEnqueueOutcome outcome) {
+	@ThreadSafe
+	final class SseCommentRouteEnqueueOutcomeKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		private final SseComment.@NonNull CommentType commentType;
+		@NonNull
+		private final SseEventEnqueueOutcome outcome;
+
 		/**
 		 * Creates an SSE comment enqueue outcome key.
 		 *
@@ -2402,28 +2841,85 @@ public interface MetricsCollector {
 		 * @param commentType SSE comment type
 		 * @param outcome fixed enqueue outcome
 		 */
-		public SseCommentRouteEnqueueOutcomeKey {
-			requireNonNull(routeType);
-			requireNonNull(commentType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(outcome);
+		public SseCommentRouteEnqueueOutcomeKey(
+				@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				SseComment.@NonNull CommentType commentType,
+				@NonNull SseEventEnqueueOutcome outcome) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.commentType = requireNonNull(commentType);
+			this.outcome = requireNonNull(outcome);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return SSE comment type */
+		public SseComment.@NonNull CommentType getCommentType() {
+			return this.commentType;
+		}
+
+		/** @return fixed enqueue outcome */
+		@NonNull
+		public SseEventEnqueueOutcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether all SSE comment enqueue dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseCommentRouteEnqueueOutcomeKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.commentType == key.commentType
+					&& this.outcome == key.outcome;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route, this.commentType,
+					this.outcome);
+		}
+
+		/** @return diagnostic rendering of the SSE comment enqueue dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseCommentRouteEnqueueOutcomeKey{routeType="
+					+ this.routeType + ", route=" + this.route + ", commentType="
+					+ this.commentType + ", outcome=" + this.outcome + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and drop reason.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param dropReason fixed drop reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseEventRouteDropKey(@NonNull RouteType routeType,
-																													 @Nullable ResourcePathDeclaration route,
-																													 @NonNull SseEventDropReason dropReason) {
+	@ThreadSafe
+	final class SseEventRouteDropKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		@NonNull
+		private final SseEventDropReason dropReason;
+
 		/**
 		 * Creates an SSE event drop key.
 		 *
@@ -2431,29 +2927,76 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param dropReason fixed drop reason
 		 */
-		public SseEventRouteDropKey {
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(dropReason);
+		public SseEventRouteDropKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				@NonNull SseEventDropReason dropReason) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.dropReason = requireNonNull(dropReason);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return fixed drop reason */
+		@NonNull
+		public SseEventDropReason getDropReason() {
+			return this.dropReason;
+		}
+
+		/** @return whether all SSE event-drop dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseEventRouteDropKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.dropReason == key.dropReason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route, this.dropReason);
+		}
+
+		/** @return diagnostic rendering of the SSE event-drop dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseEventRouteDropKey{routeType=" + this.routeType
+					+ ", route=" + this.route + ", dropReason="
+					+ this.dropReason + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and drop reason.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param commentType SSE comment type
-	 * @param dropReason fixed drop reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseCommentRouteDropKey(@NonNull RouteType routeType,
-																						@Nullable ResourcePathDeclaration route,
-																																				SseComment.@NonNull CommentType commentType,
-																																				@NonNull SseEventDropReason dropReason) {
+	@ThreadSafe
+	final class SseCommentRouteDropKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		private final SseComment.@NonNull CommentType commentType;
+		@NonNull
+		private final SseEventDropReason dropReason;
+
 		/**
 		 * Creates an SSE comment drop key.
 		 *
@@ -2462,28 +3005,84 @@ public interface MetricsCollector {
 		 * @param commentType SSE comment type
 		 * @param dropReason fixed drop reason
 		 */
-		public SseCommentRouteDropKey {
-			requireNonNull(routeType);
-			requireNonNull(commentType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(dropReason);
+		public SseCommentRouteDropKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				SseComment.@NonNull CommentType commentType,
+				@NonNull SseEventDropReason dropReason) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.commentType = requireNonNull(commentType);
+			this.dropReason = requireNonNull(dropReason);
+		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return SSE comment type */
+		public SseComment.@NonNull CommentType getCommentType() {
+			return this.commentType;
+		}
+
+		/** @return fixed drop reason */
+		@NonNull
+		public SseEventDropReason getDropReason() {
+			return this.dropReason;
+		}
+
+		/** @return whether all SSE comment-drop dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseCommentRouteDropKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.commentType == key.commentType
+					&& this.dropReason == key.dropReason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route, this.commentType,
+					this.dropReason);
+		}
+
+		/** @return diagnostic rendering of the SSE comment-drop dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseCommentRouteDropKey{routeType=" + this.routeType
+					+ ", route=" + this.route + ", commentType="
+					+ this.commentType + ", dropReason=" + this.dropReason + "}";
 		}
 	}
 
 	/**
 	 * Key for metrics grouped by Server-Sent Event stream route match information and termination reason.
 	 *
-	 * @param routeType whether a route matched
-	 * @param route matched route, or {@code null} when unmatched
-	 * @param terminationReason fixed stream termination reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseStreamRouteTerminationKey(@NonNull RouteType routeType,
-																																		 @Nullable ResourcePathDeclaration route,
-																																		 @NonNull StreamTerminationReason terminationReason) {
+	@ThreadSafe
+	final class SseStreamRouteTerminationKey {
+		@NonNull
+		private final RouteType routeType;
+		@Nullable
+		private final ResourcePathDeclaration route;
+		@NonNull
+		private final StreamTerminationReason terminationReason;
+
 		/**
 		 * Creates an SSE stream termination key.
 		 *
@@ -2491,14 +3090,71 @@ public interface MetricsCollector {
 		 * @param route matched route, or {@code null} when unmatched
 		 * @param terminationReason fixed stream termination reason
 		 */
-		public SseStreamRouteTerminationKey {
-			requireNonNull(routeType);
-			if (routeType == RouteType.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
-			if (routeType == RouteType.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
-			requireNonNull(terminationReason);
+		public SseStreamRouteTerminationKey(@NonNull RouteType routeType,
+				@Nullable ResourcePathDeclaration route,
+				@NonNull StreamTerminationReason terminationReason) {
+			validateRouteDimensions(routeType, route);
+			this.routeType = routeType;
+			this.route = route;
+			this.terminationReason = requireNonNull(terminationReason);
 		}
+
+		/** @return whether a route matched */
+		@NonNull
+		public RouteType getRouteType() {
+			return this.routeType;
+		}
+
+		/** @return matched route, or {@code null} when unmatched */
+		@Nullable
+		public ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+
+		/** @return fixed stream termination reason */
+		@NonNull
+		public StreamTerminationReason getTerminationReason() {
+			return this.terminationReason;
+		}
+
+		/** @return whether all SSE stream-termination dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SseStreamRouteTerminationKey key))
+				return false;
+			return this.routeType == key.routeType
+					&& Objects.equals(this.route, key.route)
+					&& this.terminationReason == key.terminationReason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.routeType, this.route,
+					this.terminationReason);
+		}
+
+		/** @return diagnostic rendering of the SSE termination dimensions */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SseStreamRouteTerminationKey{routeType=" + this.routeType
+					+ ", route=" + this.route + ", terminationReason="
+					+ this.terminationReason + "}";
+		}
+	}
+
+	private static void validateRouteDimensions(@NonNull RouteType routeType,
+			@Nullable ResourcePathDeclaration route) {
+		requireNonNull(routeType);
+		if (routeType == RouteType.MATCHED && route == null)
+			throw new IllegalArgumentException(
+					"Route must be provided when RouteType is MATCHED");
+		if (routeType == RouteType.UNMATCHED && route != null)
+			throw new IllegalArgumentException(
+					"Route must be null when RouteType is UNMATCHED");
 	}
 
 

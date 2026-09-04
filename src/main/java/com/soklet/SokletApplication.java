@@ -46,6 +46,10 @@ import static java.util.Objects.requireNonNull;
  * uninterruptibly, and restores the calling thread's interrupt status before
  * returning or throwing. The runner owns its JVM shutdown hook and any
  * additional shutdown-trigger registrations for the duration of the run.
+ * The core {@link Soklet} lifecycle neither installs those process resources
+ * nor closes standard input. Each registration is released before a run
+ * returns or throws, except that a JVM shutdown hook already executing is
+ * allowed to complete with the process.
  * Application cleanup begins only after a complete core shutdown. A cleanup
  * timeout bounds the runner's wait and reporting; it does not imply that
  * arbitrary application cleanup code was forcibly stopped.
@@ -99,8 +103,8 @@ public final class SokletApplication {
 	 * status before returning or throwing.
 	 *
 	 * @param sokletConfig the one-shot Soklet configuration
-	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
-	 * each element must be non-null
+	 * @param additionalShutdownTriggers non-null additional shutdown triggers
+	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
@@ -154,8 +158,8 @@ public final class SokletApplication {
 	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
 	 * status before returning or throwing.
 	 *
-	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
-	 * each element must be non-null
+	 * @param additionalShutdownTriggers non-null additional shutdown triggers
+	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
@@ -183,8 +187,8 @@ public final class SokletApplication {
 	 * arbitrary application cleanup code was forcibly stopped.
 	 *
 	 * @param shutdownCleanup bounded synchronous cleanup specification
-	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
-	 * each element must be non-null
+	 * @param additionalShutdownTriggers non-null additional shutdown triggers
+	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
 	 * @throws SokletUnexpectedTerminationException if a transport terminates

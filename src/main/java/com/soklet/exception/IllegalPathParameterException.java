@@ -59,7 +59,7 @@ public final class IllegalPathParameterException extends BadRequestException {
 	}
 
 	@NonNull
-	public Optional<String> getPathParameterValue() {
+	public Optional<@NonNull String> getPathParameterValue() {
 		return Optional.ofNullable(this.pathParameterValue);
 	}
 }

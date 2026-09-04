@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 
@@ -83,8 +84,10 @@ public final class ShutdownCleanup {
 
 	/**
 	 * One synchronous cleanup action for an ingress-exclusive application
-	 * resource.
+	 * resource. The standalone runner invokes an action at most once and never
+	 * concurrently; implementations are not required to be thread-safe.
 	 */
+	@NotThreadSafe
 	@FunctionalInterface
 	public interface Action {
 		/**

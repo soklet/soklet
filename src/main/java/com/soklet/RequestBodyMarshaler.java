@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.converter.ValueConverterRegistry;
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.Optional;
@@ -71,6 +72,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface RequestBodyMarshaler {
 	/**
 	 * Given a request, the <em>Resource Method</em> that will handle it, and a {@link com.soklet.annotation.RequestBody}-annotated parameter + its type, convert the request body bytes into an instance of type {@code requestBodyType}.
@@ -84,7 +86,7 @@ public interface RequestBodyMarshaler {
 	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the <em>Resource Method</em> parameter, or {@link Optional#empty()} if no instance should be marshaled
 	 */
 	@NonNull
-	Optional<Object> marshalRequestBody(@NonNull Request request,
+	Optional<@NonNull Object> marshalRequestBody(@NonNull Request request,
 																			@NonNull ResourceMethod resourceMethod,
 																			@NonNull Parameter parameter,
 																			@NonNull Type requestBodyType);

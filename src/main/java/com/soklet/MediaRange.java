@@ -95,7 +95,7 @@ public final class MediaRange {
 	 * @return the parsed media range, or {@link Optional#empty()} if the input is missing or malformed
 	 */
 	@NonNull
-	public static Optional<MediaRange> fromHeaderRepresentation(@Nullable String mediaRange) {
+	public static Optional<@NonNull MediaRange> fromHeaderRepresentation(@Nullable String mediaRange) {
 		if (mediaRange == null)
 			return Optional.empty();
 

@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.Function;
 
 /**
@@ -46,6 +47,7 @@ import java.util.function.Function;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface SseBroadcaster {
 	/**
 	 * The runtime Resource Path with which this broadcaster is associated.

@@ -80,6 +80,7 @@ public final class CorsResponse {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, accessControlExposeHeaders=%s}",
 				getClass().getSimpleName(), getAccessControlAllowOrigin(), getAccessControlAllowCredentials(),
@@ -121,7 +122,7 @@ public final class CorsResponse {
 	 * @return the header value
 	 */
 	@NonNull
-	public Optional<Boolean> getAccessControlAllowCredentials() {
+	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
@@ -163,12 +164,24 @@ public final class CorsResponse {
 			return this;
 		}
 
+		/**
+		 * Configures whether credentials are permitted in the CORS response.
+		 *
+		 * @param accessControlAllowCredentials whether credentials are permitted, or {@code null} to omit {@code Access-Control-Allow-Credentials}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
+		/**
+		 * Replaces the response headers exposed to the requesting client.
+		 *
+		 * @param accessControlExposeHeaders exposed response headers, or {@code null} or an empty set to configure no headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlExposeHeaders(@Nullable Set<@NonNull String> accessControlExposeHeaders) {
 			this.accessControlExposeHeaders = accessControlExposeHeaders;
@@ -208,19 +221,38 @@ public final class CorsResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces whether credentials are permitted in the copied CORS response.
+		 *
+		 * @param accessControlAllowCredentials whether credentials are permitted, or {@code null} to omit {@code Access-Control-Allow-Credentials}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.builder.accessControlAllowCredentials(accessControlAllowCredentials);
 			return this;
 		}
 
+		/**
+		 * Replaces the response headers exposed to the requesting client.
+		 *
+		 * @param accessControlExposeHeaders exposed response headers, or {@code null} or an empty set to configure no headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlExposeHeaders(@Nullable Set<@NonNull String> accessControlExposeHeaders) {
 			this.builder.accessControlExposeHeaders(accessControlExposeHeaders);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the response headers exposed by the copied CORS response in place.
+		 * <p>
+		 * The consumer receives a mutable empty set if no headers are currently configured, and may add, remove, or clear entries.
+		 *
+		 * @param accessControlExposeHeadersConsumer performs mutations on the exposed response headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlExposeHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlExposeHeadersConsumer) {
 			requireNonNull(accessControlExposeHeadersConsumer);

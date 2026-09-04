@@ -91,7 +91,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	@NonNull
 	@Override
 	@SuppressWarnings("unchecked")
-	public final Optional<T> convert(@Nullable F from) throws ValueConversionException {
+	public final Optional<@NonNull T> convert(@Nullable F from) throws ValueConversionException {
 		// Special handling for String types
 		if (from instanceof String && shouldTrimFromValues())
 			from = (F) trimAggressivelyToNull((String) from);
@@ -119,7 +119,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	 * @throws Exception if an error occured during conversion
 	 */
 	@NonNull
-	public abstract Optional<T> performConversion(@Nullable F from) throws Exception;
+	public abstract Optional<@NonNull T> performConversion(@Nullable F from) throws Exception;
 
 	@Override
 	@NonNull

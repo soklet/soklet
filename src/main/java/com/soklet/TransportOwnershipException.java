@@ -24,7 +24,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Indicates that a transport lifecycle graph is already owned by another
- * Soklet lifecycle.
+ * Soklet lifecycle. Ownership is committed by reference identity and is not
+ * released when that lifecycle terminates; construct a fresh transport graph
+ * with a fresh {@link TransportIdentity} for each generation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

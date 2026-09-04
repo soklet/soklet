@@ -18,6 +18,8 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Policy used by the standard HTTP server to decide whether an eligible response should be gzipped.
  * <p>
@@ -30,6 +32,7 @@ import org.jspecify.annotations.NonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface ResponseGzipPolicy {
 	/**
 	 * Acquires a policy that disables response gzip.

@@ -126,7 +126,7 @@ public class ValueConversionException extends Exception {
 	 * @return the 'from' value that could not be converted to the 'to' type
 	 */
 	@NonNull
-	public Optional<Object> getFromValue() {
+	public Optional<@NonNull Object> getFromValue() {
 		return Optional.ofNullable(this.fromValue);
 	}
 

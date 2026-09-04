@@ -145,9 +145,11 @@ public final class Response {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
-		return format("%s{statusCode=%s, cookies=%s, headers=%s, body=%s}",
-				getClass().getSimpleName(), getStatusCode(), getCookies(), getHeaders(), getBody());
+		return format("%s{statusCode=%s, cookieCount=%d, headerCount=%d, bodyPresent=%s}",
+				getClass().getSimpleName(), getStatusCode(), getCookies().size(),
+				getHeaders().size(), getBody().isPresent());
 	}
 
 	@Override
@@ -229,7 +231,7 @@ public final class Response {
 	 * @return the object representing the response body, or {@link Optional#empty()} if no response body should be written
 	 */
 	@NonNull
-	public Optional<Object> getBody() {
+	public Optional<@NonNull Object> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 
@@ -290,18 +292,38 @@ public final class Response {
 			return this;
 		}
 
+		/**
+		 * Replaces the configured response cookies.
+		 *
+		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
 
+		/**
+		 * Replaces the configured response headers.
+		 * <p>
+		 * A redirect builder still supplies its {@code Location} header if the replacement does not include one.
+		 *
+		 * @param headers headers to write, or {@code null} or an empty map to configure no explicit headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
+		/**
+		 * Replaces the configured response body.
+		 *
+		 * @param body response body, or {@code null} to configure no body
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder body(@Nullable Object body) {
 			this.body = body;
@@ -342,13 +364,26 @@ public final class Response {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied response headers.
+		 *
+		 * @param headers headers to write, or {@code null} or an empty map to configure no headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the copied response headers in place.
+		 * <p>
+		 * The consumer receives a mutable empty map if the copied response currently has no headers, and may add, replace, remove, or clear entries.
+		 *
+		 * @param headersConsumer performs mutations on the copied response headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
@@ -360,13 +395,26 @@ public final class Response {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied response cookies.
+		 *
+		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the copied response cookies in place.
+		 * <p>
+		 * The consumer receives a mutable empty set if the copied response currently has no cookies, and may add, remove, or clear entries.
+		 *
+		 * @param cookiesConsumer performs mutations on the copied response cookies
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier cookies(@NonNull Consumer<Set<@NonNull ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
@@ -378,6 +426,12 @@ public final class Response {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied response body.
+		 *
+		 * @param body response body, or {@code null} to configure no body
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier body(@Nullable Object body) {
 			this.builder.body(body);

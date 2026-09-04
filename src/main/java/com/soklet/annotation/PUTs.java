@@ -37,5 +37,5 @@ public @interface PUTs {
 	 * @return the {@link PUT} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	PUT[] value() default {};
+	PUT @NonNull [] value() default {};
 }

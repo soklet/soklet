@@ -72,6 +72,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	 * It deliberately exposes instance acquisition rather than the owning
 	 * application provider itself.
 	 */
+	@ThreadSafe
 	public interface GeneratedInvocationContext {
 		/**
 		 * Acquires the application instance for one generated endpoint invocation.

@@ -102,6 +102,7 @@ public final class ByteRange {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{start=%s, endInclusive=%s}", getClass().getSimpleName(), getStart(), getEndInclusive());
 	}

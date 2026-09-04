@@ -394,11 +394,12 @@ public enum StatusCode {
 	 * @return the enum value that corresponds to the provided HTTP status code, or {@link Optional#empty()} if none exists
 	 */
 	@NonNull
-	public static Optional<StatusCode> fromStatusCode(@NonNull Integer statusCode) {
+	public static Optional<@NonNull StatusCode> fromStatusCode(@NonNull Integer statusCode) {
 		return Optional.ofNullable(STATUS_CODES_BY_NUMBER.get(statusCode));
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s.%s{statusCode=%s, reasonPhrase=%s}", getClass().getSimpleName(), name(), getStatusCode(), getReasonPhrase());
 	}

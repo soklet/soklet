@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetSocketAddress;
@@ -34,12 +35,16 @@ import java.util.List;
  * change startup, shutdown, or the published lifecycle result. Other callbacks
  * retain the inline behavior documented on their individual methods.
  * <p>
- * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
+ * Soklet may invoke callbacks concurrently from lifecycle, transport, and
+ * request-handling threads. Implementations must therefore be thread-safe. A
+ * standard implementation can be acquired via the {@link #defaultInstance()}
+ * factory method.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle">https://www.soklet.com/docs/request-lifecycle</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface LifecycleObserver {
 	/**
 	 * Called before a {@link Soklet} instance starts.
@@ -58,8 +63,17 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called after a {@link Soklet} instance was asked to start, but failed due to an exception.
+	 * Called after a {@link Soklet} instance was asked to start but did not reach
+	 * readiness because startup failed, timed out, or was canceled. The
+	 * {@code throwable} is the same cause exposed by
+	 * {@link ShutdownResult#getStartupFailureCause()} and, when startup is driven
+	 * directly, by {@link SokletStartupException#getCause()}. The subsequent
+	 * {@link #didStopSoklet(Soklet, ShutdownResult)} callback supplies the
+	 * structured {@link StartupDisposition}.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param soklet Soklet whose startup did not reach readiness
+	 * @param throwable failed, timed-out, or canceled startup cause
 	 */
 	default void didFailToStartSoklet(@NonNull Soklet soklet,
 																		@NonNull Throwable throwable) {
@@ -103,8 +117,14 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called after a {@link HttpServer} instance was asked to start, but failed due to an exception.
+	 * Called after an {@link HttpServer} instance was asked to start but did not
+	 * reach readiness because startup failed, timed out, or was canceled. The
+	 * subsequent {@link #didStopHttpServer(HttpServer, ShutdownComponentResult)}
+	 * callback supplies its structured terminal evidence.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param httpServer HTTP server whose startup did not reach readiness
+	 * @param throwable failed, timed-out, or canceled startup cause
 	 */
 	default void didFailToStartHttpServer(@NonNull HttpServer httpServer,
 																		@NonNull Throwable throwable) {
@@ -358,8 +378,14 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called after a {@link SseServer} instance was asked to start, but failed due to an exception.
+	 * Called after an {@link SseServer} instance was asked to start but did not
+	 * reach readiness because startup failed, timed out, or was canceled. The
+	 * subsequent {@link #didStopSseServer(SseServer, ShutdownComponentResult)}
+	 * callback supplies its structured terminal evidence.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param sseServer SSE server whose startup did not reach readiness
+	 * @param throwable failed, timed-out, or canceled startup cause
 	 */
 	default void didFailToStartSseServer(@NonNull SseServer sseServer,
 																									 @NonNull Throwable throwable) {
@@ -407,11 +433,14 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called after an {@link McpServer} instance was asked to start, but failed due to an exception.
+	 * Called after an {@link McpServer} instance was asked to start but did not
+	 * reach readiness because startup failed, timed out, or was canceled. The
+	 * subsequent {@link #didStopMcpServer(McpServer, ShutdownComponentResult)}
+	 * callback supplies its structured terminal evidence.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
-	 * @param mcpServer the MCP server that failed to start
-	 * @param throwable the startup failure
+	 * @param mcpServer MCP server whose startup did not reach readiness
+	 * @param throwable failed, timed-out, or canceled startup cause
 	 */
 	default void didFailToStartMcpServer(@NonNull McpServer mcpServer,
 																		@NonNull Throwable throwable) {

@@ -144,7 +144,7 @@ public final class LogEvent {
 	 * @return the throwable, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<Throwable> getThrowable() {
+	public Optional<@NonNull Throwable> getThrowable() {
 		return Optional.ofNullable(this.throwable);
 	}
 
@@ -154,7 +154,7 @@ public final class LogEvent {
 	 * @return the request, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<Request> getRequest() {
+	public Optional<@NonNull Request> getRequest() {
 		return Optional.ofNullable(this.request);
 	}
 
@@ -164,7 +164,7 @@ public final class LogEvent {
 	 * @return the <em>Resource Method</em>, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<ResourceMethod> getResourceMethod() {
+	public Optional<@NonNull ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
@@ -174,7 +174,7 @@ public final class LogEvent {
 	 * @return the response, or {@link Optional#empty()} if not available
 	 */
 	@NonNull
-	public Optional<MarshaledResponse> getMarshaledResponse() {
+	public Optional<@NonNull MarshaledResponse> getMarshaledResponse() {
 		return Optional.ofNullable(this.marshaledResponse);
 	}
 
@@ -223,24 +223,52 @@ public final class LogEvent {
 			return this;
 		}
 
+		/**
+		 * Sets the throwable associated with this log event. Passing {@code null}
+		 * clears any previously configured throwable.
+		 *
+		 * @param throwable the throwable, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder throwable(@Nullable Throwable throwable) {
 			this.throwable = throwable;
 			return this;
 		}
 
+		/**
+		 * Sets the request associated with this log event. Passing {@code null}
+		 * clears any previously configured request.
+		 *
+		 * @param request the request, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder request(@Nullable Request request) {
 			this.request = request;
 			return this;
 		}
 
+		/**
+		 * Sets the <em>Resource Method</em> associated with this log event. Passing
+		 * {@code null} clears any previously configured <em>Resource Method</em>.
+		 *
+		 * @param resourceMethod the <em>Resource Method</em>, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.resourceMethod = resourceMethod;
 			return this;
 		}
 
+		/**
+		 * Sets the marshaled response associated with this log event. Passing
+		 * {@code null} clears any previously configured response.
+		 *
+		 * @param marshaledResponse the marshaled response, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder marshaledResponse(@Nullable MarshaledResponse marshaledResponse) {
 			this.marshaledResponse = marshaledResponse;

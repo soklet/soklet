@@ -44,7 +44,12 @@ import static java.util.Objects.requireNonNull;
 /** Runs single-use, off-network simulation configurations. */
 @ThreadSafe
 public final class SokletSimulator {
-	/** Simulation body with checked-exception transparency. */
+	/**
+	 * Simulation body with checked-exception transparency. One run invokes its
+	 * body exactly once and never concurrently; implementations are not required
+	 * to be thread-safe.
+	 */
+	@NotThreadSafe
 	@FunctionalInterface
 	public interface Simulation<E extends Throwable> {
 		/**

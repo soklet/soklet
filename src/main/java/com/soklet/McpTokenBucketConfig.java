@@ -152,9 +152,10 @@ public final class McpTokenBucketConfig {
 		}
 
 		/**
-		 * Sets the number of tokens replenished during one refill interval.
+		 * Sets the number of tokens replenished during one refill interval. The
+		 * default is {@code 60}.
 		 *
-		 * @param refillTokens positive refill quantity, or {@code null} to use
+		 * @param refillTokens positive refill quantity, or {@code null} to restore
 		 *                     the default
 		 * @return this builder
 		 */
@@ -166,9 +167,9 @@ public final class McpTokenBucketConfig {
 		}
 
 		/**
-		 * Sets the positive refill interval.
+		 * Sets the positive refill interval. The default is one minute.
 		 *
-		 * @param refillInterval positive refill interval, or {@code null} to use
+		 * @param refillInterval positive refill interval, or {@code null} to restore
 		 *                       the default
 		 * @return this builder
 		 */

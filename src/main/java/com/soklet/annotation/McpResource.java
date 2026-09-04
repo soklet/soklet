@@ -19,7 +19,6 @@ package com.soklet.annotation;
 import com.soklet.McpCacheScope;
 import com.soklet.McpRequestStateMode;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -61,7 +60,7 @@ public @interface McpResource {
 	 *
 	 * @return title, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String title() default "";
 
 	/**
@@ -69,7 +68,7 @@ public @interface McpResource {
 	 *
 	 * @return description, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String description() default "";
 
 	/**
@@ -77,7 +76,7 @@ public @interface McpResource {
 	 *
 	 * @return MIME type, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String mimeType() default "";
 
 	/**

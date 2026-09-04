@@ -88,6 +88,7 @@ public final class CorsPreflightResponse {
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, " +
 						"accessControlMaxAge=%s, accessControlAllowMethods=%s, accessControlAllowHeaders=%s}",
@@ -132,7 +133,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Boolean> getAccessControlAllowCredentials() {
+	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
@@ -142,7 +143,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Duration> getAccessControlMaxAge() {
+	public Optional<@NonNull Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
 
@@ -198,24 +199,48 @@ public final class CorsPreflightResponse {
 			return this;
 		}
 
+		/**
+		 * Configures whether credentials are permitted in the preflight response.
+		 *
+		 * @param accessControlAllowCredentials whether credentials are permitted, or {@code null} to omit {@code Access-Control-Allow-Credentials}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
+		/**
+		 * Configures how long the preflight response may be cached.
+		 *
+		 * @param accessControlMaxAge cache duration, or {@code null} to omit {@code Access-Control-Max-Age}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
 			this.accessControlMaxAge = accessControlMaxAge;
 			return this;
 		}
 
+		/**
+		 * Replaces the methods permitted by the preflight response.
+		 *
+		 * @param accessControlAllowMethods permitted methods, or {@code null} or an empty set to configure no methods
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlAllowMethods(@Nullable Set<@NonNull HttpMethod> accessControlAllowMethods) {
 			this.accessControlAllowMethods = accessControlAllowMethods;
 			return this;
 		}
 
+		/**
+		 * Replaces the request headers permitted by the preflight response.
+		 *
+		 * @param accessControlAllowHeaders permitted request headers, or {@code null} or an empty set to configure no headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder accessControlAllowHeaders(@Nullable Set<@NonNull String> accessControlAllowHeaders) {
 			this.accessControlAllowHeaders = accessControlAllowHeaders;
@@ -257,25 +282,50 @@ public final class CorsPreflightResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces whether credentials are permitted in the copied preflight response.
+		 *
+		 * @param accessControlAllowCredentials whether credentials are permitted, or {@code null} to omit {@code Access-Control-Allow-Credentials}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.builder.accessControlAllowCredentials(accessControlAllowCredentials);
 			return this;
 		}
 
+		/**
+		 * Replaces how long the copied preflight response may be cached.
+		 *
+		 * @param accessControlMaxAge cache duration, or {@code null} to omit {@code Access-Control-Max-Age}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
 			this.builder.accessControlMaxAge(accessControlMaxAge);
 			return this;
 		}
 
+		/**
+		 * Replaces the methods permitted by the copied preflight response.
+		 *
+		 * @param accessControlAllowMethods permitted methods, or {@code null} or an empty set to configure no methods
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowMethods(@Nullable Set<@NonNull HttpMethod> accessControlAllowMethods) {
 			this.builder.accessControlAllowMethods(accessControlAllowMethods);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the methods permitted by the copied preflight response in place.
+		 * <p>
+		 * The consumer receives a mutable empty set if no methods are currently configured, and may add, remove, or clear entries.
+		 *
+		 * @param accessControlAllowMethodsConsumer performs mutations on the permitted methods
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowMethods(@NonNull Consumer<Set<@NonNull HttpMethod>> accessControlAllowMethodsConsumer) {
 			requireNonNull(accessControlAllowMethodsConsumer);
@@ -287,13 +337,26 @@ public final class CorsPreflightResponse {
 			return this;
 		}
 
+		/**
+		 * Replaces the request headers permitted by the copied preflight response.
+		 *
+		 * @param accessControlAllowHeaders permitted request headers, or {@code null} or an empty set to configure no headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowHeaders(@Nullable Set<@NonNull String> accessControlAllowHeaders) {
 			this.builder.accessControlAllowHeaders(accessControlAllowHeaders);
 			return this;
 		}
 
-		// Convenience method for mutation
+		/**
+		 * Mutates the request headers permitted by the copied preflight response in place.
+		 * <p>
+		 * The consumer receives a mutable empty set if no headers are currently configured, and may add, remove, or clear entries.
+		 *
+		 * @param accessControlAllowHeadersConsumer performs mutations on the permitted request headers
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier accessControlAllowHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlAllowHeadersConsumer) {
 			requireNonNull(accessControlAllowHeadersConsumer);

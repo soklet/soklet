@@ -64,7 +64,7 @@ public final class TraceContext {
 	 * @return the parsed trace context, or {@link Optional#empty()} if no valid {@code traceparent} is available
 	 */
 	@NonNull
-	public static Optional<TraceContext> fromHeaderValues(@Nullable Collection<@NonNull String> traceparentHeaderValues,
+	public static Optional<@NonNull TraceContext> fromHeaderValues(@Nullable Collection<@NonNull String> traceparentHeaderValues,
 																											 @Nullable List<@NonNull String> tracestateHeaderValues) {
 		if (traceparentHeaderValues == null || traceparentHeaderValues.size() != 1)
 			return Optional.empty();
@@ -157,7 +157,7 @@ public final class TraceContext {
 	 * @return the {@code tracestate} header value, or {@link Optional#empty()} if none is present
 	 */
 	@NonNull
-	public Optional<String> toTracestateHeaderValue() {
+	public Optional<@NonNull String> toTracestateHeaderValue() {
 		if (getTraceStateEntries().isEmpty())
 			return Optional.empty();
 

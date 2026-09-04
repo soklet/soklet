@@ -140,6 +140,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	/**
 	 * A streaming body backed by a {@link Flow.Publisher}.
 	 */
+	@ThreadSafe
 	final class PublisherBody implements StreamingResponseBody {
 		private final java.util.concurrent.Flow.@NonNull Publisher<@NonNull ByteBuffer> publisher;
 
@@ -160,6 +161,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	/**
 	 * A streaming body backed by an {@link InputStream} supplier.
 	 */
+	@ThreadSafe
 	final class InputStreamBody implements StreamingResponseBody {
 		@NonNull
 		private final Supplier<? extends InputStream> inputStreamSupplier;
@@ -184,7 +186,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		 * @return the input stream supplier
 		 */
 		@NonNull
-		public Supplier<? extends InputStream> getInputStreamSupplier() {
+		public Supplier<? extends @NonNull InputStream> getInputStreamSupplier() {
 			return this.inputStreamSupplier;
 		}
 
@@ -202,6 +204,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	/**
 	 * A streaming body backed by a {@link Reader} supplier.
 	 */
+	@ThreadSafe
 	final class ReaderBody implements StreamingResponseBody {
 		@NonNull
 		private final Supplier<? extends Reader> readerSupplier;
@@ -239,7 +242,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		 * @return the reader supplier
 		 */
 		@NonNull
-		public Supplier<? extends Reader> getReaderSupplier() {
+		public Supplier<? extends @NonNull Reader> getReaderSupplier() {
 			return this.readerSupplier;
 		}
 
@@ -299,6 +302,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	/**
 	 * A streaming body backed by a writer callback.
 	 */
+	@ThreadSafe
 	final class WriterBody implements StreamingResponseBody {
 		@NonNull
 		private final StreamingResponseWriter writer;

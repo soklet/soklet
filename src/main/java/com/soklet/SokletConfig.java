@@ -216,7 +216,7 @@ public final class SokletConfig {
 	 * @return the lifecycle observers that are invoked in registration order
 	 */
 	@NonNull
-	public List<LifecycleObserver> getLifecycleObservers() {
+	public List<@NonNull LifecycleObserver> getLifecycleObservers() {
 		return this.lifecycleObservers;
 	}
 
@@ -246,7 +246,7 @@ public final class SokletConfig {
 	 * @return the HTTP server, if configured
 	 */
 	@NonNull
-	public Optional<HttpServer> getHttpServer() {
+	public Optional<@NonNull HttpServer> getHttpServer() {
 		return Optional.ofNullable(this.httpServer);
 	}
 
@@ -256,7 +256,7 @@ public final class SokletConfig {
 	 * @return the SSE server instance, or {@link Optional#empty()} if none was configured
 	 */
 	@NonNull
-	public Optional<SseServer> getSseServer() {
+	public Optional<@NonNull SseServer> getSseServer() {
 		return Optional.ofNullable(this.sseServer);
 	}
 
@@ -494,7 +494,9 @@ public final class SokletConfig {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder lifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
+		public Builder lifecycleObservers(
+				@Nullable Collection<? extends @NonNull LifecycleObserver>
+						lifecycleObservers) {
 			this.lifecycleObservers = copyLifecycleObservers(lifecycleObservers);
 			return this;
 		}

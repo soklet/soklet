@@ -2578,8 +2578,17 @@
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
-      "file": "src/main/java/com/soklet/McpRateLimiter.java",
+      "file": "src/main/java/com/soklet/McpTokenBucketConfig.java",
       "id": "FINITE-EX-041",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpTokenBucketConfig.java#com.soklet.McpTokenBucketConfig.Builder#refillInterval(Duration)",
+      "matcherRuleId": "FINITE-MATCH-003",
+      "member": "refillInterval(Duration)",
+      "owner": "com.soklet.McpTokenBucketConfig.Builder",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpRateLimiter.java",
+      "id": "FINITE-EX-042",
       "key": "FINITE-MATCH-004:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#minimumTimeUntilReclaimable(long)",
       "matcherRuleId": "FINITE-MATCH-004",
       "member": "minimumTimeUntilReclaimable(long)",

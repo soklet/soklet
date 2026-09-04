@@ -52,7 +52,7 @@ public interface StreamingResponseContext {
 	 * @return the streaming deadline, or {@link Optional#empty()} if no deadline is configured
 	 */
 	@NonNull
-	Optional<Instant> getDeadline();
+	Optional<@NonNull Instant> getDeadline();
 
 	/**
 	 * The idle timeout for this stream, if one is configured.
@@ -60,7 +60,7 @@ public interface StreamingResponseContext {
 	 * @return the streaming idle timeout, or {@link Optional#empty()} if disabled
 	 */
 	@NonNull
-	Optional<Duration> getIdleTimeout();
+	Optional<@NonNull Duration> getIdleTimeout();
 
 	/**
 	 * Is the streaming response canceled?
@@ -78,7 +78,7 @@ public interface StreamingResponseContext {
 	 * @return the cancelation reason, or {@link Optional#empty()} if not canceled
 	 */
 	@NonNull
-	default Optional<StreamTerminationReason> getCancelationReason() {
+	default Optional<@NonNull StreamTerminationReason> getCancelationReason() {
 		return getCancelationToken().getCancelationReason();
 	}
 
@@ -88,7 +88,7 @@ public interface StreamingResponseContext {
 	 * @return the underlying cause, or {@link Optional#empty()} if none is available
 	 */
 	@NonNull
-	default Optional<Throwable> getCancelationCause() {
+	default Optional<@NonNull Throwable> getCancelationCause() {
 		return getCancelationToken().getCancelationCause();
 	}
 

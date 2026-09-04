@@ -2503,7 +2503,8 @@ final class DefaultSseServer implements SseServer {
 
 		List<String> normalizedValues;
 
-		if (values instanceof SortedSet || values instanceof LinkedHashSet) {
+		if (values instanceof SortedSet || values instanceof LinkedHashSet
+				|| values.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
 			normalizedValues = new ArrayList<>(values.size());
 			for (String value : values)
 				normalizedValues.add(value == null ? "" : value);
@@ -4010,7 +4011,8 @@ final class DefaultSseServer implements SseServer {
 
 	@NonNull
 	@Override
-	public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+	public Optional<? extends @NonNull SseBroadcaster> acquireBroadcaster(
+			@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
 

@@ -56,7 +56,7 @@ public interface CancelationToken {
 	 * @return the cancelation reason, or {@link Optional#empty()} if not canceled
 	 */
 	@NonNull
-	Optional<StreamTerminationReason> getCancelationReason();
+	Optional<@NonNull StreamTerminationReason> getCancelationReason();
 
 	/**
 	 * The underlying cancelation cause, if available.
@@ -64,7 +64,7 @@ public interface CancelationToken {
 	 * @return the underlying cause, or {@link Optional#empty()} if no cause is available
 	 */
 	@NonNull
-	Optional<Throwable> getCancelationCause();
+	Optional<@NonNull Throwable> getCancelationCause();
 
 	/**
 	 * Registers a callback that runs when the token is canceled.

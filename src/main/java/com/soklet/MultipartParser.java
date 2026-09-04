@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +32,7 @@ import java.util.Set;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface MultipartParser {
 	/**
 	 * Given a request, detect all HTML form fields with <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> encoding and parse their values.

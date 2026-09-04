@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
@@ -42,6 +43,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface ResourceMethodResolver {
 	/**
 	 * Given an HTTP request, provide a matching <em>Resource Method</em> to invoke.
@@ -53,7 +55,7 @@ public interface ResourceMethodResolver {
 	 * @return the matching <em>Resource Method</em>, or {@link Optional#empty()} if no match was found
 	 */
 	@NonNull
-	Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+	Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
 																										@NonNull ServerType serverType);
 
 	/**

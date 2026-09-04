@@ -37,5 +37,5 @@ public @interface PATCHes {
 	 * @return the {@link PATCH} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	PATCH[] value() default {};
+	PATCH @NonNull [] value() default {};
 }

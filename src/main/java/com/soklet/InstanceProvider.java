@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Parameter;
 
 import static java.util.Objects.requireNonNull;
@@ -35,6 +36,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface InstanceProvider {
 	/**
 	 * Vends an instance of the given class.

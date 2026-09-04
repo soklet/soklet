@@ -74,7 +74,7 @@ public final class ResponseCookie {
 	 * Acquires a builder for {@link ResponseCookie} instances.
 	 *
 	 * @param name  the cookie name
-	 * @param value the cookie value
+	 * @param value the cookie value, or {@code null} to leave the value unspecified
 	 * @return the builder
 	 */
 	@NonNull
@@ -120,7 +120,7 @@ public final class ResponseCookie {
 	 * @throws IllegalArgumentException if the {@code Set-Cookie} header representation is malformed
 	 */
 	@NonNull
-	public static Optional<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
+	public static Optional<@NonNull ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
 		setCookieHeaderRepresentation = setCookieHeaderRepresentation == null ? null : setCookieHeaderRepresentation.trim();
 
 		if (setCookieHeaderRepresentation == null || setCookieHeaderRepresentation.length() == 0)
@@ -447,7 +447,7 @@ public final class ResponseCookie {
 	 * @return the value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<String> getValue() {
+	public Optional<@NonNull String> getValue() {
 		return Optional.ofNullable(this.value);
 	}
 
@@ -457,7 +457,7 @@ public final class ResponseCookie {
 	 * @return the {@code Max-Age} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<Duration> getMaxAge() {
+	public Optional<@NonNull Duration> getMaxAge() {
 		return Optional.ofNullable(this.maxAge);
 	}
 
@@ -467,7 +467,7 @@ public final class ResponseCookie {
 	 * @return the {@code Expires} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<Instant> getExpires() {
+	public Optional<@NonNull Instant> getExpires() {
 		return Optional.ofNullable(this.expires);
 	}
 
@@ -477,7 +477,7 @@ public final class ResponseCookie {
 	 * @return the {@code Domain} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<String> getDomain() {
+	public Optional<@NonNull String> getDomain() {
 		return Optional.ofNullable(this.domain);
 	}
 
@@ -487,7 +487,7 @@ public final class ResponseCookie {
 	 * @return the {@code Path} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<String> getPath() {
+	public Optional<@NonNull String> getPath() {
 		return Optional.ofNullable(this.path);
 	}
 
@@ -517,7 +517,7 @@ public final class ResponseCookie {
 	 * @return the {@code SameSite} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<SameSite> getSameSite() {
+	public Optional<@NonNull SameSite> getSameSite() {
 		return Optional.ofNullable(this.sameSite);
 	}
 
@@ -527,7 +527,7 @@ public final class ResponseCookie {
 	 * @return the {@code Priority} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
 	@NonNull
-	public Optional<Priority> getPriority() {
+	public Optional<@NonNull Priority> getPriority() {
 		return Optional.ofNullable(this.priority);
 	}
 
@@ -580,7 +580,7 @@ public final class ResponseCookie {
 		 * @return the enum value that corresponds to the given the header representation, or {@link Optional#empty()} if none matches
 		 */
 		@NonNull
-		public static Optional<SameSite> fromHeaderRepresentation(@NonNull String headerRepresentation) {
+		public static Optional<@NonNull SameSite> fromHeaderRepresentation(@NonNull String headerRepresentation) {
 			requireNonNull(headerRepresentation);
 
 			headerRepresentation = headerRepresentation.trim();
@@ -625,7 +625,7 @@ public final class ResponseCookie {
 		}
 
 		@NonNull
-		public static Optional<Priority> fromHeaderRepresentation(@NonNull String headerRepresentation) {
+		public static Optional<@NonNull Priority> fromHeaderRepresentation(@NonNull String headerRepresentation) {
 			requireNonNull(headerRepresentation);
 
 			String normalized = headerRepresentation.trim();
@@ -690,60 +690,120 @@ public final class ResponseCookie {
 			return this;
 		}
 
+		/**
+		 * Configures the cookie value.
+		 *
+		 * @param value cookie value, or {@code null} to leave the value unspecified
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder value(@Nullable String value) {
 			this.value = value;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Max-Age} attribute.
+		 *
+		 * @param maxAge maximum age, or {@code null} to omit {@code Max-Age}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder maxAge(@Nullable Duration maxAge) {
 			this.maxAge = maxAge;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Expires} attribute.
+		 *
+		 * @param expires expiration time, or {@code null} to omit {@code Expires}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder expires(@Nullable Instant expires) {
 			this.expires = expires;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Domain} attribute.
+		 *
+		 * @param domain cookie domain, or {@code null} to omit {@code Domain}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder domain(@Nullable String domain) {
 			this.domain = domain;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Path} attribute.
+		 *
+		 * @param path cookie path, or {@code null} or blank to omit {@code Path}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder path(@Nullable String path) {
 			this.path = path;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Secure} flag.
+		 *
+		 * @param secure whether to include {@code Secure}, or {@code null} to use the default of {@code false}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder secure(@Nullable Boolean secure) {
 			this.secure = secure;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code HttpOnly} flag.
+		 *
+		 * @param httpOnly whether to include {@code HttpOnly}, or {@code null} to use the default of {@code false}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder httpOnly(@Nullable Boolean httpOnly) {
 			this.httpOnly = httpOnly;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code SameSite} attribute.
+		 *
+		 * @param sameSite same-site policy, or {@code null} to omit {@code SameSite}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder sameSite(@Nullable SameSite sameSite) {
 			this.sameSite = sameSite;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Priority} attribute.
+		 *
+		 * @param priority cookie priority, or {@code null} to omit {@code Priority}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder priority(@Nullable Priority priority) {
 			this.priority = priority;
 			return this;
 		}
 
+		/**
+		 * Configures the cookie's {@code Partitioned} flag.
+		 *
+		 * @param partitioned whether to include {@code Partitioned}, or {@code null} to use the default of {@code false}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder partitioned(@Nullable Boolean partitioned) {
 			this.partitioned = partitioned;
@@ -791,60 +851,120 @@ public final class ResponseCookie {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie value.
+		 *
+		 * @param value cookie value, or {@code null} to leave the value unspecified
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier value(@Nullable String value) {
 			this.builder.value(value);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Max-Age} attribute.
+		 *
+		 * @param maxAge maximum age, or {@code null} to omit {@code Max-Age}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier maxAge(@Nullable Duration maxAge) {
 			this.builder.maxAge(maxAge);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Expires} attribute.
+		 *
+		 * @param expires expiration time, or {@code null} to omit {@code Expires}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier expires(@Nullable Instant expires) {
 			this.builder.expires(expires);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Domain} attribute.
+		 *
+		 * @param domain cookie domain, or {@code null} to omit {@code Domain}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier domain(@Nullable String domain) {
 			this.builder.domain(domain);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Path} attribute.
+		 *
+		 * @param path cookie path, or {@code null} or blank to omit {@code Path}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier path(@Nullable String path) {
 			this.builder.path(path);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Secure} flag.
+		 *
+		 * @param secure whether to include {@code Secure}, or {@code null} to use the default of {@code false}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier secure(@Nullable Boolean secure) {
 			this.builder.secure(secure);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code HttpOnly} flag.
+		 *
+		 * @param httpOnly whether to include {@code HttpOnly}, or {@code null} to use the default of {@code false}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier httpOnly(@Nullable Boolean httpOnly) {
 			this.builder.httpOnly(httpOnly);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code SameSite} attribute.
+		 *
+		 * @param sameSite same-site policy, or {@code null} to omit {@code SameSite}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier sameSite(@Nullable SameSite sameSite) {
 			this.builder.sameSite(sameSite);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Priority} attribute.
+		 *
+		 * @param priority cookie priority, or {@code null} to omit {@code Priority}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier priority(@Nullable Priority priority) {
 			this.builder.priority(priority);
 			return this;
 		}
 
+		/**
+		 * Replaces the copied cookie's {@code Partitioned} flag.
+		 *
+		 * @param partitioned whether to include {@code Partitioned}, or {@code null} to use the default of {@code false}
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier partitioned(@Nullable Boolean partitioned) {
 			this.builder.partitioned(partitioned);

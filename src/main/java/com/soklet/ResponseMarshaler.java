@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -130,6 +131,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface ResponseMarshaler {
 	/**
 	 * Prepares a response for a request that was matched to a <em>Resource Method</em> and returned normally (i.e., without throwing an exception).
@@ -359,6 +361,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forResourceMethod(Request, Response, ResourceMethod)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface ResourceMethodHandler {
 			/**
 			 * Prepares a response for the scenario in which the request was matched to a <em>Resource Method</em> and executed non-exceptionally.
@@ -380,6 +383,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forNotFound(Request)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface NotFoundHandler {
 			/**
 			 * Prepares a response for a request that triggers an
@@ -398,6 +402,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forMethodNotAllowed(Request, Set)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface MethodNotAllowedHandler {
 			/**
 			 * Prepares a response for a request that triggers an
@@ -418,6 +423,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forContentTooLarge(Request, ResourceMethod)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface ContentTooLargeHandler {
 			/**
 			 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.413">HTTP 413 Content Too Large</a>.
@@ -437,6 +443,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forServiceUnavailable(Request, ResourceMethod)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface ServiceUnavailableHandler {
 			/**
 			 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
@@ -456,6 +463,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forOptions(Request, Set)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface OptionsHandler {
 			/**
 			 * Prepares a response for an HTTP {@code OPTIONS} request.
@@ -478,6 +486,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forOptionsSplat(Request)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface OptionsSplatHandler {
 			/**
 			 * Prepares a response for an HTTP {@code OPTIONS *} (colloquially, "{@code OPTIONS} Splat") request.
@@ -497,6 +506,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface ThrowableHandler {
 			/**
 			 * Prepares a response for scenarios in which an uncaught exception is encountered.
@@ -518,6 +528,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forHead(Request, MarshaledResponse)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface HeadHandler {
 			/**
 			 * Prepares a response for an HTTP {@code HEAD} request.
@@ -537,6 +548,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forCorsPreflightAllowed(Request, CorsPreflight, CorsPreflightResponse)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface CorsPreflightAllowedHandler {
 			/**
 			 * Prepares a response for "CORS preflight allowed" scenario when your {@link CorsAuthorizer} approves a preflight request.
@@ -558,6 +570,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forCorsPreflightRejected(Request, CorsPreflight)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface CorsPreflightRejectedHandler {
 			/**
 			 * Prepares a response for "CORS preflight rejected" scenario when your {@link CorsAuthorizer} denies a preflight request.
@@ -577,6 +590,7 @@ public interface ResponseMarshaler {
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forCorsAllowed(Request, Cors, CorsResponse, MarshaledResponse)}.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface CorsAllowedHandler {
 			/**
 			 * Applies "CORS is permitted for this request" data to a response.
@@ -608,6 +622,7 @@ public interface ResponseMarshaler {
 		 * Function used to support a pluggable "post-process" hook for any final customization or processing before data goes over the wire.
 		 */
 		@FunctionalInterface
+		@ThreadSafe
 		public interface PostProcessor {
 			/**
 			 * Applies an optional "post-process" hook for any final customization or processing before data goes over the wire.
@@ -660,78 +675,169 @@ public interface ResponseMarshaler {
 			return this;
 		}
 
+		/**
+		 * Sets the handler used to marshal successful <em>Resource Method</em>
+		 * responses. Passing {@code null} restores the built-in marshaling behavior.
+		 *
+		 * @param resourceMethodHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder resourceMethodHandler(@Nullable ResourceMethodHandler resourceMethodHandler) {
 			this.resourceMethodHandler = resourceMethodHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for HTTP 404 Not Found responses. Passing
+		 * {@code null} restores the built-in response.
+		 *
+		 * @param notFoundHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder notFoundHandler(@Nullable NotFoundHandler notFoundHandler) {
 			this.notFoundHandler = notFoundHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for HTTP 405 Method Not Allowed responses. Passing
+		 * {@code null} restores the built-in response.
+		 *
+		 * @param methodNotAllowedHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder methodNotAllowedHandler(@Nullable MethodNotAllowedHandler methodNotAllowedHandler) {
 			this.methodNotAllowedHandler = methodNotAllowedHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for HTTP 413 Content Too Large responses. Passing
+		 * {@code null} restores the built-in response.
+		 *
+		 * @param contentTooLargeHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder contentTooLargeHandler(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
 			this.contentTooLargeHandler = contentTooLargeHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for HTTP 503 Service Unavailable responses. Passing
+		 * {@code null} restores the built-in response.
+		 *
+		 * @param serviceUnavailableHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder serviceUnavailableHandler(@Nullable ServiceUnavailableHandler serviceUnavailableHandler) {
 			this.serviceUnavailableHandler = serviceUnavailableHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for path-specific HTTP {@code OPTIONS} responses.
+		 * Passing {@code null} restores the built-in response.
+		 *
+		 * @param optionsHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder optionsHandler(@Nullable OptionsHandler optionsHandler) {
 			this.optionsHandler = optionsHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for HTTP {@code OPTIONS *} responses. Passing
+		 * {@code null} restores the built-in response.
+		 *
+		 * @param optionsSplatHandler the handler, or {@code null} for the built-in response
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder optionsSplatHandler(@Nullable OptionsSplatHandler optionsSplatHandler) {
 			this.optionsSplatHandler = optionsSplatHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for uncaught exceptions. Passing {@code null}
+		 * restores the built-in response behavior.
+		 *
+		 * @param throwableHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder throwableHandler(@Nullable ThrowableHandler throwableHandler) {
 			this.throwableHandler = throwableHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used to derive HTTP {@code HEAD} responses. Passing
+		 * {@code null} restores the built-in response behavior.
+		 *
+		 * @param headHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder headHandler(@Nullable HeadHandler headHandler) {
 			this.headHandler = headHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for allowed CORS preflight requests. Passing
+		 * {@code null} restores the built-in response behavior.
+		 *
+		 * @param corsPreflightAllowedHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder corsPreflightAllowedHandler(@Nullable CorsPreflightAllowedHandler corsPreflightAllowedHandler) {
 			this.corsPreflightAllowedHandler = corsPreflightAllowedHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used for rejected CORS preflight requests. Passing
+		 * {@code null} restores the built-in response behavior.
+		 *
+		 * @param corsPreflightRejectedHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder corsPreflightRejectedHandler(@Nullable CorsPreflightRejectedHandler corsPreflightRejectedHandler) {
 			this.corsPreflightRejectedHandler = corsPreflightRejectedHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the handler used to apply allowed CORS response data. Passing
+		 * {@code null} restores the built-in response behavior.
+		 *
+		 * @param corsAllowedHandler the handler, or {@code null} for the built-in behavior
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder corsAllowedHandler(@Nullable CorsAllowedHandler corsAllowedHandler) {
 			this.corsAllowedHandler = corsAllowedHandler;
 			return this;
 		}
 
+		/**
+		 * Sets the optional final response post-processor. Passing {@code null}
+		 * clears any previously configured post-processor.
+		 *
+		 * @param postProcessor the post-processor, or {@code null} to clear it
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder postProcessor(@Nullable PostProcessor postProcessor) {
 			this.postProcessor = postProcessor;

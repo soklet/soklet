@@ -24,8 +24,10 @@ import java.time.Duration;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Framework-created advisory phase and deadline information for transport
- * shutdown.
+ * Framework-created advisory phase and deadline information borrowed by a
+ * transport for one shutdown invocation. Soklet owns the context and its
+ * absolute phase boundary; a transport may inspect it but cannot extend the
+ * deadline.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

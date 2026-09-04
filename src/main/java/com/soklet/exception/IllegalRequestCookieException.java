@@ -59,7 +59,7 @@ public final class IllegalRequestCookieException extends BadRequestException {
 	}
 
 	@NonNull
-	public Optional<String> getValue() {
+	public Optional<@NonNull String> getValue() {
 		return Optional.ofNullable(this.value);
 	}
 }

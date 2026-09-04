@@ -37,5 +37,5 @@ public @interface DELETEs {
 	 * @return the {@link DELETE} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	DELETE[] value() default {};
+	DELETE @NonNull [] value() default {};
 }

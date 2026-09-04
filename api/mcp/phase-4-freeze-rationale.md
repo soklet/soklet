@@ -862,3 +862,24 @@ has SHA-256
 The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. These are local development checks, not
 release-candidate provenance or publication evidence.
+
+## 2026-09-04 public-contract annotation amendment
+
+The owner-approved Revision 2 contract pass makes the existing source-level
+nullability promises explicit without changing a Java method or field
+descriptor. Java annotation elements now declare their non-null return and,
+for repeatable annotations, non-null array-component contracts. The reviewed
+MCP surface also records the non-null raw-JSON argument type selected by
+`jsonObjectArguments()`, while shared `SokletConfig` accessors explicitly mark
+their list and optional payloads non-null. Public parameter names now follow
+their property or value type, including `tokenBucketConfig`, and generated-code
+diagnostics use the same annotation-property vocabulary.
+
+These annotation-only changes leave the Phase 4 snapshot byte-identical at
+1,058 records with signature SHA-256
+`41c717baa9353bfe794601f9ee5da1ebf5e3317afb9a656343683287da88290c`.
+The deliberately refreshed reflection/nullability SHA-256 is
+`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`.
+The 133-owner include inventory and the 621-record released-3.5.1
+compatibility ledger remain byte-identical. Phase 5 and Phase 6 signatures and
+reflection digests are unchanged.

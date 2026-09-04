@@ -102,7 +102,7 @@ public final class EffectiveOriginResolver {
 	 * @return the effective origin, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	public Optional<String> resolve() {
+	public Optional<@NonNull String> resolve() {
 		return Utilities.extractEffectiveOrigin(this);
 	}
 
@@ -119,9 +119,11 @@ public final class EffectiveOriginResolver {
 	}
 
 	/**
-	 * Predicate used when {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} is in effect.
+	 * Replaces the predicate used when {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} is in effect.
 	 *
-	 * @param trustedProxyPredicate predicate that returns {@code true} for trusted proxies
+	 * @param trustedProxyPredicate predicate that returns {@code true} for trusted proxies, or {@code null} to clear the
+	 *                              configured predicate; resolving with {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} then
+	 *                              fails until a predicate or allowlist is configured
 	 * @return this resolver
 	 */
 	@NonNull
@@ -131,9 +133,9 @@ public final class EffectiveOriginResolver {
 	}
 
 	/**
-	 * Allows specifying an IP allowlist for trusted proxies.
+	 * Replaces the configured trusted-proxy predicate with one backed by the supplied IP allowlist.
 	 *
-	 * @param trustedProxyAddresses IP addresses of trusted proxies
+	 * @param trustedProxyAddresses replacement IP addresses of trusted proxies; an empty set trusts no proxies
 	 * @return this resolver
 	 */
 	@NonNull

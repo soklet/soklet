@@ -37,5 +37,5 @@ public @interface SseEventSources {
 	 * @return the {@link SseEventSource} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	SseEventSource[] value() default {};
+	SseEventSource @NonNull [] value() default {};
 }

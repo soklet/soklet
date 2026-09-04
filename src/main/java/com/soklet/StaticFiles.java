@@ -162,7 +162,7 @@ public final class StaticFiles {
 	 * @return the marshaled response, if a static file was resolved
 	 */
 	@NonNull
-	public Optional<MarshaledResponse> marshaledResponseFor(@NonNull String relativePath,
+	public Optional<@NonNull MarshaledResponse> marshaledResponseFor(@NonNull String relativePath,
 																													@NonNull Request request) {
 		requireNonNull(relativePath);
 		requireNonNull(request);
@@ -520,8 +520,11 @@ public final class StaticFiles {
 		 * Names are tried in list order. Each name must be a single file name, not a path; blank
 		 * names, {@code .}, {@code ..}, path separators, control characters, Windows drive paths, and
 		 * UNC-style paths are rejected when the builder is built.
+		 * <p>
+		 * Each call replaces the complete previously configured list; it does not append. Passing
+		 * {@code null} or an empty list clears the index file names.
 		 *
-		 * @param indexFileNames the index file names, or {@code null} for no index files
+		 * @param indexFileNames the replacement index file names, or {@code null} to clear them
 		 * @return this builder
 		 */
 		@NonNull
@@ -672,6 +675,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface EntityTagResolver {
 		/**
 		 * Returns the default weak metadata-based ETag resolver.
@@ -727,7 +731,7 @@ public final class StaticFiles {
 		 * @return the ETag to emit, or {@link Optional#empty()} to omit it
 		 */
 		@NonNull
-		Optional<EntityTag> entityTagFor(@NonNull Path path,
+		Optional<@NonNull EntityTag> entityTagFor(@NonNull Path path,
 																		 @NonNull BasicFileAttributes attributes);
 	}
 
@@ -757,6 +761,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface AccessResolver {
 		/**
 		 * Returns a resolver that allows all resolved static files.
@@ -791,6 +796,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface LastModifiedResolver {
 		/**
 		 * Returns a resolver that emits the file's last-modified timestamp from its attributes.
@@ -823,7 +829,7 @@ public final class StaticFiles {
 		 * @return the last-modified instant to emit, or {@link Optional#empty()} to omit it
 		 */
 		@NonNull
-		Optional<Instant> lastModifiedFor(@NonNull Path path,
+		Optional<@NonNull Instant> lastModifiedFor(@NonNull Path path,
 																			@NonNull BasicFileAttributes attributes);
 	}
 
@@ -833,6 +839,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface CacheControlResolver {
 		/**
 		 * Returns a resolver that always emits the supplied {@code Cache-Control} value.
@@ -872,7 +879,7 @@ public final class StaticFiles {
 		 * @return the cache-control value to emit, or {@link Optional#empty()} to omit it
 		 */
 		@NonNull
-		Optional<String> cacheControlFor(@NonNull Path path,
+		Optional<@NonNull String> cacheControlFor(@NonNull Path path,
 																		 @NonNull BasicFileAttributes attributes);
 	}
 
@@ -882,6 +889,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface HeadersResolver {
 		/**
 		 * Returns a resolver that always emits the supplied headers.
@@ -929,6 +937,7 @@ public final class StaticFiles {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
+	@ThreadSafe
 	public interface RangeRequestsResolver {
 		/**
 		 * Returns a resolver that enables byte range requests.

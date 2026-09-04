@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
 	private static final int CURRENT_MCP_TYPE_COUNT = 233;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"7f5fe43e23b6da1cc3f18d431e9a4576aa57cad8ac83a7fae050a249e9e9d04f";
+			"58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -418,8 +418,23 @@ public class McpPublicApiReflectionContractTests {
 						"requestDurations", "requests", "requestStreamDurations",
 						"serverStops", "subscriptionDurations", "transportFailures",
 						"unknownMirroredHeaders"),
+				McpLocalizationContext.Builder.class, Set.of("revision"),
+				McpLocalizer.Builder.class, Set.of("failurePolicy",
+						"maximumLocalizableTextCountPerResponse"),
 				McpTokenBucketConfig.Builder.class, Set.of(
 						"refillInterval", "refillTokens"));
+		Set<Class<?>> actualNullableBuilderTypes = publicMcpTypes().stream()
+				.filter(type -> type.getSimpleName().endsWith("Builder"))
+				.filter(type -> Arrays.stream(type.getDeclaredMethods())
+						.anyMatch(method -> Modifier.isPublic(method.getModifiers())
+								&& !Modifier.isStatic(method.getModifiers())
+								&& method.getParameterCount() == 1
+								&& method.getAnnotatedParameterTypes()[0]
+										.isAnnotationPresent(Nullable.class)))
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		Assertions.assertEquals(expectedNullableBuilderMethods.keySet(),
+				actualNullableBuilderTypes,
+				"The nullable MCP builder-family inventory changed");
 
 		for (Map.Entry<Class<?>, Set<String>> entry
 				: expectedNullableBuilderMethods.entrySet()) {
@@ -508,6 +523,95 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpEndpointRegistry.class.getMethod("fromClasses",
 						InstanceProvider.class, Class[].class));
+	}
+
+	@Test
+	public void reviewedMcpReferenceReturnsDeclareTheirNullness()
+			throws Exception {
+		List<String> incorrectNullness = new ArrayList<>();
+
+		for (Class<?> type : publicMcpTypes()) {
+			if (!type.getName().startsWith("com.soklet.Mcp") || type.isEnum())
+				continue;
+
+			for (Method method : type.getDeclaredMethods()) {
+				if (!Modifier.isPublic(method.getModifiers())
+						|| method.isBridge() || method.isSynthetic()
+						|| method.getReturnType() == void.class
+						|| method.getReturnType().isPrimitive())
+					continue;
+
+				AnnotatedType returnType = method.getAnnotatedReturnType();
+				if (!hasExactNullness(returnType, NonNull.class))
+					incorrectNullness.add(methodId(method));
+			}
+		}
+
+		Assertions.assertTrue(incorrectNullness.isEmpty(),
+				() -> "Public MCP reference returns without exact @NonNull:\n - "
+						+ String.join("\n - ", incorrectNullness));
+	}
+
+	@Test
+	public void reviewedMcpNestedTypeUsesDeclareTheirNullness()
+			throws Exception {
+		AnnotatedType returnType = McpToolRegistration.ArgumentTypeStage.class
+				.getMethod("jsonObjectArguments").getAnnotatedReturnType();
+		Assertions.assertInstanceOf(AnnotatedParameterizedType.class, returnType);
+		AnnotatedType[] arguments = ((AnnotatedParameterizedType) returnType)
+				.getAnnotatedActualTypeArguments();
+		Assertions.assertEquals(1, arguments.length);
+		Assertions.assertEquals(McpJsonObject.class, arguments[0].getType());
+		Assertions.assertTrue(hasExactNullness(arguments[0], NonNull.class),
+				"jsonObjectArguments() payload must be exactly @NonNull");
+	}
+
+	@Test
+	public void reviewedMcpPropertyParameterNamesRemainTypeAligned()
+			throws Exception {
+		assertParameterNames(McpEndpoint.Builder.class.getMethod(
+				"serverInformation", McpImplementation.class),
+				"implementation");
+		assertParameterNames(McpEndpoint.Builder.class.getMethod(
+				"resourceListCachePolicy", McpCachePolicy.class),
+				"resourceListCachePolicy");
+		assertParameterNames(McpEndpoint.Builder.class.getMethod(
+				"resourceTemplateListCachePolicy", McpCachePolicy.class),
+				"resourceTemplateListCachePolicy");
+		assertParameterNames(McpEndpoint.Builder.class.getMethod(
+				"toolRateLimiterName", String.class), "toolRateLimiterName");
+		assertParameterNames(McpResourceOutput.Builder.class.getMethod(
+				"cacheTimeToLiveOverride", Duration.class),
+				"cacheTimeToLiveOverride");
+		assertParameterNames(McpResourcePage.Builder.class.getMethod(
+				"cacheTimeToLiveOverride", Duration.class),
+				"cacheTimeToLiveOverride");
+		assertParameterNames(McpRateLimiter.class.getMethod(
+				"fromInMemoryTokenBucket", McpTokenBucketConfig.class),
+				"tokenBucketConfig");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"unknownMirroredHeaderNameDiagnostics", Boolean.class),
+				"unknownMirroredHeaderNameDiagnostics");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"logRawValidatedTraceIds", Boolean.class),
+				"logRawValidatedTraceIds");
+		for (Class<?> builderType : List.of(
+				McpToolRegistration.OperationBuilder.class,
+				McpToolRegistration.CompleteBuilder.class)) {
+			assertParameterNames(builderType.getMethod("rateLimiterName",
+					String.class), "rateLimiterName");
+			assertParameterNames(builderType.getMethod(
+					"structuredContentMirroredAsText", Boolean.class),
+					"structuredContentMirroredAsText");
+		}
+		assertParameterNames(McpToolAnnotations.Builder.class.getMethod(
+				"readOnlyHint", Boolean.class), "readOnlyHint");
+		assertParameterNames(McpToolAnnotations.Builder.class.getMethod(
+				"destructiveHint", Boolean.class), "destructiveHint");
+		assertParameterNames(McpToolAnnotations.Builder.class.getMethod(
+				"idempotentHint", Boolean.class), "idempotentHint");
+		assertParameterNames(McpToolAnnotations.Builder.class.getMethod(
+				"openWorldHint", Boolean.class), "openWorldHint");
 	}
 
 	@Test
@@ -1934,5 +2038,12 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertArrayEquals(expectedNames, Arrays.stream(parameters)
 				.map(Parameter::getName).toArray(String[]::new),
 				() -> description + " parameter names or order changed");
+	}
+
+	private static boolean hasExactNullness(AnnotatedType type,
+			Class<? extends Annotation> expected) {
+		return type.isAnnotationPresent(expected)
+				&& !type.isAnnotationPresent(expected == NonNull.class
+				? Nullable.class : NonNull.class);
 	}
 }

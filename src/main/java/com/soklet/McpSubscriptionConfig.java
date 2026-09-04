@@ -130,6 +130,8 @@ public final class McpSubscriptionConfig {
 
 		/**
 		 * Replaces the supported resource-notification families.
+		 * Passing an empty set clears the current families; a subsequent
+		 * {@link #build()} then fails until at least one family is added.
 		 *
 		 * @param notificationTypes notification families
 		 * @return this builder

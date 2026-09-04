@@ -526,15 +526,16 @@ public final class McpEndpoint {
 		 * {@code resources/list} page. The default is private scope with a zero
 		 * time to live.
 		 *
-		 * @param cachePolicy resources-list cache policy, or null to restore the
-		 *                    default
+		 * @param resourceListCachePolicy resources-list cache policy, or null to
+		 *                                restore the default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder resourceListCachePolicy(
-				@Nullable McpCachePolicy cachePolicy) {
-			this.resourceListCachePolicy = cachePolicy == null
-					? McpCachePolicy.privateNoCacheInstance() : cachePolicy;
+				@Nullable McpCachePolicy resourceListCachePolicy) {
+			this.resourceListCachePolicy = resourceListCachePolicy == null
+					? McpCachePolicy.privateNoCacheInstance()
+					: resourceListCachePolicy;
 			return this;
 		}
 
@@ -543,15 +544,18 @@ public final class McpEndpoint {
 		 * {@code resources/templates/list}. The default is private scope with a
 		 * zero time to live.
 		 *
-		 * @param cachePolicy resource-template-list cache policy, or null to restore
-		 *                    the default
+		 * @param resourceTemplateListCachePolicy resource-template-list cache
+		 *                                        policy, or null to restore the
+		 *                                        default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder resourceTemplateListCachePolicy(
-				@Nullable McpCachePolicy cachePolicy) {
-			this.resourceTemplateListCachePolicy = cachePolicy == null
-					? McpCachePolicy.privateNoCacheInstance() : cachePolicy;
+				@Nullable McpCachePolicy resourceTemplateListCachePolicy) {
+			this.resourceTemplateListCachePolicy =
+					resourceTemplateListCachePolicy == null
+							? McpCachePolicy.privateNoCacheInstance()
+							: resourceTemplateListCachePolicy;
 			return this;
 		}
 
@@ -561,21 +565,21 @@ public final class McpEndpoint {
 		 * Sequential named and direct setter calls are last-call-wins. This call
 		 * clears any direct limiter previously configured on this builder.
 		 *
-		 * @param limiterName nonblank name in the server limiter registry, or null
-		 *                    to clear the endpoint override
+		 * @param toolRateLimiterName nonblank name in the server limiter registry,
+		 *                            or null to clear the endpoint override
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolRateLimiterName(@Nullable String limiterName) {
-			if (limiterName == null) {
+		public Builder toolRateLimiterName(@Nullable String toolRateLimiterName) {
+			if (toolRateLimiterName == null) {
 				this.toolRateLimiterName = null;
 				this.toolRateLimiter = null;
 				return this;
 			}
-			if (limiterName.isBlank())
+			if (toolRateLimiterName.isBlank())
 				throw new IllegalArgumentException(
 						"MCP rate-limiter name must not be blank.");
-			this.toolRateLimiterName = limiterName;
+			this.toolRateLimiterName = toolRateLimiterName;
 			this.toolRateLimiter = null;
 			return this;
 		}
@@ -604,7 +608,7 @@ public final class McpEndpoint {
 		 * application-owned publisher are retained by reference.
 		 *
 		 * @param subscriptionConfig resource-subscription configuration, or null to
-		 *                      disable subscriptionConfig
+		 *                           disable subscriptions
 		 * @return this builder
 		 */
 		@NonNull

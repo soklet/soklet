@@ -88,6 +88,13 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		Assertions.assertTrue(generatedSource.contains(
 				"endpointBuilder.resourceListHandler"), generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
+				"endpointBuilder.resourceListCachePolicy("), generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				"endpointBuilder.resourceTemplateListCachePolicy("),
+				generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				".sizeInBytes(7L)"), generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
 				"resource.getUriTemplateVariables().get(\"identifier\")"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(

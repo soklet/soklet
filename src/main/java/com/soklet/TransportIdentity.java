@@ -26,7 +26,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Stable, opaque reference identity for one complete transport lifecycle graph.
  * Independent engines retain one token; decorators return their delegate's exact
- * token unchanged.
+ * token unchanged. Soklet permanently claims the token for the lifecycle that
+ * first accepts its configuration, so a token must not be reused for a distinct
+ * transport graph or lifecycle generation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

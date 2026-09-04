@@ -95,10 +95,10 @@ public final class McpSimulationOptions {
 		}
 
 		/**
-		 * Sets the maximum pending SSE-item count.
+		 * Sets the maximum pending SSE-item count. The default is {@code 128}.
 		 *
 		 * @param streamItemQueueCapacity positive queue capacity, or {@code null}
-		 *                                for the default
+		 *                                to restore the default
 		 * @return this builder
 		 */
 		@NonNull
@@ -111,10 +111,10 @@ public final class McpSimulationOptions {
 
 		/**
 		 * Sets the cumulative captured-byte bound. Consuming items never refunds
-		 * this budget.
+		 * this budget. The default is 10,485,760 bytes.
 		 *
 		 * @param maximumCapturedSizeInBytes positive byte limit, or {@code null}
-		 *                                   for the default
+		 *                                   to restore the default
 		 * @return this builder
 		 */
 		@NonNull

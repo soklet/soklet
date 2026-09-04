@@ -18,12 +18,15 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Callback that writes a streaming HTTP response body.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
+@ThreadSafe
 public interface StreamingResponseWriter {
 	/**
 	 * Writes response bytes to the provided output stream.

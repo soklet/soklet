@@ -24,9 +24,17 @@ import javax.annotation.concurrent.ThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Framework-created SSE attachment capability. Delegate attachment is unary,
- * same-thread, and valid only during the dynamic extent of the enclosing
- * {@link SseServer#attach(SseTransportAttachmentContext, StartupContext)} call.
+ * Framework-owned SSE attachment capability borrowed by one
+ * {@link SseServer#attach(SseTransportAttachmentContext, StartupContext)}
+ * invocation. The context itself must not be retained after that invocation
+ * returns. Delegate attachment is unary, same-thread, and valid only during the
+ * dynamic extent of the enclosing call.
+ * <p>
+ * The type is thread-safe so its immutable values can be read safely, but that
+ * does not relax the thread confinement or lifetime of the delegate-attachment
+ * methods. The request handler and termination signal obtained from this
+ * context may be retained for the attached runtime according to their
+ * individual contracts.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -42,25 +50,41 @@ public final class SseTransportAttachmentContext {
 		this.internalContext = requireNonNull(internalContext);
 	}
 
-	/** @return the configuration that owns this transport graph */
+	/**
+	 * @return the configuration that owns this transport graph; the stable
+	 * reference may be retained by the attached runtime
+	 */
 	@NonNull
 	public SokletConfig getSokletConfig() {
 		return (SokletConfig) this.internalContext.configuration();
 	}
 
-	/** @return the framework admission-fenced request handler */
+	/**
+	 * @return the framework admission-fenced request handler, which may be
+	 * retained and invoked by the attached runtime while admission remains open
+	 */
 	public SseServer.@NonNull RequestHandler getAdmissionFencedRequestHandler() {
 		return this.internalContext.requestHandler();
 	}
 
-	/** @return this member's framework-owned termination capability */
+	/**
+	 * Acquires this transport member's framework-owned termination capability.
+	 * The attached runtime may retain the signal after {@code attach(...)}
+	 * returns and must use it to report honest failure and termination evidence.
+	 *
+	 * @return this member's termination signal
+	 */
 	@NonNull
 	public TransportTerminationSignal getTerminationSignal() {
 		return this.internalContext.terminationSignal().publicSignal();
 	}
 
 	/**
-	 * Attaches one transparent delegate using this member and signal.
+	 * Attaches one transparent delegate using this member's identity and exact
+	 * termination signal. The delegate does not receive an independently
+	 * terminating child member. The enclosing transport must return the delegate's
+	 * runtime and must not drive a separate runtime or signal termination itself;
+	 * the transparent delegate owns the shared member's lifecycle and signal.
 	 *
 	 * @param delegate delegate transport
 	 * @param delegateRequestHandler handler supplied to the delegate
@@ -75,7 +99,9 @@ public final class SseTransportAttachmentContext {
 	}
 
 	/**
-	 * Attaches one independently terminating delegate child.
+	 * Attaches one independently terminating delegate child. Soklet owns the
+	 * child's completion state; the enclosing transport may observe the returned
+	 * stage but cannot complete or otherwise mutate it.
 	 *
 	 * @param delegate delegate transport
 	 * @param delegateRequestHandler handler supplied to the delegate

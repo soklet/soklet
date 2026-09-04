@@ -270,16 +270,20 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Override
-	public synchronized void init(ProcessingEnvironment processingEnv) {
-		super.init(processingEnv);
-		this.types = processingEnv.getTypeUtils();
-		this.elements = processingEnv.getElementUtils();
-		this.messager = processingEnv.getMessager();
-		this.filer = processingEnv.getFiler();
+	public synchronized void init(
+			@NonNull ProcessingEnvironment processingEnvironment) {
+		super.init(processingEnvironment);
+		this.types = processingEnvironment.getTypeUtils();
+		this.elements = processingEnvironment.getElementUtils();
+		this.messager = processingEnvironment.getMessager();
+		this.filer = processingEnvironment.getFiler();
 
-		this.debugEnabled = parseBooleanishOption(processingEnv.getOptions().get(PROCESSOR_OPTION_DEBUG));
-		this.pruneDeletedEnabled = parseBooleanishOption(processingEnv.getOptions().get(PROCESSOR_OPTION_PRUNE_DELETED));
-		this.cacheMode = parseCacheMode(processingEnv.getOptions().get(PROCESSOR_OPTION_CACHE_MODE));
+		this.debugEnabled = parseBooleanishOption(processingEnvironment
+				.getOptions().get(PROCESSOR_OPTION_DEBUG));
+		this.pruneDeletedEnabled = parseBooleanishOption(processingEnvironment
+				.getOptions().get(PROCESSOR_OPTION_PRUNE_DELETED));
+		this.cacheMode = parseCacheMode(processingEnvironment.getOptions()
+				.get(PROCESSOR_OPTION_CACHE_MODE));
 
 		TypeElement hr = elements.getTypeElement("com.soklet.SseHandshakeResult");
 		this.sseHandshakeResultType = (hr == null ? null : hr.asType());
@@ -342,7 +346,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Override
-	public Set<String> getSupportedAnnotationTypes() {
+	@NonNull
+	public Set<@NonNull String> getSupportedAnnotationTypes() {
 		Set<String> out = new LinkedHashSet<>();
 		for (Class<? extends Annotation> c : HTTP_AND_SSE_ANNOTATIONS) {
 			out.add(c.getCanonicalName());
@@ -366,12 +371,14 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Override
+	@NonNull
 	public SourceVersion getSupportedSourceVersion() {
 		return SourceVersion.latestSupported();
 	}
 
 	@Override
-	public Set<String> getSupportedOptions() {
+	@NonNull
+	public Set<@NonNull String> getSupportedOptions() {
 		return new LinkedHashSet<>(List.of(
 				PROCESSOR_OPTION_CACHE_MODE,
 				PROCESSOR_OPTION_CACHE_DIR,
@@ -381,9 +388,11 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Override
-	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+	public boolean process(
+			@NonNull Set<? extends @NonNull TypeElement> annotations,
+			@NonNull RoundEnvironment roundEnvironment) {
 		// Track top-level types being compiled in this invocation.
-		for (Element root : roundEnv.getRootElements()) {
+		for (Element root : roundEnvironment.getRootElements()) {
 			if (root instanceof TypeElement te) {
 				String bin = elements.getBinaryName(te).toString();
 				touchedTopLevelBinaries.add(bin);
@@ -393,23 +402,23 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 
 		// SSE-specific return type check
-		enforceSseReturnTypes(roundEnv);
+		enforceSseReturnTypes(roundEnvironment);
 
 		// Collect + validate
-		collect(roundEnv, HttpMethod.GET, GET.class, false);
-		collect(roundEnv, HttpMethod.POST, POST.class, false);
-		collect(roundEnv, HttpMethod.PUT, PUT.class, false);
-		collect(roundEnv, HttpMethod.PATCH, PATCH.class, false);
-		collect(roundEnv, HttpMethod.DELETE, DELETE.class, false);
-		collect(roundEnv, HttpMethod.HEAD, HEAD.class, false);
-		collect(roundEnv, HttpMethod.OPTIONS, OPTIONS.class, false);
-		collect(roundEnv, HttpMethod.GET, SseEventSource.class, true); // SSE as GET + flag
+		collect(roundEnvironment, HttpMethod.GET, GET.class, false);
+		collect(roundEnvironment, HttpMethod.POST, POST.class, false);
+		collect(roundEnvironment, HttpMethod.PUT, PUT.class, false);
+		collect(roundEnvironment, HttpMethod.PATCH, PATCH.class, false);
+		collect(roundEnvironment, HttpMethod.DELETE, DELETE.class, false);
+		collect(roundEnvironment, HttpMethod.HEAD, HEAD.class, false);
+		collect(roundEnvironment, HttpMethod.OPTIONS, OPTIONS.class, false);
+		collect(roundEnvironment, HttpMethod.GET, SseEventSource.class, true); // SSE as GET + flag
 
-		collectAndGenerateMcpEndpoints(roundEnv);
+		collectAndGenerateMcpEndpoints(roundEnvironment);
 
-		if (roundEnv.processingOver()) {
+		if (roundEnvironment.processingOver()) {
 			// Critical: don't overwrite a good index with a partial/failed compile.
-			if (roundEnv.errorRaised() || resourceMethodAmbiguityDetected
+			if (roundEnvironment.errorRaised() || resourceMethodAmbiguityDetected
 					|| mcpProcessingErrorDetected) {
 				debug("SokletProcessor: compilation has errors; skipping index write to avoid clobbering.");
 				return false;
@@ -929,13 +938,13 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: MCP implementation version must not be blank.");
 		if (!toolRateLimiterName.isEmpty() && toolRateLimiterName.isBlank())
 			mcpError(endpointType,
-					"Soklet: MCP endpoint tool rate-limiter name must not be blank.");
+					"Soklet: @McpServerEndpoint toolRateLimiterName must not be blank.");
 		if (resourceListCacheTimeToLiveInMilliseconds < 0)
 			mcpError(endpointType,
-					"Soklet: MCP resources-list cache TTL must not be negative.");
+					"Soklet: @McpServerEndpoint resourceListCacheTimeToLiveInMilliseconds must not be negative.");
 		if (resourceTemplateListCacheTimeToLiveInMilliseconds < 0)
 			mcpError(endpointType,
-					"Soklet: MCP resource-template-list cache TTL must not be negative.");
+					"Soklet: @McpServerEndpoint resourceTemplateListCacheTimeToLiveInMilliseconds must not be negative.");
 		if (!websiteUrl.isBlank()) {
 			try {
 				URI uri = URI.create(websiteUrl);
@@ -1157,7 +1166,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: MCP tool names must contain 1-128 characters from [A-Za-z0-9_.-].");
 		if (!rateLimiterName.isEmpty() && rateLimiterName.isBlank())
 			mcpError(method,
-					"Soklet: MCP tool rate-limiter name must not be blank.");
+					"Soklet: @McpTool rateLimiterName must not be blank.");
 
 		List<McpParameterBinding> bindings = new ArrayList<>();
 		List<McpTypeMirrorTypedSchemaBridge.ToolArgument> schemaArguments =
@@ -1535,10 +1544,10 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: MCP resource MIME type must not be blank.");
 		if (sizeInBytes < -1)
 			mcpError(method,
-					"Soklet: MCP exact-resource size must be nonnegative or -1 when absent.");
+					"Soklet: @McpResource sizeInBytes must be nonnegative or -1 when absent.");
 		if (cacheTimeToLiveInMilliseconds < 0)
 			mcpError(method,
-					"Soklet: MCP resource cache TTL must not be negative.");
+					"Soklet: @McpResource cacheTimeToLiveInMilliseconds must not be negative.");
 
 		boolean template = address.indexOf('{') >= 0
 				|| address.indexOf('}') >= 0;
@@ -1591,7 +1600,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 		} else if (sizeInBytes >= 0) {
 			mcpError(method,
-					"Soklet: An MCP resource URI template must not declare size.");
+					"Soklet: An @McpResource URI template must not declare sizeInBytes.");
 		}
 
 		List<McpResourceParameterBinding> bindings = new ArrayList<>();
@@ -2710,7 +2719,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@NonNull
-	private static String cachePolicyExpression(long timeToLiveMs,
+	private static String cachePolicyExpression(
+			long timeToLiveInMilliseconds,
 			@NonNull String scope) {
 		String factory = switch (scope) {
 			case "PRIVATE" -> "fromPrivateTimeToLive";
@@ -2719,7 +2729,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Unsupported MCP cache scope: " + scope);
 		};
 		return "com.soklet.McpCachePolicy." + factory
-				+ "(java.time.Duration.ofMillis(" + timeToLiveMs + "L))";
+				+ "(java.time.Duration.ofMillis(" + timeToLiveInMilliseconds
+				+ "L))";
 	}
 
 	@NonNull

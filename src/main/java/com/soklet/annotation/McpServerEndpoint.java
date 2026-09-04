@@ -18,7 +18,6 @@ package com.soklet.annotation;
 
 import com.soklet.McpCacheScope;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -72,7 +71,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return the title, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String title() default "";
 
 	/**
@@ -80,7 +79,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return the description, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String description() default "";
 
 	/**
@@ -88,7 +87,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return the website URL, or an empty string if none is configured
 	 */
-	@Nullable
+	@NonNull
 	String websiteUrl() default "";
 
 	/**
@@ -96,7 +95,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return endpoint instructions, or an empty string if none are configured
 	 */
-	@Nullable
+	@NonNull
 	String instructions() default "";
 
 	/**
@@ -107,7 +106,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return the rate-limiter name, or an empty string to inherit
 	 */
-	@Nullable
+	@NonNull
 	String toolRateLimiterName() default "";
 
 	/**

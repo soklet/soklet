@@ -28,6 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -49,6 +52,50 @@ public class MarshaledResponseTests {
 		Assertions.assertEquals(Long.valueOf(3), response.getBodyLength());
 		Assertions.assertTrue(response.getBody().orElseThrow() instanceof MarshaledResponseBody.Bytes);
 		Assertions.assertSame(bytes, ((MarshaledResponseBody.Bytes) response.getBody().orElseThrow()).getBytes());
+	}
+
+	@Test
+	public void headers_and_cookies_are_immutable_snapshots() {
+		Set<String> headerValues = new LinkedHashSet<>(List.of("first", "second"));
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("X-Example", headerValues);
+		ResponseCookie cookie = ResponseCookie.with("session", "secret").build();
+		Set<ResponseCookie> cookies = new LinkedHashSet<>(Set.of(cookie));
+
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.headers(headers)
+				.cookies(cookies)
+				.build();
+
+		headerValues.clear();
+		headers.clear();
+		cookies.clear();
+
+		Assertions.assertEquals(Set.of("first", "second"), response.getHeaders().get("x-example"));
+		Assertions.assertEquals(List.of("first", "second"),
+				List.copyOf(response.getHeaders().get("X-Example")));
+		Assertions.assertEquals(Set.of(cookie), response.getCookies());
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> response.getHeaders().put("X-Other", Set.of("value")));
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> response.getHeaders().get("X-Example").add("third"));
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> response.getCookies().clear());
+	}
+
+	@Test
+	public void to_string_redacts_headers_and_cookies() {
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Authorization", Set.of("secret-token")))
+				.cookies(Set.of(ResponseCookie.with("session", "secret-cookie").build()))
+				.body(new byte[]{1, 2, 3})
+				.build();
+
+		String value = response.toString();
+		Assertions.assertTrue(value.contains("statusCode=200"));
+		Assertions.assertTrue(value.contains("body=3 bytes"));
+		Assertions.assertFalse(value.contains("secret-token"));
+		Assertions.assertFalse(value.contains("secret-cookie"));
 	}
 
 	@Test

@@ -37,5 +37,5 @@ public @interface GETs {
 	 * @return the {@link GET} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	GET[] value() default {};
+	GET @NonNull [] value() default {};
 }
