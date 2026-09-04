@@ -57,6 +57,13 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 	@NonNull
 	private static final String INITIALIZED_PROPERTY =
 			"com.soklet.tests.generated-endpoint-initialized";
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void generatedProviderUsesOnlyPublicApisAndDefersInstancesUntilInvocation(
@@ -381,6 +388,28 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertFalse(failureResponse.body().contains(
 							providerFailure.getMessage()), failureResponse.body());
 					Assertions.assertEquals(1, failedProviderInvocations.get());
+
+					HttpResponse<String> promptFailureResponse = send(failingPort,
+							"prompts/get",
+							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-prompt-provider-failure\","
+									+ "\"method\":\"prompts/get\",\"params\":{\"_meta\":{"
+									+ "\"io.modelcontextprotocol/protocolVersion\":\""
+									+ PROTOCOL_VERSION + "\","
+									+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+									+ "\"name\":\"catalog.compose\",\"arguments\":{"
+									+ "\"subject\":\"needle\"}}}");
+					Assertions.assertEquals(500,
+							promptFailureResponse.statusCode(),
+							promptFailureResponse.body());
+					Assertions.assertTrue(promptFailureResponse.body().contains(
+							"\"code\":-32603"), promptFailureResponse.body());
+					Assertions.assertTrue(promptFailureResponse.body().contains(
+							"\"message\":\"Internal error\""),
+							promptFailureResponse.body());
+					Assertions.assertFalse(promptFailureResponse.body().contains(
+							providerFailure.getMessage()),
+							promptFailureResponse.body());
+					Assertions.assertEquals(2, failedProviderInvocations.get());
 				} finally {
 					failingSoklet.close();
 				}
@@ -399,6 +428,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.instanceProvider(instanceProvider)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 	}
 

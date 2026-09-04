@@ -50,6 +50,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @ThreadSafe
 public class McpAnnotatedResourceProcessorRuntimeTests {
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build();
+
 	@Test
 	void generatedProviderPreservesResourceContractsAndInvocationBindings(
 			@TempDir Path temporaryDirectory) throws Exception {
@@ -170,17 +178,8 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			Assertions.assertEquals(Duration.ofMillis(250),
 					template.getCachePolicy().getTimeToLive());
 
-			SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-					.mcpServer(0, registry,
-							McpAdmissionController.acceptAllInstance(), builder -> builder
-									.host("127.0.0.1")
-									.corsAuthorizer(
-											CorsAuthorizer.acceptAllInstance())
-									.allowedHosts(Set.of("127.0.0.1")))
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.instanceProvider(instanceProvider)
-					.build();
+			SimulatorConfig simulatorConfig = simulatorConfig(registry,
+					instanceProvider);
 			SokletSimulator.run(simulatorConfig, simulator -> {
 				String exactBody = responseBody(simulator, "resource-exact",
 						"resources/read", "test://catalog/static",
@@ -205,6 +204,84 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			});
 			Assertions.assertEquals(3, providedInstances.get());
 		}
+	}
+
+	@Test
+	void providerFailuresAreInternalAcrossResourceInvocations(
+			@TempDir Path temporaryDirectory) throws Exception {
+		Path sourceDirectory = temporaryDirectory.resolve("src/example");
+		Path classDirectory = temporaryDirectory.resolve("classes");
+		Path generatedDirectory = temporaryDirectory.resolve("generated");
+		Files.createDirectories(sourceDirectory);
+		Files.createDirectories(classDirectory);
+		Files.createDirectories(generatedDirectory);
+		Path endpointSource = sourceDirectory.resolve("ResourceEndpoint.java");
+		Files.writeString(endpointSource, endpointSource(), StandardCharsets.UTF_8);
+		compile(endpointSource, classDirectory, generatedDirectory);
+
+		try (URLClassLoader classLoader = new URLClassLoader(
+				new URL[] { classDirectory.toUri().toURL() },
+				McpAnnotatedResourceProcessorRuntimeTests.class.getClassLoader())) {
+			Class<?> endpointClass = Class.forName("example.ResourceEndpoint",
+					false, classLoader);
+			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
+					endpointClass);
+			AtomicInteger failedProviderInvocations = new AtomicInteger();
+			IllegalStateException providerFailure = new IllegalStateException(
+					"Resource provider failure must remain private");
+			InstanceProvider failingProvider = new InstanceProvider() {
+				@Override
+				@NonNull
+				public <T> T provide(@NonNull Class<T> instanceClass) {
+					Assertions.assertSame(endpointClass, instanceClass);
+					failedProviderInvocations.incrementAndGet();
+					throw providerFailure;
+				}
+			};
+			SokletSimulator.run(simulatorConfig(registry, failingProvider),
+					simulator -> {
+						assertProviderFailure(simulator,
+								"resource-exact-provider-failure", "resources/read",
+								"test://catalog/static",
+								",\"uri\":\"test://catalog/static\"",
+								providerFailure);
+						Assertions.assertEquals(1,
+								failedProviderInvocations.get());
+
+						assertProviderFailure(simulator,
+								"resource-template-provider-failure", "resources/read",
+								"test://catalog/item/42/summary",
+								",\"uri\":\"test://catalog/item/42/summary\"",
+								providerFailure);
+						Assertions.assertEquals(2,
+								failedProviderInvocations.get());
+
+						assertProviderFailure(simulator,
+								"resource-list-provider-failure", "resources/list",
+								null, ",\"cursor\":\"cursor-1\"",
+								providerFailure);
+						Assertions.assertEquals(3,
+								failedProviderInvocations.get());
+					});
+		}
+	}
+
+	@NonNull
+	private static SimulatorConfig simulatorConfig(
+			@NonNull McpEndpointRegistry registry,
+			@NonNull InstanceProvider instanceProvider) {
+		return SimulatorConfig.builder()
+				.mcpServer(0, registry,
+						McpAdmissionController.acceptAllInstance(), builder -> builder
+								.host("127.0.0.1")
+								.corsAuthorizer(
+										CorsAuthorizer.acceptAllInstance())
+								.allowedHosts(Set.of("127.0.0.1")))
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.instanceProvider(instanceProvider)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build();
 	}
 
 	@NonNull
@@ -355,6 +432,39 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 	private static String responseBody(@NonNull Simulator simulator,
 			@NonNull String requestId, @NonNull String method,
 			@Nullable String operationName, @NonNull String parameters) {
+		McpSimulationResponse response = response(simulator, requestId, method,
+				operationName, parameters);
+		byte[] responseBytes = response.getBody().orElseThrow();
+		String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
+		Assertions.assertEquals(200, response.getStatusCode(), responseBody);
+		Assertions.assertEquals(McpSimulationBodyType.JSON,
+				response.getBodyType());
+		return responseBody;
+	}
+
+	private static void assertProviderFailure(@NonNull Simulator simulator,
+			@NonNull String requestId, @NonNull String method,
+			@Nullable String operationName, @NonNull String parameters,
+			@NonNull RuntimeException providerFailure) {
+		McpSimulationResponse response = response(simulator, requestId, method,
+				operationName, parameters);
+		String responseBody = new String(response.getBody().orElseThrow(),
+				StandardCharsets.UTF_8);
+		Assertions.assertEquals(500, response.getStatusCode(), responseBody);
+		Assertions.assertEquals(McpSimulationBodyType.JSON,
+				response.getBodyType());
+		Assertions.assertTrue(responseBody.contains("\"code\":-32603"),
+				responseBody);
+		Assertions.assertTrue(responseBody.contains(
+				"\"message\":\"Internal error\""), responseBody);
+		Assertions.assertFalse(responseBody.contains(
+				providerFailure.getMessage()), responseBody);
+	}
+
+	@NonNull
+	private static McpSimulationResponse response(@NonNull Simulator simulator,
+			@NonNull String requestId, @NonNull String method,
+			@Nullable String operationName, @NonNull String parameters) {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + method + "\",\"params\":{"
 				+ "\"_meta\":{"
@@ -384,12 +494,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(exception);
 		}
-		byte[] responseBytes = response.getBody().orElseThrow();
-		String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
-		Assertions.assertEquals(200, response.getStatusCode(), responseBody);
-		Assertions.assertEquals(McpSimulationBodyType.JSON,
-				response.getBodyType());
-		return responseBody;
+		return response;
 	}
 
 	@NonNull

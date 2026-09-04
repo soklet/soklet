@@ -408,7 +408,7 @@ runCase('coherently resealed mapping tamper is rejected', ({ root }) => {
 
 runCase('coherently resealed removed-key tamper is rejected', ({ root }) => {
   const inventory = readInventory(root);
-  inventory.currentStage.removedBaselineKeys[0] = 'active.txt\t1\t0';
+  inventory.currentStage.removedBaselineKeys[0] = 'history.txt\t1\t0';
   inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
   writeInventory(root, inventory);
   expectFailure(
@@ -416,6 +416,25 @@ runCase('coherently resealed removed-key tamper is rejected', ({ root }) => {
     'baseline',
     inventory.currentStage.censusSha256,
     /removedBaselineKeys|does not have an approved removal classification/u,
+  );
+});
+
+runCase('reviewed late removal remains explicit and deterministic', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  write(root, 'active.txt', 'snapshot=4.0.0-SNAPSHOT\nexact=4.0.0\n');
+  const inventory = readInventory(root);
+  inventory.currentStage = derivePostU7CurrentStage({
+    d2RemovalAnchorLines: { 'remove.java\t1\t0': 1 },
+    inventory,
+    pendingCurrentStagePaths: [SELF_TEST_PENDING_PATH],
+    preservedFinalSnapshotAnchors: ['current-only-negative.txt\t1\t0'],
+    reviewedRemovedBaselineKeys: ['active.txt\t3\t0'],
+    root,
+  });
+  writeInventory(root, inventory);
+  assert.equal(
+    verify(root, 'post-u7', inventory.currentStage.censusSha256).stage,
+    'post-u7',
   );
 });
 
@@ -575,4 +594,4 @@ runCase('hex-encoded active product version after U7', ({
   expectFailure(root, 'post-u7', expectedCurrentStageCensusSha256, /encoded active 3\.6\.0 product-version text survives/u);
 });
 
-console.log('version-transition inventory self-test PASS (31 cases)');
+console.log('version-transition inventory self-test PASS (32 cases)');

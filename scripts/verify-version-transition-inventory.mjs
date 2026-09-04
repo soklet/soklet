@@ -117,13 +117,18 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  '87fe400088c67917de0a2e005cce75f19b4af470db6f441e53df8c62b1a7cc81';
+  '10a43c674ba55cabd3b7ddcedcb3c3081baed756ade8557077377b673dec012e';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([
   'PRESERVED',
   'REPLACED',
   'TARGET_ONLY',
+]);
+const CURRENT_STAGE_REMOVAL_CLASSIFICATIONS = new Set([
+  'REMOVE_BY_MCP_R4',
+  'RETARGET_NOW',
+  'RETARGET_THEN_REMOVE_BY_U7',
 ]);
 const VERSION_MASK = '@@SOKLET-VERSION@@';
 const CURRENT_VERSION_PATTERNS = Object.freeze([
@@ -811,8 +816,7 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     if (baseline === undefined) {
       fail(`currentStage removed key ${key} does not identify a baseline occurrence.`);
     }
-    if (baseline.classification !== 'REMOVE_BY_MCP_R4'
-        && baseline.classification !== 'RETARGET_THEN_REMOVE_BY_U7') {
+    if (!CURRENT_STAGE_REMOVAL_CLASSIFICATIONS.has(baseline.classification)) {
       fail(`currentStage removed key ${key} does not have an approved removal classification.`);
     }
     if (mappedBaselineKeys.has(key)) {
@@ -1370,6 +1374,7 @@ export function derivePostU7CurrentStage({
   root,
   inventory,
   reviewedOverrides = {},
+  reviewedRemovedBaselineKeys = [],
   d2RemovalAnchorLines = {},
   pendingCurrentStagePaths = PENDING_CURRENT_STAGE_PATHS,
   preservedFinalSnapshotAnchors = [],
@@ -1381,6 +1386,27 @@ export function derivePostU7CurrentStage({
   const mappings = new Map();
   const unresolved = [];
   const usedOverrides = new Set();
+  const baselineByKey = new Map(inventory.occurrences.map((row) => [
+    printableOccurrenceKey(row),
+    row,
+  ]));
+  const reviewedRemoved = reviewedRemovedBaselineKeys.map((tuple, index) =>
+    parseRemovedTuple(tuple, `reviewedRemovedBaselineKeys[${index}]`));
+  const reviewedRemovedKeys = reviewedRemoved.map(encodeRemovedTuple);
+  const sortedReviewedRemovedKeys = [...reviewedRemoved]
+    .sort(compareOccurrences)
+    .map(encodeRemovedTuple);
+  if (JSON.stringify(reviewedRemovedKeys) !== JSON.stringify(sortedReviewedRemovedKeys)
+      || new Set(reviewedRemovedKeys).size !== reviewedRemovedKeys.length) {
+    fail('reviewedRemovedBaselineKeys must be unique and in strict ASCII path/location order.');
+  }
+  const reviewedRemovedKeySet = new Set(reviewedRemovedKeys);
+  for (const key of reviewedRemovedKeys) {
+    const baseline = baselineByKey.get(key);
+    if (baseline === undefined || baseline.classification !== 'RETARGET_NOW') {
+      fail(`reviewed removed key ${key} must identify a RETARGET_NOW baseline occurrence.`);
+    }
+  }
   for (const row of inventory.occurrences) {
     let classification;
     let expectedLiteral;
@@ -1394,6 +1420,9 @@ export function derivePostU7CurrentStage({
       continue;
     }
     const key = printableOccurrenceKey(row);
+    if (reviewedRemovedKeySet.has(key)) {
+      continue;
+    }
     let anchor = reviewedOverrideAnchor(
       row,
       expectedLiteral,
@@ -1513,6 +1542,10 @@ export function derivePostU7CurrentStage({
     .filter(({ classification }) =>
       classification === 'REMOVE_BY_MCP_R4'
         || classification === 'RETARGET_THEN_REMOVE_BY_U7')
+    .map(encodeRemovedTuple)
+    .concat(reviewedRemovedKeys)
+    .map((tuple, index) => parseRemovedTuple(tuple, `removedBaselineKeys[${index}]`))
+    .sort(compareOccurrences)
     .map(encodeRemovedTuple);
   const currentStage = {
     censusSha256: '',

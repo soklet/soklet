@@ -201,6 +201,28 @@ run('cleanup is complete-branch-only and report is exact', () => {
   expectFailure(() => verifyDocument(document), /semantic closure rows/u);
 });
 
+run('fixture cleanup helper is not application shutdown cleanup', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void closesFixture() {
+        Soklet soklet = Soklet.fromConfig(null);
+        soklet.start();
+        cleanup(soklet);
+      }
+      static void cleanup(Soklet soklet) { soklet.close(); }
+    }
+  `);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].cleanupConfigured, false);
+  assert.equal(scopes[0].hasInlineCleanup, false);
+  assert.equal(scopes[0].observedOperations.includes('CONFIGURE_RUNNER'), false);
+  const row = buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false })[0];
+  assert.equal(row.review.applicationCleanupCount, 0);
+  assert.equal(row.review.applicationCleanupMillis, 0);
+});
+
 run('repeated application runs repeat cleanup and terminal reporting', () => {
   const name = 'startupFailureAndTimeoutRemainPrimaryWithIncompleteRollback';
   const row = rowByName(INVENTORY, name);
@@ -234,10 +256,12 @@ run('mixed repeated application branch retains prior complete cleanup', () => {
     import org.junit.jupiter.api.Timeout;
     class SyntheticLifecycleTests {
       @Test @Timeout(120) void twoRuns() {
-        SokletApplicationOptions options = SokletApplicationOptions.builder()
-          .afterCompleteShutdown(Duration.ofSeconds(1), () -> {}).build();
-        SokletApplication.run(null, options);
-        SokletApplication.run(null, options);
+        ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
+          Duration.ofSeconds(1), result -> {});
+        SokletApplication first = SokletApplication.fromConfig(null);
+        SokletApplication second = SokletApplication.fromConfig(null);
+        first.run(cleanup);
+        second.run(cleanup);
       }
     }
   `);
@@ -257,6 +281,130 @@ run('mixed repeated application branch retains prior complete cleanup', () => {
   assert.equal(row.branchBoundsMillis.COMPLETE_CORE, 98_500);
   assert.equal(row.branchBoundsMillis.INCOMPLETE_CORE, 99_500);
   assert.equal(row.totalComposedBoundMillis, 99_500);
+});
+
+run('mutually exclusive application runs count as one generation', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(120) void conditionalRun() {
+        SokletApplication application = SokletApplication.fromConfig(null);
+        ShutdownCleanup cleanup = null;
+        ShutdownResult result = cleanup == null
+          ? application.run(null)
+          : application.run(null, cleanup);
+      }
+    }
+  `);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].applicationRunSiteCount, 1);
+  assert.equal(scopes[0].generationSiteCount, 1);
+  assert.equal(scopes[0].unresolvedLifecycleRepetitionCount, 0);
+});
+
+run('conditional application runs preserve sequential multiplicity', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(240) void sequentialAndConditionalRuns() {
+        SokletApplication application = SokletApplication.fromConfig(null);
+        application.run(null);
+        ShutdownResult result = useCleanup()
+          ? combine(application.run(null), application.run(null))
+          : application.run(null);
+        application.run(null);
+      }
+    }
+  `);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].applicationRunSiteCount, 4);
+  assert.equal(scopes[0].generationSiteCount, 4);
+  assert.equal(scopes[0].unresolvedLifecycleRepetitionCount, 0);
+});
+
+run('precommit rejections do not consume lifecycle cleanup or reports', () => {
+  const scopes = syntheticScopes(`
+    import java.time.Duration;
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(60) void precommitOnly() {
+        SokletApplication application = SokletApplication.fromConfig(null);
+        ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
+          Duration.ofSeconds(1), result -> {});
+        reject(() -> application.run((ShutdownTrigger[]) null));
+        reject(() -> application.run(ENTER, null));
+        reject(() -> application.run((ShutdownCleanup) null, ENTER));
+        reject(() -> application.run(cleanup, (ShutdownTrigger[]) null));
+        reject(application::run);
+        application.run(failingEnvironment());
+      }
+    }
+  `);
+  const review = {
+    applicationCleanupCount: 0,
+    generation: {
+      complete: 0, count: 6, incomplete: 0,
+      mode: 'PRECOMMIT_REJECTIONS_ONLY', prior: 0,
+    },
+    incompleteBranchCleanupCount: 0,
+    terminalReportCount: 0,
+  };
+  const row = reviewedSyntheticRows(scopes, { precommitOnly: review })[0];
+  assert.equal(row.source.applicationRunSiteCount, 6);
+  assert.equal(row.review.generationCount, 6);
+  assert.equal(row.review.completeGenerationMultiplier, 0);
+  assert.equal(row.review.incompleteGenerationMultiplier, 0);
+  assert.equal(row.review.applicationCleanupCount, 0);
+  assert.equal(row.review.terminalReportCount, 0);
+  assert.equal(row.review.terminalReportMillis, 0);
+  assert.equal(row.review.totalComposedBoundMillis, 0);
+  for (const mutation of [
+    { applicationCleanupCount: 1 },
+    { terminalReportCount: 1 },
+  ]) {
+    expectFailure(() => reviewedSyntheticRows(scopes, {
+      precommitOnly: { ...review, ...mutation },
+    }), /Precommit application rejections/u);
+  }
+  expectFailure(() => reviewedSyntheticRows(scopes, {
+    precommitOnly: {
+      ...review,
+      generation: {
+        complete: 1, count: 6, incomplete: 1,
+        mode: 'ONE_FULL_PLUS_PREINIT_REJECTIONS', prior: 0,
+      },
+    },
+  }), /terminal-report repetition count/u);
+});
+
+run('transport preinitialization rejections have no terminal report', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(60) void rejectedSecondTransportStart() {
+        HttpServer server = HttpServer.withPort(0);
+        server.start();
+        server.start();
+      }
+    }
+  `);
+  const row = reviewedSyntheticRows(scopes, {
+    rejectedSecondTransportStart: {
+      generation: {
+        complete: 1, count: 2, incomplete: 1,
+        mode: 'ONE_FULL_PLUS_PREINIT_REJECTIONS', prior: 0,
+      },
+    },
+  })[0];
+  assert.equal(row.source.applicationRunSiteCount, 0);
+  assert.equal(row.source.terminalReportExpected, false);
+  assert.equal(row.review.generationCount, 2);
+  assert.equal(row.review.terminalReportCount, 0);
+  assert.equal(row.review.terminalReportMillis, 0);
 });
 
 run('local strict-fit equality rejected', () => {
@@ -596,6 +744,26 @@ run('socket thread and stream methods are not lifecycle receivers', () => {
   assert.equal(scopes.length, 0);
 });
 
+run('request-capture close is not a transport lifecycle close', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void requestCaptureClose() {
+        McpSimulationRuntime runtime = createCapture();
+        runtime.close();
+      }
+      @Test void transportLifecycleClose() {
+        TransportRuntime runtime = createTransport();
+        runtime.close();
+      }
+    }
+  `);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].scopeName, 'transportLifecycleClose');
+  assert.deepEqual(scopes[0].observedOperations,
+    ['CONSTRUCT_TEMPORARY_RUNTIME', 'CLOSE']);
+});
+
 for (const [label, declarations, execution] of [
   ['cast receiver',
     'Object alias = Soklet.fromConfig(null);',
@@ -824,6 +992,7 @@ run('lifecycle-core join is not double-counted as a control wait', () => {
 
 run('background join is deduplicated under its timed Future get', () => {
   const scopes = syntheticScopes(`
+    import java.util.concurrent.Callable;
     import java.util.concurrent.Future;
     import java.util.concurrent.TimeUnit;
     import org.junit.jupiter.api.Test;
@@ -864,6 +1033,38 @@ for (const [label, wait] of [
       { requireRegistryCompleteness: false }), /fixed-control waits are unresolved/u);
   });
 }
+
+run('foreground-released start gate has a reviewed finite control bound', () => {
+  const scopes = syntheticScopes(`
+    import java.util.concurrent.Future;
+    import java.util.concurrent.TimeUnit;
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(60) void foregroundReleasesStartGate() throws Exception {
+        Soklet s = Soklet.fromConfig(null); s.start();
+        Callable<?> attempt = () -> { start.await(); return null; };
+        Future<?> first = executor.submit(attempt);
+        Future<?> second = executor.submit(attempt);
+        start.countDown();
+        first.get(2, TimeUnit.SECONDS);
+        second.get(2, TimeUnit.SECONDS);
+        s.close();
+      }
+    }
+  `);
+  assert.equal(scopes[0].unresolvedFixedControlWaitCount, 1);
+  expectFailure(() => buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false }), /fixed-control waits are unresolved/u);
+  const [row] = reviewedSyntheticRows(scopes, {
+    foregroundReleasesStartGate: {
+      controlComposition: 'REVIEWED_FOREGROUND_RELEASE',
+      controlJoinMillis: 4_000,
+    },
+  });
+  assert.equal(row.review.controlTopology, 'REVIEWED_FOREGROUND_RELEASE');
+  assert.equal(row.review.controlJoinMillis, 4_000);
+});
 
 for (const [label, wait] of [
   ['LockSupport.parkUntil',
@@ -1050,6 +1251,37 @@ run('zero-argument lifecycle policy accessor is not an installation', () => {
   assert.ok(installation);
   assert.deepEqual(installation.observedOperations, ['CONFIGURE_POLICY']);
   assert.equal(installation.unresolvedPolicyInstallationCount, 1);
+});
+
+run('literal null lifecycle policy installation restores defaults', () => {
+  const scopes = syntheticScopes(`
+    import java.time.Duration;
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void restoresDefault() {
+        SokletConfig config = SokletConfig.withHttpServer(null)
+          .lifecyclePolicy(LifecyclePolicy.builder()
+            .startupTimeout(Duration.ZERO).build())
+          .lifecyclePolicy(null).build();
+        Soklet soklet = Soklet.fromConfig(config);
+        soklet.start();
+        soklet.close();
+      }
+    }
+  `);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].unresolvedPolicyInstallationCount, 0);
+  assert.ok(scopes[0].literalPhasePolicies.some((policy) =>
+    policy.startupMillis === 30_000
+      && policy.startupCancellationMillis === 2_000
+      && policy.gracefulShutdownMillis === 15_000
+      && policy.forcedShutdownMillis === 3_000));
+  const row = buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false })[0];
+  assert.equal(row.review.phasePolicy.startupMillis, 30_000);
+  assert.equal(row.review.phasePolicy.startupCancellationMillis, 2_000);
+  assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 15_000);
+  assert.equal(row.review.phasePolicy.forcedShutdownMillis, 3_000);
 });
 
 run('duplicate lifecycle setters use the effective last value', () => {

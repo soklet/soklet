@@ -46,8 +46,16 @@ public class McpNotificationPublicRuntimeTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build();
 
 	@Test
+	@Timeout(65)
 	public void inboundNotificationsNeverEmitJsonRpcBodiesOrReachApplicationHandlers() {
 		AtomicInteger handlerCalls = new AtomicInteger();
 		AtomicInteger interceptorCalls = new AtomicInteger();
@@ -126,6 +134,7 @@ public class McpNotificationPublicRuntimeTests {
 						return continuation.proceed();
 					}))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 		SokletSimulator.run(simulatorConfig, simulator -> {
 			serverReference.set(simulator.getMcpServer().orElseThrow());
@@ -231,6 +240,7 @@ public class McpNotificationPublicRuntimeTests {
 						return continuation.proceed();
 					}))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 		SokletSimulator.run(simulatorConfig, simulator -> {
 			serverReference.set(simulator.getMcpServer().orElseThrow());

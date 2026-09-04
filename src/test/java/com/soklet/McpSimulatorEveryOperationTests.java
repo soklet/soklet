@@ -63,6 +63,13 @@ public class McpSimulatorEveryOperationTests {
 	private static final String TEMPLATE_URI = "matrix://records/{id}";
 	private static final Duration WAIT = Duration.ofSeconds(5);
 	private static final Duration DYNAMIC_TEST_TIMEOUT = Duration.ofSeconds(60);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build();
 	private static final McpJsonCodec JSON_CODEC =
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
 	private static final List<OperationCase> OPERATIONS = List.of(
@@ -638,12 +645,7 @@ public class McpSimulatorEveryOperationTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(this.metrics)
 				.lifecycleObservers(List.of(this.lifecycle))
-				.lifecyclePolicy(LifecyclePolicy.builder()
-						.startupTimeout(Duration.ofSeconds(30))
-						.startupCancelationTimeout(Duration.ofSeconds(2))
-						.gracefulShutdownTimeout(Duration.ZERO)
-						.forcedShutdownTimeout(Duration.ofMillis(250))
-						.build())
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 		}
 
