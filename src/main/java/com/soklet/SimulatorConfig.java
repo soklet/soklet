@@ -637,9 +637,9 @@ public final class SimulatorConfig {
 				@NonNull McpEndpointRegistry endpointRegistry,
 				@NonNull McpAdmissionController admissionController) {
 			this.configurationGraph = requireNonNull(configurationGraph);
-			this.builder = McpServer.withPort(requireNonNull(port),
-					requireNonNull(endpointRegistry),
-					requireNonNull(admissionController))
+			this.builder = McpServer.withPort(requireNonNull(port))
+					.endpointRegistry(requireNonNull(endpointRegistry))
+					.admissionController(requireNonNull(admissionController))
 					.simulatorBuildRegistrar(this);
 		}
 

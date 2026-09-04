@@ -90,7 +90,7 @@ public class McpTypedToolPublicRuntimeTests {
 						"bounded-public-runtime-test", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor((context, features, continuation) -> {
@@ -212,7 +212,7 @@ public class McpTypedToolPublicRuntimeTests {
 			stages.add("tool:" + context.getOperationName().orElseThrow());
 			return McpRateLimitDecision.allowed();
 		};
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
 					return McpAdmissionDecision.accepted();
@@ -359,7 +359,7 @@ public class McpTypedToolPublicRuntimeTests {
 						"propagation-public-runtime-test", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionTraceContext.set(
 							context.getTraceContext().orElseThrow());
 					return McpAdmissionDecision.accepted();

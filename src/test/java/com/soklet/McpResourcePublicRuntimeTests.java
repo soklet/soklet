@@ -131,7 +131,7 @@ public class McpResourcePublicRuntimeTests {
 				.resourceTemplateListCachePolicy(
 						McpCachePolicy.fromPrivateTimeToLive(Duration.ofMillis(200)))
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
 					return McpAdmissionDecision.accepted();
@@ -338,7 +338,7 @@ public class McpResourcePublicRuntimeTests {
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(500)))
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissions.incrementAndGet();
 					return McpAdmissionDecision.accepted();
 				})
@@ -468,7 +468,7 @@ public class McpResourcePublicRuntimeTests {
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(250)))
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					String authorization = context.getRequest()
 							.getHeader("Authorization").orElseThrow();
 					String tenant = authorization.substring("Bearer ".length());
@@ -574,7 +574,7 @@ public class McpResourcePublicRuntimeTests {
 				.addResource(invalidContentMetadata)
 				.resourceListHandler(listHandler)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -960,7 +960,7 @@ public class McpResourcePublicRuntimeTests {
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

@@ -1307,7 +1307,7 @@ public class McpSubscriptionPublicRuntimeTests {
 
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
 			McpAdmissionController admissionController) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(endpoints), admissionController)
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(admissionController)
 				.host(LOOPBACK)
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())

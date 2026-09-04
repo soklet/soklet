@@ -694,7 +694,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			sanitizerInvocations.incrementAndGet();
 			return output;
 		};
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
@@ -1310,7 +1310,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			McpRateLimiter toolRateLimiter,
 			McpHandlerInterceptor handlerInterceptor,
 			McpToolOutputSanitizer sanitizer) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)

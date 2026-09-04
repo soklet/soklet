@@ -266,7 +266,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 						"4.0.0").build())
 				.addTool(tool)
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.requestRateLimiter(limiter)
 				.toolRateLimiter(limiter)

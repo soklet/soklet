@@ -623,8 +623,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			@NonNull List<@NonNull McpEndpoint> endpoints,
 			int concurrency, int queueCapacity,
 			@NonNull Duration requestTimeout) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.copyOf(requireNonNull(endpoints))), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.copyOf(requireNonNull(endpoints))))
 				.host(HOST)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

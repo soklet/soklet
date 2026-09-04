@@ -167,7 +167,9 @@ public class App {
 }
 ```
 
-The static `run(...)` methods cover the usual standalone-process lifecycle. If
+The static [`run(SokletConfig)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig)>) and
+[`run(SokletConfig, ShutdownTrigger...)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig,com.soklet.ShutdownTrigger...)>) methods on
+[`SokletApplication`](https://javadoc.soklet.com/com/soklet/SokletApplication.html) cover the usual standalone-process lifecycle. If
 the runner also owns bounded application-resource cleanup, configure one
 one-shot application and supply that cleanup for its run:
 
@@ -179,7 +181,8 @@ ShutdownResult result = SokletApplication.fromConfig(config).run(
     ShutdownTrigger.ENTER_KEY);
 ```
 
-The configured `SokletApplication` is one-shot. After any run attempt begins,
+The configured [`SokletApplication`](https://javadoc.soklet.com/com/soklet/SokletApplication.html)
+is one-shot. After any run attempt begins,
 it cannot be run a second time or concurrently. The cleanup action is eligible
 only after Soklet has proven core shutdown complete; an incomplete core
 shutdown skips it.
@@ -685,13 +688,18 @@ The development coordinate for this section is `4.0.0`.
 ##### Recommended MCP setup
 
 For the 4.0.0 release, Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile through a dedicated,
-stateless `McpServer`. MCP owns a listener and port separate from Soklet's
+stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
+MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
 derives each endpoint's advertised capabilities from its registered
 operations.
 
-Define endpoints with the compile-time-processed `@McpServerEndpoint`,
-`@McpTool`, `@McpPrompt`, `@McpResource`, and `@McpResourceList` annotations,
+Define endpoints with the compile-time-processed
+[`@McpServerEndpoint`](https://javadoc.soklet.com/com/soklet/annotation/McpServerEndpoint.html),
+[`@McpTool`](https://javadoc.soklet.com/com/soklet/annotation/McpTool.html),
+[`@McpPrompt`](https://javadoc.soklet.com/com/soklet/annotation/McpPrompt.html),
+[`@McpResource`](https://javadoc.soklet.com/com/soklet/annotation/McpResource.html), and
+[`@McpResourceList`](https://javadoc.soklet.com/com/soklet/annotation/McpResourceList.html) annotations,
 or assemble the same immutable model programmatically. The public API covers:
 
 - Java-derived tool input and output schemas, typed or JSON arguments, and
@@ -710,25 +718,21 @@ A minimal loopback configuration for an annotation-driven, tool-bearing
 endpoint looks like this:
 
 ```java
-McpEndpointRegistry endpointRegistry =
-    McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class);
-McpAdmissionController admissionController =
-    McpAdmissionController.acceptAllInstance();
-
-McpServer mcpServer = McpServer.withPort(
-    8081, endpointRegistry, admissionController)
+McpServer mcpServer = McpServer.withPort(8081)
   .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
   .build();
 
 SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
 ```
 
-`acceptAllInstance()` and the in-memory limiter are convenient development
-defaults, not production authentication or fleet-wide rate limiting. Every
-server requires an admission controller, and every tool-bearing server requires a
-fallback tool limiter. The listener binds to `127.0.0.1` by default; configure
-`host(...)`, `allowedHosts(...)`, authentication/admission, and TLS termination
-deliberately before exposing it remotely.
+The built-in accept-all admission policy and the in-memory limiter are
+convenient development choices, not production authentication or fleet-wide
+rate limiting. Every tool-bearing server requires a fallback tool limiter. The
+listener binds to `127.0.0.1` by default; configure
+[`McpServer.Builder::host`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#host(java.lang.String)>),
+[`McpServer.Builder::allowedHosts`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#allowedHosts(java.util.Set)>),
+authentication/admission, and TLS termination deliberately
+before exposing it remotely.
 
 After admission, static `tools/list` and `prompts/list` catalogs are immutable
 and caller-neutral; Soklet does not authorization-filter their descriptors. A
@@ -741,9 +745,12 @@ authorization boundary or a promise of ETag-based dynamic catalogs.
 Framework-owned catalog text - server, tool, prompt, resource, and schema
 titles and descriptions - can be localized per request through a
 library-neutral seam that keeps Soklet free of any translation dependency.
-`McpLocalizationContext` is a Soklet-owned final value built with
-`withLocale(locale, localizationLookup)`; applications provide the named,
-thread-safe `McpLocalizationLookup` callback instead of a custom context
+[`McpLocalizationContext`](https://javadoc.soklet.com/com/soklet/McpLocalizationContext.html)
+is a Soklet-owned final value built with
+[`McpLocalizationContext::withLocale`](<https://javadoc.soklet.com/com/soklet/McpLocalizationContext.html#withLocale(java.util.Locale,com.soklet.McpLocalizationLookup)>);
+applications provide the named, thread-safe
+[`McpLocalizationLookup`](https://javadoc.soklet.com/com/soklet/McpLocalizationLookup.html)
+callback instead of a custom context
 implementation.
 The other public MCP value carriers follow the same style: final immutable
 classes, named factories or builders, private constructors, and conventional
@@ -753,15 +760,23 @@ is owned by factories on the sealed root.
 Omitting a localizer leaves wire output byte-identical. See
 [MCP localization](https://www.soklet.com/docs/mcp-localization).
 
-Every selected application handler receives one cooperative `CancelationToken`.
+Every selected application handler receives one cooperative
+[`CancelationToken`](https://javadoc.soklet.com/com/soklet/CancelationToken.html).
 Programmatic MCP handlers obtain it from
-`McpInvocationFeatures.getCancelationToken()` and obtain request-scoped
-progress, when available, from `getProgressReporter()`. The generic
-`find(...)` and `require(...)` methods remain available for extension feature
-types.
-Framework cancellation exposes only a fixed `StreamTerminationReason`; its
+[`McpInvocationFeatures::getCancelationToken`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getCancelationToken()>)
+and obtain request-scoped progress, when available, from
+[`McpInvocationFeatures::getProgressReporter`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getProgressReporter()>).
+The generic
+[`McpInvocationFeatures::find`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#find(java.lang.Class)>)
+and
+[`McpInvocationFeatures::require`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#require(java.lang.Class)>)
+methods remain available for extension feature types.
+Framework cancellation exposes only a fixed
+[`StreamTerminationReason`](https://javadoc.soklet.com/com/soklet/StreamTerminationReason.html);
+its
 underlying cause is empty, including through
-`StreamingResponseCanceledException`. On HTTP, an incoming
+[`StreamingResponseCanceledException`](https://javadoc.soklet.com/com/soklet/StreamingResponseCanceledException.html).
+On HTTP, an incoming
 `notifications/cancelled` message is accepted and ignored for compatibility;
 disconnect, deadline, shutdown, and response-stream failure are the signals
 that cancel work. Soklet validates the open `inputResponses` wire union, but
@@ -799,11 +814,14 @@ streaming is not that legacy transport.
 ##### Current implementation evidence
 
 Trace correlation remains default-off. Configuring a trace-correlation key
-enables an exactly-once finish-time `MCP_TRACE_CORRELATION` log event carrying
+enables an exactly-once finish-time
+[`LogEventType.MCP_TRACE_CORRELATION`](https://javadoc.soklet.com/com/soklet/LogEventType.html#MCP_TRACE_CORRELATION)
+log event carrying
 the bounded pseudonymous token fields; the separate
-`logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
+[`McpServer.Builder::logRawValidatedTraceIds`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#logRawValidatedTraceIds(java.lang.Boolean)>)
+opt-in may add only the validated lowercase MCP
 trace ID. Neither mode adds a trace value to metrics. The current snapshot has
-all 65 Phase 6 owners frozen and an empty provisional inventory, but it is not
+all 64 Phase 6 owners frozen and an empty provisional inventory, but it is not
 a release claim. The 1,676/0/0/4 result over 462 main and 194 test sources
 remains the rate-limit identity/trusted-proxy checkpoint. The independent-
 request direction-boundary checkpoint passed 1,678/0/0/4 over 462 main and 195
@@ -1008,7 +1026,9 @@ public Response multipart(
 In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have the DI infrastructure vend your instances.
 
 Soklet integrates via an [`InstanceProvider`](https://javadoc.soklet.com/com/soklet/InstanceProvider.html).
-The single provider configured on `SokletConfig` creates annotation-backed
+The single provider configured on
+[`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html)
+creates annotation-backed
 HTTP/SSE resources, generated MCP endpoint classes, and injectable application
 parameter values. Soklet may call it concurrently, so custom providers must
 support concurrent invocation.
@@ -1456,7 +1476,8 @@ Perform tests:
 creates one fresh off-network transport graph and supplies a
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) to exercise
 full request/response flows without binding a port. Its
-`startMcpRequest(...)` methods run an asynchronous MCP POST through the real
+[`Simulator::startMcpRequest`](<https://javadoc.soklet.com/com/soklet/Simulator.html#startMcpRequest(com.soklet.Request)>)
+methods run an asynchronous MCP POST through the real
 processor and lifecycle while retaining bounded JSON or exact SSE capture
 off-network; they do not start a configured network listener or change public
 server diagnostics.
@@ -1520,18 +1541,32 @@ SokletConfig config = SokletConfig.withHttpServer(
 Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
 
-`McpServer.getDiagnostics()` provides an immutable point-in-time view of MCP
+[`McpServer::getDiagnostics`](<https://javadoc.soklet.com/com/soklet/McpServer.html#getDiagnostics()>)
+provides an immutable point-in-time view of MCP
 handler capacity, live request streams, protection, and trace configuration
-even when metrics are disabled. `McpServerDiagnostics` declares exactly 12
-zero-argument methods: `getStatus()` and `getBoundAddress()`, plus all ten
+even when metrics are disabled.
+[`McpServerDiagnostics`](https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html)
+declares exactly 12 zero-argument methods:
+[`getStatus()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getStatus()>)
+and
+[`getBoundAddress()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getBoundAddress()>),
+plus all ten
 implemented diagnostic getters. Six are boxed `@NonNull Integer` values:
-`getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
-`getActiveHandlerExecutions()`, `getRequestHandlerQueueDepth()`,
-`getActiveRequestStreams()`, and `getActiveSubscriptions()`. The other four are
-`getProtectionMode()`, boxed
-`@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-`getProtectionKeyringFingerprint()`, and
-`getTraceCorrelationFingerprint()`; both fingerprint accessors
+[`getRequestHandlerConcurrency()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getRequestHandlerConcurrency()>),
+[`getRequestHandlerQueueCapacity()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getRequestHandlerQueueCapacity()>),
+[`getActiveHandlerExecutions()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getActiveHandlerExecutions()>),
+[`getRequestHandlerQueueDepth()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getRequestHandlerQueueDepth()>),
+[`getActiveRequestStreams()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getActiveRequestStreams()>),
+and
+[`getActiveSubscriptions()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getActiveSubscriptions()>).
+The other four are
+[`getProtectionMode()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getProtectionMode()>),
+boxed
+[`@NonNull Boolean isApplicationRequestStateProtectorConfigured()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#isApplicationRequestStateProtectorConfigured()>),
+[`getProtectionKeyringFingerprint()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getProtectionKeyringFingerprint()>),
+and
+[`getTraceCorrelationFingerprint()`](<https://javadoc.soklet.com/com/soklet/McpServerDiagnostics.html#getTraceCorrelationFingerprint()>);
+both fingerprint accessors
 return non-null `Optional` values with non-null payloads.
 
 The configured numeric values are positive and stable before start and through
@@ -1563,11 +1598,17 @@ an open subscription pair `1/1`; completed cleanup reports `STOPPED` with
 
 The protection mode and custom-protector flag are construction-time values and
 remain stable across listener lifecycle. The flag is `true` exactly for
-`CUSTOM_PROTECTOR`; it reports selection of a custom application-owned
-`McpRequestStateProtector`, not `APPLICATION_PROTECTED` operation selection.
+[`McpProtectionMode.CUSTOM_PROTECTOR`](https://javadoc.soklet.com/com/soklet/McpProtectionMode.html#CUSTOM_PROTECTOR);
+it reports selection of a custom application-owned
+[`McpRequestStateProtector`](https://javadoc.soklet.com/com/soklet/McpRequestStateProtector.html),
+not
+[`McpRequestStateMode.APPLICATION_PROTECTED`](https://javadoc.soklet.com/com/soklet/McpRequestStateMode.html#APPLICATION_PROTECTED)
+operation selection.
 Application-protected opaque state requires no framework protector and bypasses
 one even when configured. The protection fingerprint is present exactly for a
-live `PRODUCTION_KEYRING`; development-ephemeral, custom, and unconfigured
+live
+[`McpProtectionMode.PRODUCTION_KEYRING`](https://javadoc.soklet.com/com/soklet/McpProtectionMode.html#PRODUCTION_KEYRING);
+development-ephemeral, custom, and unconfigured
 modes return empty. The trace fingerprint is independent of protection mode
 and is present exactly when trace correlation was enabled at construction.
 Successful live rotations update only fresh snapshots, remain visible through
@@ -1583,11 +1624,19 @@ cardinality values, so fingerprints should not be metric labels or per-request
 log fields. These diagnostics add no metric family, event type, wire field,
 label, or other observation dimension, and collector reset cannot alter them.
 
-For MCP handler capacity, `McpMetricsSnapshot` exposes boxed, nonnegative
-`Long` values from `getActiveHandlerExecutions()`, `getHandlerQueueDepth()`,
-and `getHandlerCapacityRejections()`. The corresponding
-`activeHandlerExecutions(Long)`, `handlerQueueDepth(Long)`, and
-`handlerCapacityRejections(Long)` builder methods also use boxed values. A
+For MCP handler capacity,
+[`McpMetricsSnapshot`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html)
+exposes boxed, nonnegative `Long` values from
+[`getActiveHandlerExecutions()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getActiveHandlerExecutions()>),
+[`getHandlerQueueDepth()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getHandlerQueueDepth()>),
+and
+[`getHandlerCapacityRejections()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getHandlerCapacityRejections()>).
+The corresponding
+[`activeHandlerExecutions(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#activeHandlerExecutions(java.lang.Long)>),
+[`handlerQueueDepth(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#handlerQueueDepth(java.lang.Long)>),
+and
+[`handlerCapacityRejections(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#handlerCapacityRejections(java.lang.Long)>)
+builder methods also use boxed values. A
 configured MCP server renders these exact label-free families, including zero
 values:
 
@@ -1608,12 +1657,18 @@ handoff.
 
 The tenth bounded Phase 6 vertical resolved the full `AMB-003` aggregate
 contract and implemented the coherent transport-boundary slice. At that
-checkpoint, `McpMetricsSnapshot` had seven getters: five boxed nonnegative
+checkpoint,
+[`McpMetricsSnapshot`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html)
+had seven getters: five boxed nonnegative
 `Long` values plus immutable shutdown and transport-failure maps. The new
-getter/builder pairs are `getConnectionsAccepted()`/
-`connectionsAccepted(Long)`, `getConnectionsRejected()`/
-`connectionsRejected(Long)`, and `getTransportFailures()`/
-`transportFailures(Map<MetricsCollector.TransportFailureReason, Long>)`.
+getter/builder pairs are
+[`getConnectionsAccepted()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getConnectionsAccepted()>)/
+[`connectionsAccepted(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#connectionsAccepted(java.lang.Long)>),
+[`getConnectionsRejected()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getConnectionsRejected()>)/
+[`connectionsRejected(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#connectionsRejected(java.lang.Long)>),
+and
+[`getTransportFailures()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getTransportFailures()>)/
+[`transportFailures(Map<MetricsCollector.TransportFailureReason, Long>)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#transportFailures(java.util.Map)>).
 The map is defensive, enum-ordered, and sparse in default snapshots.
 
 Configured MCP collectors render the label-free counters
@@ -1622,7 +1677,8 @@ Configured MCP collectors render the label-free counters
 transport event activates the same pair. At that checkpoint these joined the
 four prior families for seven rendered aggregate families. MCP failures reuse the single
 `soklet_transport_failures_total` family with fixed
-`server_type="MCP"` and `reason="<TransportFailureReason>"` labels. HTTP, SSE,
+`server_type="MCP"` and `reason` labels drawn from
+[`MetricsCollector.TransportFailureReason`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html). HTTP, SSE,
 and MCP samples share one HELP/TYPE block, and a filter rejecting every sample
 leaves no orphaned metadata. Reset clears both connection counters and the
 sparse failure map while configured zero families remain visible; retained
@@ -1639,10 +1695,17 @@ fixed enum reason—never a remote address, request, throwable, header, trace,
 token, key, tracestate, baggage, or application-controlled label.
 
 The eleventh bounded Phase 6 vertical implements the contract-fixed,
-label-free `ServerStarted` scalar. The boxed, nonnegative
-`getServerStarts()`/`serverStarts(Long)` pair brings `McpMetricsSnapshot` to
+label-free
+[`McpMetricsEvent.ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html)
+scalar. The boxed, nonnegative
+[`getServerStarts()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getServerStarts()>)/
+[`serverStarts(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#serverStarts(java.lang.Long)>)
+pair brings
+[`McpMetricsSnapshot`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html)
+to
 exactly eight getters and its builder to nine public methods including
-`build()`: six boxed `Long` values and two immutable maps. The counter is the
+[`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>):
+six boxed `Long` values and two immutable maps. The counter is the
 eighth rendered aggregate family. The default
 collector increments only the existing fieldless event emitted once per
 successfully started listener generation. Failed staged starts and repeated
@@ -1650,7 +1713,10 @@ already-started no-ops contribute none; managed rollback retains its successful
 start before the matching stop, and restart counts each fresh generation.
 
 Configured collectors render `soklet_mcp_server_starts_total` at zero. Direct
-`ServerStarted` or `ServerStopped` ingest activates the same lifecycle subset,
+[`McpMetricsEvent.ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html)
+or
+[`McpMetricsEvent.ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html)
+ingest activates the same lifecycle subset,
 so a stop-only fresh collector renders zero starts plus its shutdown sample.
 Filtering the start sample also removes its HELP/TYPE block. Reset clears the
 cumulative count while retaining configured/event-activated zero visibility;
@@ -1665,11 +1731,19 @@ and
 `#concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 
 The twelfth bounded Phase 6 vertical implements the independent, label-free
-`RequestAccepted` and `RequestRejected` request-boundary scalars. Boxed,
-nonnegative `getRequestsAccepted()`/`requestsAccepted(Long)` and
-`getRequestsRejected()`/`requestsRejected(Long)` brought
-`McpMetricsSnapshot` at that checkpoint to exactly ten getters and its builder
-to 11 public methods including `build()`: eight boxed `Long` values and two
+[`McpMetricsEvent.RequestAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestAccepted.html)
+and
+[`McpMetricsEvent.RequestRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestRejected.html)
+request-boundary scalars. Boxed, nonnegative
+[`getRequestsAccepted()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getRequestsAccepted()>)/
+[`requestsAccepted(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#requestsAccepted(java.lang.Long)>)
+and
+[`getRequestsRejected()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getRequestsRejected()>)/
+[`requestsRejected(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#requestsRejected(java.lang.Long)>)
+brought
+[`McpMetricsSnapshot`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html)
+at that checkpoint to exactly ten getters and its builder
+to 11 public methods including [`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): eight boxed `Long` values and two
 immutable maps.
 
 The accepted event becomes durable only when the bounded protocol processor
@@ -1704,19 +1778,33 @@ and
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`.
 
 The thirteenth bounded Phase 6 vertical implements admitted-request lifecycle
-aggregation. The provisional `McpMetricsSnapshot` adds boxed, nonnegative
-`getActiveRequests()`, immutable `getRequests()` and
-`getRequestDurations()` maps keyed by a public, thread-safe final value created
+aggregation. The provisional
+[`McpMetricsSnapshot`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html)
+adds boxed, nonnegative
+[`getActiveRequests()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getActiveRequests()>),
+immutable
+[`getRequests()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getRequests()>)
+and
+[`getRequestDurations()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getRequestDurations()>)
+maps keyed by a public, thread-safe final value created
 with
-`RequestOutcomeKey.fromDimensions(endpointPath, jsonRpcMethod, outcome)`, and
+[`McpMetricsSnapshot.RequestOutcomeKey::fromDimensions`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestOutcomeKey.html#fromDimensions(java.lang.String,java.lang.String,com.soklet.McpRequestOutcome)>),
+and
 matching builder methods. The key rejects nulls and empty routed strings but
 its public factory does not validate registry membership. Its dimensions use
-`getEndpointPath()`, `getJsonRpcMethod()`, and `getOutcome()`. The current surface is 13 getters and
-14 public builder methods including `build()`: nine boxed `Long` values and
+[`getEndpointPath()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestOutcomeKey.html#getEndpointPath()>),
+[`getJsonRpcMethod()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestOutcomeKey.html#getJsonRpcMethod()>),
+and
+[`getOutcome()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestOutcomeKey.html#getOutcome()>).
+The current surface is 13 getters and
+14 public builder methods including [`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): nine boxed `Long` values and
 four immutable maps; completed counts and histograms are independent sparse
 maps.
 
-The existing exact `RequestStarted`/`RequestFinished` authority drives
+The existing exact
+[`McpMetricsEvent.RequestStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStarted.html)/
+[`McpMetricsEvent.RequestFinished`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestFinished.html)
+authority drives
 `soklet_mcp_requests_active`, `soklet_mcp_requests_total`, and
 `soklet_mcp_request_duration_nanos`. Completed and duration samples use only
 bounded `endpoint`, `method`, and lower-snake `outcome`; there are no standalone
@@ -1748,20 +1836,31 @@ authority/cardinality evidence includes
 
 The fourteenth bounded Phase 6 vertical implements request-stream lifecycle
 aggregation. The provisional snapshot adds boxed, nonnegative
-`getActiveRequestStreams()`, immutable `getRequestStreamDurations()`, and
-matching `activeRequestStreams(Long)`/`requestStreamDurations(Map)` builders.
+[`getActiveRequestStreams()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getActiveRequestStreams()>),
+immutable
+[`getRequestStreamDurations()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getRequestStreamDurations()>),
+and matching
+[`activeRequestStreams(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#activeRequestStreams(java.lang.Long)>)/
+[`requestStreamDurations(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#requestStreamDurations(java.util.Map)>)
+builders.
 The new public, thread-safe
-`RequestStreamTerminationKey(endpointPath, jsonRpcMethod, reason)` validates
+[`McpMetricsSnapshot.RequestStreamTerminationKey::fromDimensions`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestStreamTerminationKey.html#fromDimensions(java.lang.String,java.lang.String,com.soklet.McpStreamTerminationReason)>)
+validates
 non-null/nonempty shape but not application-created registry membership. The
 current surface is 15 getters and 16 public builder methods including
-`build()`: ten boxed `Long` values and five immutable maps.
+[`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): ten boxed `Long` values and five immutable maps.
 
-Exact `RequestStreamOpened`/`RequestStreamClosed` delivery drives the gauge
+Exact
+[`McpMetricsEvent.RequestStreamOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamOpened.html)/
+[`McpMetricsEvent.RequestStreamClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamClosed.html)
+delivery drives the gauge
 `soklet_mcp_request_streams_active` (HELP `Currently active MCP request
 streams`) and histogram `soklet_mcp_request_stream_duration_nanos` (HELP `MCP
 request-stream duration in nanoseconds`). The stream transition records open
 before accepted progress/keepalive observations and the single close before
-terminal `RequestFinished`; this is FIFO record/enqueue order, not a universal
+terminal
+[`McpMetricsEvent.RequestFinished`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestFinished.html);
+this is FIFO record/enqueue order, not a universal
 cross-thread total order. Histogram dimensions are only
 bounded `endpoint`, `method`, and lower-snake `reason`. The ten reasons are
 `completed`, `client_disconnected`, `request_canceled`, `deadline_exceeded`,
@@ -1799,15 +1898,25 @@ and
 
 The fifteenth bounded Phase 6 vertical implements subscription lifecycle
 aggregation. The provisional snapshot adds boxed, nonnegative
-`getActiveSubscriptions()`, immutable `getSubscriptionDurations()`, and
-matching `activeSubscriptions(Long)`/`subscriptionDurations(Map)` builders.
+[`getActiveSubscriptions()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getActiveSubscriptions()>),
+immutable
+[`getSubscriptionDurations()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getSubscriptionDurations()>),
+and matching
+[`activeSubscriptions(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#activeSubscriptions(java.lang.Long)>)/
+[`subscriptionDurations(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#subscriptionDurations(java.util.Map)>)
+builders.
 The new public, thread-safe
-`SubscriptionTerminationKey(endpointPath, reason)` validates non-null/nonempty
+[`McpMetricsSnapshot.SubscriptionTerminationKey::fromDimensions`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.SubscriptionTerminationKey.html#fromDimensions(java.lang.String,com.soklet.McpStreamTerminationReason)>)
+validates non-null/nonempty
 shape but not application-created registry membership. The current surface is
-17 getters and 18 public builder methods including `build()`: 11 boxed `Long`
+17 getters and 18 public builder methods including
+[`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): 11 boxed `Long`
 values and six immutable maps.
 
-Exact `SubscriptionOpened`/`SubscriptionClosed` delivery drives the gauge
+Exact
+[`McpMetricsEvent.SubscriptionOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionOpened.html)/
+[`McpMetricsEvent.SubscriptionClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionClosed.html)
+delivery drives the gauge
 `soklet_mcp_subscriptions_active` (HELP `Currently active MCP subscriptions`)
 and histogram `soklet_mcp_subscription_duration_nanos` (HELP `MCP subscription
 duration in nanoseconds`). Dimensions are only bounded `endpoint` and
@@ -1818,9 +1927,13 @@ lower-snake `reason`. The ten reasons are `completed`, `client_disconnected`,
 are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds
 plus overflow. No standalone open/close counters exist.
 
-Produced order is `RequestStreamOpened`, `SubscriptionOpened`, then at
-termination `RequestStreamClosed`, `SubscriptionClosed`, and
-`RequestFinished`. This is FIFO record/enqueue order, not universal
+Produced order is
+[`RequestStreamOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamOpened.html),
+[`SubscriptionOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionOpened.html), then at
+termination
+[`RequestStreamClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamClosed.html),
+[`SubscriptionClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionClosed.html), and
+[`RequestFinished`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestFinished.html). This is FIFO record/enqueue order, not universal
 cross-thread ordering or an atomic relationship between gauges. Configured
 collectors and either direct subscription event activate gauge-zero visibility;
 the histogram remains sparse without orphan HELP/TYPE metadata when empty or
@@ -1848,18 +1961,26 @@ and `#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
 
 The sixteenth bounded Phase 6 vertical implements independent progress and
 cooperative-cancelation counters. The provisional snapshot adds immutable
-`Map<EndpointMethodKey, Long> getCancelationsSignaled()` and
-`getProgressEmitted()`, with matching `cancelationsSignaled(Map)` and
-`progressEmitted(Map)` builders. The public, thread-safe
-`EndpointMethodKey(endpointPath, jsonRpcMethod)` rejects null/empty shape while
+[`Map<EndpointMethodKey, Long> getCancelationsSignaled()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getCancelationsSignaled()>)
+and
+[`getProgressEmitted()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getProgressEmitted()>),
+with matching
+[`cancelationsSignaled(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#cancelationsSignaled(java.util.Map)>)
+and
+[`progressEmitted(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#progressEmitted(java.util.Map)>)
+builders. The public, thread-safe
+[`McpMetricsSnapshot.EndpointMethodKey::fromDimensions`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.EndpointMethodKey.html#fromDimensions(java.lang.String,java.lang.String)>)
+rejects null/empty shape while
 accepting arbitrary nonempty application-created values. The current surface
-is 19 getters and 20 public builder methods including `build()`: 11 boxed
+is 19 getters and 20 public builder methods including [`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): 11 boxed
 `Long` values and eight immutable maps.
 
-`CancelationSignaled` drives
+[`McpMetricsEvent.CancelationSignaled`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.CancelationSignaled.html)
+drives
 `soklet_mcp_cancelations_signaled_total{endpoint,method}` with HELP `Total
 cooperative MCP request cancelations signaled by endpoint and method`;
-`ProgressEmitted` drives
+[`McpMetricsEvent.ProgressEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProgressEmitted.html)
+drives
 `soklet_mcp_progress_emitted_total{endpoint,method}` with HELP `Total MCP
 progress notifications accepted for delivery by endpoint and method`. They are
 independent counters, not complements or a conservation equation. The labeled
@@ -1891,12 +2012,17 @@ and
 `#concurrentDirectProgressAndCancelationIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 
 The seventeenth bounded Phase 6 vertical implements fieldless keep-alive
-aggregation. Boxed, nonnegative `@NonNull Long getKeepAlivesEmitted()` and
-matching `keepAlivesEmitted(Long)` expand the provisional snapshot to 20
-getters and 21 public builder methods including `build()`: 12 boxed `Long`
+aggregation. Boxed, nonnegative
+[`@NonNull Long getKeepAlivesEmitted()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getKeepAlivesEmitted()>)
+and matching
+[`keepAlivesEmitted(Long)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#keepAlivesEmitted(java.lang.Long)>)
+expand the provisional snapshot to 20
+getters and 21 public builder methods including [`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): 12 boxed `Long`
 values and eight immutable maps.
 
-Each exact `KeepAliveEmitted` accepted by the shared semantic-event FIFO drives
+Each exact
+[`McpMetricsEvent.KeepAliveEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.KeepAliveEmitted.html)
+accepted by the shared semantic-event FIFO drives
 the label-free `soklet_mcp_keep_alives_emitted_total` counter with HELP `Total
 MCP keep-alive comments accepted for delivery`. Configured MCP and a direct
 event both activate the family; configured and post-reset state render zero.
@@ -1927,11 +2053,17 @@ comprehensive privacy, sustained/simulator evidence, release readiness, or
 Phase 6 freeze.
 
 The eighteenth bounded Phase 6 production vertical completes core default MCP
-aggregation with immutable `Map<Integer, Long> getProtocolErrors()` and
-`Map<EndpointMethodKey, Long> getUnknownMirroredHeaders()`, plus matching
-`protocolErrors(Map)` and `unknownMirroredHeaders(Map)` builder methods. The
+aggregation with immutable
+[`Map<Integer, Long> getProtocolErrors()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getProtocolErrors()>)
+and
+[`Map<EndpointMethodKey, Long> getUnknownMirroredHeaders()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getUnknownMirroredHeaders()>),
+plus matching
+[`protocolErrors(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#protocolErrors(java.util.Map)>)
+and
+[`unknownMirroredHeaders(Map)`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#unknownMirroredHeaders(java.util.Map)>)
+builder methods. The
 provisional snapshot now has 22 getters and 23 public builder methods including
-`build()`: 12 boxed `Long` values and ten maps. The three fuzz, dormant-
+[`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): 12 boxed `Long` values and ten maps. The three fuzz, dormant-
 derivation, and metric-dimensionality checkpoints remain separately
 unnumbered.
 
@@ -1961,9 +2093,13 @@ attribution.
 
 The two default maps independently retain at most 8,192 keys. Public builder
 maps remain uncapped value carriers and accept arbitrary non-null `Integer`
-codes and structurally valid nonempty `EndpointMethodKey` values with
+codes and structurally valid nonempty
+[`McpMetricsSnapshot.EndpointMethodKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.EndpointMethodKey.html)
+values with
 nonnegative counts, including explicit zero. Protocol maps use natural Integer
-order; no canonical `EndpointMethodKey` order is promised. Built-in dimensions
+order; no canonical
+[`McpMetricsSnapshot.EndpointMethodKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.EndpointMethodKey.html)
+order is promised. Built-in dimensions
 contain no header identity, request, throwable, payload, remote identity, trace
 ID/token/key material, tracestate, baggage, or generic application label.
 
@@ -1986,14 +2122,18 @@ conservation.
 
 This constrains built-in MCP event, snapshot, and default-renderer surfaces,
 not arbitrary public/manual vocabulary, custom collectors, generic HTTP
-callbacks, logs, `Request`, `Throwable`, or application telemetry. It adds no
+callbacks, logs,
+[`Request`](https://javadoc.soklet.com/com/soklet/Request.html), `Throwable`,
+or application telemetry. It adds no
 structured/raw-ID emission, downstream OpenTelemetry mapping, sustained/soak,
 simulator or release-candidate proof, and does not freeze Phase 6.
 
 The nineteenth bounded Phase 6 production vertical implements the frozen
 downstream metric matrix in the then-current
 unreleased `soklet-otel`, whose default core baseline is
-`com.soklet:soklet:3.6.0-SNAPSHOT`. All 23 `McpMetricsEvent` variants map to
+`com.soklet:soklet:3.6.0-SNAPSHOT`. All 23
+[`McpMetricsEvent`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.html)
+variants map to
 exactly 22 OpenTelemetry instruments: 21 MCP-specific instruments plus the
 existing shared transport-failure counter. The mapping uses seven fixed MCP
 attributes, lower-snake enum values, the exact 14 request-duration and 12
@@ -2006,7 +2146,8 @@ The required 3.6 migration removes obsolete MCP request/session/SSE span
 callbacks, the four legacy `soklet.mcp.sessions.*`/session-duration
 instruments, three MCP span-policy knobs, and two MCP span-naming methods. At
 that V19 boundary, the reviewed downstream public diff was exactly 15 removed
-legacy methods plus the new `didRecordMcpMetricsEvent(McpMetricsEvent)`
+legacy methods plus the new
+[`MetricsCollector::didRecordMcpMetricsEvent`](<https://javadoc.soklet.com/com/soklet/MetricsCollector.html#didRecordMcpMetricsEvent(com.soklet.McpMetricsEvent)>)
 callback. Modern MCP lifecycle callbacks then remained inherited no-ops, so
 that metric slice emitted no replacement MCP spans; HTTP and SSE tracing
 remained intact. A 1.3.1 consumer
@@ -2037,16 +2178,17 @@ sources, Javadoc, and standalone Javadoc packaging is green. Core inventories
 remain unchanged: 23/23 event variants and 22 text families, 22 snapshot
 getters and 23 builder methods, the exact 31/12 cardinality projection, and
 the 32-entry provisional/210-owner union. At that V19 boundary, modern
-`McpRequestContext` span parenting, naming, policy, and terminal behavior were
+[`McpRequestContext`](https://javadoc.soklet.com/com/soklet/McpRequestContext.html)
+span parenting, naming, policy, and terminal behavior were
 the next contract slice.
 
 The twentieth bounded Phase 6 production vertical implements those modern
 admitted-request spans in the same unreleased
 `com.soklet:soklet-otel:1.4.0-SNAPSHOT` against
 `com.soklet:soklet:3.6.0-SNAPSHOT`. Boxed
-`SpanPolicy.recordMcpRequestSpans()` and its builder method default to `true`.
+[`SpanPolicy.recordMcpRequestSpans()`](<https://otel.javadoc.soklet.com/com/soklet/otel/SpanPolicy.html#recordMcpRequestSpans()>) and its builder method default to `true`.
 The additive default
-`SpanNamingStrategy.mcpRequestSpanName(McpRequestContext)` preserves existing
+[`SpanNamingStrategy.mcpRequestSpanName(McpRequestContext)`](<https://otel.javadoc.soklet.com/com/soklet/otel/SpanNamingStrategy.html#mcpRequestSpanName(com.soklet.McpRequestContext)>) preserves existing
 three-method implementations. Default names are `MCP <method>` for the exact
 ten core methods; every other raw context method is `<unrecognized>` in the
 name and `rpc.method`, with no original-method attribute. Custom naming remains
@@ -2118,9 +2260,15 @@ only `SOK-TRACE-005`, and `SOK-PRIV-001` remained PARTIAL; and
 integration was next.
 
 The twenty-first bounded Phase 6 production vertical implements that simulator
-integration through the existing shared `Simulator` host. Its two abstract
-`startMcpRequest(...)` methods return a thread-safe `McpSimulation`; seven new
-top-level simulation types and `McpSimulationOptions.Builder` define immutable
+integration through the existing shared
+[`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) host. Its
+two abstract
+[`startMcpRequest(...)`](<https://javadoc.soklet.com/com/soklet/Simulator.html#startMcpRequest(com.soklet.Request)>)
+methods return a thread-safe
+[`McpSimulation`](https://javadoc.soklet.com/com/soklet/McpSimulation.html);
+seven new top-level simulation types and
+[`McpSimulationOptions.Builder`](https://javadoc.soklet.com/com/soklet/McpSimulationOptions.Builder.html)
+define immutable
 responses, completion, exact SSE items, body/item enums, and positive capture
 bounds. Defaults are 128 pending SSE items and 10,485,760 cumulative bytes.
 
@@ -2135,14 +2283,22 @@ such as `127.0.0.1:0`; no Host is synthesized.
 Repeatable response/completion waits and destructive FIFO item reads expose
 defensive JSON/empty-body copies, exact unchunked SSE frames, and immutable
 completion. A captured terminal JSON frame consumes one ordinary item and is
-also available as completion `terminalMessage` at no second cost. Item capacity
+also available from
+[`McpSimulationCompletion::getTerminalMessage`](<https://javadoc.soklet.com/com/soklet/McpSimulationCompletion.html#getTerminalMessage()>)
+at no second cost. Item capacity
 is checked before cumulative bytes; equality is allowed, an offending frame is
 excluded, dequeue refunds only a queue slot, and bytes never refund. JSON or
 pre-response SSE overflow retains the response head and exact item/byte reason.
-The admitted request finishes `CANCELED` with coarse token reason
-`SIMULATOR_LIMIT_EXCEEDED`, not a protocol or transport failure.
+The admitted request finishes
+[`McpRequestOutcome.CANCELED`](https://javadoc.soklet.com/com/soklet/McpRequestOutcome.html#CANCELED)
+with coarse token reason
+[`StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED`](https://javadoc.soklet.com/com/soklet/StreamTerminationReason.html#SIMULATOR_LIMIT_EXCEEDED),
+not a protocol or transport failure.
 
-`close()` and scope exit publish `CLIENT_DISCONNECTED` only if they win
+[`McpSimulation::close`](<https://javadoc.soklet.com/com/soklet/McpSimulation.html#close()>)
+and scope exit publish
+[`McpRequestOutcome.CLIENT_DISCONNECTED`](https://javadoc.soklet.com/com/soklet/McpRequestOutcome.html#CLIENT_DISCONNECTED)
+only if they win
 the shared terminal reservation. Cleanup is bounded and idempotent; residual
 noncooperative work blocks new simulation and live start until release, while
 escaped handles stay readable. Waits reject null/negative values, support zero
@@ -2188,20 +2344,38 @@ the MCP conformance matrix.
 The sixth bounded Phase 6 vertical established one context-aware, server-wide
 deferred FIFO for the first 16 semantic event variants produced by the runtime:
 the five handler transitions,
-`ServerStopped`, admitted `RequestStarted`, `RequestFinished`,
-`RequestStreamOpened`, `RequestStreamClosed`, `SubscriptionOpened`,
-`SubscriptionClosed`, `CancelationSignaled`, `ProgressEmitted`, and
-`KeepAliveEmitted`, plus exactly one `ServerStarted` for each successfully
-started listener generation. Failed starts leave no phantom `ServerStarted`.
-Direct restart orders the old `ServerStopped` before the new `ServerStarted`,
-while managed startup rollback orders `ServerStarted` before `ServerStopped`.
+[`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html), admitted
+[`RequestStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStarted.html),
+[`RequestFinished`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestFinished.html),
+[`RequestStreamOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamOpened.html),
+[`RequestStreamClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamClosed.html),
+[`SubscriptionOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionOpened.html),
+[`SubscriptionClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionClosed.html),
+[`CancelationSignaled`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.CancelationSignaled.html),
+[`ProgressEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProgressEmitted.html), and
+[`KeepAliveEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.KeepAliveEmitted.html), plus exactly one
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html) for each successfully
+started listener generation. Failed starts leave no phantom
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html).
+Direct restart orders the old
+[`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html) before the new
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html),
+while managed startup rollback orders
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html) before
+[`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html).
 
 The seventh vertical extended the same FIFO to the 20 variants produced at
 that checkpoint with
-`RequestAccepted`, `RequestRejected`, `ProtocolError`, and
-`UnknownMirroredHeader`. A successful bounded-processor submission emits
-`RequestAccepted`; executor rejection removes that provisional event and emits
-only `RequestRejected` before the fixed empty HTTP 503. Malformed requests
+[`RequestAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestAccepted.html),
+[`RequestRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestRejected.html),
+[`McpMetricsEvent.ProtocolError`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProtocolError.html),
+and
+[`McpMetricsEvent.UnknownMirroredHeader`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.UnknownMirroredHeader.html).
+A successful bounded-processor submission emits
+[`RequestAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestAccepted.html);
+executor rejection removes that provisional event and emits only
+[`RequestRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestRejected.html)
+before the fixed empty HTTP 503. Malformed requests
 order accepted, fixed protocol error, then rejected. Strict unknown-header and
 unresolved-method requests additionally emit one unknown-header event per
 occurrence before their fixed protocol error and rejection. Unknown events use
@@ -2209,7 +2383,8 @@ only the endpoint path and a bounded method or `<unrecognized>`—never a header
 name, value, or raw method—and are independent of optional name-diagnostic
 quota. Application-owned error codes are excluded from protocol-error metrics.
 
-`ProtocolError` uses exactly the fixed codes `-32700`, `-32600`, `-32601`,
+[`ProtocolError`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProtocolError.html)
+uses exactly the fixed codes `-32700`, `-32600`, `-32601`,
 `-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998`,
 after successful response encoding. A streamed error remains provisional until
 its terminal message is accepted and is discarded on failed reservation.
@@ -2223,35 +2398,39 @@ failures are contained and do not stall the FIFO. This guarantees FIFO metric
 record/enqueue order, not a universal cross-thread causal or per-request total
 order between independently racing producers.
 
-The eighth bounded vertical adds `ConnectionAccepted`, `ConnectionRejected`,
-and `TransportFailure`, so the same FIFO now produces and delivers all 23
-declared event variants. `ConnectionAccepted` follows operating-system accept
+The eighth bounded vertical adds
+[`McpMetricsEvent.ConnectionAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ConnectionAccepted.html),
+[`McpMetricsEvent.ConnectionRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ConnectionRejected.html),
+and
+[`McpMetricsEvent.TransportFailure`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.TransportFailure.html),
+so the same FIFO now produces and delivers all 23
+declared event variants. [`ConnectionAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ConnectionAccepted.html) follows operating-system accept
 and capacity reservation but precedes registration and request processing; a
-later setup failure can therefore follow it. `ConnectionRejected` means only
+later setup failure can therefore follow it. [`ConnectionRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ConnectionRejected.html) means only
 that an accepted socket encountered the configured maximum-connection bound.
 Accept-loop and setup faults are typed transport failures, never capacity
 rejections.
 
-Every `TransportFailure` is request-free and carries only one of the exact 18
-bounded reasons: `REQUEST_READ_TIMEOUT`, `REQUEST_TOO_LARGE`,
-`MALFORMED_REQUEST`, `READ_ERROR`, `WRITE_ERROR`,
-`RESPONSE_WRITE_IDLE_TIMEOUT`, `RESPONSE_READY_ERROR`,
-`REQUEST_READ_TIMEOUT_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`,
-`ACCEPT_LOOP_ERROR`, `CONNECTION_SETUP_ERROR`, `TASK_ERROR`,
-`TIMEOUT_TASK_ERROR`, `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
-`EVENT_LOOP_TERMINATED`, or `UNKNOWN`. Neither the event nor collector-failure
+Every [`TransportFailure`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.TransportFailure.html) is request-free and carries only one of the exact 18
+bounded reasons: [`REQUEST_READ_TIMEOUT`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#REQUEST_READ_TIMEOUT), [`REQUEST_TOO_LARGE`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#REQUEST_TOO_LARGE),
+[`MALFORMED_REQUEST`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#MALFORMED_REQUEST), [`READ_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#READ_ERROR), [`WRITE_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#WRITE_ERROR),
+[`RESPONSE_WRITE_IDLE_TIMEOUT`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#RESPONSE_WRITE_IDLE_TIMEOUT), [`RESPONSE_READY_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#RESPONSE_READY_ERROR),
+[`REQUEST_READ_TIMEOUT_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#REQUEST_READ_TIMEOUT_ERROR), [`RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#RESPONSE_WRITE_IDLE_TIMEOUT_ERROR),
+[`ACCEPT_LOOP_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#ACCEPT_LOOP_ERROR), [`CONNECTION_SETUP_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#CONNECTION_SETUP_ERROR), [`TASK_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#TASK_ERROR),
+[`TIMEOUT_TASK_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#TIMEOUT_TASK_ERROR), [`SELECTION_KEY_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#SELECTION_KEY_ERROR), [`REGISTER_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#REGISTER_ERROR), [`WRITE_TIMEOUT`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#WRITE_TIMEOUT),
+[`EVENT_LOOP_TERMINATED`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#EVENT_LOOP_TERMINATED), or [`UNKNOWN`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#UNKNOWN). Neither the event nor collector-failure
 logging retains a remote address, raw request, request context, throwable,
 payload, trace token, or another unbounded dimension.
 
 Typed provisional failure scopes and a coalescing single-daemon-worker drain
 keep collector callbacks off connection threads and retry a signal that races
 executor rejection. Lifecycle deferral safely adopts pending delivery, so a
-fatal restart orders old `EVENT_LOOP_TERMINATED`, old `ServerStopped`, then new
-`ServerStarted` before returning. A partial request timeout is recorded while
+fatal restart orders old [`EVENT_LOOP_TERMINATED`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#EVENT_LOOP_TERMINATED), old [`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html), then new
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html) before returning. A partial request timeout is recorded while
 a byte-free idle close is quiet; malformed HTTP remains distinct from a
 complete malformed JSON-RPC request. A winning request-SSE write-idle expiry
-records one `WRITE_TIMEOUT` before its terminals, while a losing/generic close
-records no `WRITE_TIMEOUT` and does not manufacture `WRITE_ERROR`. Fatal-loop
+records one [`WRITE_TIMEOUT`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#WRITE_TIMEOUT) before its terminals, while a losing/generic close
+records no [`WRITE_TIMEOUT`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#WRITE_TIMEOUT) and does not manufacture [`WRITE_ERROR`](https://javadoc.soklet.com/com/soklet/MetricsCollector.TransportFailureReason.html#WRITE_ERROR). Fatal-loop
 recording precedes stop/wake and remains scoped through sibling cleanup. These
 are FIFO
 record/enqueue-order guarantees, not universal cross-thread causal ordering.
@@ -2290,7 +2469,9 @@ snapshot one complete active key ID and key-material pair under the shared
 security lock, derive after releasing it with HMAC-SHA-256 over UTF-8
 `soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
 to the first 16 digest bytes, and encode an unpadded 22-character Base64URL
-token. `TraceContext` rejects invalid and all-zero trace IDs before derivation;
+token.
+[`TraceContext`](https://javadoc.soklet.com/com/soklet/TraceContext.html)
+rejects invalid and all-zero trace IDs before derivation;
 same key/trace inputs agree, changed key or trace inputs differ, and rotation
 exposes only coherent old or new `(keyId, token)` pairs. Copied key material
 and explicit derivation buffers are zeroed. The internal carrier retains only
@@ -2314,7 +2495,9 @@ derivation checkpoints remained unnumbered. `SOK-TRACE-001`, `SOK-TRACE-002`,
 and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` and `SOK-TRACE-005` were
 PLANNED; and `SOK-PRIV-001` was PARTIAL. No public API or API-sketch source
 changed. At that checkpoint there was no structured-log carrier, field,
-emission point, cadence, or new `LogEventType`, and raw trace-ID logging was
+emission point, cadence, or new
+[`LogEventType`](https://javadoc.soklet.com/com/soklet/LogEventType.html), and
+raw trace-ID logging was
 unimplemented. No metric, event, diagnostics/
 snapshot field, aggregate, label, or wire dimension was added. Tokens remain
 pseudonymous high-cardinality operational metadata, not anonymization,
@@ -2339,7 +2522,7 @@ constructors are private, while the nested types remain public for typed
 pattern matching. At that
 checkpoint, the MCP snapshot was three boxed `Long` values and one immutable
 shutdown map. `DefaultMetricsCollector` aggregated only five handler variants
-and `ServerStopped`, ignoring and retaining none of the other 17 variants.
+and [`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html), ignoring and retaining none of the other 17 variants.
 
 Sixteen sequential real requests carrying distinct valid MCP and HTTP trace
 IDs, tracestate, baggage, derived tokens, and key canaries leave no value in
@@ -2357,8 +2540,12 @@ remained PARTIAL; `AMB-003` remained AMBIGUOUS.
 
 That test-only checkpoint changed no production source, public API, API sketch,
 owner/signature inventory, family, label, event variant, or wire behavior. It
-did not cover custom collectors; generic HTTP `MetricsCollector` callbacks
-receiving `Request`, request-target, or `Throwable` values; `LogEvent`,
+did not cover custom collectors; generic HTTP
+[`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
+callbacks receiving
+[`Request`](https://javadoc.soklet.com/com/soklet/Request.html), request-target,
+or `Throwable` values;
+[`LogEvent`](https://javadoc.soklet.com/com/soklet/LogEvent.html),
 application callbacks or handler telemetry; arbitrary application event
 vocabulary; structured logging or raw-ID emission; future aggregates;
 comprehensive trace/baggage redaction; sustained cardinality, fuzz or soak;
@@ -2375,7 +2562,7 @@ downstream OpenTelemetry metric migration is the nineteenth, modern
 admitted-request spans are the twentieth, and bounded off-network MCP
 simulation is the twenty-first. The three earlier
 checkpoints remain unnumbered. The snapshot remains at 22 getters
-and 23 public builder methods including `build()`: 12 boxed `Long` values and
+and 23 public builder methods including [`build()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.Builder.html#build()>): 12 boxed `Long` values and
 ten maps. The default collector aggregates the full 23/23 event variants across 22 text
 families, leaving zero core events unaggregated. The nonsubscription 16-request
 gate remains exactly 31 MCP-prefixed samples before reset and 12 after reset
@@ -2405,22 +2592,37 @@ concurrent mutation, add structured-log or raw-ID emission, complete
 privacy/cardinality work, or prove every-operation simulation, sustained,
 release-readiness, review, or the later Phase 6 freeze.
 
-For MCP shutdowns, `snapshot().getMcpMetrics().getServerStops()` is an immutable,
-enum-ordered `Map<ShutdownComponentDisposition, Long>`. The default collector omits
+For MCP shutdowns,
+[`snapshot().getMcpMetrics().getServerStops()`](<https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.html#getServerStops()>)
+is an immutable, enum-ordered
+[`Map<ShutdownComponentDisposition, Long>`](https://javadoc.soklet.com/com/soklet/ShutdownComponentDisposition.html).
+The default collector omits
 unobserved outcomes, resets the map to empty, and emits `soklet_mcp_shutdowns_total`
 only for `not_started`, `graceful_termination`, `forced_termination`,
 `unexpected_termination`, `residual_activity`, or `termination_unknown`. Default aggregation
-now covers `ServerStarted`, `ServerStopped`, `RequestAccepted`,
-`RequestRejected`, `RequestStarted`, `RequestFinished`,
-`RequestStreamOpened`, `RequestStreamClosed`, the five handler variants,
-`SubscriptionOpened`, `SubscriptionClosed`, `CancelationSignaled`,
-`ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
-`UnknownMirroredHeader`, and the transport trio.
-The later `MCP_TRACE_CORRELATION` implementation completes the bounded
+now covers
+[`ServerStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStarted.html),
+[`ServerStopped`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ServerStopped.html),
+[`RequestAccepted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestAccepted.html),
+[`RequestRejected`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestRejected.html),
+[`RequestStarted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStarted.html),
+[`RequestFinished`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestFinished.html),
+[`RequestStreamOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamOpened.html),
+[`RequestStreamClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.RequestStreamClosed.html), the five handler variants,
+[`SubscriptionOpened`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionOpened.html),
+[`SubscriptionClosed`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.SubscriptionClosed.html),
+[`CancelationSignaled`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.CancelationSignaled.html),
+[`ProgressEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProgressEmitted.html),
+[`KeepAliveEmitted`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.KeepAliveEmitted.html),
+[`ProtocolError`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.ProtocolError.html),
+[`UnknownMirroredHeader`](https://javadoc.soklet.com/com/soklet/McpMetricsEvent.UnknownMirroredHeader.html), and the transport trio.
+The later
+[`MCP_TRACE_CORRELATION`](https://javadoc.soklet.com/com/soklet/LogEventType.html#MCP_TRACE_CORRELATION)
+implementation completes the bounded
 pseudonymous-token and separately opted-in raw-ID structured-log contract;
 operator retention, custom collectors/application telemetry, broader privacy
 and redaction review, and sustained cardinality/drain evidence remain open.
-Phase 6 review and freeze are complete for all 65 owners, and the provisional
+Phase 6 review and freeze are complete for all 64 owners, and the provisional
 inventory is empty.
 Here, the remaining fuzz work means scheduled/manual coverage-guided and
 sustained execution, not the completed registration and deterministic corpus
@@ -2431,17 +2633,20 @@ The seventh through ninth verticals added no public API, snapshot field,
 aggregate family, label, event variant, or wire dimension. The tenth added
 three provisional snapshot getters and three matching builder methods; the
 eleventh adds one getter/builder pair, the twelfth adds two, the thirteenth adds
-three plus `RequestOutcomeKey`, and the fourteenth adds two plus
-`RequestStreamTerminationKey`; the fifteenth adds two plus
-`SubscriptionTerminationKey`; and the sixteenth adds two plus
-`EndpointMethodKey`; the seventeenth adds one provisional getter/builder pair;
+three plus
+[`RequestOutcomeKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestOutcomeKey.html), and the fourteenth adds two plus
+[`RequestStreamTerminationKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.RequestStreamTerminationKey.html); the fifteenth adds two plus
+[`SubscriptionTerminationKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.SubscriptionTerminationKey.html); and the sixteenth adds two plus
+[`EndpointMethodKey`](https://javadoc.soklet.com/com/soklet/McpMetricsSnapshot.EndpointMethodKey.html); the seventeenth adds one provisional getter/builder pair;
 and the eighteenth adds two provisional map getter/builder pairs.
 The nineteenth changes only the downstream `soklet-otel` artifact and adds no
 core event variant, snapshot member, owner, label, or wire dimension.
 The twentieth also changes only that downstream artifact and adds five declared
 methods relative to V19, with no core inventory change.
 The twenty-first adds seven top-level public simulation types,
-`McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, while
+[`McpSimulationOptions.Builder`](https://javadoc.soklet.com/com/soklet/McpSimulationOptions.Builder.html),
+and two abstract methods to
+[`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html), while
 leaving the metric/snapshot/canary inventories unchanged.
 Those Vxx counts remain historical. The current API inventory is 133/36/64
 Phase 4/5/6 owners (233 total), all three phases are frozen, and
@@ -2872,7 +3077,7 @@ redaction, quota, or cardinality scenario, so this adds no official-suite
 claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
 `FAILED` at 110/117/12/19/5, while the synthetic report remains
 115/117/12/19/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
-`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
+`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic [`Request`](https://javadoc.soklet.com/com/soklet/Request.html),
 `Throwable`, custom-collector, and application-telemetry privacy remain owned
 by `SOK-PRIV-001`.
 

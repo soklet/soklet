@@ -17,7 +17,6 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -385,7 +384,7 @@ public class McpErrorMappingGoldenProductionTests {
 						"error-mapping-golden", "4.0.0").build())
 				.addTools(List.of(regular, required, conditional, hold))
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> "rate-limit".equals(context.getRequest()
 						.getHeader(CASE_HEADER).orElse(""))

@@ -456,7 +456,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			@NonNull McpEndpointRegistry registry,
 			@NonNull McpRateLimiter fallbackToolLimiter,
 			@NonNull McpAdmissionController admissionController) {
-		return McpServer.withPort(0, registry, admissionController)
+		return McpServer.withPort(0).endpointRegistry(registry).admissionController(admissionController)
 				.host(LOOPBACK)
 				.toolRateLimiter(fallbackToolLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

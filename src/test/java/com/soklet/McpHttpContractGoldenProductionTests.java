@@ -445,7 +445,7 @@ public class McpHttpContractGoldenProductionTests {
 				.addTool(tool)
 				.addTool(typedTool)
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					String caseName = state.caseName(context.getRequest());
 					state.record(caseName, "admission");
 					if (Set.of("metadata", "version", "structural", "admission-denied",

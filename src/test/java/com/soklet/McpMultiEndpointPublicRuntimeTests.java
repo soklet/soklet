@@ -75,8 +75,8 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.instructions("Instructions for the second endpoint.")
 				.addTool(secondTool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)))
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -174,8 +174,8 @@ public class McpMultiEndpointPublicRuntimeTests {
 						"second-policy-result", new AtomicInteger(),
 						new AtomicReference<>()))
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint))).admissionController(context -> {
 					admittedEndpoints.add(context.getEndpoint());
 					return McpAdmissionDecision.accepted();
 				})
@@ -246,8 +246,8 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.addPrompt(secondPrompt)
 				.addResource(secondResource)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)))
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))

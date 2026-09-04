@@ -1143,8 +1143,8 @@ function verifyCharacterizationSources(root, sourceFiles) {
 
   const withPort = oneMethod(server.lexed, serverPath, 'com.soklet.McpServer', 'withPort');
   requireStructural(withPort,
-    /return\s+new\s+Builder\s*\(\s*requirePort\s*\(\s*requireNonNull\s*\(\s*port\s*\)\s*\)\s*,\s*endpointRegistry\s*,\s*admissionController\s*\)\s*;/u,
-    'McpServer.withPort must prime its dedicated builder with every required construction value');
+    /return\s+new\s+Builder\s*\(\s*requirePort\s*\(\s*requireNonNull\s*\(\s*port\s*\)\s*\)\s*\)\s*;/u,
+    'McpServer.withPort must prime its dedicated builder with the validated port');
   requireStructural(start, /candidateEventLoop\s*=\s*new\s+EventLoop\s*\(\s*options\s*,\s*NoopLogger\s*\.\s*instance\s*\(\s*\)\s*,\s*handler/u, 'MCP start path must construct its Microhttp EventLoop');
   const httpVersionReferences = [...process.bodyCode.matchAll(
     /\brequest\s*\.\s*version\s*\(\s*\)/gu)];

@@ -409,7 +409,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(int port,
 			List<McpEndpoint> endpoints, AtomicInteger admissions,
 			CorsAuthorizer corsAuthorizer) {
-		return McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(endpoints), context -> {
+		return McpServer.withPort(port).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(context -> {
 					admissions.incrementAndGet();
 					return McpAdmissionDecision.accepted();
 				})

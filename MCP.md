@@ -93,8 +93,11 @@ and does not cause Soklet to advertise a protocol capability.
 
 ## Server and request model
 
-`McpServer.withPort(port, endpointRegistry, admissionController)` creates an
-independent listener and requires its unconditional inputs up front. A Soklet
+`McpServer.withPort(port)` creates an independent listener. By default, the
+builder discovers every generated endpoint visible from the thread context
+class loader at build time and admits requests anonymously. Use
+`endpointRegistry(...)` to select an explicit registry and
+`admissionController(...)` to install application-owned admission. A Soklet
 application may manage HTTP, SSE, and MCP servers together through the
 corresponding `SokletConfig` builder setters, but each retains its own bind
 address and port.
@@ -121,10 +124,10 @@ request/stream and permits independent concurrent requests to carry the same
 string or integer ID. It does not reserve IDs across the listener or reject a
 request merely because another live request has an equal ID.
 
-Every server must configure:
+Every server must resolve:
 
-- a nonempty `McpEndpointRegistry`;
-- one `McpAdmissionController`; and
+- a nonempty `McpEndpointRegistry`, using classpath introspection by default;
+- one `McpAdmissionController`, using the accept-all controller by default; and
 - a server-level fallback `McpRateLimiter` if any endpoint has a tool.
 
 The fallback tool limiter remains required even if every tool has an endpoint
@@ -161,13 +164,16 @@ Collection methods use one grammar throughout MCP: `addX(...)` and
 reject null elements.
 
 For optional or defaulted builder properties, passing null clears the optional
-feature or restores the documented built-in default. This includes server
-host and operational budgets, optional endpoint features, localizer revision,
-protection limits, simulation options, token-bucket refill settings, and
-metrics maps. Required construction values, mode-defining values, and
-additive elements remain non-null. Security-sensitive resets remain secure:
-for example, a null CORS authorizer restores reject-all behavior for present
-origins, and null allowed hosts restores the empty deployment-specific set.
+feature or restores the documented built-in default. This includes the server
+endpoint registry and admission controller, host and operational budgets,
+optional endpoint features, localizer revision, protection limits, simulation
+options, token-bucket refill settings, and metrics maps. Required construction
+values, mode-defining values, and additive elements remain non-null.
+Security-sensitive resets remain secure: for example, a null CORS authorizer
+restores reject-all behavior for present origins, and null allowed hosts
+restores the empty deployment-specific set. A null admission controller
+restores the documented accept-all development default and therefore must not
+be used as a production authentication policy.
 
 `McpTokenBucketConfig.withCapacity(capacity)` is a complete builder entrypoint.
 Without overrides it replenishes 60 tokens every one minute; passing null to
@@ -193,8 +199,9 @@ open to Soklet.
 
 `McpEndpointRegistry.fromClasses(...)` selects generated endpoint classes in an
 explicit order. `fromClasspathIntrospection(...)` loads every generated
-endpoint visible from the context class loader in binary-name order. Discovery
-is provider-neutral. Each annotated operation acquires its endpoint instance
+endpoint visible from the context class loader in binary-name order and is the
+server builder's default. Discovery is provider-neutral. Each annotated
+operation acquires its endpoint instance
 from the `InstanceProvider` on the `SokletConfig` that owns the MCP server, at
 the point of handler invocation. The provider is not called during discovery or
 framework-owned static catalog listing; a custom annotated resource-list handler

@@ -69,15 +69,19 @@ public class McpServerPublicRuntimeTests {
 				List.of(newEndpoint()));
 		McpAdmissionController admissionController =
 				McpAdmissionController.acceptAllInstance();
-		McpServer.Builder validationBuilder = McpServer.withPort(0,
-				endpointRegistry, admissionController);
+		McpServer.Builder validationBuilder = McpServer.withPort(0)
+				.endpointRegistry(endpointRegistry)
+				.admissionController(admissionController);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpServer.withPort(null, endpointRegistry,
-						admissionController));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpServer.withPort(0, null, admissionController));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpServer.withPort(0, endpointRegistry, null));
+				() -> McpServer.withPort(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.endpointRegistry(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.endpointRegistry(endpointRegistry));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.admissionController(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.admissionController(admissionController));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> validationBuilder.port(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
@@ -149,8 +153,9 @@ public class McpServerPublicRuntimeTests {
 
 		ExecutorService shutDownExecutor = Executors.newSingleThreadExecutor();
 		shutDownExecutor.shutdown();
-		McpServer invalidServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
+		McpServer invalidServer = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> shutDownExecutor)
 				.build();
@@ -1048,8 +1053,9 @@ public class McpServerPublicRuntimeTests {
 	@NonNull
 	private static McpServer newExecutorConfiguredMcpServer(
 			@NonNull List<@NonNull ExecutorService> suppliedExecutors) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerConcurrency(3)
 				.requestHandlerQueueCapacity(7)
@@ -1064,8 +1070,9 @@ public class McpServerPublicRuntimeTests {
 
 	@NonNull
 	private static McpServer newDevelopmentEphemeralMcpServer() {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.protectionConfig(McpProtectionConfig
 						.withDevelopmentEphemeralProtection().build())
@@ -1084,7 +1091,9 @@ public class McpServerPublicRuntimeTests {
 	private static McpServer newMcpServer(int port, @NonNull McpEndpoint endpoint,
 			@NonNull McpAdmissionController admissionController,
 			boolean configureCorsAuthorizer) {
-		McpServer.Builder builder = McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController);
+		McpServer.Builder builder = McpServer.withPort(port)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(admissionController);
 		if (configureCorsAuthorizer)
 			builder.corsAuthorizer(CorsAuthorizer.rejectAllInstance());
 		return builder.build();

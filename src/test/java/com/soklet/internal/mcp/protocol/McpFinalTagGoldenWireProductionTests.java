@@ -40,7 +40,6 @@ import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtectionConfig;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionContext;
 import com.soklet.McpRequestStateProtectionException;
@@ -158,7 +157,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted(
 							com.soklet.McpAdmissionIdentity
@@ -269,7 +268,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addPrompt(prompt)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
@@ -347,7 +346,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.addResource(blobResource)
 				.addResource(recordTemplate)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
@@ -405,7 +404,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted();
 				})
@@ -562,7 +561,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.addTool(tool)
 				.addTool(inputResponsesTool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -627,7 +626,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted();
 				})
@@ -690,7 +689,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -760,7 +759,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.addResource(resource)
 				.subscriptionConfig(subscriptions)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -893,7 +892,7 @@ public class McpFinalTagGoldenWireProductionTests {
 						"soklet-final-schema-golden", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.protectionConfig(McpProtectionConfig.withRequestStateProtector(

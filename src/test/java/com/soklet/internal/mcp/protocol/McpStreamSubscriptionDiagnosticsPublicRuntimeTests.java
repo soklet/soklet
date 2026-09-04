@@ -26,7 +26,6 @@ import com.soklet.McpJsonObject;
 import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
@@ -392,7 +391,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	@NonNull
 	private static McpServer server(@NonNull List<@NonNull McpEndpoint> endpoints,
 			@NonNull Duration shutdownTimeout) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(endpoints), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

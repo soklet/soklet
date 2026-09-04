@@ -631,9 +631,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 						return context;
 					})
 					.build();
-			return McpServer.withPort(0,
-					McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-					McpAdmissionController.acceptAllInstance())
+			return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 					.host(LOOPBACK)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())

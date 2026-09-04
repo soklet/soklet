@@ -17,15 +17,16 @@ amendments, followed by the 2026-09-03 application-wide instance-provider,
 MCP value-contract, invocation/input-declaration, and focused naming/surface
 amendments, followed by the 2026-09-04 public-contract annotation and
 transport-ownership documentation amendment and the 2026-09-04 non-MCP
-public-record elimination amendment. The
+public-record elimination amendment, followed by the 2026-09-04 MCP server
+default-construction amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 670 records and has SHA-256
-`8b29282aaf333e5b84b3ee74c55b19e6f8419433b7311aef6da5084b81320256`.
+4.0.0 source tree. It currently contains 669 records and has SHA-256
+`283b4031a8f28e5f4d0640b2cc0deeaf68d345312786fabefa49bac7b8f5a4b1`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -368,7 +369,7 @@ separate evidence is recorded below.
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
 1,058 canonical records across all 133 selected owners: 133 classes, one
 constructor, 79 fields, and 845 methods. Its SHA-256 is
-`41c717baa9353bfe794601f9ee5da1ebf5e3317afb9a656343683287da88290c`.
+`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`.
 `phase-5.signatures.jsonl` freezes 189 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 134 methods.
 Its SHA-256 is
@@ -378,7 +379,7 @@ selected owners: 64 classes, zero constructors, 41 fields, and 318 methods.
 Its SHA-256 is
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
 Their current reflection/nullability digests are respectively
-`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`,
+`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`,
 `682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`,
 and
 `3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`.
@@ -1550,15 +1551,15 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-621 reviewed incompatibilities across 271 owners: 233 MCP and 38 non-MCP.
+669 reviewed incompatibilities across 284 owners: 233 MCP and 51 non-MCP.
 The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
 `RequestStreamTerminationKey`, and `SubscriptionTerminationKey` are now frozen
 Phase 6 owners. The amended frozen inventories contain 1,058 Phase 4, 189
 Phase 5, and 423 Phase 6 signatures. Phase 4 contains 133 classes, one
 constructor, 79 fields, and 845 methods, with SHA-256
-`41c717baa9353bfe794601f9ee5da1ebf5e3317afb9a656343683287da88290c`
+`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`
 and exact nullability digest
-`58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9`.
+`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 134 methods,
 with SHA-256
 `0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`
@@ -2312,3 +2313,26 @@ released-3.5.1 comparison records: 13 superclass changes from `Record` to
 `e56656835910a549fa3d6edf8fe073ca11759eede86daa5f760a423ce133f006`,
 and the 670-record compatibility ledger has SHA-256
 `8b29282aaf333e5b84b3ee74c55b19e6f8419433b7311aef6da5084b81320256`.
+
+### 2026-09-04 MCP server default-construction amendment
+
+The owner-approved server-construction pass restores the complete
+`McpServer.withPort(Integer)` entrypoint. Its builder discovers generated MCP
+endpoints from the thread context class loader at build time and uses
+`McpAdmissionController.acceptAllInstance()` unless the application supplies
+an override. `endpointRegistry(null)` restores classpath discovery and
+`admissionController(null)` restores anonymous admission. Discovery remains
+lazy, so a programmatic registry can be installed without first requiring a
+generated classpath descriptor.
+
+The unreleased three-argument `withPort` overload is removed without a
+compatibility alias. Restoring the exact one-argument descriptor present in
+3.5.1 removes its prior incompatibility record, reducing the reviewed ledger
+to 669 records with SHA-256
+`283b4031a8f28e5f4d0640b2cc0deeaf68d345312786fabefa49bac7b8f5a4b1`.
+The Phase 4 snapshot remains at 1,058 records, with one method exchanged
+one-for-one, and now has SHA-256
+`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`.
+Its reflection/nullability SHA-256 is
+`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
+Phase 5, Phase 6, and all owner inventories remain unchanged.

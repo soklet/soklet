@@ -893,7 +893,7 @@ public class McpRequestObservationPublicRuntimeTests {
 								"Authentication required"))
 				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context ->
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context ->
 						McpAdmissionDecision.rejected(rejection))
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -1128,7 +1128,7 @@ public class McpRequestObservationPublicRuntimeTests {
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

@@ -733,8 +733,7 @@ class McpLocalizationReloadRuntimeTests {
 		McpEndpointRegistry endpointRegistry =
 				McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 		return server(localizer, handlerExecutor,
-				McpServer.withPort(0, endpointRegistry,
-						McpAdmissionController.acceptAllInstance()));
+				McpServer.withPort(0).endpointRegistry(endpointRegistry));
 	}
 
 	private static McpServer server(McpLocalizer localizer,

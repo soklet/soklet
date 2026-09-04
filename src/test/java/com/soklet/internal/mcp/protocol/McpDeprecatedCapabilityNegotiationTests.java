@@ -19,7 +19,6 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.LifecycleObserver;
 import com.soklet.LogEvent;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpClientCapability;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -76,7 +75,7 @@ public class McpDeprecatedCapabilityNegotiationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"deprecated-capability-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

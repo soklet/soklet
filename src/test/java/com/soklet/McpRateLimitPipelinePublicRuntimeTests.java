@@ -375,7 +375,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint,
 			McpAdmissionController admissionController,
 			McpRateLimiter toolRateLimiter) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.toolRateLimiter(toolRateLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

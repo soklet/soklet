@@ -17,7 +17,6 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpLocalizer;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
@@ -434,9 +433,7 @@ public class McpLimitsAndAccountingTests {
 				McpImplementation.withNameAndVersion(
 						"limits-and-accounting-tests", "4.0.0").build())
 				.build();
-		return McpServer.withPort(0,
-				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-				McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)));
 	}
 
 	private static void putPair(Map<String, Bound> values, String key,

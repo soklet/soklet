@@ -74,7 +74,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 						"self-report-identity-test", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissions.add(context);
 					IdentityFixture identity = context.getRequest()
 							.getHeader("Authorization")

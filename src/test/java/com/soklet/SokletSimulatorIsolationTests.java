@@ -959,7 +959,7 @@ public class SokletSimulatorIsolationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"rejected-session-proof-test", "4.0.0").build())
 				.build();
-		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> {
 					ExecutorService executor = Executors.newSingleThreadExecutor();

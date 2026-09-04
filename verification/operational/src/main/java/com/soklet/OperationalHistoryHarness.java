@@ -246,7 +246,7 @@ public final class OperationalHistoryHarness {
             "soklet-operational-history", "4.0.0").build())
         .addTool(tool)
         .build();
-    McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+    McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
         .host(HOST)
         .toolRateLimiter(context -> McpRateLimitDecision.allowed())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -419,7 +419,7 @@ public final class OperationalHistoryHarness {
       traceKeyBytes[index] = (byte) (0x21 + index);
     TelemetryAudit telemetry = new TelemetryAudit(
         "operational-self-test", traceKeyBytes, 1L, 1L);
-    McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+    McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
         .host(HOST)
         .toolRateLimiter(context -> McpRateLimitDecision.allowed())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())

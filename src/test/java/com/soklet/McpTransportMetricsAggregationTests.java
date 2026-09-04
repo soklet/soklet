@@ -502,7 +502,7 @@ public class McpTransportMetricsAggregationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/transport-metrics", McpImplementation.withNameAndVersion(
 						"transport-metrics-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

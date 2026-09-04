@@ -118,8 +118,8 @@ public class McpBuilderResetContractTests {
 	public void serverOptionalAndDefaultedPropertiesResetAfterCustomization() {
 		McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(
 				List.of(McpEndpoint.withPath("/mcp", implementation()).build()));
-		McpAdmissionController admissionController =
-				McpAdmissionController.acceptAllInstance();
+		McpAdmissionController customAdmissionController =
+				context -> McpAdmissionDecision.accepted();
 		McpRateLimiter rateLimiter = context -> McpRateLimitDecision.allowed();
 		McpRateLimiterRegistry rateLimiterRegistry = McpRateLimiterRegistry
 				.builder().addRateLimiter("custom", rateLimiter).build();
@@ -130,10 +130,13 @@ public class McpBuilderResetContractTests {
 		byte[] traceKeyMaterial = new byte[32];
 		traceKeyMaterial[0] = 1;
 
-		DefaultMcpServer defaults = (DefaultMcpServer) McpServer.withPort(0,
-				endpointRegistry, admissionController).build();
-		DefaultMcpServer reset = (DefaultMcpServer) McpServer.withPort(0,
-				endpointRegistry, admissionController)
+		DefaultMcpServer defaults = (DefaultMcpServer) McpServer.withPort(0)
+				.endpointRegistry(endpointRegistry)
+				.build();
+		DefaultMcpServer reset = (DefaultMcpServer) McpServer.withPort(0)
+				.endpointRegistry(endpointRegistry)
+				.admissionController(customAdmissionController)
+				.admissionController(null)
 				.host("0.0.0.0")
 				.host(null)
 				.maximumCursorSizeInBytes(17)
@@ -222,6 +225,8 @@ public class McpBuilderResetContractTests {
 		Assertions.assertEquals(McpProtectionMode.NONE,
 				reset.getProtectionControl().getProtectionMode());
 		Assertions.assertFalse(reset.getTraceCorrelationControl().isEnabled());
+		Assertions.assertSame(McpAdmissionController.acceptAllInstance(),
+				reset.getAdmissionController());
 	}
 
 	@Test

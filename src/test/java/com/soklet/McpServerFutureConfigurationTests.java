@@ -208,7 +208,7 @@ class McpServerFutureConfigurationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"future-configuration-tests", "4.0.0").build())
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)));
 	}
 
 	private static McpProtectionKey protectionKey(String id, int fill) {

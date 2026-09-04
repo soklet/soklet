@@ -513,8 +513,7 @@ public class McpLocalizationPublicApiTests {
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpointRegistry registry) {
-		return McpServer.withPort(0, registry,
-				McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0).endpointRegistry(registry);
 	}
 
 	private static Soklet managedSoklet(McpServer server) {

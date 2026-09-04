@@ -344,7 +344,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	private static McpServer server(McpEndpoint endpoint,
 			McpAdmissionController admissionController,
 			McpHandlerInterceptor handlerInterceptor) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(handlerInterceptor)

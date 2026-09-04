@@ -260,7 +260,7 @@ public class McpServerStartMetricsAggregationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/server-start-metrics", McpImplementation.withNameAndVersion(
 						"server-start-metrics-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

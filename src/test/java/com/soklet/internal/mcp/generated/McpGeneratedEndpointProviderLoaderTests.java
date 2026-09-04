@@ -16,14 +16,17 @@
 
 package com.soklet.internal.mcp.generated;
 
+import com.soklet.McpAdmissionController;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpInvocationFeatures;
 import com.soklet.McpJsonObject;
-import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpOperationResult;
+import com.soklet.McpRateLimiter;
 import com.soklet.McpRequestContext;
+import com.soklet.McpServer;
 import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpToolArguments;
 import com.soklet.McpToolHandler;
@@ -169,6 +172,82 @@ public class McpGeneratedEndpointProviderLoaderTests {
 						tool.getOutputSchema().orElseThrow().getDocument();
 					});
 				});
+			} finally {
+				Thread.currentThread().setContextClassLoader(previous);
+			}
+		}
+	}
+
+	@Test
+	void oneArgumentServerFactoryDefersDiscoveryUntilBuildAndDefaultsToAnonymousAdmission()
+			throws Exception {
+		try (IndexedClassLoader emptyClassLoader = newClassLoader();
+				IndexedClassLoader classLoader = newClassLoader(goodIndex())) {
+			ClassLoader previous = Thread.currentThread().getContextClassLoader();
+			try {
+				Thread.currentThread().setContextClassLoader(emptyClassLoader);
+				McpServer.Builder builder = McpServer.withPort(0)
+						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults());
+				Thread.currentThread().setContextClassLoader(classLoader);
+				McpServer server = builder.build();
+
+				assertEquals(List.of("/a", "/b"),
+						endpointPaths(server.getEndpointRegistry()));
+				assertSame(McpAdmissionController.acceptAllInstance(),
+						server.getAdmissionController());
+			} finally {
+				Thread.currentThread().setContextClassLoader(previous);
+			}
+		}
+	}
+
+	@Test
+	void explicitServerRegistryBypassesClasspathDiscovery() throws Exception {
+		try (IndexedClassLoader classLoader = newClassLoader(goodIndex());
+				IndexedClassLoader emptyClassLoader = newClassLoader()) {
+			ClassLoader previous = Thread.currentThread().getContextClassLoader();
+			try {
+				Thread.currentThread().setContextClassLoader(classLoader);
+				McpEndpointRegistry explicitRegistry = McpEndpointRegistry
+						.fromClasspathIntrospection();
+				Thread.currentThread().setContextClassLoader(emptyClassLoader);
+				McpServer server = McpServer.withPort(0)
+						.endpointRegistry(explicitRegistry)
+						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+						.build();
+
+				assertSame(explicitRegistry, server.getEndpointRegistry());
+			} finally {
+				Thread.currentThread().setContextClassLoader(previous);
+			}
+		}
+	}
+
+	@Test
+	void nullServerOverridesRestoreClasspathAndAnonymousDefaults()
+			throws Exception {
+		try (IndexedClassLoader classLoader = newClassLoader(goodIndex())) {
+			ClassLoader previous = Thread.currentThread().getContextClassLoader();
+			try {
+				Thread.currentThread().setContextClassLoader(classLoader);
+				McpEndpointRegistry explicitRegistry = McpEndpointRegistry
+						.fromEndpoints(List.of(McpEndpointRegistry
+								.fromClasspathIntrospection().getEndpoints().get(0)));
+				McpServer server = McpServer.withPort(0)
+						.endpointRegistry(explicitRegistry)
+						.endpointRegistry(null)
+						.admissionController(context -> {
+							throw new AssertionError(
+									"custom admission controller must have been reset");
+						})
+						.admissionController(null)
+						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+						.build();
+
+				assertEquals(List.of("/a", "/b"),
+						endpointPaths(server.getEndpointRegistry()));
+				assertSame(McpAdmissionController.acceptAllInstance(),
+						server.getAdmissionController());
 			} finally {
 				Thread.currentThread().setContextClassLoader(previous);
 			}

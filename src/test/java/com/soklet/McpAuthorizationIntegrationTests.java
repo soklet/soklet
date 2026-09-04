@@ -233,7 +233,7 @@ public class McpAuthorizationIntegrationTests {
 						"authorization-integration-test", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					state.admissions.add(context);
 					String challenge = context.isNotification()
 							? NOTIFICATION_CHALLENGE : TOOL_CHALLENGE;

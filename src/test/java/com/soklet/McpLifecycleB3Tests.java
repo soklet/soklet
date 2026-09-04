@@ -927,8 +927,8 @@ class McpLifecycleB3Tests {
 				}
 			}
 		};
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(endpoint(PATH))), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(endpoint(PATH))))
 				.host(HOST)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.allowedHosts(Set.of(HOST))
@@ -2222,9 +2222,7 @@ class McpLifecycleB3Tests {
 			@NonNull McpEndpoint endpoint,
 			@NonNull Duration shutdownTimeout) {
 		requireNonNull(shutdownTimeout);
-		return McpServer.withPort(port,
-				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-				McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(port).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(HOST)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

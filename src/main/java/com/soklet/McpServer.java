@@ -52,7 +52,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpEndpointRegistry getEndpointRegistry();
 
 	/**
-	 * Returns the required admission controller.
+	 * Returns the effective admission controller. When omitted during
+	 * construction this is {@link McpAdmissionController#acceptAllInstance()}.
 	 *
 	 * @return admission controller
 	 */
@@ -172,22 +173,24 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpServerDiagnostics getDiagnostics();
 
 	/**
-	 * Vends a server builder primed with its required construction values.
-	 * Port {@code 0} requests an operating-system-assigned port.
+	 * Vends a server builder for the given port. Port {@code 0} requests an
+	 * operating-system-assigned port.
+	 * <p>
+	 * By default, {@link McpEndpointRegistry#fromClasspathIntrospection()}
+	 * discovers generated endpoints when {@link Builder#build()} is invoked, and
+	 * {@link McpAdmissionController#acceptAllInstance()} admits every request and
+	 * notification anonymously. Applications can replace either default through
+	 * the corresponding builder method.
 	 *
 	 * @param port port in the range 0 through 65535
-	 * @param endpointRegistry registry containing at least one endpoint
-	 * @param admissionController authentication, authorization, and admission
-	 *                            controller
 	 * @return server builder
-	 * @throws NullPointerException if an argument is null
+	 * @throws NullPointerException if {@code port} is null
+	 * @throws IllegalArgumentException if {@code port} is outside the supported
+	 *                                  range
 	 */
 	@NonNull
-	static Builder withPort(@NonNull Integer port,
-			@NonNull McpEndpointRegistry endpointRegistry,
-			@NonNull McpAdmissionController admissionController) {
-		return new Builder(requirePort(requireNonNull(port)), endpointRegistry,
-				admissionController);
+	static Builder withPort(@NonNull Integer port) {
+		return new Builder(requirePort(requireNonNull(port)));
 	}
 
 	/**
@@ -231,7 +234,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private Duration writeTimeout;
 		@Nullable
 		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
-		@NonNull
+		@Nullable
 		private McpEndpointRegistry endpointRegistry;
 		@NonNull
 		private McpAdmissionController admissionController;
@@ -264,12 +267,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@Nullable
 		private SimulatorMcpBuildRegistrar simulatorBuildRegistrar;
 
-		private Builder(int port,
-				@NonNull McpEndpointRegistry endpointRegistry,
-				@NonNull McpAdmissionController admissionController) {
+		private Builder(int port) {
 			this.port = port;
-			this.endpointRegistry = requireNonNull(endpointRegistry);
-			this.admissionController = requireNonNull(admissionController);
+			this.admissionController =
+					McpAdmissionController.acceptAllInstance();
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.maximumSubscriptionsPerPartition =
@@ -563,14 +564,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Sets the endpoint registry.
+		 * Sets the endpoint registry. By default, generated endpoints visible
+		 * through the current thread's context class loader are discovered when
+		 * {@link #build()} is invoked.
 		 *
-		 * @param endpointRegistry registry containing at least one endpoint
+		 * @param endpointRegistry registry containing at least one endpoint, or null
+		 *                         to restore classpath discovery
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder endpointRegistry(@NonNull McpEndpointRegistry endpointRegistry) {
-			this.endpointRegistry = requireNonNull(endpointRegistry);
+		public Builder endpointRegistry(
+				@Nullable McpEndpointRegistry endpointRegistry) {
+			this.endpointRegistry = endpointRegistry;
 			return this;
 		}
 
@@ -590,17 +595,19 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Sets the required authentication, authorization, and admission controller.
-		 * Applications deliberately allowing anonymous access may use
-		 * {@link McpAdmissionController#acceptAllInstance()}.
+		 * Sets the authentication, authorization, and admission controller. The
+		 * default is {@link McpAdmissionController#acceptAllInstance()}.
 		 *
-		 * @param admissionController admission controller
+		 * @param admissionController admission controller, or null to restore the
+		 *                            accept-all default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder admissionController(
-				@NonNull McpAdmissionController admissionController) {
-			this.admissionController = requireNonNull(admissionController);
+				@Nullable McpAdmissionController admissionController) {
+			this.admissionController = admissionController == null
+					? McpAdmissionController.acceptAllInstance()
+					: admissionController;
 			return this;
 		}
 
@@ -874,11 +881,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Builds a stopped MCP server.
 		 *
 		 * @return configured server
-		 * @throws IllegalStateException if the keep-alive interval is not shorter
-		 *                               than the write timeout, a configured limiter
-		 *                               name is unknown, or tools exist without a fallback
-		 *                               tool limiter, or a configured localization
-		 *                               response exceeds its provider-lookup limit
+		 * @throws IllegalStateException if default endpoint discovery finds no
+		 *                               generated descriptor or encounters a malformed,
+		 *                               conflicting, or unloadable index or provider; the
+		 *                               keep-alive interval is not shorter than the write
+		 *                               timeout; a configured limiter name is unknown;
+		 *                               tools exist without a fallback tool limiter; or a
+		 *                               configured localization response exceeds its
+		 *                               provider-lookup limit
 		 */
 		@NonNull
 		public McpServer build() {
@@ -889,12 +899,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 			if (this.keepAliveInterval.compareTo(this.writeTimeout) >= 0)
 				throw new IllegalStateException(
 						"The MCP keep-alive interval must be shorter than the write timeout.");
-			boolean toolsPresent = this.endpointRegistry.getEndpoints().stream()
+			McpEndpointRegistry endpointRegistry = this.endpointRegistry == null
+					? McpEndpointRegistry.fromClasspathIntrospection()
+					: this.endpointRegistry;
+			boolean toolsPresent = endpointRegistry.getEndpoints().stream()
 					.anyMatch(endpoint -> !endpoint.getTools().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
 				throw new IllegalStateException(
 						"An MCP tool rate limiter must be configured when tools are registered.");
-			for (McpEndpoint endpoint : this.endpointRegistry.getEndpoints()) {
+			for (McpEndpoint endpoint : endpointRegistry.getEndpoints()) {
 				endpoint.getToolRateLimiterName().ifPresent(name ->
 						requireRegisteredLimiter(name,
 								"endpoint " + endpoint.getPath()));
@@ -912,7 +925,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.keepAliveInterval,
 					this.maximumSubscriptionsPerPartition,
 					this.maximumSubscriptionDuration,
-					this.endpointRegistry,
+					endpointRegistry,
 					this.admissionController, this.handlerInterceptor,
 					this.toolOutputSanitizer, this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,

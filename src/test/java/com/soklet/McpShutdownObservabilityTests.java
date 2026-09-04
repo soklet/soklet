@@ -885,7 +885,7 @@ public class McpShutdownObservabilityTests {
 						"shutdown-observability-test", "4.0.0").build())
 				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(HOST)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -1163,8 +1163,8 @@ public class McpShutdownObservabilityTests {
 			@Nullable Duration shutdownTimeout) {
 		if (shutdownTimeout != null)
 			requireNonNull(shutdownTimeout);
-		McpServer.Builder builder = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.copyOf(requireNonNull(endpoints))), McpAdmissionController.acceptAllInstance())
+		McpServer.Builder builder = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.copyOf(requireNonNull(endpoints))))
 				.host(HOST)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));

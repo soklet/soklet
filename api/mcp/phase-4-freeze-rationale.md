@@ -28,6 +28,8 @@ MCP value-contract amendment reviewed: 2026-09-03
 
 Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
+MCP server default-construction amendment reviewed: 2026-09-04
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -883,3 +885,25 @@ The deliberately refreshed reflection/nullability SHA-256 is
 The 133-owner include inventory and the 621-record released-3.5.1
 compatibility ledger remain byte-identical. Phase 5 and Phase 6 signatures and
 reflection digests are unchanged.
+
+## 2026-09-04 MCP server default-construction amendment
+
+The owner-approved construction correction restores
+`McpServer.withPort(Integer)` as the single server factory. The resulting
+builder lazily resolves `McpEndpointRegistry.fromClasspathIntrospection()` at
+build time and defaults to `McpAdmissionController.acceptAllInstance()`.
+Applications retain explicit `endpointRegistry(...)` and
+`admissionController(...)` overrides; null restores each documented default.
+Lazy registry resolution is required so programmatic endpoint configuration
+does not depend on generated classpath metadata that it replaces.
+
+The unreleased three-argument factory is removed without an alias. Restoring
+the exact one-argument descriptor from released 3.5.1 removes one reviewed
+incompatibility, leaving 669 records with SHA-256
+`283b4031a8f28e5f4d0640b2cc0deeaf68d345312786fabefa49bac7b8f5a4b1`.
+The Phase 4 snapshot still contains 1,058 records across the same 133 owners;
+the one-for-one method exchange gives it SHA-256
+`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`.
+The reviewed reflection/nullability SHA-256 is
+`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
+Phase 5, Phase 6, and all owner inventories are unchanged.

@@ -31,7 +31,6 @@ import com.soklet.McpMetricsEvent;
 import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpServer;
 import com.soklet.McpToolHandler;
 import com.soklet.McpToolRegistration;
@@ -770,7 +769,7 @@ public class McpProgressPublicRuntimeTests {
 						"progress-public-runtime-test", "4.0.0").build())
 				.addTools(tools)
 				.build();
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())

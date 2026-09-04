@@ -439,9 +439,7 @@ public class McpCrossFeatureSoakTests {
 	private static McpServer mcpServer(@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
 		McpEndpoint endpoint = mcpEndpoint(state, publisher);
-		return configureMcpServer(McpServer.withPort(0,
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-						McpAdmissionController.acceptAllInstance()))
+		return configureMcpServer(McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))))
 				.build();
 	}
 

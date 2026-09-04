@@ -252,9 +252,7 @@ public final class McpConformanceFixture {
 			LifecycleObserver lifecycleObserver) {
 		McpEndpoint endpoint = endpointForScenario(scenario);
 		McpServer mcpServer = mcpServerForScenario(scenario, corsAuthorizer,
-				McpServer.withPort(0,
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-						McpAdmissionController.acceptAllInstance()));
+				McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))));
 		return SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)

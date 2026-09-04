@@ -326,12 +326,12 @@ class McpResourceRegistrationTests {
 	void serverCursorLimitUsesTheReviewedJsonWireRange() {
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpointBuilder().build()));
-		McpServer defaultServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
+		McpServer defaultServer = McpServer.withPort(0).endpointRegistry(registry)
 				.build();
-		McpServer customServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
+		McpServer customServer = McpServer.withPort(0).endpointRegistry(registry)
 				.maximumCursorSizeInBytes(17)
 				.build();
-		McpServer maximumServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
+		McpServer maximumServer = McpServer.withPort(0).endpointRegistry(registry)
 				.maximumCursorSizeInBytes(174_762)
 				.build();
 
@@ -342,26 +342,21 @@ class McpResourceRegistrationTests {
 		assertEquals(Integer.valueOf(174_762),
 				maximumServer.getMaximumCursorSizeInBytes());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0, registry,
-						McpAdmissionController.acceptAllInstance())
+				() -> McpServer.withPort(0).endpointRegistry(registry)
 						.maximumCursorSizeInBytes(0));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0, registry,
-						McpAdmissionController.acceptAllInstance())
+				() -> McpServer.withPort(0).endpointRegistry(registry)
 						.maximumCursorSizeInBytes(-1));
 		IllegalArgumentException excessive = assertThrows(
 				IllegalArgumentException.class,
-				() -> McpServer.withPort(0, registry,
-						McpAdmissionController.acceptAllInstance())
+				() -> McpServer.withPort(0).endpointRegistry(registry)
 						.maximumCursorSizeInBytes(174_763));
 		assertEquals("MCP maximum cursor size must not exceed 174762 bytes.",
 				excessive.getMessage());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0, registry,
-						McpAdmissionController.acceptAllInstance())
+				() -> McpServer.withPort(0).endpointRegistry(registry)
 						.maximumCursorSizeInBytes(Integer.MAX_VALUE));
-		McpServer resetServer = McpServer.withPort(0, registry,
-						McpAdmissionController.acceptAllInstance())
+		McpServer resetServer = McpServer.withPort(0).endpointRegistry(registry)
 				.maximumCursorSizeInBytes(17)
 				.maximumCursorSizeInBytes(null)
 				.build();

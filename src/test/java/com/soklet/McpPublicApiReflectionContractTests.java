@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
 	private static final int CURRENT_MCP_TYPE_COUNT = 233;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"58e691ed68915535648ad8945ba88992dfc145e817468ba53ae5369f11e4bbe9";
+			"a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -388,8 +388,9 @@ public class McpPublicApiReflectionContractTests {
 			throws Exception {
 		Map<Class<?>, Set<String>> expectedNullableBuilderMethods = Map.of(
 				McpServer.Builder.class, Set.of(
-						"absentOriginPolicy", "allowedHosts", "corsAuthorizer",
-						"handlerInterceptor", "host", "keepAliveInterval",
+						"absentOriginPolicy", "admissionController", "allowedHosts",
+						"corsAuthorizer", "endpointRegistry", "handlerInterceptor",
+						"host", "keepAliveInterval",
 						"localizer", "logRawValidatedTraceIds",
 						"maximumCursorSizeInBytes",
 						"maximumSubscriptionDuration",
@@ -453,10 +454,8 @@ public class McpPublicApiReflectionContractTests {
 							+ " nullable builder-property contract changed");
 		}
 
-		Method server = McpServer.class.getMethod("withPort", Integer.class,
-				McpEndpointRegistry.class, McpAdmissionController.class);
-		assertRequiredFactory(server, McpServer.Builder.class,
-				"port", "endpointRegistry", "admissionController");
+		Method server = McpServer.class.getMethod("withPort", Integer.class);
+		assertRequiredFactory(server, McpServer.Builder.class, "port");
 		Method endpoint = McpEndpoint.class.getMethod("withPath", String.class,
 				McpImplementation.class);
 		assertRequiredFactory(endpoint, McpEndpoint.Builder.class,
@@ -510,7 +509,8 @@ public class McpPublicApiReflectionContractTests {
 		assertRequiredFactory(registryFromClasspath, McpEndpointRegistry.class);
 
 		Assertions.assertThrows(NoSuchMethodException.class,
-				() -> McpServer.class.getMethod("withPort", Integer.class));
+				() -> McpServer.class.getMethod("withPort", Integer.class,
+						McpEndpointRegistry.class, McpAdmissionController.class));
 		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpEndpoint.class.getMethod("withPath", String.class));
 		Assertions.assertThrows(NoSuchMethodException.class,

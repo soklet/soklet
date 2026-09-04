@@ -613,7 +613,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 								.build())
 						.build())
 				.toList();
-		return McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(endpoints), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(port).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
 				.host(HOST)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))

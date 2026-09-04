@@ -338,8 +338,8 @@ final class SokletApplicationObservationTests {
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(http)
 				.sseServer(SseServer.withPort(0).build())
-				.mcpServer(McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-								List.of(mcpEndpoint)), McpAdmissionController.acceptAllInstance())
+				.mcpServer(McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+								List.of(mcpEndpoint)))
 						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(
@@ -1010,7 +1010,7 @@ final class SokletApplicationObservationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"observation-test", "4.0.0").build())
 				.build();
-		McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.build();
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build())

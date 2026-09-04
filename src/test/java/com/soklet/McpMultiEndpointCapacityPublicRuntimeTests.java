@@ -70,8 +70,8 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 				"multi-endpoint-first-capacity", firstTool);
 		McpEndpoint secondEndpoint = endpoint(SECOND_PATH,
 				"multi-endpoint-second-capacity", secondTool);
-		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)))
 				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

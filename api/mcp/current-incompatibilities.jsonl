@@ -426,7 +426,6 @@
 {"id":"M:com/soklet/McpServer#isStarted()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#start()V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#stop()V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
-{"id":"M:com/soklet/McpServer#withPort(Ljava/lang/Integer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$Builder#concurrentConnectionLimit(Ljava/lang/Integer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$Builder#connectionQueueCapacity(Ljava/lang/Integer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$Builder#corsAuthorizer(Lcom/soklet/McpCorsAuthorizer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}

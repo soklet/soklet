@@ -101,8 +101,6 @@ Save this as `src/main/java/example/CatalogMcpApp.java`:
 package example;
 
 import com.soklet.CorsAuthorizer;
-import com.soklet.McpAdmissionController;
-import com.soklet.McpEndpointRegistry;
 import com.soklet.McpRateLimiter;
 import com.soklet.McpServer;
 import com.soklet.ShutdownTrigger;
@@ -113,13 +111,7 @@ import java.util.Set;
 
 public final class CatalogMcpApp {
   public static void main(String[] args) {
-    McpEndpointRegistry endpointRegistry =
-        McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class);
-    McpAdmissionController admissionController =
-        McpAdmissionController.acceptAllInstance();
-
-    McpServer mcpServer = McpServer.withPort(
-            8081, endpointRegistry, admissionController)
+    McpServer mcpServer = McpServer.withPort(8081)
         .host("127.0.0.1")
         .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -145,7 +137,7 @@ java -cp target/classes:$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.
 
 The classpath separator above is for macOS/Linux; use `;` on Windows.
 
-The anonymous admission controller and node-local in-memory limiter are
+The built-in anonymous admission policy and node-local in-memory limiter are
 development choices. Before a remote deployment, supply application-owned
 authentication and authorization, fleet-appropriate limiting, an intentional
 Origin policy, allowed hosts, and TLS termination. See the worked

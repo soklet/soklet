@@ -18,7 +18,6 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.LifecyclePolicy;
-import com.soklet.McpAdmissionController;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -1005,7 +1004,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

@@ -388,7 +388,7 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpServer.Builder wireServerBuilder(
 			McpEndpointRegistry registry) {
-		return McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0).endpointRegistry(registry)
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
