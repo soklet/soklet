@@ -43,15 +43,29 @@ class McpServerFutureConfigurationTests {
 				.streamQueueCapacity(7)
 				.writeTimeout(Duration.ofSeconds(9))
 				.keepAliveInterval(Duration.ofSeconds(8))
-				.maximumSubscriptionsPerPrincipal(11)
+				.maximumSubscriptionsPerPartition(11)
 				.maximumSubscriptionDuration(Duration.ofSeconds(12))
 				.logRawValidatedTraceIds(true)
+				.build();
+		DefaultMcpServer reset = (DefaultMcpServer) serverBuilder()
+				.streamQueueCapacity(7)
+				.streamQueueCapacity(null)
+				.writeTimeout(Duration.ofSeconds(9))
+				.writeTimeout(null)
+				.keepAliveInterval(Duration.ofSeconds(8))
+				.keepAliveInterval(null)
+				.maximumSubscriptionsPerPartition(11)
+				.maximumSubscriptionsPerPartition(null)
+				.maximumSubscriptionDuration(Duration.ofSeconds(12))
+				.maximumSubscriptionDuration(null)
+				.logRawValidatedTraceIds(true)
+				.logRawValidatedTraceIds(null)
 				.build();
 
 		assertEquals(128, defaults.streamQueueCapacity());
 		assertEquals(Duration.ofSeconds(30), defaults.writeTimeout());
 		assertEquals(Duration.ofSeconds(15), defaults.keepAliveInterval());
-		assertEquals(32, defaults.maximumSubscriptionsPerPrincipal());
+		assertEquals(32, defaults.maximumSubscriptionsPerPartition());
 		assertEquals(Duration.ofHours(24),
 				defaults.maximumSubscriptionDuration());
 		assertFalse(defaults.logRawValidatedTraceIds());
@@ -59,38 +73,39 @@ class McpServerFutureConfigurationTests {
 		assertEquals(7, configured.streamQueueCapacity());
 		assertEquals(Duration.ofSeconds(9), configured.writeTimeout());
 		assertEquals(Duration.ofSeconds(8), configured.keepAliveInterval());
-		assertEquals(11, configured.maximumSubscriptionsPerPrincipal());
+		assertEquals(11, configured.maximumSubscriptionsPerPartition());
 		assertEquals(Duration.ofSeconds(12),
 				configured.maximumSubscriptionDuration());
 		assertTrue(configured.logRawValidatedTraceIds());
 		assertFalse(configured.getTraceCorrelationControl().isEnabled());
+
+		assertEquals(defaults.streamQueueCapacity(), reset.streamQueueCapacity());
+		assertEquals(defaults.writeTimeout(), reset.writeTimeout());
+		assertEquals(defaults.keepAliveInterval(), reset.keepAliveInterval());
+		assertEquals(defaults.maximumSubscriptionsPerPartition(),
+				reset.maximumSubscriptionsPerPartition());
+		assertEquals(defaults.maximumSubscriptionDuration(),
+				reset.maximumSubscriptionDuration());
+		assertEquals(defaults.logRawValidatedTraceIds(),
+				reset.logRawValidatedTraceIds());
 	}
 
 	@Test
 	void operationalControlsRejectNonpositiveAndUnrepresentableValues() {
-		McpServer.Builder builder = McpServer.withPort(0);
+		McpServer.Builder builder = serverBuilder();
 
-		assertThrows(NullPointerException.class,
-				() -> builder.streamQueueCapacity(null));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.streamQueueCapacity(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.streamQueueCapacity(-1));
 		assertThrows(IllegalArgumentException.class,
-				() -> builder.maximumSubscriptionsPerPrincipal(0));
+				() -> builder.maximumSubscriptionsPerPartition(0));
 		assertThrows(IllegalArgumentException.class,
-				() -> builder.maximumSubscriptionsPerPrincipal(-1));
-		assertThrows(NullPointerException.class,
-				() -> builder.maximumSubscriptionsPerPrincipal(null));
-		assertThrows(NullPointerException.class,
-				() -> builder.logRawValidatedTraceIds(null));
-
+				() -> builder.maximumSubscriptionsPerPartition(-1));
 		for (DurationSetter setter : List.<DurationSetter>of(
 				McpServer.Builder::writeTimeout,
 				McpServer.Builder::keepAliveInterval,
 				McpServer.Builder::maximumSubscriptionDuration)) {
-			assertThrows(NullPointerException.class,
-					() -> setter.set(builder, null));
 			assertThrows(IllegalArgumentException.class,
 					() -> setter.set(builder, Duration.ZERO));
 			assertThrows(IllegalArgumentException.class,
@@ -114,11 +129,11 @@ class McpServerFutureConfigurationTests {
 	void omittedSecurityConfigurationExposesDisabledControlViews() {
 		McpServer server = serverBuilder().build();
 
-		assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+		assertEquals(McpProtectionMode.NONE,
 				server.getProtectionControl().getProtectionMode());
 		assertSame(server.getProtectionControl(), server.getTraceCorrelationControl());
 		assertTrue(((DefaultMcpServer) server).protectionConfig().isEmpty());
-		assertTrue(server.getProtectionControl().getKeyRingSnapshot().isEmpty());
+		assertTrue(server.getProtectionControl().getKeyringSnapshot().isEmpty());
 		assertFalse(server.getTraceCorrelationControl().isEnabled());
 		assertTrue(server.getTraceCorrelationControl().getActiveKeyId().isEmpty());
 		assertThrows(IllegalStateException.class,
@@ -131,9 +146,9 @@ class McpServerFutureConfigurationTests {
 
 	@Test
 	void reusedConfigurationProducesIndependentServerOwnedControlState() {
-		McpProtectionConfig protectionConfig = McpProtectionConfig.withKeyRing(
-				McpProtectionKeyRing.withActiveKey(protectionKey("active-a", 1))
-						.verificationKey(protectionKey("verify-b", 2))
+		McpProtectionConfig protectionConfig = McpProtectionConfig.withKeyring(
+				McpProtectionKeyring.withActiveKey(protectionKey("active-a", 1))
+						.addVerificationKey(protectionKey("verify-b", 2))
 						.build()).build();
 		McpTraceCorrelationKey initialTrace = traceKey("trace-c", 3);
 		McpServer.Builder builder = serverBuilder()
@@ -147,38 +162,41 @@ class McpServerFutureConfigurationTests {
 		assertNotSame(first.getProtectionControl(),
 				second.getProtectionControl());
 		assertEquals("active-a", first.getProtectionControl()
-				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
+				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
 		assertEquals("trace-c", first.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 
-		first.getProtectionControl().rotateTo(protectionKey("active-d", 4));
+		first.getProtectionControl().rotateActiveKey(protectionKey("active-d", 4));
 		first.getTraceCorrelationControl().rotateActiveKey(traceKey("trace-e", 5));
 
 		assertEquals("active-d", first.getProtectionControl()
-				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
+				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
 		assertEquals("trace-e", first.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 		assertEquals("active-a", second.getProtectionControl()
-				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
+				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
 		assertEquals("trace-c", second.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 	}
 
 	@Test
-	void builderRejectsNullAndCrossPurposeKeyReuse() {
-		McpServer.Builder builder = McpServer.withPort(0);
-		assertThrows(NullPointerException.class,
-				() -> builder.protectionConfig(null));
-		assertThrows(NullPointerException.class,
-				() -> builder.traceCorrelationKey(null));
-
+	void builderClearsOptionalSecurityAndRejectsCrossPurposeKeyReuse() {
 		byte[] sharedMaterial = keyMaterial(7);
-		McpProtectionConfig protectionConfig = McpProtectionConfig.withKeyRing(
-				McpProtectionKeyRing.withActiveKey(
+		McpProtectionConfig protectionConfig = McpProtectionConfig.withKeyring(
+				McpProtectionKeyring.withActiveKey(
 						McpProtectionKey.fromIdAndBytes("protection",
 								sharedMaterial)).build()).build();
 		McpTraceCorrelationKey traceKey = McpTraceCorrelationKey.fromIdAndBytes(
 				"trace", sharedMaterial);
+		McpServer cleared = serverBuilder()
+				.protectionConfig(protectionConfig)
+				.protectionConfig(null)
+				.traceCorrelationKey(traceKey)
+				.traceCorrelationKey(null)
+				.build();
+
+		assertTrue(((DefaultMcpServer) cleared).protectionConfig().isEmpty());
+		assertFalse(cleared.getTraceCorrelationControl().isEnabled());
 
 		assertThrows(IllegalArgumentException.class, () -> serverBuilder()
 				.protectionConfig(protectionConfig)
@@ -187,14 +205,10 @@ class McpServerFutureConfigurationTests {
 	}
 
 	private static McpServer.Builder serverBuilder() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"future-configuration-tests", "4.0.0").build())
 				.build();
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpProtectionKey protectionKey(String id, int fill) {

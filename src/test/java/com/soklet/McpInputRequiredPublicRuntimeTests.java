@@ -79,51 +79,48 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("input-tool")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
-						McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest.fromDeclaration(
+						McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
 										form, toolFormParams))
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+								.addInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "tool")
 										.build())
 								.build())
-				.mayRequestInput(form, roots)
+				.addInputRequestDeclarations(form, roots)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("input-prompt")
 				.handler((request, promptGet, features) ->
-						McpInputRequiredResult.builder()
-								.inputRequest("promptRoots", McpInputRequest.fromDeclaration(
+						McpInputRequiredResult.withInputRequest("promptRoots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "prompt")
 										.build())
 								.build())
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriTemplateAndName("test://items/{id}", "input-resource")
 				.handler((request, read, features) ->
-						McpInputRequiredResult.builder()
-								.inputRequest("resourceApproval", McpInputRequest.fromDeclaration(
+						McpInputRequiredResult.withInputRequest("resourceApproval", McpInputRequest.fromDeclaration(
 										form, resourceFormParams))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "resource")
 										.build())
 								.build())
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -264,30 +261,30 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("valid-form-input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> inputRequired(
 						"form", form, formParams))
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("valid-url-input")
 				.handler((request, promptGet, features) -> inputRequired(
 						"url", url, urlParams))
-				.mayRequestInput(url)
+				.addInputRequestDeclarations(url)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://valid-sampling"),
 						"valid-sampling-input")
 				.handler((request, read, features) -> inputRequired(
 						"sampling", sampling, samplingParams))
-				.mayRequestInput(sampling)
+				.addInputRequestDeclarations(sampling)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -413,56 +410,53 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("invalid-form-input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
 									roots,
 											McpJsonObject.emptyInstance()))
-							.inputRequest("invalid-form", McpInputRequest.fromDeclaration(
+							.addInputRequest("invalid-form", McpInputRequest.fromDeclaration(
 									form, invalidFormParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.mayRequestInput(roots, form)
+				.addInputRequestDeclarations(roots, form)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("invalid-sampling-input")
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
 									form, validFormParams))
-							.inputRequest("invalid-sampling", McpInputRequest.fromDeclaration(
+							.addInputRequest("invalid-sampling", McpInputRequest.fromDeclaration(
 									sampling,
 											invalidSamplingParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.mayRequestInput(form, sampling)
+				.addInputRequestDeclarations(form, sampling)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://invalid-roots"),
 						"invalid-roots-input")
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
 									form, validFormParams))
-							.inputRequest("invalid-roots", McpInputRequest.fromDeclaration(
+							.addInputRequest("invalid-roots", McpInputRequest.fromDeclaration(
 									roots, invalidRootsParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.mayRequestInput(form, roots)
+				.addInputRequestDeclarations(form, roots)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -524,35 +518,35 @@ public class McpInputRequiredPublicRuntimeTests {
 				.fromRoots(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
 				.withName("required-roots")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					requiredHandlerInvocations.incrementAndGet();
 					return inputRequired("roots", requiredRoots,
 							McpJsonObject.emptyInstance());
 				})
-				.mayRequestInput(requiredRoots)
+				.addInputRequestDeclarations(requiredRoots)
 				.build();
 		McpToolRegistration<McpJsonObject> conditionalComplete =
 				McpToolRegistration.withName("conditional-complete")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							conditionalCompleteHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("complete");
 						})
-						.mayRequestInput(conditionalRoots)
+						.addInputRequestDeclarations(conditionalRoots)
 						.build();
 		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
 				.withName("conditional-input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					conditionalInputHandlerInvocations.incrementAndGet();
 					return inputRequired("roots", conditionalRoots,
 							McpJsonObject.emptyInstance());
 				})
-				.mayRequestInput(conditionalRoots)
+				.addInputRequestDeclarations(conditionalRoots)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tools(List.of(required, conditionalComplete, conditionalInput))
+				.addTools(List.of(required, conditionalComplete, conditionalInput))
 				.build();
 		McpServer server = server(endpoint, context -> {
 			admissionInvocations.incrementAndGet();
@@ -636,14 +630,14 @@ public class McpInputRequiredPublicRuntimeTests {
 				.fromElicitationForm(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("supported caller admitted");
 				})
 				.title("Caller-neutral required-form tool")
 				.description("Requires form elicitation when called")
-				.mayRequestInput(requiredForm)
+				.addInputRequestDeclarations(requiredForm)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(promptName)
@@ -656,13 +650,11 @@ public class McpInputRequiredPublicRuntimeTests {
 				.description("Visible to every admitted caller")
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
+				.addTool(tool)
+				.addPrompt(prompt)
 				.build();
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> McpLocalizationContext
-						.withLocale(Locale.ENGLISH)
-						.localizer(text -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> McpLocalizationContext
+						.withLocale(Locale.ENGLISH, text -> {
 							catalogTextRenders.incrementAndGet();
 							return McpLocalizationResult.useDefaultText();
 						})
@@ -702,11 +694,8 @@ public class McpInputRequiredPublicRuntimeTests {
 			sanitizerInvocations.incrementAndGet();
 			return output;
 		};
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
 				.handlerInterceptor(McpHandlerInterceptor.passThroughInstance())
@@ -824,21 +813,20 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("conditional-malformed-input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("undeclared-" + inputKeySecret,
+					return McpInputRequiredResult.withInputRequest("undeclared-" + inputKeySecret,
 									McpInputRequest.fromDeclaration(undeclaredRoots,
 											McpJsonObject.emptyInstance()))
-							.inputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
+							.addInputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
 									roots, invalidRootsParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
-		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
@@ -898,11 +886,10 @@ public class McpInputRequiredPublicRuntimeTests {
 				.fromRoots(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("undeclared-input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("secret-key", McpInputRequest.fromDeclaration(
+					return McpInputRequiredResult.withInputRequest("secret-key", McpInputRequest.fromDeclaration(
 									emitted,
 											McpJsonObject.builder()
 													.put("secret", parameterSecret)
@@ -912,9 +899,9 @@ public class McpInputRequiredPublicRuntimeTests {
 									.build())
 							.build();
 				})
-				.mayRequestInput(declared)
+				.addInputRequestDeclarations(declared)
 				.build();
-		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
@@ -963,8 +950,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
 				.fromRoots(McpInputRequirement.CONDITIONAL);
-		McpInputRequiredResult undeclaredResult = McpInputRequiredResult.builder()
-				.inputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
+		McpInputRequiredResult undeclaredResult = McpInputRequiredResult.withInputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
 						emitted, McpJsonObject.builder()
 								.put("x-secret", parameterSecret)
 								.build()))
@@ -975,12 +961,12 @@ public class McpInputRequiredPublicRuntimeTests {
 		URI resourceUri = URI.create("test://interceptor-undeclared-input");
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("interceptor-undeclared-tool")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must-not-run");
 				})
-				.mayRequestInput(declared)
+				.addInputRequestDeclarations(declared)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("interceptor-undeclared-prompt")
@@ -991,27 +977,26 @@ public class McpInputRequiredPublicRuntimeTests {
 									McpPromptMessage.fromUserContent(
 											McpTextContent.fromText("must-not-run"))));
 				})
-				.mayRequestInput(declared)
+				.addInputRequestDeclarations(declared)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(resourceUri, "interceptor-undeclared-resource")
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents.withUriAndText(
+							McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 											read.getUri(), "must-not-run")
 											.build())
 									.build());
 				})
-				.mayRequestInput(declared)
+				.addInputRequestDeclarations(declared)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -1098,19 +1083,19 @@ public class McpInputRequiredPublicRuntimeTests {
 		for (String toolName : List.of("interceptor-valid-input",
 				"interceptor-undeclared-input", "interceptor-invalid-input",
 				"interceptor-missing-capability")) {
-			McpToolRegistration.Builder<McpJsonObject> toolBuilder =
+			McpToolRegistration.OperationBuilder<McpJsonObject> toolBuilder =
 					McpToolRegistration.withName(toolName)
-							.jsonArguments()
+							.jsonObjectArguments()
 							.handler((request, arguments, features) -> {
 								handlerInvocations.incrementAndGet();
 								return McpCompleteResult.fromToolText("must-not-run");
 							});
 			if (toolName.equals("interceptor-undeclared-input")
 					|| toolName.equals("interceptor-missing-capability"))
-				toolBuilder.mayRequestInput(form);
+				toolBuilder.addInputRequestDeclarations(form);
 			else
-				toolBuilder.mayRequestInput(roots);
-			endpointBuilder.tool(toolBuilder.build());
+				toolBuilder.addInputRequestDeclarations(roots);
+			endpointBuilder.addTool(toolBuilder.build());
 		}
 		McpServer server = server(endpointBuilder.build(),
 				McpAdmissionController.acceptAllInstance(),
@@ -1122,16 +1107,14 @@ public class McpInputRequiredPublicRuntimeTests {
 						case "interceptor-valid-input" -> inputRequired(
 								"valid", roots, McpJsonObject.emptyInstance());
 						case "interceptor-undeclared-input" ->
-								McpInputRequiredResult.builder()
-										.inputRequest(inputKeySecret,
+								McpInputRequiredResult.withInputRequest(inputKeySecret,
 												McpInputRequest.fromDeclaration(roots,
 														McpJsonObject.emptyInstance()))
 										.metadata(secretMetadata)
 										.build();
 						case "interceptor-invalid-input",
 								"interceptor-missing-capability" ->
-								McpInputRequiredResult.builder()
-										.inputRequest(inputKeySecret,
+								McpInputRequiredResult.withInputRequest(inputKeySecret,
 												McpInputRequest.fromDeclaration(roots,
 														invalidRootsParams))
 										.metadata(secretMetadata)
@@ -1217,37 +1200,37 @@ public class McpInputRequiredPublicRuntimeTests {
 						.build())
 				.build();
 		McpInputRequiredResult.Builder aggregateResult =
-				McpInputRequiredResult.builder();
-		for (int index = 0; index < 100; ++index)
-			aggregateResult.inputRequest("request-" + index,
+				McpInputRequiredResult.withInputRequest("request-0",
+						McpInputRequest.fromDeclaration(roots, params));
+		for (int index = 1; index < 100; ++index)
+			aggregateResult.addInputRequest("request-" + index,
 					McpInputRequest.fromDeclaration(roots, params));
 		McpInputRequiredResult oversizedResult = aggregateResult.build();
 		McpInputRequiredResult individuallyLegalResult =
-				McpInputRequiredResult.builder()
-						.inputRequest("request", McpInputRequest.fromDeclaration(
+				McpInputRequiredResult.withInputRequest("request", McpInputRequest.fromDeclaration(
 								roots, params))
 						.build();
 		McpToolRegistration<McpJsonObject> aggregateTool = McpToolRegistration
 				.withName("aggregate-input-requests")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					aggregateInvocations.incrementAndGet();
 					return oversizedResult;
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpToolRegistration<McpJsonObject> legalTool = McpToolRegistration
 				.withName("legal-input-request")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					legalInvocations.incrementAndGet();
 					return individuallyLegalResult;
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(aggregateTool)
-				.tool(legalTool)
+				.addTool(aggregateTool)
+				.addTool(legalTool)
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -1299,8 +1282,7 @@ public class McpInputRequiredPublicRuntimeTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"input-required-public-runtime-test",
 						"4.0.0").build());
 	}
@@ -1328,11 +1310,8 @@ public class McpInputRequiredPublicRuntimeTests {
 			McpRateLimiter toolRateLimiter,
 			McpHandlerInterceptor handlerInterceptor,
 			McpToolOutputSanitizer sanitizer) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
 				.handlerInterceptor(handlerInterceptor)
@@ -1348,8 +1327,7 @@ public class McpInputRequiredPublicRuntimeTests {
 
 	private static McpInputRequiredResult inputRequired(String key,
 			McpInputRequestDeclaration declaration, McpJsonObject params) {
-		return McpInputRequiredResult.builder()
-				.inputRequest(key, McpInputRequest.fromDeclaration(declaration, params))
+		return McpInputRequiredResult.withInputRequest(key, McpInputRequest.fromDeclaration(declaration, params))
 				.build();
 	}
 

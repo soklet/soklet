@@ -23,9 +23,10 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Invocation-scoped reporter for MCP progress notifications.
  *
- * <p>A reporter is available through {@link McpInvocationFeatures} only when
- * the initiating request supplied a valid progress token and Soklet can safely
- * commit request-scoped progress to the response stream. Implementations are
+ * <p>A reporter is available through
+ * {@link McpInvocationFeatures#getProgressReporter()} only when the initiating
+ * request supplied a valid progress token and Soklet can safely commit
+ * request-scoped progress to the response stream. Implementations are
  * thread-safe. Reports from concurrent callers are serialized in accepted
  * progress order.
  *

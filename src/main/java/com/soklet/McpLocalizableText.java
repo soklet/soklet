@@ -36,6 +36,22 @@ public final class McpLocalizableText {
 	@NonNull
 	private final String defaultText;
 
+	/**
+	 * Creates localizable text from its coordinate and canonical default text.
+	 *
+	 * @param coordinate stable structured coordinate
+	 * @param defaultText canonical configured default text and safe fallback
+	 * @return immutable localizable text
+	 * @throws NullPointerException if either argument is null
+	 * @throws IllegalArgumentException if {@code defaultText} is blank
+	 */
+	@NonNull
+	public static McpLocalizableText fromCoordinateAndDefaultText(
+			@NonNull McpTextCoordinate coordinate,
+			@NonNull String defaultText) {
+		return new McpLocalizableText(coordinate, defaultText);
+	}
+
 	McpLocalizableText(@NonNull McpTextCoordinate coordinate,
 			@NonNull String defaultText) {
 		this.coordinate = requireNonNull(coordinate);

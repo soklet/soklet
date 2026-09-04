@@ -65,22 +65,31 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void executionConfigurationValidatesAndOwnsOneExecutorPerGeneration()
 			throws Exception {
-		McpServer.Builder validationBuilder = McpServer.withPort(0);
+		McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(
+				List.of(newEndpoint()));
+		McpAdmissionController admissionController =
+				McpAdmissionController.acceptAllInstance();
+		McpServer.Builder validationBuilder = McpServer.withPort(0,
+				endpointRegistry, admissionController);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpServer.withPort(null));
+				() -> McpServer.withPort(null, endpointRegistry,
+						admissionController));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpServer.withPort(0, null, admissionController));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpServer.withPort(0, endpointRegistry, null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> validationBuilder.port(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestHandlerConcurrency(0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestHandlerQueueCapacity(-1));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> validationBuilder.requestHandlerConcurrency(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> validationBuilder.requestHandlerQueueCapacity(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> validationBuilder
-						.unknownMirroredHeaderNameDiagnostics(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.requestHandlerConcurrency(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.requestHandlerQueueCapacity(null));
+		Assertions.assertSame(validationBuilder, validationBuilder
+				.unknownMirroredHeaderNameDiagnostics(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestTimeout(Duration.ZERO));
 		Assertions.assertThrows(IllegalArgumentException.class,
@@ -88,11 +97,10 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestTimeout(
 						Duration.ofSeconds(Long.MAX_VALUE)));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> validationBuilder.requestTimeout(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> validationBuilder
-						.requestHandlerExecutorServiceSupplier(null));
+		Assertions.assertSame(validationBuilder,
+				validationBuilder.requestTimeout(null));
+		Assertions.assertSame(validationBuilder, validationBuilder
+				.requestHandlerExecutorServiceSupplier(null));
 
 		List<ExecutorService> suppliedExecutors = new ArrayList<>();
 		McpServer firstServer = newExecutorConfiguredMcpServer(suppliedExecutors);
@@ -141,11 +149,8 @@ public class McpServerPublicRuntimeTests {
 
 		ExecutorService shutDownExecutor = Executors.newSingleThreadExecutor();
 		shutDownExecutor.shutdown();
-		McpServer invalidServer = McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
+		McpServer invalidServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> shutDownExecutor)
 				.build();
@@ -270,27 +275,27 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void diagnosticSnapshotValidatesLifecycleHandlerStreamAndSecurityTuples() {
 		InetSocketAddress address = new InetSocketAddress(LOOPBACK, 12_345);
-		McpProtectionKeyRingFingerprint protectionFingerprint =
-				new McpProtectionKeyRingFingerprint("A".repeat(43));
-		McpTraceCorrelationConfigurationFingerprint traceFingerprint =
-				McpTraceCorrelationConfigurationFingerprint.fromValue(
+		McpProtectionKeyringFingerprint protectionFingerprint =
+				new McpProtectionKeyringFingerprint("A".repeat(43));
+		McpTraceCorrelationFingerprint traceFingerprint =
+				McpTraceCorrelationFingerprint.fromValue(
 						"E".repeat(43));
 		McpServerDiagnostics started = diagnosticSnapshot(
 				McpServerStatus.RUNNING, Optional.of(address), 2, 3, 1, 2, 4, 3,
-				McpProtectionMode.PRODUCTION_KEY_RING, false,
+				McpProtectionMode.PRODUCTION_KEYRING, false,
 				Optional.of(protectionFingerprint), Optional.of(traceFingerprint));
 
 		Assertions.assertEquals(McpServerStatus.RUNNING, started.getStatus());
 		Assertions.assertEquals(address, started.getBoundAddress().orElseThrow());
 		assertDiagnostics(started, 2, 3, 1, 2, 4, 3);
-		Assertions.assertEquals(McpProtectionMode.PRODUCTION_KEY_RING,
+		Assertions.assertEquals(McpProtectionMode.PRODUCTION_KEYRING,
 				started.getProtectionMode());
 		Assertions.assertEquals(Boolean.FALSE,
 				started.isApplicationRequestStateProtectorConfigured());
 		Assertions.assertEquals(Optional.of(protectionFingerprint),
-				started.getProtectionKeyRingFingerprint());
+				started.getProtectionKeyringFingerprint());
 		Assertions.assertEquals(Optional.of(traceFingerprint),
-				started.getTraceCorrelationConfigurationFingerprint());
+				started.getTraceCorrelationFingerprint());
 
 		McpServerDiagnostics residualCleanup = diagnosticSnapshot(
 				McpServerStatus.RESIDUAL_ACTIVITY, Optional.empty(),
@@ -366,17 +371,17 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertThrows(NullPointerException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
-						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+						McpProtectionMode.NONE, false,
 						null, Optional.empty()));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
-						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+						McpProtectionMode.NONE, false,
 						Optional.empty(), null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
-						McpProtectionMode.NO_FRAMEWORK_KEYS, true,
+						McpProtectionMode.NONE, true,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
@@ -391,12 +396,12 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
-						McpProtectionMode.PRODUCTION_KEY_RING, false,
+						McpProtectionMode.PRODUCTION_KEYRING, false,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
-						McpProtectionMode.PRODUCTION_KEY_RING, true,
+						McpProtectionMode.PRODUCTION_KEYRING, true,
 						Optional.of(protectionFingerprint), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
@@ -548,8 +553,7 @@ public class McpServerPublicRuntimeTests {
 				.description("Operation-free public projection")
 				.websiteUrl(URI.create("https://example.test/soklet-mcp"))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(implementation)
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, implementation)
 				.instructions("Use the public discovery endpoint.")
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
@@ -610,11 +614,9 @@ public class McpServerPublicRuntimeTests {
 					}
 				};
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCE_UPDATED)
+				.withEventPublisher(publisher, Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://phase-five-subscriptions"),
@@ -624,12 +626,11 @@ public class McpServerPublicRuntimeTests {
 							"Discovery must not invoke the resource handler.");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("phase-five-subscriptions", "1.0")
 						.build())
-				.resource(resource)
-				.subscriptions(subscriptions)
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
@@ -670,11 +671,10 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void discoveryOmitsServerInformationMetadataWhenDisabled()
 			throws Exception {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("omitted-server-info", "4.0.0")
 						.build())
-				.includeServerInformation(false)
+				.serverInformationIncluded(false)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
@@ -705,7 +705,7 @@ public class McpServerPublicRuntimeTests {
 				.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(1_001,
 						"Temporarily unavailable",
 						McpJsonObject.builder().put("reason", "maintenance").build()))
-				.header("WWW-Authenticate", "Bearer realm=soklet-mcp")
+				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
 		McpEndpoint endpoint = newEndpoint();
 		McpServer server = newMcpServer(0, endpoint, context -> {
@@ -1048,11 +1048,8 @@ public class McpServerPublicRuntimeTests {
 	@NonNull
 	private static McpServer newExecutorConfiguredMcpServer(
 			@NonNull List<@NonNull ExecutorService> suppliedExecutors) {
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerConcurrency(3)
 				.requestHandlerQueueCapacity(7)
@@ -1067,10 +1064,8 @@ public class McpServerPublicRuntimeTests {
 
 	@NonNull
 	private static McpServer newDevelopmentEphemeralMcpServer() {
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(newEndpoint())))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())), McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.protectionConfig(McpProtectionConfig
 						.withDevelopmentEphemeralProtection().build())
@@ -1089,9 +1084,7 @@ public class McpServerPublicRuntimeTests {
 	private static McpServer newMcpServer(int port, @NonNull McpEndpoint endpoint,
 			@NonNull McpAdmissionController admissionController,
 			boolean configureCorsAuthorizer) {
-		McpServer.Builder builder = McpServer.withPort(port)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController);
+		McpServer.Builder builder = McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController);
 		if (configureCorsAuthorizer)
 			builder.corsAuthorizer(CorsAuthorizer.rejectAllInstance());
 		return builder.build();
@@ -1099,8 +1092,7 @@ public class McpServerPublicRuntimeTests {
 
 	@NonNull
 	private static McpEndpoint newEndpoint() {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("public-runtime-test", "1.0")
 						.build())
 				.build();
@@ -1199,7 +1191,7 @@ public class McpServerPublicRuntimeTests {
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				activeHandlerExecutions, queuedRequests,
 				activeRequestStreams, activeSubscriptions,
-				McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+				McpProtectionMode.NONE, false,
 				Optional.empty(), Optional.empty());
 	}
 
@@ -1211,16 +1203,16 @@ public class McpServerPublicRuntimeTests {
 			int activeRequestStreams, int activeSubscriptions,
 			McpProtectionMode protectionMode,
 			boolean applicationRequestStateProtectorConfigured,
-			Optional<McpProtectionKeyRingFingerprint> protectionKeyRingFingerprint,
-			Optional<McpTraceCorrelationConfigurationFingerprint>
-					traceCorrelationConfigurationFingerprint) {
+			Optional<McpProtectionKeyringFingerprint> protectionKeyringFingerprint,
+			Optional<McpTraceCorrelationFingerprint>
+					traceCorrelationFingerprint) {
 		return new DefaultMcpServerDiagnostics(status, boundAddress,
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				activeHandlerExecutions, queuedRequests,
 				activeRequestStreams, activeSubscriptions, protectionMode,
 				applicationRequestStateProtectorConfigured,
-				protectionKeyRingFingerprint,
-				traceCorrelationConfigurationFingerprint);
+				protectionKeyringFingerprint,
+				traceCorrelationFingerprint);
 	}
 
 	private static void assertOmittedCorsEvents(@NonNull List<LogEvent> events,
@@ -1261,7 +1253,7 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertEquals(Integer.valueOf(activeHandlerExecutions),
 				diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(Integer.valueOf(queuedRequests),
-				diagnostics.getQueuedRequests());
+				diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(Integer.valueOf(activeRequestStreams),
 				diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(Integer.valueOf(activeSubscriptions),

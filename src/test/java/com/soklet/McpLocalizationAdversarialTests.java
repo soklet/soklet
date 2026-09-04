@@ -194,7 +194,7 @@ class McpLocalizationAdversarialTests {
 								Set.of(index % 2 == 0 ? "fr-CA" : "de-DE"))));
 
 			// Races the in-flight selections; must neither corrupt nor block.
-			serverReference.get().getLocalizationControl().catalogsChanged();
+			serverReference.get().getLocalizationControl().invalidateCatalogs();
 
 			for (McpSimulation simulation : simulations)
 				bodies.add(awaitStartedBody(simulation));
@@ -218,24 +218,22 @@ class McpLocalizationAdversarialTests {
 	}
 
 	private static McpEndpointRegistry endpointRegistry() {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-adversarial", "1.0")
 						.title("Canonical title")
 						.build())
 				.instructions("Canonical instructions.")
-				.tool(McpToolRegistration.withName("adversarial.tool")
-						.jsonArguments()
+				.addTool(McpToolRegistration.withName("adversarial.tool")
+						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						java.net.URI.create("adversarial://text"), "text")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(java.net.URI
 																.create("adversarial://text"),
 																"unused")
@@ -255,13 +253,11 @@ class McpLocalizationAdversarialTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
-				.localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(request -> {
+				.localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 							contexts.incrementAndGet();
 							Locale locale = selector == null ? Locale.CANADA_FRENCH
 									: selector.select(request);
-							return McpLocalizationContext.withLocale(locale)
-									.localizer(text ->
+							return McpLocalizationContext.withLocale(locale, text ->
 											McpLocalizationResult.useDefaultText())
 									.build();
 						})

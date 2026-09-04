@@ -106,6 +106,37 @@ public interface McpInvocationFeatures {
 	<T> Optional<@NonNull T> find(@NonNull Class<T> featureType);
 
 	/**
+	 * Returns the cooperative cancelation signal for this invocation.
+	 *
+	 * <p>Soklet supplies this built-in feature for every selected MCP
+	 * application handler. The returned value is the same instance exposed by
+	 * {@link #require(Class) require(CancelationToken.class)}.
+	 *
+	 * @return invocation cancelation token
+	 * @throws IllegalStateException if an implementation does not supply the
+	 * built-in cancelation token
+	 */
+	@NonNull
+	default CancelationToken getCancelationToken() {
+		return require(CancelationToken.class);
+	}
+
+	/**
+	 * Returns the progress reporter available for this invocation.
+	 *
+	 * <p>The reporter is present only when the initiating request supplied a
+	 * valid progress token and Soklet can safely emit request-scoped progress.
+	 * When present, the returned value is the same instance exposed by
+	 * {@link #find(Class) find(McpProgressReporter.class)}.
+	 *
+	 * @return invocation progress reporter, if available
+	 */
+	@NonNull
+	default Optional<@NonNull McpProgressReporter> getProgressReporter() {
+		return find(McpProgressReporter.class);
+	}
+
+	/**
 	 * Requires a feature using the same exact-class lookup as
 	 * {@link #find(Class)}.
 	 *

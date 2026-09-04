@@ -263,7 +263,7 @@ public final class McpConformanceFixtureContractTest {
 		assertEquals(expectedStateMode, registration.getRequestStateMode(),
 				"Wrong request-state mode for " + toolName);
 		assertEquals(expectedMethods, registration.getInputRequestDeclarations()
-				.stream().map(declaration -> declaration.getMethod()).toList(),
+				.stream().map(declaration -> declaration.getJsonRpcMethod()).toList(),
 				"Wrong input declarations for " + toolName);
 	}
 
@@ -328,7 +328,7 @@ public final class McpConformanceFixtureContractTest {
 	private static McpInputResponses responses(String... keys) {
 		McpInputResponses.Builder builder = McpInputResponses.builder();
 		for (String key : keys)
-			builder.response(key, McpJsonObject.emptyInstance());
+			builder.addResponse(key, McpJsonObject.emptyInstance());
 		return builder.build();
 	}
 

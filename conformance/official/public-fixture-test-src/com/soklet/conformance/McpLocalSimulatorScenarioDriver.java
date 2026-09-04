@@ -1005,7 +1005,7 @@ public final class McpLocalSimulatorScenarioDriver {
 				"Simulator must not expose a bound address");
 		assertEquals(0, diagnostics.getActiveHandlerExecutions(),
 				"Simulator handler diagnostics must remain hidden");
-		assertEquals(0, diagnostics.getQueuedRequests(),
+		assertEquals(0, diagnostics.getRequestHandlerQueueDepth(),
 				"Simulator queue diagnostics must remain hidden");
 		assertEquals(0, diagnostics.getActiveRequestStreams(),
 				"Simulator stream diagnostics must remain hidden");

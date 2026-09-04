@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * No configuration is required until an operation declares framework-protected
  * request state. Development-ephemeral mode is explicit and is not portable
- * across restarts or server instances. A production key ring is an immutable
+ * across restarts or server instances. A production keyring is an immutable
  * initial value; building a server copies it into independent live state and
  * exposes subsequent mutation only through {@link McpProtectionControl}.
  *
@@ -40,8 +40,8 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpProtectionConfig {
-	private static final int DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES = 65_536;
-	private static final int DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES = 49_152;
+	private static final int DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_SIZE_IN_BYTES = 65_536;
+	private static final int DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_SIZE_IN_BYTES = 49_152;
 	private static final int DEFAULT_MAXIMUM_REQUEST_STATE_ROUNDS = 10;
 	@NonNull
 	private static final Duration DEFAULT_MAXIMUM_REQUEST_STATE_LIFETIME =
@@ -50,11 +50,11 @@ public final class McpProtectionConfig {
 	@NonNull
 	private final McpProtectionMode protectionMode;
 	@Nullable
-	private final McpProtectionKeyRing initialKeyRing;
+	private final McpProtectionKeyring initialKeyring;
 	@Nullable
 	private final McpRequestStateProtector requestStateProtector;
-	private final int maximumEncodedRequestStateBytes;
-	private final int maximumDecodedRequestStateBytes;
+	private final int maximumEncodedRequestStateSizeInBytes;
+	private final int maximumDecodedRequestStateSizeInBytes;
 	@NonNull
 	private final Duration maximumRequestStateLifetime;
 	private final int maximumRequestStateRounds;
@@ -62,13 +62,13 @@ public final class McpProtectionConfig {
 	/**
 	 * Vends a production configuration builder.
 	 *
-	 * @param keyRing immutable initial production ring
+	 * @param keyring immutable initial production ring
 	 * @return protection configuration builder
 	 */
 	@NonNull
-	public static Builder withKeyRing(@NonNull McpProtectionKeyRing keyRing) {
-		return new Builder(McpProtectionMode.PRODUCTION_KEY_RING,
-				requireNonNull(keyRing), null);
+	public static Builder withKeyring(@NonNull McpProtectionKeyring keyring) {
+		return new Builder(McpProtectionMode.PRODUCTION_KEYRING,
+				requireNonNull(keyring), null);
 	}
 
 	/**
@@ -96,12 +96,12 @@ public final class McpProtectionConfig {
 
 	private McpProtectionConfig(@NonNull Builder builder) {
 		this.protectionMode = builder.protectionMode;
-		this.initialKeyRing = builder.initialKeyRing;
+		this.initialKeyring = builder.initialKeyring;
 		this.requestStateProtector = builder.requestStateProtector;
-		this.maximumEncodedRequestStateBytes =
-				builder.maximumEncodedRequestStateBytes;
-		this.maximumDecodedRequestStateBytes =
-				builder.maximumDecodedRequestStateBytes;
+		this.maximumEncodedRequestStateSizeInBytes =
+				builder.maximumEncodedRequestStateSizeInBytes;
+		this.maximumDecodedRequestStateSizeInBytes =
+				builder.maximumDecodedRequestStateSizeInBytes;
 		this.maximumRequestStateLifetime = builder.maximumRequestStateLifetime;
 		this.maximumRequestStateRounds = builder.maximumRequestStateRounds;
 	}
@@ -115,11 +115,11 @@ public final class McpProtectionConfig {
 	/**
 	 * Returns the immutable initial ring configuration, not a server's live ring.
 	 *
-	 * @return initial key ring, if production protection is configured
+	 * @return initial keyring, if production protection is configured
 	 */
 	@NonNull
-	public Optional<@NonNull McpProtectionKeyRing> getInitialKeyRing() {
-		return Optional.ofNullable(this.initialKeyRing);
+	public Optional<@NonNull McpProtectionKeyring> getInitialKeyring() {
+		return Optional.ofNullable(this.initialKeyring);
 	}
 
 	/** @return custom application protector, when configured */
@@ -131,14 +131,14 @@ public final class McpProtectionConfig {
 
 	/** @return positive maximum encoded request-state size in bytes */
 	@NonNull
-	public Integer getMaximumEncodedRequestStateBytes() {
-		return this.maximumEncodedRequestStateBytes;
+	public Integer getMaximumEncodedRequestStateSizeInBytes() {
+		return this.maximumEncodedRequestStateSizeInBytes;
 	}
 
 	/** @return positive maximum decoded request-state size in bytes */
 	@NonNull
-	public Integer getMaximumDecodedRequestStateBytes() {
-		return this.maximumDecodedRequestStateBytes;
+	public Integer getMaximumDecodedRequestStateSizeInBytes() {
+		return this.maximumDecodedRequestStateSizeInBytes;
 	}
 
 	/** @return positive finite maximum request-state lifetime */
@@ -163,25 +163,25 @@ public final class McpProtectionConfig {
 		@NonNull
 		private final McpProtectionMode protectionMode;
 		@Nullable
-		private final McpProtectionKeyRing initialKeyRing;
+		private final McpProtectionKeyring initialKeyring;
 		@Nullable
 		private final McpRequestStateProtector requestStateProtector;
-		private int maximumEncodedRequestStateBytes;
-		private int maximumDecodedRequestStateBytes;
+		private int maximumEncodedRequestStateSizeInBytes;
+		private int maximumDecodedRequestStateSizeInBytes;
 		@NonNull
 		private Duration maximumRequestStateLifetime;
 		private int maximumRequestStateRounds;
 
 		private Builder(@NonNull McpProtectionMode protectionMode,
-				@Nullable McpProtectionKeyRing initialKeyRing,
+				@Nullable McpProtectionKeyring initialKeyring,
 				@Nullable McpRequestStateProtector requestStateProtector) {
 			this.protectionMode = requireNonNull(protectionMode);
-			this.initialKeyRing = initialKeyRing;
+			this.initialKeyring = initialKeyring;
 			this.requestStateProtector = requestStateProtector;
-			this.maximumEncodedRequestStateBytes =
-					DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES;
-			this.maximumDecodedRequestStateBytes =
-					DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES;
+			this.maximumEncodedRequestStateSizeInBytes =
+					DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_SIZE_IN_BYTES;
+			this.maximumDecodedRequestStateSizeInBytes =
+					DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_SIZE_IN_BYTES;
 			this.maximumRequestStateLifetime =
 					DEFAULT_MAXIMUM_REQUEST_STATE_LIFETIME;
 			this.maximumRequestStateRounds =
@@ -191,65 +191,70 @@ public final class McpProtectionConfig {
 		/**
 		 * Sets the maximum encoded request-state size.
 		 *
-		 * @param maximumEncodedRequestStateBytes positive byte limit
+		 * @param maximumEncodedRequestStateSizeInBytes positive byte limit, or
+		 *                                        {@code null} to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumEncodedRequestStateBytes}
-		 *                              is null
 		 */
 		@NonNull
-		public Builder maximumEncodedRequestStateBytes(
-				@NonNull Integer maximumEncodedRequestStateBytes) {
-			this.maximumEncodedRequestStateBytes = requirePositive(
-					requireNonNull(maximumEncodedRequestStateBytes),
-					"Maximum encoded request-state bytes");
+		public Builder maximumEncodedRequestStateSizeInBytes(
+				@Nullable Integer maximumEncodedRequestStateSizeInBytes) {
+			this.maximumEncodedRequestStateSizeInBytes =
+					maximumEncodedRequestStateSizeInBytes == null
+							? DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_SIZE_IN_BYTES
+							: requirePositive(maximumEncodedRequestStateSizeInBytes,
+									"Maximum encoded request-state bytes");
 			return this;
 		}
 
 		/**
 		 * Sets the maximum decoded request-state size.
 		 *
-		 * @param maximumDecodedRequestStateBytes positive byte limit
+		 * @param maximumDecodedRequestStateSizeInBytes positive byte limit, or
+		 *                                        {@code null} to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumDecodedRequestStateBytes}
-		 *                              is null
 		 */
 		@NonNull
-		public Builder maximumDecodedRequestStateBytes(
-				@NonNull Integer maximumDecodedRequestStateBytes) {
-			this.maximumDecodedRequestStateBytes = requirePositive(
-					requireNonNull(maximumDecodedRequestStateBytes),
-					"Maximum decoded request-state bytes");
+		public Builder maximumDecodedRequestStateSizeInBytes(
+				@Nullable Integer maximumDecodedRequestStateSizeInBytes) {
+			this.maximumDecodedRequestStateSizeInBytes =
+					maximumDecodedRequestStateSizeInBytes == null
+							? DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_SIZE_IN_BYTES
+							: requirePositive(maximumDecodedRequestStateSizeInBytes,
+									"Maximum decoded request-state bytes");
 			return this;
 		}
 
 		/**
 		 * Sets the maximum request-state lifetime.
 		 *
-		 * @param maximumRequestStateLifetime positive finite lifetime
+		 * @param maximumRequestStateLifetime positive finite lifetime, or
+		 *                                    {@code null} to use the default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder maximumRequestStateLifetime(
-				@NonNull Duration maximumRequestStateLifetime) {
-			this.maximumRequestStateLifetime = requirePositiveDuration(
-					maximumRequestStateLifetime,
-					"Maximum request-state lifetime");
+				@Nullable Duration maximumRequestStateLifetime) {
+			this.maximumRequestStateLifetime = maximumRequestStateLifetime == null
+					? DEFAULT_MAXIMUM_REQUEST_STATE_LIFETIME
+					: requirePositiveDuration(maximumRequestStateLifetime,
+							"Maximum request-state lifetime");
 			return this;
 		}
 
 		/**
 		 * Sets the maximum request-state round count.
 		 *
-		 * @param maximumRequestStateRounds positive round limit
+		 * @param maximumRequestStateRounds positive round limit, or {@code null}
+		 *                                  to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumRequestStateRounds} is null
 		 */
 		@NonNull
 		public Builder maximumRequestStateRounds(
-				@NonNull Integer maximumRequestStateRounds) {
-			this.maximumRequestStateRounds = requirePositive(
-					requireNonNull(maximumRequestStateRounds),
-					"Maximum request-state rounds");
+				@Nullable Integer maximumRequestStateRounds) {
+			this.maximumRequestStateRounds = maximumRequestStateRounds == null
+					? DEFAULT_MAXIMUM_REQUEST_STATE_ROUNDS
+					: requirePositive(maximumRequestStateRounds,
+							"Maximum request-state rounds");
 			return this;
 		}
 
@@ -262,8 +267,8 @@ public final class McpProtectionConfig {
 		 */
 		@NonNull
 		public McpProtectionConfig build() {
-			if (this.maximumDecodedRequestStateBytes
-					> this.maximumEncodedRequestStateBytes)
+			if (this.maximumDecodedRequestStateSizeInBytes
+					> this.maximumEncodedRequestStateSizeInBytes)
 				throw new IllegalStateException(
 						"Decoded request-state limit must not exceed encoded request-state limit.");
 			return new McpProtectionConfig(this);

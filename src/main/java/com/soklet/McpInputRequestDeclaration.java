@@ -40,15 +40,14 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class McpInputRequestDeclaration {
 	@NonNull
-	private static final Set<@NonNull String> CORE_METHODS =
-			Set.of("elicitation/create", "sampling/createMessage", "roots/list");
-	@NonNull
 	private static final Set<@NonNull McpClientCapability>
 			OPTIONAL_SAMPLING_CAPABILITIES = Set.of(
 					McpClientCapability.SAMPLING_CONTEXT,
 					McpClientCapability.SAMPLING_TOOLS);
 	@NonNull
-	private final String method;
+	private final McpInputRequestType inputRequestType;
+	@NonNull
+	private final String jsonRpcMethod;
 	@NonNull
 	private final Set<@NonNull McpClientCapability> capabilities;
 	@NonNull
@@ -57,17 +56,18 @@ public final class McpInputRequestDeclaration {
 	/**
 	 * Creates and validates an input-request declaration.
 	 *
-	 * @param method client request method
+	 * @param inputRequestType client input-request type
 	 * @param capabilities required client capabilities
 	 * @param requirement when the capabilities are required
 	 * @throws NullPointerException if an argument or capability is null
-	 * @throws IllegalArgumentException if the method or capability combination
+	 * @throws IllegalArgumentException if the type or capability combination
 	 * is not one of Soklet 4.0's supported core declarations
 	 */
-	private McpInputRequestDeclaration(@NonNull String method,
+	private McpInputRequestDeclaration(
+			@NonNull McpInputRequestType inputRequestType,
 			@NonNull Set<@NonNull McpClientCapability> capabilities,
 			@NonNull McpInputRequirement requirement) {
-		requireNonNull(method);
+		requireNonNull(inputRequestType);
 		requireNonNull(capabilities);
 		requireNonNull(requirement);
 		Set<McpClientCapability> copiedCapabilities =
@@ -75,43 +75,16 @@ public final class McpInputRequestDeclaration {
 		for (McpClientCapability capability : capabilities)
 			copiedCapabilities.add(requireNonNull(capability));
 
-		if (method.isBlank())
-			throw new IllegalArgumentException(
-					"Input-request methods must not be blank.");
 		if (copiedCapabilities.isEmpty())
 			throw new IllegalArgumentException(
 					"At least one input-request capability is required.");
-		if (!CORE_METHODS.contains(method))
-			throw new IllegalArgumentException(
-					"Soklet 4.0 supports only the three core input-request methods.");
 
 		Set<McpClientCapability> immutableCapabilities =
 				Collections.unmodifiableSet(copiedCapabilities);
-		if ("elicitation/create".equals(method)
-				&& !(immutableCapabilities.equals(Set.of(
-						McpClientCapability.ELICITATION_FORM))
-				|| immutableCapabilities.equals(Set.of(
-						McpClientCapability.ELICITATION_URL))))
-			throw new IllegalArgumentException(
-					"Elicitation declarations must select exactly form or URL capability.");
+		validateCapabilities(inputRequestType, immutableCapabilities);
 
-		if ("sampling/createMessage".equals(method)) {
-			Set<McpClientCapability> allowed = Set.of(
-					McpClientCapability.SAMPLING,
-					McpClientCapability.SAMPLING_CONTEXT,
-					McpClientCapability.SAMPLING_TOOLS);
-			if (!immutableCapabilities.contains(McpClientCapability.SAMPLING)
-					|| !allowed.containsAll(immutableCapabilities))
-				throw new IllegalArgumentException(
-						"Sampling declarations require SAMPLING and only sampling capabilities.");
-		}
-
-		if ("roots/list".equals(method)
-				&& !immutableCapabilities.equals(Set.of(McpClientCapability.ROOTS)))
-			throw new IllegalArgumentException(
-					"Roots declarations require exactly the ROOTS capability.");
-
-		this.method = method;
+		this.inputRequestType = inputRequestType;
+		this.jsonRpcMethod = jsonRpcMethod(inputRequestType);
 		this.capabilities = immutableCapabilities;
 		this.requirement = requirement;
 	}
@@ -125,7 +98,7 @@ public final class McpInputRequestDeclaration {
 	@NonNull
 	public static McpInputRequestDeclaration fromElicitationForm(
 			@NonNull McpInputRequirement requirement) {
-		return new McpInputRequestDeclaration("elicitation/create",
+		return new McpInputRequestDeclaration(McpInputRequestType.ELICITATION_FORM,
 				Set.of(McpClientCapability.ELICITATION_FORM), requirement);
 	}
 
@@ -138,7 +111,7 @@ public final class McpInputRequestDeclaration {
 	@NonNull
 	public static McpInputRequestDeclaration fromElicitationUrl(
 			@NonNull McpInputRequirement requirement) {
-		return new McpInputRequestDeclaration("elicitation/create",
+		return new McpInputRequestDeclaration(McpInputRequestType.ELICITATION_URL,
 				Set.of(McpClientCapability.ELICITATION_URL), requirement);
 	}
 
@@ -177,8 +150,8 @@ public final class McpInputRequestDeclaration {
 						"Only optional sampling capabilities may be supplied.");
 			capabilities.add(capability);
 		}
-		return new McpInputRequestDeclaration(
-				"sampling/createMessage", capabilities, requirement);
+		return new McpInputRequestDeclaration(McpInputRequestType.SAMPLING,
+				capabilities, requirement);
 	}
 
 	/**
@@ -196,14 +169,20 @@ public final class McpInputRequestDeclaration {
 	@NonNull
 	public static McpInputRequestDeclaration fromRoots(
 			@NonNull McpInputRequirement requirement) {
-		return new McpInputRequestDeclaration("roots/list",
+		return new McpInputRequestDeclaration(McpInputRequestType.ROOTS,
 				Set.of(McpClientCapability.ROOTS), requirement);
 	}
 
-	/** @return client request method */
+	/** @return core client-input request type */
 	@NonNull
-	public String getMethod() {
-		return this.method;
+	public McpInputRequestType getInputRequestType() {
+		return this.inputRequestType;
+	}
+
+	/** @return derived JSON-RPC client request method */
+	@NonNull
+	public String getJsonRpcMethod() {
+		return this.jsonRpcMethod;
 	}
 
 	/** @return immutable required client capabilities */
@@ -218,14 +197,14 @@ public final class McpInputRequestDeclaration {
 		return this.requirement;
 	}
 
-	/** @return whether this value has the same method, capabilities, and requirement */
+	/** @return whether this value has the same type, capabilities, and requirement */
 	@Override
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
 			return true;
 		if (!(other instanceof McpInputRequestDeclaration declaration))
 			return false;
-		return this.method.equals(declaration.method)
+		return this.inputRequestType == declaration.inputRequestType
 				&& this.capabilities.equals(declaration.capabilities)
 				&& this.requirement == declaration.requirement;
 	}
@@ -233,14 +212,60 @@ public final class McpInputRequestDeclaration {
 	/** @return value-based hash code */
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.method, this.capabilities, this.requirement);
+		return Objects.hash(this.inputRequestType, this.capabilities,
+				this.requirement);
 	}
 
 	/** @return value-based diagnostic rendering */
 	@Override
 	@NonNull
 	public String toString() {
-		return "McpInputRequestDeclaration{method='%s', capabilities=%s, requirement=%s}"
-				.formatted(this.method, this.capabilities, this.requirement);
+		return "McpInputRequestDeclaration{inputRequestType=%s, jsonRpcMethod='%s', capabilities=%s, requirement=%s}"
+				.formatted(this.inputRequestType, this.jsonRpcMethod,
+						this.capabilities, this.requirement);
+	}
+
+	private static void validateCapabilities(
+			@NonNull McpInputRequestType inputRequestType,
+			@NonNull Set<@NonNull McpClientCapability> capabilities) {
+		switch (inputRequestType) {
+			case ELICITATION_FORM -> requireExactCapabilities(capabilities,
+					McpClientCapability.ELICITATION_FORM,
+					"Form-elicitation declarations require exactly the ELICITATION_FORM capability.");
+			case ELICITATION_URL -> requireExactCapabilities(capabilities,
+					McpClientCapability.ELICITATION_URL,
+					"URL-elicitation declarations require exactly the ELICITATION_URL capability.");
+			case SAMPLING -> {
+				Set<McpClientCapability> allowed = Set.of(
+						McpClientCapability.SAMPLING,
+						McpClientCapability.SAMPLING_CONTEXT,
+						McpClientCapability.SAMPLING_TOOLS);
+				if (!capabilities.contains(McpClientCapability.SAMPLING)
+						|| !allowed.containsAll(capabilities))
+					throw new IllegalArgumentException(
+							"Sampling declarations require SAMPLING and only sampling capabilities.");
+			}
+			case ROOTS -> requireExactCapabilities(capabilities,
+					McpClientCapability.ROOTS,
+					"Roots declarations require exactly the ROOTS capability.");
+		}
+	}
+
+	private static void requireExactCapabilities(
+			@NonNull Set<@NonNull McpClientCapability> capabilities,
+			@NonNull McpClientCapability capability,
+			@NonNull String message) {
+		if (!capabilities.equals(Set.of(capability)))
+			throw new IllegalArgumentException(message);
+	}
+
+	@NonNull
+	private static String jsonRpcMethod(
+			@NonNull McpInputRequestType inputRequestType) {
+		return switch (inputRequestType) {
+			case ELICITATION_FORM, ELICITATION_URL -> "elicitation/create";
+			case SAMPLING -> "sampling/createMessage";
+			case ROOTS -> "roots/list";
+		};
 	}
 }

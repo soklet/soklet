@@ -188,7 +188,7 @@ public final class McpInputResponses {
 		}
 
 		/**
-		 * Associates a response key with an exact JSON value.
+		 * Adds an exact JSON response under an application-assigned key.
 		 *
 		 * <p>Repeated keys are last-call-wins.
 		 *
@@ -197,14 +197,14 @@ public final class McpInputResponses {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder response(@NonNull String key,
+		public Builder addResponse(@NonNull String key,
 				@NonNull McpJsonValue response) {
 			this.responses.put(requireNonNull(key), requireNonNull(response));
 			return this;
 		}
 
 		/**
-		 * Associates all supplied response entries.
+		 * Adds all supplied response entries.
 		 *
 		 * <p>Entries are applied in iteration order and repeated keys are
 		 * last-call-wins.
@@ -214,7 +214,7 @@ public final class McpInputResponses {
 		 * @throws NullPointerException if the map, a key, or a value is null
 		 */
 		@NonNull
-		public Builder responses(
+		public Builder addResponses(
 				@NonNull Map<@NonNull String,
 						? extends @NonNull McpJsonValue> responses) {
 			McpInputResponses copiedResponses =

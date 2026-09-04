@@ -65,10 +65,10 @@
         "MCP-SAMPLING-001"
       ],
       "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
-      "id": "OPEN-003",
-      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#McpInputRequestDeclaration",
-      "matcherRuleId": "OPEN-MATCH-004",
-      "method": "McpInputRequestDeclaration",
+      "id": "OPEN-004",
+      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#fromSampling",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "fromSampling",
       "owner": "com.soklet.McpInputRequestDeclaration",
       "phase": "profile-2026-07-28",
       "roadmapNegativeInventoryKeys": [
@@ -78,17 +78,37 @@
     },
     {
       "closureAuthority": "MCP_2026_07_28",
-      "compatibleOptionalMemberBehavior": "A new client-input method or extension-contributed requirement needs the named capability-requirement widening point and cannot enter this core-only vocabulary implicitly.",
+      "compatibleOptionalMemberBehavior": "A new core client-input request type requires an explicit profile-reviewed wire-method mapping and cannot enter this enum-backed vocabulary implicitly.",
       "conformanceRows": [
         "MCP-ELICIT-001",
         "MCP-ROOTS-001",
         "MCP-SAMPLING-001"
       ],
       "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
-      "id": "OPEN-004",
-      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#fromSampling",
+      "id": "OPEN-054",
+      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#jsonRpcMethod",
       "matcherRuleId": "OPEN-MATCH-003",
-      "method": "fromSampling",
+      "method": "jsonRpcMethod",
+      "owner": "com.soklet.McpInputRequestDeclaration",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A new core client-input request type or capability combination requires explicit profile-reviewed validation and cannot enter this enum-backed vocabulary implicitly.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
+      "id": "OPEN-003",
+      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#validateCapabilities",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateCapabilities",
       "owner": "com.soklet.McpInputRequestDeclaration",
       "phase": "profile-2026-07-28",
       "roadmapNegativeInventoryKeys": [

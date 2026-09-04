@@ -114,7 +114,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
 					handlerInvocations.incrementAndGet();
@@ -122,7 +122,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("tool-observation-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -168,7 +168,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				new TraceRecordingLifecycleObserver(2);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					DefaultMcpRequestContext internalContext =
 							Assertions.assertInstanceOf(
@@ -184,7 +184,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("trace-retention-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
@@ -275,14 +275,14 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("trace-source-checked");
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("trace-source-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
@@ -348,12 +348,12 @@ public class McpRequestObservationPublicRuntimeTests {
 			throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("raw-id-independent"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("raw-id-independence-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 
 		TraceRecordingLifecycleObserver defaultObserver =
@@ -453,12 +453,12 @@ public class McpRequestObservationPublicRuntimeTests {
 						TRACE_CARDINALITY_REQUEST_COUNT);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("metric-cardinality-checked"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("metric-cardinality-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		byte[] keyMaterial = TRACE_CARDINALITY_KEY_MATERIAL.getBytes(
 				StandardCharsets.UTF_8);
@@ -640,7 +640,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(0L,
 					mcpMetrics.getHandlerCapacityRejections());
 			Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 1L),
-					mcpMetrics.getShutdowns());
+					mcpMetrics.getServerStops());
 			Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
 			Assertions.assertEquals(0L,
 					mcpMetrics.getConnectionsRejected());
@@ -794,14 +794,14 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
 					return McpCompleteResult.fromToolText("log-level-observed");
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("log-level-observation-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -822,7 +822,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertNotNull(context);
 			Assertions.assertSame(context, handlerContext.get());
 			Assertions.assertEquals(Optional.of(McpLogLevel.WARNING),
-					context.getDeprecatedLogLevel());
+					context.getLogLevel());
 		} finally {
 			soklet.close();
 		}
@@ -837,13 +837,13 @@ public class McpRequestObservationPublicRuntimeTests {
 				"sentinel-handler-failure");
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					throw handlerFailure;
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("handler-failure-observation-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -891,13 +891,11 @@ public class McpRequestObservationPublicRuntimeTests {
 				.withStatusCodeAndError(401,
 						McpJsonRpcError.fromApplication(1_001,
 								"Authentication required"))
-				.header("WWW-Authenticate", "Bearer realm=soklet-mcp")
+				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context ->
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context ->
 						McpAdmissionDecision.rejected(rejection))
+				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -1124,18 +1122,14 @@ public class McpRequestObservationPublicRuntimeTests {
 
 	private static McpEndpoint.@NonNull Builder endpointBuilder(
 			@NonNull String implementationName) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						implementationName, "4.0.0").build());
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
@@ -1454,10 +1448,11 @@ public class McpRequestObservationPublicRuntimeTests {
 				case "endpointPath" -> Assertions.assertEquals(MCP_PATH, value);
 				case "jsonRpcMethod" ->
 						Assertions.assertEquals("tools/call", value);
-				case "outcome" -> Assertions.assertTrue(
-						value instanceof McpRequestOutcome
-								|| value instanceof ShutdownComponentDisposition,
-						value.toString());
+				case "outcome" -> Assertions.assertInstanceOf(
+						McpRequestOutcome.class, value);
+				case "shutdownComponentDisposition" ->
+						Assertions.assertInstanceOf(
+								ShutdownComponentDisposition.class, value);
 				case "reason" -> Assertions.assertTrue(
 						value instanceof McpStreamTerminationReason
 								|| value instanceof
@@ -1492,7 +1487,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		values.add("mcpQueued=" + mcpMetrics.getHandlerQueueDepth());
 		values.add("mcpRejected="
 				+ mcpMetrics.getHandlerCapacityRejections());
-		values.add("mcpShutdowns=" + mcpMetrics.getShutdowns());
+		values.add("mcpShutdowns=" + mcpMetrics.getServerStops());
 		values.add("mcpConnectionsAccepted="
 				+ mcpMetrics.getConnectionsAccepted());
 		values.add("mcpConnectionsRejected="

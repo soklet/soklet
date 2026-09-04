@@ -20,8 +20,6 @@ import com.soklet.converter.TypeReference;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,7 +64,9 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromRoots(
 						McpInputRequirement.REQUIRED);
 
-		assertEquals("elicitation/create", form.getMethod());
+		assertEquals(McpInputRequestType.ELICITATION_FORM,
+				form.getInputRequestType());
+		assertEquals("elicitation/create", form.getJsonRpcMethod());
 		assertEquals(Set.of(McpClientCapability.ELICITATION_FORM),
 				form.getCapabilities());
 		assertEquals(McpInputRequirement.REQUIRED, form.getRequirement());
@@ -78,7 +78,13 @@ class McpMultiRoundTripDescriptorTests {
 		assertEquals(Set.of(McpClientCapability.SAMPLING,
 				McpClientCapability.SAMPLING_CONTEXT),
 				copiedSampling.getCapabilities());
-		assertEquals("roots/list", roots.getMethod());
+		assertEquals(McpInputRequestType.ELICITATION_URL,
+				url.getInputRequestType());
+		assertEquals(McpInputRequestType.SAMPLING,
+				sampling.getInputRequestType());
+		assertEquals(McpInputRequestType.ROOTS,
+				roots.getInputRequestType());
+		assertEquals("roots/list", roots.getJsonRpcMethod());
 		assertThrows(UnsupportedOperationException.class,
 				() -> form.getCapabilities().clear());
 		assertEquals(form, McpInputRequestDeclaration.fromElicitationForm(
@@ -125,13 +131,13 @@ class McpMultiRoundTripDescriptorTests {
 
 			assertSame(declaration, request.getDeclaration());
 			assertSame(params, request.getParams());
-			assertEquals(declaration.getMethod(), request.getMethod());
+			assertEquals(declaration.getJsonRpcMethod(), request.getMethod());
 			assertEquals(request,
 					McpInputRequest.fromDeclaration(declaration, params));
 			assertEquals(request.hashCode(),
 					McpInputRequest.fromDeclaration(declaration, params).hashCode());
 			assertEquals("McpInputRequest{method='%s', params=<redacted>}"
-					.formatted(declaration.getMethod()), request.toString());
+					.formatted(declaration.getJsonRpcMethod()), request.toString());
 			assertFalse(request.toString().contains(secretParams));
 		}
 
@@ -152,28 +158,25 @@ class McpMultiRoundTripDescriptorTests {
 						McpInputRequirement.REQUIRED);
 		McpInputRequest request = McpInputRequest.fromDeclaration(approval,
 				McpJsonObject.builder().put("future", true).build());
-		IllegalStateException emptyResult = assertThrows(
-				IllegalStateException.class,
-				() -> McpInputRequiredResult.builder().build());
-		assertFalse(String.valueOf(emptyResult.getMessage())
-				.contains("McpInputRequiredResult"));
-		assertThrows(IllegalStateException.class, () ->
-				McpInputRequiredResult.builder()
-						.metadata(McpJsonObject.builder()
-								.put("dev.example/metadata-only", true)
-								.build())
-						.build());
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequiredResult.withInputRequest(null, request));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequiredResult.withInputRequest("approval", null));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequiredResult.withFrameworkRequestState(null));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequiredResult.withApplicationRequestState(null));
+		assertThrows(IllegalArgumentException.class,
+				() -> McpInputRequiredResult.withApplicationRequestState(""));
 
-		McpInputRequiredResult inputOnly = McpInputRequiredResult.builder()
-				.inputRequest("approval", request)
+		McpInputRequiredResult inputOnly = McpInputRequiredResult.withInputRequest("approval", request)
 				.build();
 		assertEquals(Map.of("approval", request), inputOnly.getInputRequests());
 		assertTrue(inputOnly.getFrameworkRequestState().isEmpty());
 		assertTrue(inputOnly.getApplicationRequestState().isEmpty());
 		assertSame(McpJsonObject.emptyInstance(), inputOnly.getMetadata());
 
-		McpInputRequiredResult stateOnly = McpInputRequiredResult.builder()
-				.frameworkRequestState(McpJsonNull.INSTANCE)
+		McpInputRequiredResult stateOnly = McpInputRequiredResult.withFrameworkRequestState(McpJsonNull.INSTANCE)
 				.build();
 		assertTrue(stateOnly.getInputRequests().isEmpty());
 		assertSame(McpJsonNull.INSTANCE,
@@ -183,8 +186,7 @@ class McpMultiRoundTripDescriptorTests {
 		McpJsonObject metadata = McpJsonObject.builder()
 				.put("dev.example/result", "combined")
 				.build();
-		McpInputRequiredResult combined = McpInputRequiredResult.builder()
-				.inputRequest("approval", request)
+		McpInputRequiredResult combined = McpInputRequiredResult.withInputRequest("approval", request)
 				.applicationRequestState("opaque-state")
 				.metadata(metadata)
 				.build();
@@ -208,10 +210,9 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromSampling(Set.of(),
 						McpInputRequirement.CONDITIONAL));
 		String secretId = "secret-input-request-id";
-		McpInputRequiredResult.Builder builder = McpInputRequiredResult.builder()
-				.inputRequest("", first)
-				.inputRequest("   ", second)
-				.inputRequest(secretId, third);
+		McpInputRequiredResult.Builder builder = McpInputRequiredResult.withInputRequest("", first)
+				.addInputRequest("   ", second)
+				.addInputRequest(secretId, third);
 		McpInputRequiredResult snapshot = builder.build();
 
 		assertEquals(List.of("", "   ", secretId),
@@ -220,23 +221,23 @@ class McpMultiRoundTripDescriptorTests {
 				() -> snapshot.getInputRequests().clear());
 		IllegalArgumentException duplicate = assertThrows(
 				IllegalArgumentException.class,
-				() -> builder.inputRequest(secretId, first));
+				() -> builder.addInputRequest(secretId, first));
 		assertFalse(String.valueOf(duplicate.getMessage()).contains(secretId));
 		assertSame(third, builder.build().getInputRequests().get(secretId));
 
 		Map<String, McpInputRequest> beforeNullFailures =
 				builder.build().getInputRequests();
 		assertThrows(NullPointerException.class,
-				() -> builder.inputRequest(null, first));
+				() -> builder.addInputRequest(null, first));
 		String nullRequestId = "secret-null-request-id";
 		NullPointerException nullRequest = assertThrows(
 				NullPointerException.class,
-				() -> builder.inputRequest(nullRequestId, null));
+				() -> builder.addInputRequest(nullRequestId, null));
 		assertFalse(String.valueOf(nullRequest.getMessage())
 				.contains(nullRequestId));
 		assertEquals(beforeNullFailures, builder.build().getInputRequests());
 
-		builder.inputRequest("later", first);
+		builder.addInputRequest("later", first);
 		assertEquals(List.of("", "   ", secretId),
 				new ArrayList<>(snapshot.getInputRequests().keySet()));
 	}
@@ -258,8 +259,7 @@ class McpMultiRoundTripDescriptorTests {
 		McpJsonObject secondMetadata = McpJsonObject.builder()
 				.put("version", 2)
 				.build();
-		McpInputRequiredResult.Builder builder = McpInputRequiredResult.builder()
-				.inputRequest("roots", request)
+		McpInputRequiredResult.Builder builder = McpInputRequiredResult.withInputRequest("roots", request)
 				.frameworkRequestState(firstState)
 				.metadata(firstMetadata);
 		McpInputRequiredResult firstSnapshot = builder.build();
@@ -309,8 +309,8 @@ class McpMultiRoundTripDescriptorTests {
 		Map<String, McpJsonValue> mutableResponses = new LinkedHashMap<>();
 		mutableResponses.put("approval", approvalJson);
 		McpInputResponses responses = McpInputResponses.builder()
-				.responses(mutableResponses)
-				.response("tags", tagsJson)
+				.addResponses(mutableResponses)
+				.addResponse("tags", tagsJson)
 				.build();
 		mutableResponses.clear();
 
@@ -336,16 +336,16 @@ class McpMultiRoundTripDescriptorTests {
 				.contains("accept"));
 
 		McpInputResponses.Builder reusableBuilder = McpInputResponses.builder()
-				.response("first", approvalJson);
+				.addResponse("first", approvalJson);
 		McpInputResponses firstSnapshot = reusableBuilder.build();
-		reusableBuilder.response("second", tagsJson);
+		reusableBuilder.addResponse("second", tagsJson);
 		assertEquals(Set.of("first"), firstSnapshot.asMap().keySet());
 
 		Map<String, McpJsonValue> invalidBatch = new LinkedHashMap<>();
 		invalidBatch.put("would-partially-append", approvalJson);
 		invalidBatch.put("invalid", null);
 		assertThrows(NullPointerException.class,
-				() -> reusableBuilder.responses(invalidBatch));
+				() -> reusableBuilder.addResponses(invalidBatch));
 		assertEquals(Set.of("first", "second"),
 				reusableBuilder.build().asMap().keySet());
 	}
@@ -355,11 +355,9 @@ class McpMultiRoundTripDescriptorTests {
 		String frameworkSecret = "secret-framework-state";
 		String applicationSecret = "secret-application-state";
 		McpJsonValue value = McpJsonString.fromValue(frameworkSecret);
-		McpInputRequiredResult framework = McpInputRequiredResult.builder()
-				.frameworkRequestState(value)
+		McpInputRequiredResult framework = McpInputRequiredResult.withFrameworkRequestState(value)
 				.build();
-		McpInputRequiredResult application = McpInputRequiredResult.builder()
-				.applicationRequestState(applicationSecret)
+		McpInputRequiredResult application = McpInputRequiredResult.withApplicationRequestState(applicationSecret)
 				.build();
 
 		assertSame(value, framework.getFrameworkRequestState().orElseThrow());
@@ -368,14 +366,11 @@ class McpMultiRoundTripDescriptorTests {
 				application.getApplicationRequestState().orElseThrow());
 		assertTrue(application.getFrameworkRequestState().isEmpty());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpInputRequiredResult.builder()
-						.applicationRequestState(""));
+				() -> McpInputRequiredResult.withApplicationRequestState(""));
 		assertThrows(NullPointerException.class,
-				() -> McpInputRequiredResult.builder()
-						.applicationRequestState(null));
+				() -> McpInputRequiredResult.withApplicationRequestState(null));
 		assertThrows(NullPointerException.class,
-				() -> McpInputRequiredResult.builder()
-						.frameworkRequestState(null));
+				() -> McpInputRequiredResult.withFrameworkRequestState(null));
 	}
 
 	@Test
@@ -384,9 +379,9 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.REQUIRED);
 
-		McpToolRegistration.Builder<McpJsonObject> toolBuilder =
+		McpToolRegistration.OperationBuilder<McpJsonObject> toolBuilder =
 				McpToolRegistration.withName("catalog.delete")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"));
 		McpPromptRegistration.Builder promptBuilder = McpPromptRegistration
@@ -405,13 +400,13 @@ class McpMultiRoundTripDescriptorTests {
 						.handler(resourceHandler());
 
 		assertThrows(NullPointerException.class, () ->
-				toolBuilder.mayRequestInput(approval, null));
+				toolBuilder.addInputRequestDeclarations(approval, null));
 		assertThrows(NullPointerException.class, () ->
-				promptBuilder.mayRequestInput(approval, null));
+				promptBuilder.addInputRequestDeclarations(approval, null));
 		assertThrows(NullPointerException.class, () ->
-				exactBuilder.mayRequestInput(approval, null));
+				exactBuilder.addInputRequestDeclarations(approval, null));
 		assertThrows(NullPointerException.class, () ->
-				templateBuilder.mayRequestInput(approval, null));
+				templateBuilder.addInputRequestDeclarations(approval, null));
 
 		assertTrue(toolBuilder.build().getInputRequestDeclarations().isEmpty());
 		assertTrue(promptBuilder.build().getInputRequestDeclarations().isEmpty());
@@ -432,11 +427,11 @@ class McpMultiRoundTripDescriptorTests {
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("catalog.delete")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
-				.mayRequestInput(mutableDeclarations)
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(mutableDeclarations)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		mutableDeclarations[0] = roots;
@@ -446,19 +441,19 @@ class McpMultiRoundTripDescriptorTests {
 				.handler((request, get, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
-				.mayRequestInput(approval)
+				.addInputRequestDeclarations(approval)
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpResourceRegistration exact = McpResourceRegistration
 				.withUriAndName(URI.create("catalog://item/42"), "item")
 				.handler(resourceHandler())
-				.mayRequestInput(approval)
+				.addInputRequestDeclarations(approval)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
 				.withUriTemplateAndName("catalog://item/{itemId}", "item")
 				.handler(resourceHandler())
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 
@@ -479,13 +474,13 @@ class McpMultiRoundTripDescriptorTests {
 	void registrationDefaultsRemainNeutralAndCompleteToolsCannotDeclareMrtr() {
 		McpToolRegistration<Arguments> complete = McpToolRegistration
 				.withName("catalog.get")
-				.types(Arguments.class, CompleteOutput.class)
+				.argumentAndOutputTypes(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
 						new CompleteOutput(arguments.getConvertedArguments().identifier()))
 				.build();
 		Object completeBuilder = McpToolRegistration
 				.withName("catalog.other")
-				.types(Arguments.class, CompleteOutput.class)
+				.argumentAndOutputTypes(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
 						new CompleteOutput(arguments.getConvertedArguments().identifier()));
 		McpPromptRegistration prompt = McpPromptRegistration
@@ -510,24 +505,6 @@ class McpMultiRoundTripDescriptorTests {
 						|| method.getName().equals("requestStateMode")));
 	}
 
-	@Test
-	void requestContextCompatibilityDefaultsExposeNoMrtrData() {
-		McpRequestContext context = (McpRequestContext) Proxy.newProxyInstance(
-				McpRequestContext.class.getClassLoader(),
-				new Class<?>[] {McpRequestContext.class},
-				(proxy, method, arguments) -> {
-					if (method.isDefault())
-						return InvocationHandler.invokeDefault(
-								proxy, method, arguments);
-					throw new UnsupportedOperationException(method.getName());
-				});
-
-		assertSame(McpInputResponses.emptyInstance(),
-				context.getInputResponses());
-		assertTrue(context.getFrameworkRequestState().isEmpty());
-		assertTrue(context.getApplicationRequestState().isEmpty());
-	}
-
 	private static McpInputRequest inputRequest(
 			McpInputRequestDeclaration declaration) {
 		return McpInputRequest.fromDeclaration(declaration,
@@ -536,8 +513,7 @@ class McpMultiRoundTripDescriptorTests {
 
 	private static McpResourceReadHandler resourceHandler() {
 		return (request, resource, features) ->
-				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-						.content(McpTextResourceContents.withUriAndText(
+				McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 								resource.getUri(), "value").build())
 						.build());
 	}

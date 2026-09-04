@@ -14,6 +14,10 @@ Greenfield public-record elimination amendment reviewed: 2026-08-18
 
 Greenfield typed-request-state amendment reviewed: 2026-08-18
 
+MCP value-contract amendment reviewed: 2026-09-03
+
+Invocation and typed-input declaration amendment reviewed: 2026-09-03
+
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -41,10 +45,10 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 133 Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 233
-MCP owners; the 38-owner non-MCP allowlist brings current-side coverage to 271.
+partition is 133 Phase 4, 37 Phase 5, 64 Phase 6, zero provisional, and 234
+MCP owners; the 38-owner non-MCP allowlist brings current-side coverage to 272.
 
-The 36 current Phase 5 owners are the exact sorted entries in
+The 37 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
 and its 133-owner inventory were
 unchanged, while Phase 6 and provisional owners remained unfrozen. Phase 6
@@ -60,28 +64,28 @@ records with SHA-256
 The 2026-08-18 public-record elimination amendment retained the owner partition
 and advanced that checkpoint to 565 records. Typed request state then removed
 three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections leave
-Phase 5 byte-identical while the current released-3.5.1 comparison advances to
-618 records with SHA-256 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
+Phase 5 byte-identical while the current released-3.5.1 comparison contains
+621 records with SHA-256 `25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
 
 ## Frozen Phase 5 snapshot
 
-`phase-5.signatures.jsonl` contains exactly 179 canonical records:
+`phase-5.signatures.jsonl` contains exactly 190 canonical records:
 
-- 36 classes;
+- 37 classes;
 - zero constructors;
-- 15 fields; and
-- 128 methods.
+- 19 fields; and
+- 134 methods.
 
 The reviewed file's SHA-256 is
-`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`.
+`54a96f16d32096b4a4a68a29f727443853178e5da1f0dadacce2004cca70d420`.
 The independent reflection contract freezes the Phase 5 JSpecify type-use
 layout with SHA-256
-`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`.
-The 36-entry `phase-5.includes` inventory has SHA-256
-`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
+`5c90b20e8b582931ca636d91ccf11c9fdc92734289bdad9b27eb9a529645db7f`.
+The 37-entry `phase-5.includes` inventory has SHA-256
+`97e1796b3972136dcba44dcd978e47df15ab8351138d080c1d52f8df58ae29f7`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 179 records and was byte-for-
+current full japicmp report produced the same 190 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate compares
 the Phase 4, Phase 5, and now Phase 6 snapshots bidirectionally on every run.
 
@@ -286,7 +290,7 @@ the following public contracts:
 - MCP scalar signatures use non-null reference types such as `Integer`,
   `Long`, `Boolean`, and `Double`; primitives remain available to internal
   implementation code.
-- Protection-provider selection is exclusive at construction. Key-ring,
+- Protection-provider selection is exclusive at construction. Keyring,
   custom-protector, and development-ephemeral factories select the provider;
   their builder can tune limits but cannot replace it.
 - Soklet-owned request-state diagnostics remain redacted. At the deliberate
@@ -322,3 +326,121 @@ in profile and evidence verifiers preserve that separate result. JDK 17 and
 JDK 25 CI and later release-candidate provenance remain separate obligations.
 This rationale intentionally contains no commit identifier; repository
 history and publication remain maintainer-owned.
+
+## 2026-09-03 Revision 2 construction and collection amendment
+
+`McpInputRequiredResult` no longer exposes an empty builder. Its three complete
+factories begin with a first input request, framework-protected state, or
+application-protected state, respectively; additional requests use
+`addInputRequest(...)`.
+Subscription configuration likewise begins with the event publisher and a
+nonempty notification-type set, then uses `addNotificationType(...)` for
+extensions. Input responses use `addResponse(...)` and `addResponses(...)`,
+and protection keyrings use `addVerificationKey(...)` and
+`addVerificationKeys(...)`. Passing `null` to the documented optional
+protection bounds resets those values to their defaults.
+
+The amended Phase 5 snapshot contains 181 records: 36 classes, no public
+constructors, 15 fields, and 130 methods. Its signature SHA-256 is
+`1bd7282469dd7aa41d2aa79a926f2a929518d421c4b2ac8a61ea8b97cdb27ffa`;
+the reflection/nullability SHA-256 is
+`e33c1f2b4f53603d359b04d76ea90a8286954c642e6f125cb01b3eb3f0b3bec8`;
+and the include inventory remains
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
+This amendment adds no separate released-3.5 incompatibility; the shared
+compatibility ledger contains 622 records with SHA-256
+`c83e4e13f40b8c1773aac64d0fc2b4854879391ab322438187a6f3807cbbf2b8`.
+
+The aggregate API-freeze gate and the 23-test focused reflection contract
+passed against this development tree. These checks do not substitute for
+release-candidate provenance or publication evidence.
+
+## 2026-09-03 MCP value-contract amendment
+
+The owner-approved Revision 2 value pass makes
+`McpRequestStateProtectionContext.fromComponents(...)` public so an
+application-provided protector can be unit-tested without constructing a live
+request. The factory defensively copies associated data and does not add any
+new authority to production request handling.
+
+The amended Phase 5 snapshot contains 182 records: 36 classes, no public
+constructors, 15 fields, and 131 methods. Its signature SHA-256 is
+`2a0ee1e0c68a6d0776a6f4d4afe6c2d105e66770ba351afefd0f1d510cc25a15`;
+the reflection/nullability SHA-256 is
+`79d9a62b4cbe482621bcc0eeaa9b9dd08908ebde899512dbdb7e49134836edbf`;
+and the include inventory remains
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
+The shared compatibility ledger contains 618 records with SHA-256
+`5846923de47c75e2ac5b926f4efdfbcf78f8d88beab1d1f1095bf62d09804114`.
+The owner partition is unchanged. The focused factory and reflection contracts
+and aggregate API-freeze gate are local development checks, not
+release-candidate provenance or publication evidence.
+
+## 2026-09-03 invocation and typed-input declaration amendment
+
+The owner-approved Revision 2 input-declaration pass adds the
+`McpInputRequestType` enum with form elicitation, URL elicitation, sampling,
+and roots choices. Each choice derives the JSON-RPC method and base
+capability. `McpMayRequestInput.samplingCapabilities()` accepts only the two
+optional sampling refinements and only for sampling; invalid or duplicate
+annotation combinations fail during processing. Programmatic declarations
+retain their four named factories, add `getInputRequestType()`, and expose the
+derived wire name as `getJsonRpcMethod()` without retaining the former
+`getMethod()` alias.
+
+The generated registration path now preserves input declarations and
+`requestStateMode` for tools, prompts, and resources. Annotated tools whose
+return type belongs to `McpOperationResult` use the advanced registration path
+and compile only their input schema. The generated digest contract records the
+absence of one fixed output schema explicitly and the runtime loader validates
+that absence fail-closedly.
+
+The amended Phase 5 snapshot contains 190 records: 37 classes, no public
+constructors, 19 fields, and 134 methods. Its signature,
+reflection/nullability, and include-inventory SHA-256 values are respectively
+`54a96f16d32096b4a4a68a29f727443853178e5da1f0dadacce2004cca70d420`,
+`5c90b20e8b582931ca636d91ccf11c9fdc92734289bdad9b27eb9a529645db7f`,
+and
+`97e1796b3972136dcba44dcd978e47df15ab8351138d080c1d52f8df58ae29f7`.
+The owner partition is now 133/37/64/0, for 234 MCP owners and 272 reviewed
+current-side owners. Phase 6 remains unchanged.
+
+The concurrent Phase 4 context amendment adds three reviewed interface-method
+records relative to released 3.5.1, bringing the shared compatibility ledger
+to 621 records with SHA-256
+`25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
+Focused annotation-processor, generated-runtime, descriptor, and reflection
+contracts and the aggregate API gate are local development checks, not
+release-candidate or publication evidence.
+
+## 2026-09-03 focused naming and subscription-publisher amendment
+
+The owner-approved Revision 2 naming pass treats keyring as one word in every
+Java identifier and current document, aligns protection limits and controls
+with their public properties, and names prompt arguments as declarations. The
+new secret-free keyring accessors expose only active and verification key IDs;
+they never expose key bytes. The cryptographic domain-separation bytes remain
+unchanged so the source-level rename does not alter fingerprint values.
+
+Construction of Soklet's built-in process-local subscription publisher moves
+to `McpSubscriptionEventPublisher.fromInMemoryDefaults()`. The concrete
+default implementation is package-private, while custom distributed
+publishers continue to implement the same public SPI. Removing that concrete
+public owner reduces Phase 5 to 36 owners and 189 records: 36 classes, no
+public constructors, 19 fields, and 134 methods.
+
+The Phase 5 signature SHA-256 is
+`0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`;
+the reflection/nullability SHA-256 is
+`682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`;
+and the canonically sorted include inventory has SHA-256
+`0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
+The complete owner partition is now 133/36/64/0, or 233 MCP owners and 271
+reviewed current-side owners.
+
+The complete released-3.5.1 compatibility ledger remains 621 records and now
+has SHA-256
+`38356e712db3eb747e9b525a8f2645a95ea59c50fa8de25dcfb4c21e79dc3e2e`.
+The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
+against this development tree. These are local development checks, not
+release-candidate provenance or publication evidence.

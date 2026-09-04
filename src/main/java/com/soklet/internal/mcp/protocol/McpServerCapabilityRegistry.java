@@ -143,7 +143,7 @@ final class McpServerCapabilityRegistry {
 		this.resourceTemplatesListResult = resourceTemplatesListResult(
 				resourceTemplateDescriptors, endpoint.resourceTemplateListCachePolicy());
 
-		boolean subscriptionsSupported = endpoint.subscriptions().isPresent();
+		boolean subscriptionsSupported = endpoint.subscriptionConfig().isPresent();
 		Optional<McpCatalogCapability> toolsCapability = tools.isEmpty()
 				? Optional.empty()
 				: Optional.of(subscriptionsSupported && localizedResponseKinds
@@ -160,7 +160,7 @@ final class McpServerCapabilityRegistry {
 		Optional<McpResourceCapability> resourcesCapability;
 
 		if (endpoint.hasResourceSurface()) {
-			Set<McpResourceNotificationType> notificationTypes = endpoint.subscriptions()
+			Set<McpResourceNotificationType> notificationTypes = endpoint.subscriptionConfig()
 					.map(McpNormalizedSubscriptionConfiguration::notificationTypes)
 					.orElseGet(Set::of);
 			boolean localizedResourceCatalog = subscriptionsSupported
@@ -183,7 +183,7 @@ final class McpServerCapabilityRegistry {
 				toolsCapability, promptsCapability, resourcesCapability);
 
 		Optional<McpImplementationMetadata> serverInformation =
-				endpoint.includeServerInformation()
+				endpoint.serverInformationIncluded()
 						? Optional.of(endpoint.serverInformation())
 						: Optional.empty();
 		McpResultMetadata resultMetadata =

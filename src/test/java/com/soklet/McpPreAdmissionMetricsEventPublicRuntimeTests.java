@@ -110,7 +110,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				.withStatusCodeAndError(401,
 						McpJsonRpcError.fromApplication(1_001,
 								"Authentication required"))
-				.header("WWW-Authenticate", "Bearer realm=soklet-mcp")
+				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
 		McpServer server = serverBuilder(endpoint("fixed-error-context-test"))
 				.admissionController(context ->
@@ -371,19 +371,15 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String implementationName) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						implementationName, "4.0.0").build())
 				.build();
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

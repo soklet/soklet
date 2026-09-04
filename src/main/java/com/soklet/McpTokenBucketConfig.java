@@ -33,10 +33,15 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpTokenBucketConfig {
+	private static final long DEFAULT_CAPACITY = 20L;
+	private static final long DEFAULT_REFILL_TOKENS = 60L;
+	@NonNull
+	private static final Duration DEFAULT_REFILL_INTERVAL =
+			Duration.ofMinutes(1);
 	private final long capacity;
 	private final long refillTokens;
 	@NonNull
-	private final Duration refillPeriod;
+	private final Duration refillInterval;
 
 	/**
 	 * Returns a configuration with capacity {@code 20} that replenishes
@@ -46,10 +51,7 @@ public final class McpTokenBucketConfig {
 	 */
 	@NonNull
 	public static McpTokenBucketConfig fromDefaults() {
-		return withCapacity(20L)
-				.refillTokens(60L)
-				.refillPeriod(Duration.ofMinutes(1))
-				.build();
+		return withCapacity(DEFAULT_CAPACITY).build();
 	}
 
 	/**
@@ -67,16 +69,19 @@ public final class McpTokenBucketConfig {
 	private McpTokenBucketConfig(@NonNull Builder builder) {
 		this.capacity = requirePositive(builder.capacity, "capacity");
 		this.refillTokens = requirePositive(builder.refillTokens, "refillTokens");
-		this.refillPeriod = requireNonNull(builder.refillPeriod, "refillPeriod");
+		this.refillInterval = requireNonNull(builder.refillInterval,
+				"refillInterval");
 
-		if (this.refillPeriod.isZero() || this.refillPeriod.isNegative())
-			throw new IllegalArgumentException("refillPeriod must be positive");
+		if (this.refillInterval.isZero() || this.refillInterval.isNegative())
+			throw new IllegalArgumentException("refillInterval must be positive");
 		try {
-			if (this.refillPeriod.toNanos() <= 0)
-				throw new IllegalArgumentException("refillPeriod must be at least one nanosecond");
+			if (this.refillInterval.toNanos() <= 0)
+				throw new IllegalArgumentException(
+						"refillInterval must be at least one nanosecond");
 		} catch (ArithmeticException exception) {
 			throw new IllegalArgumentException(
-					"refillPeriod must fit in a signed 64-bit nanosecond count", exception);
+					"refillInterval must fit in a signed 64-bit nanosecond count",
+					exception);
 		}
 	}
 
@@ -91,7 +96,7 @@ public final class McpTokenBucketConfig {
 	}
 
 	/**
-	 * Returns the number of tokens replenished during one refill period.
+	 * Returns the number of tokens replenished during one refill interval.
 	 *
 	 * @return positive refill quantity
 	 */
@@ -101,13 +106,13 @@ public final class McpTokenBucketConfig {
 	}
 
 	/**
-	 * Returns the refill period.
+	 * Returns the refill interval.
 	 *
-	 * @return positive refill period
+	 * @return positive refill interval
 	 */
 	@NonNull
-	public Duration getRefillPeriod() {
-		return this.refillPeriod;
+	public Duration getRefillInterval() {
+		return this.refillInterval;
 	}
 
 	private static long requirePositive(long value, @NonNull String name) {
@@ -125,10 +130,12 @@ public final class McpTokenBucketConfig {
 	public static final class Builder {
 		private long capacity;
 		private long refillTokens;
-		@Nullable
-		private Duration refillPeriod;
+		@NonNull
+		private Duration refillInterval;
 
 		private Builder() {
+			this.refillTokens = DEFAULT_REFILL_TOKENS;
+			this.refillInterval = DEFAULT_REFILL_INTERVAL;
 		}
 
 		/**
@@ -145,27 +152,30 @@ public final class McpTokenBucketConfig {
 		}
 
 		/**
-		 * Sets the number of tokens replenished during one refill period.
+		 * Sets the number of tokens replenished during one refill interval.
 		 *
-		 * @param refillTokens positive refill quantity
+		 * @param refillTokens positive refill quantity, or {@code null} to use
+		 *                     the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code refillTokens} is null
 		 */
 		@NonNull
-		public Builder refillTokens(@NonNull Long refillTokens) {
-			this.refillTokens = requireNonNull(refillTokens);
+		public Builder refillTokens(@Nullable Long refillTokens) {
+			this.refillTokens = refillTokens == null
+					? DEFAULT_REFILL_TOKENS : refillTokens;
 			return this;
 		}
 
 		/**
-		 * Sets the positive refill period.
+		 * Sets the positive refill interval.
 		 *
-		 * @param refillPeriod positive refill period
+		 * @param refillInterval positive refill interval, or {@code null} to use
+		 *                       the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder refillPeriod(@NonNull Duration refillPeriod) {
-			this.refillPeriod = requireNonNull(refillPeriod);
+		public Builder refillInterval(@Nullable Duration refillInterval) {
+			this.refillInterval = refillInterval == null
+					? DEFAULT_REFILL_INTERVAL : refillInterval;
 			return this;
 		}
 
@@ -174,9 +184,8 @@ public final class McpTokenBucketConfig {
 		 *
 		 * @return token-bucket configuration
 		 * @throws IllegalArgumentException if a numeric value is not positive or
-		 *                                  the refill period cannot be represented
+		 *                                  the refill interval cannot be represented
 		 *                                  in nanoseconds
-		 * @throws NullPointerException if no refill period was configured
 		 */
 		@NonNull
 		public McpTokenBucketConfig build() {

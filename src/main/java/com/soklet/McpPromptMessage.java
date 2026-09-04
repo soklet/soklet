@@ -37,6 +37,18 @@ public final class McpPromptMessage {
 	private final McpContentBlock content;
 
 	/**
+	 * Creates a user-authored plain-text message.
+	 *
+	 * @param text message text
+	 * @return user message
+	 * @throws NullPointerException if {@code text} is null
+	 */
+	@NonNull
+	public static McpPromptMessage fromUserText(@NonNull String text) {
+		return fromUserContent(McpTextContent.fromText(text));
+	}
+
+	/**
 	 * Creates a user-authored message.
 	 *
 	 * @param content message content
@@ -46,6 +58,18 @@ public final class McpPromptMessage {
 	public static McpPromptMessage fromUserContent(
 			@NonNull McpContentBlock content) {
 		return new McpPromptMessage(McpRole.USER, content);
+	}
+
+	/**
+	 * Creates an assistant-authored plain-text message.
+	 *
+	 * @param text message text
+	 * @return assistant message
+	 * @throws NullPointerException if {@code text} is null
+	 */
+	@NonNull
+	public static McpPromptMessage fromAssistantText(@NonNull String text) {
+		return fromAssistantContent(McpTextContent.fromText(text));
 	}
 
 	/**

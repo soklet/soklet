@@ -105,7 +105,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * cursors in a fleet.
  *
  * <p>The two nodes below have independent server objects, application cursor
- * codecs, key-ring copies, localization snapshots, and retained catalog
+ * codecs, keyring copies, localization snapshots, and retained catalog
  * repositories. The cursor is the only value transferred between them. The
  * separately populated repositories model application replication; they are
  * not a claim that Soklet supplies a distributed store, key-management
@@ -143,15 +143,15 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				"foxtrot", "golf");
 		TranslationSnapshot translationsA = translations("translations-r7");
 		TranslationSnapshot translationsB = translations("translations-r7");
-		ApplicationCursorKeyRing keyRingA = cursorKeyRing(1);
-		ApplicationCursorKeyRing keyRingB = cursorKeyRing(1);
+		ApplicationCursorKeyring keyringA = cursorKeyring(1);
+		ApplicationCursorKeyring keyringB = cursorKeyring(1);
 		ApplicationNode nodeA = new ApplicationNode("node-a",
 				new ReplicatedCatalogRepository(originalA, List.of(originalA)),
-				translationsA, keyRingA);
+				translationsA, keyringA);
 		ApplicationNode nodeB = new ApplicationNode("node-b",
 				new ReplicatedCatalogRepository(replacementB,
 						List.of(originalB, replacementB)),
-				translationsB, keyRingB);
+				translationsB, keyringB);
 
 		assertNotSame(nodeA.repository(), nodeB.repository());
 		assertNotSame(originalA, originalB);
@@ -160,8 +160,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		assertNotSame(originalA.records().get(0), originalB.records().get(0));
 		assertNotSame(translationsA, translationsB);
 		assertEquals(translationsA, translationsB);
-		assertNotSame(keyRingA, keyRingB);
-		assertTrue(keyRingA.hasSameConfiguration(keyRingB));
+		assertNotSame(keyringA, keyringB);
+		assertTrue(keyringA.hasSameConfiguration(keyringB));
 		assertNotSame(nodeA.codec(), nodeB.codec());
 
 		SokletSimulator.run(nodeA.config(), simulatorA -> {
@@ -254,7 +254,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				"alpha", "bravo", "charlie");
 		ApplicationNode issuer = new ApplicationNode("issuer",
 				new ReplicatedCatalogRepository(original, List.of(original)),
-				translations("translations-r7"), cursorKeyRing(1));
+				translations("translations-r7"), cursorKeyring(1));
 		Capture issued = run(issuer, resourceListRequest("issue-cursor",
 				Optional.empty(), PRINCIPAL, "fr-CA"));
 		assertEquals(List.of(), issuer.applicationFailures(),
@@ -288,13 +288,13 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 						new ApplicationNode("wrong-key",
 								new ReplicatedCatalogRepository(copy(original),
 										List.of(copy(original))),
-								translations("translations-r7"), cursorKeyRing(99)),
+								translations("translations-r7"), cursorKeyring(99)),
 						validCursor, PRINCIPAL, false, false),
 				new FailureCase("localization-revision-drift",
 						new ApplicationNode("revision-drift",
 								new ReplicatedCatalogRepository(copy(original),
 										List.of(copy(original))),
-								translations("translations-r8"), cursorKeyRing(1)),
+								translations("translations-r8"), cursorKeyring(1)),
 						validCursor, PRINCIPAL, true, true),
 				new FailureCase("catalog-revision-drift",
 						new ApplicationNode("catalog-drift",
@@ -303,7 +303,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 												"bravo", "charlie"),
 										List.of(catalog("snapshot-7", "catalog-r8",
 												"alpha", "bravo", "charlie"))),
-								translations("translations-r7"), cursorKeyRing(1)),
+								translations("translations-r7"), cursorKeyring(1)),
 						validCursor, PRINCIPAL, true, true),
 				new FailureCase("locale-pin-unavailable",
 						new ApplicationNode("locale-mismatch",
@@ -311,13 +311,13 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 										List.of(copy(original))),
 								translations("translations-r7",
 										List.of(Locale.FRENCH, Locale.ENGLISH)),
-								cursorKeyRing(1)),
+								cursorKeyring(1)),
 						validCursor, PRINCIPAL, true, false),
 				new FailureCase("exact-expiry",
 						new ApplicationNode("expired",
 								new ReplicatedCatalogRepository(copy(original),
 										List.of(copy(original))),
-								translations("translations-r7"), cursorKeyRing(1),
+								translations("translations-r7"), cursorKeyring(1),
 								NOW.plus(CURSOR_LIFETIME)),
 						validCursor, PRINCIPAL, false, false),
 				new FailureCase("missing-retained-snapshot",
@@ -326,7 +326,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 										catalog("snapshot-8", "catalog-r8", "foxtrot"),
 										List.of(catalog("snapshot-8", "catalog-r8",
 												"foxtrot"))),
-								translations("translations-r7"), cursorKeyRing(1)),
+								translations("translations-r7"), cursorKeyring(1)),
 						validCursor, PRINCIPAL, true, true));
 
 		List<String> failureBodies = new ArrayList<>();
@@ -334,7 +334,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			ApplicationNode node = failureCase.node();
 			assertNotSame(issuer.repository(), node.repository());
 			assertNotSame(issuer.codec(), node.codec());
-			assertNotSame(issuer.keyRing(), node.keyRing());
+			assertNotSame(issuer.keyring(), node.keyring());
 
 			Capture failure = run(node, resourceListRequest("invalid-cursor",
 					Optional.of(failureCase.cursor()), failureCase.principal(),
@@ -386,7 +386,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		CatalogSnapshot retained = copy(snapshot);
 		return new ApplicationNode(name,
 				new ReplicatedCatalogRepository(active, List.of(retained)),
-				translations("translations-r7"), cursorKeyRing(1));
+				translations("translations-r7"), cursorKeyring(1));
 	}
 
 	private static Capture run(ApplicationNode node, Request request) {
@@ -505,11 +505,11 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 	}
 
 	private static void assertFrameworkProtectionDisabled(ApplicationNode node) {
-		assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+		assertEquals(McpProtectionMode.NONE,
 				node.server().getProtectionControl().getProtectionMode());
-		assertTrue(node.server().getProtectionControl().getKeyRingSnapshot().isEmpty());
+		assertTrue(node.server().getProtectionControl().getKeyringSnapshot().isEmpty());
 		assertTrue(node.server().getDiagnostics()
-				.getProtectionKeyRingFingerprint().isEmpty());
+				.getProtectionKeyringFingerprint().isEmpty());
 	}
 
 	private static void assertStopped(ApplicationNode node) {
@@ -517,7 +517,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		assertTrue(diagnostics.getBoundAddress().isEmpty());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		assertEquals(0, diagnostics.getActiveRequestStreams());
 		assertEquals(0, diagnostics.getActiveSubscriptions());
 		assertFrameworkProtectionDisabled(node);
@@ -586,14 +586,14 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				McpLocalizationRevision.fromValue(revision), localizedNames);
 	}
 
-	private static ApplicationCursorKeyRing cursorKeyRing(int seed) {
+	private static ApplicationCursorKeyring cursorKeyring(int seed) {
 		byte[] active = new byte[32];
 		byte[] verification = new byte[32];
 		for (int index = 0; index < active.length; ++index) {
 			active[index] = (byte) (seed + index);
 			verification[index] = (byte) (seed + 64 + index);
 		}
-		return new ApplicationCursorKeyRing("cursor-k2", Map.of(
+		return new ApplicationCursorKeyring("cursor-k2", Map.of(
 				"cursor-k1", verification,
 				"cursor-k2", active));
 	}
@@ -623,7 +623,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		private final String name;
 		private final ReplicatedCatalogRepository repository;
 		private final TranslationSnapshot translations;
-		private final ApplicationCursorKeyRing keyRing;
+		private final ApplicationCursorKeyring keyring;
 		private final SignedLocalizedCursorCodec codec;
 		private final Instant now;
 		private final CopyOnWriteArrayList<ProviderObservation>
@@ -643,32 +643,30 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		private ApplicationNode(String name,
 				ReplicatedCatalogRepository repository,
 				TranslationSnapshot translations,
-				ApplicationCursorKeyRing keyRing) {
-			this(name, repository, translations, keyRing, NOW);
+				ApplicationCursorKeyring keyring) {
+			this(name, repository, translations, keyring, NOW);
 		}
 
 		private ApplicationNode(String name,
 				ReplicatedCatalogRepository repository,
 				TranslationSnapshot translations,
-				ApplicationCursorKeyRing keyRing, Instant now) {
+				ApplicationCursorKeyring keyring, Instant now) {
 			this.name = requireClaimText(name);
 			this.repository = requireNonNull(repository);
 			this.translations = requireNonNull(translations);
-			this.keyRing = requireNonNull(keyRing);
-			this.codec = new SignedLocalizedCursorCodec(keyRing);
+			this.keyring = requireNonNull(keyring);
+			this.codec = new SignedLocalizedCursorCodec(keyring);
 			this.now = requireNonNull(now);
 		}
 
 		private SimulatorConfig config() {
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"localized-cursor-fixture", "1.0").build())
-					.resource(McpResourceRegistration.withUriTemplateAndName(
+					.addResource(McpResourceRegistration.withUriTemplateAndName(
 							"app-resource://catalog/{id}", "catalog-resource")
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
-											McpResourceOutput.builder()
-													.content(McpTextResourceContents
+											McpResourceOutput.withContent(McpTextResourceContents
 															.withUriAndText(
 																	resource.getUri(), "unused")
 															.build())
@@ -677,8 +675,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 					.resourceListHandler(this::page)
 					.build();
 			McpLocalizer localizer = McpLocalizer
-					.withFallbackLocale(Locale.ENGLISH)
-					.contextProvider(this::localizationContext)
+					.withFallbackLocale(Locale.ENGLISH,
+							this::localizationContext)
 					.build();
 			McpEndpointRegistry endpointRegistry =
 					McpEndpointRegistry.fromEndpoints(List.of(endpoint));
@@ -763,9 +761,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			this.providerObservations.add(new ProviderObservation(this.name, requestId,
 					cursor, recognized.isPresent(), pinnedLocale.isPresent(), locale,
 					this.translations.revision().getValue()));
-			return McpLocalizationContext.withLocale(locale)
+			return McpLocalizationContext.withLocale(locale, text -> McpLocalizationResult.useDefaultText())
 					.revision(this.translations.revision())
-					.localizer(text -> McpLocalizationResult.useDefaultText())
 					.build();
 		}
 
@@ -828,7 +825,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			McpResourcePage.Builder page = McpResourcePage.builder();
 			for (ResourceRecord record
 					: snapshot.records().subList(claims.offset(), end))
-				page.resource(McpResourceDescriptor.withUriAndName(record.uri(),
+				page.addResource(McpResourceDescriptor.withUriAndName(record.uri(),
 						this.translations.localizedName(
 								localization.getLocale(), record.id())).build());
 			if (end < snapshot.records().size()) {
@@ -848,8 +845,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			return this.repository;
 		}
 
-		private ApplicationCursorKeyRing keyRing() {
-			return this.keyRing;
+		private ApplicationCursorKeyring keyring() {
+			return this.keyring;
 		}
 
 		private SignedLocalizedCursorCodec codec() {
@@ -994,11 +991,11 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		}
 	}
 
-	private static final class ApplicationCursorKeyRing {
+	private static final class ApplicationCursorKeyring {
 		private final String activeKeyId;
 		private final Map<String, byte[]> keys;
 
-		private ApplicationCursorKeyRing(String activeKeyId,
+		private ApplicationCursorKeyring(String activeKeyId,
 				Map<String, byte[]> keys) {
 			this.activeKeyId = requireKeyId(activeKeyId);
 			LinkedHashMap<String, byte[]> copied = new LinkedHashMap<>();
@@ -1025,7 +1022,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 					: Optional.of(material.clone());
 		}
 
-		private boolean hasSameConfiguration(ApplicationCursorKeyRing other) {
+		private boolean hasSameConfiguration(ApplicationCursorKeyring other) {
 			if (!this.activeKeyId.equals(other.activeKeyId)
 					|| !this.keys.keySet().equals(other.keys.keySet()))
 				return false;
@@ -1044,16 +1041,16 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		private static final byte[] HMAC_DOMAIN =
 				"soklet-example-localized-resource-cursor-v1"
 						.getBytes(StandardCharsets.US_ASCII);
-		private final ApplicationCursorKeyRing keyRing;
+		private final ApplicationCursorKeyring keyring;
 
-		private SignedLocalizedCursorCodec(ApplicationCursorKeyRing keyRing) {
-			this.keyRing = requireNonNull(keyRing);
+		private SignedLocalizedCursorCodec(ApplicationCursorKeyring keyring) {
+			this.keyring = requireNonNull(keyring);
 		}
 
 		private String issue(CursorClaims claims, IdentityBinding binding) {
 			byte[] payload = encode(requireNonNull(claims));
-			String keyId = this.keyRing.activeKeyId();
-			byte[] key = this.keyRing.key(keyId).orElseThrow();
+			String keyId = this.keyring.activeKeyId();
+			byte[] key = this.keyring.key(keyId).orElseThrow();
 			try {
 				Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
 				return keyId + '.' + encoder.encodeToString(payload) + '.'
@@ -1087,7 +1084,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 						|| lastSeparator == cursor.length() - 1)
 					throw invalidCursor();
 				String keyId = requireKeyId(cursor.substring(0, firstSeparator));
-				byte[] key = this.keyRing.key(keyId).orElseThrow(
+				byte[] key = this.keyring.key(keyId).orElseThrow(
 						McpLocalizedCursorFleetApplicationPatternsTests::invalidCursor);
 				try {
 					Base64.Decoder decoder = Base64.getUrlDecoder();

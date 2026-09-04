@@ -42,7 +42,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @FunctionalInterface
 public interface McpLocalizationContextProvider {
 	/**
-	 * Creates the immutable localization context for one admitted
+	 * Provides the immutable localization context for one admitted
 	 * localization-capable operation.
 	 *
 	 * @param request bounded localization inputs and admitted request context
@@ -53,6 +53,6 @@ public interface McpLocalizationContextProvider {
 	 * response-throwable, or cause surfaces
 	 */
 	@NonNull
-	McpLocalizationContext createContext(
+	McpLocalizationContext provideContext(
 			@NonNull McpLocalizationRequest request) throws Exception;
 }

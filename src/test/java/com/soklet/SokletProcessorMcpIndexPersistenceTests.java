@@ -72,6 +72,34 @@ public class SokletProcessorMcpIndexPersistenceTests {
 	}
 
 	@Test
+	void staleFormatThreeSidecarRequiresCleanRegeneration(
+			@TempDir Path temporaryDirectory) throws IOException {
+		Fixture fixture = createFixture(temporaryDirectory);
+		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint()),
+				"-Asoklet.cacheMode=sidecar"));
+		Path classOutputIndex = classOutputIndex(fixture.classDirectory());
+		Path sidecar = sidecarPath(fixture.classDirectory());
+		assertIndexVersion(classOutputIndex, "4");
+		assertIndexVersion(sidecar, "4");
+
+		Files.delete(classOutputIndex);
+		List<String> staleRows = Files.readAllLines(sidecar,
+				StandardCharsets.UTF_8).stream()
+				.map(row -> "3" + row.substring(1))
+				.toList();
+		Files.write(sidecar, staleRows, StandardCharsets.UTF_8);
+		Path unrelated = fixture.firstEndpoint().getParent().resolve("Plain.java");
+		Files.writeString(unrelated, """
+				package example;
+				public final class Plain {}
+				""", StandardCharsets.UTF_8);
+
+		Assertions.assertFalse(fixture.compile(List.of(unrelated),
+				"-Asoklet.cacheMode=sidecar"));
+		assertIndexVersion(sidecar, "3");
+	}
+
+	@Test
 	void touchedEndpointWithoutAnnotationIsRemovedFromClassOutputAndSidecar(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Fixture fixture = createFixture(temporaryDirectory);
@@ -309,6 +337,15 @@ public class SokletProcessorMcpIndexPersistenceTests {
 					StandardCharsets.UTF_8));
 		}
 		return names;
+	}
+
+	private static void assertIndexVersion(Path index, String expectedVersion)
+			throws IOException {
+		for (String row : Files.readAllLines(index, StandardCharsets.UTF_8)) {
+			String[] fields = row.split("\\|", -1);
+			Assertions.assertEquals(5, fields.length);
+			Assertions.assertEquals(expectedVersion, fields[0]);
+		}
 	}
 
 	private static List<String> topLevelNames(Path index) throws IOException {

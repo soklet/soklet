@@ -25,45 +25,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Built-in thread-safe in-process MCP subscription-event publisher.
- * <p>
- * Each publisher is independent and reaches only listeners registered with
- * that instance in the current process. It invokes listeners synchronously on
- * the publishing thread. Closing a registration does not wait for a delivery
- * already selected or in flight, which may begin or finish after close returns;
- * no later delivery is selected for the closed registration. A listener should
- * therefore return promptly. If a listener throws a runtime exception, all
- * other current listeners are still attempted before the first exception is
- * rethrown with later exceptions suppressed.
+ * Default thread-safe in-memory MCP subscription-event publisher.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpLocalSubscriptionEventPublisher
+final class DefaultMcpSubscriptionEventPublisher
 		implements McpSubscriptionEventPublisher {
 	@NonNull
 	private final CopyOnWriteArrayList<@NonNull Registration> registrations;
 
-	/**
-	 * Creates an independent process-local publisher with default behavior.
-	 *
-	 * @return process-local event publisher
-	 */
-	@NonNull
-	public static McpLocalSubscriptionEventPublisher fromDefaults() {
-		return new McpLocalSubscriptionEventPublisher();
-	}
-
-	private McpLocalSubscriptionEventPublisher() {
+	DefaultMcpSubscriptionEventPublisher() {
 		this.registrations = new CopyOnWriteArrayList<>();
 	}
 
-	/**
-	 * Registers a listener for synchronous process-local broadcast.
-	 *
-	 * @param listener listener to register
-	 * @return idempotently closable registration
-	 */
 	@Override
 	@NonNull
 	public McpSubscriptionEventRegistration subscribe(
@@ -74,13 +49,6 @@ public final class McpLocalSubscriptionEventPublisher
 		return registration;
 	}
 
-	/**
-	 * Broadcasts an event synchronously to every current listener.
-	 *
-	 * @param event event to broadcast
-	 * @throws RuntimeException after all listeners have been attempted if one or
-	 *                          more listeners fail
-	 */
 	@Override
 	public void publish(@NonNull McpSubscriptionEvent event) {
 		requireNonNull(event);
@@ -105,23 +73,18 @@ public final class McpLocalSubscriptionEventPublisher
 		this.registrations.remove(registration);
 	}
 
-	/**
-	 * One idempotently closable process-local listener registration.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
 	@ThreadSafe
 	private static final class Registration
 			implements McpSubscriptionEventRegistration {
 		@NonNull
-		private final McpLocalSubscriptionEventPublisher publisher;
+		private final DefaultMcpSubscriptionEventPublisher publisher;
 		@NonNull
 		private final McpSubscriptionEventListener listener;
 		@NonNull
 		private final AtomicBoolean open;
 
 		private Registration(
-				@NonNull McpLocalSubscriptionEventPublisher publisher,
+				@NonNull DefaultMcpSubscriptionEventPublisher publisher,
 				@NonNull McpSubscriptionEventListener listener) {
 			this.publisher = requireNonNull(publisher);
 			this.listener = requireNonNull(listener);

@@ -25,7 +25,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Java result.
  *
  * <p>Soklet derives the output schema and intrinsic conversion plan from the
- * result type declared by {@link McpToolRegistration.NamedBuilder#types(
+ * result type declared by {@link McpToolRegistration.ArgumentTypeStage#argumentAndOutputTypes(
  * Class, Class)}. A bare {@link String} result type is rejected; return prose
  * through an advanced {@link McpToolHandler} and
  * {@link McpCompleteResult#fromToolText(String)} instead.

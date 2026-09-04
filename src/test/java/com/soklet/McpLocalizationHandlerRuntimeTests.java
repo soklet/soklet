@@ -67,8 +67,7 @@ class McpLocalizationHandlerRuntimeTests {
 		AtomicReference<Object> handlerObserved = new AtomicReference<>();
 		AtomicReference<Object> interceptorObserved = new AtomicReference<>();
 
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					contexts.incrementAndGet();
 					McpLocalizationContext context = context(Locale.FRENCH);
 					created.set(context);
@@ -116,8 +115,7 @@ class McpLocalizationHandlerRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		List<Throwable> observedThrowables = new CopyOnWriteArrayList<>();
 
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					throw new AssertionError("secret-provider-detail");
 				})
 				.build();
@@ -151,16 +149,14 @@ class McpLocalizationHandlerRuntimeTests {
 		AtomicReference<Object> promptObserved = new AtomicReference<>();
 		AtomicReference<Object> resourceObserved = new AtomicReference<>();
 
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					contexts.incrementAndGet();
 					return context(Locale.FRENCH);
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("handler-context", "1.0").build())
-				.prompt(McpPromptRegistration.withName("context.prompt")
+				.addPrompt(McpPromptRegistration.withName("context.prompt")
 						.handler((request, promptContext, features) -> {
 							promptObserved.set(features
 									.find(McpLocalizationContext.class).orElse(null));
@@ -168,14 +164,13 @@ class McpLocalizationHandlerRuntimeTests {
 									McpPromptOutput.fromMessages());
 						})
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("handler://text"), "text")
 						.handler((request, resource, features) -> {
 							resourceObserved.set(features
 									.find(McpLocalizationContext.class).orElse(null));
 							return McpCompleteResult.fromResourceOutput(
-									McpResourceOutput.builder()
-											.content(McpTextResourceContents
+									McpResourceOutput.withContent(McpTextResourceContents
 													.withUriAndText(URI.create(
 															"handler://text"),
 															"resource complete")
@@ -204,15 +199,13 @@ class McpLocalizationHandlerRuntimeTests {
 		List<Optional<String>> observedCursors = new CopyOnWriteArrayList<>();
 		List<Locale.LanguageRange> observedRanges = new CopyOnWriteArrayList<>();
 
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observedCursors.add(request.getResourceListCursor());
 					observedRanges.addAll(request.getLanguageRanges());
 					return context(Locale.FRENCH);
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("handler-cursor", "1.0").build())
 				.resourceListHandler((request, list, features) -> {
 					assertTrue(features.find(McpLocalizationContext.class)
@@ -239,8 +232,7 @@ class McpLocalizationHandlerRuntimeTests {
 	}
 
 	private static McpLocalizationContext context(Locale locale) {
-		return McpLocalizationContext.withLocale(locale)
-				.localizer(text -> McpLocalizationResult.useDefaultText())
+		return McpLocalizationContext.withLocale(locale, text -> McpLocalizationResult.useDefaultText())
 				.build();
 	}
 
@@ -250,11 +242,10 @@ class McpLocalizationHandlerRuntimeTests {
 	}
 
 	private static McpEndpoint endpoint(FeaturesProbe probe) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("handler-context", "1.0").build())
-				.tool(McpToolRegistration.withName("context.tool")
-						.jsonArguments()
+				.addTool(McpToolRegistration.withName("context.tool")
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							probe.observe(features);
 							return McpCompleteResult.fromToolText("tool complete");

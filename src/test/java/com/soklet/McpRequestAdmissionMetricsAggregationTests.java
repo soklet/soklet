@@ -323,16 +323,13 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint
-				.withPath("/mcp/request-admission-metrics")
-				.serverInformation(McpImplementation.withNameAndVersion(
+				.withPath("/mcp/request-admission-metrics",
+						McpImplementation.withNameAndVersion(
 						"request-admission-metrics-test", "4.0.0")
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

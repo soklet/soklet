@@ -333,17 +333,13 @@ final class SokletApplicationObservationTests {
 				transitions.add("did-stop-soklet");
 			}
 		};
-		McpEndpoint mcpEndpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint mcpEndpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"mixed-observation-test", "4.0.0").build())
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(http)
 				.sseServer(SseServer.withPort(0).build())
-				.mcpServer(McpServer.withPort(0)
-						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-								List.of(mcpEndpoint)))
-						.admissionController(
-								McpAdmissionController.acceptAllInstance())
+				.mcpServer(McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+								List.of(mcpEndpoint)), McpAdmissionController.acceptAllInstance())
 						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(
@@ -1011,13 +1007,10 @@ final class SokletApplicationObservationTests {
 	@NonNull
 	private static SokletConfig realMixedTransportConfig(
 			@NonNull LifecycleObserver observer) {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"observation-test", "4.0.0").build())
 				.build();
-		McpServer mcpServer = McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.build();
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build())

@@ -188,13 +188,10 @@ public class SokletConfigTests {
 
 	@NonNull
 	private static McpServer newMcpServer() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion("test-server", "1.0").build())
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test-server", "1.0").build())
 				.build();
 
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.build();
 	}
 

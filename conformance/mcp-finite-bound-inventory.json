@@ -695,7 +695,7 @@
     },
     {
       "boundaryTests": [
-        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java#localizerUsesStagedConstructionAndReviewedBounds",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java#localizerUsesDirectConstructionAndNullableDefaultResets",
         "src/test/java/com/soklet/McpLocalizationRendererTests.java#aReplacementOverTheCharacterLimitFailsBeforeRetentionAndLaterSlots",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureRuntimeTests.java#cumulativeByteBudgetNeverRefundsAndAllowsExactEquality"
       ],
@@ -1301,9 +1301,9 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/McpServer.java",
-          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL",
+          "member": "DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION",
           "owner": "com.soklet.McpServer.Builder"
         },
         {
@@ -1343,9 +1343,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
-          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#maximumSubscriptionsPerPrincipal",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#maximumSubscriptionsPerPartition",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "maximumSubscriptionsPerPrincipal",
+          "member": "maximumSubscriptionsPerPartition",
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
         },
         {
@@ -1357,9 +1357,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpServer.java",
-          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumSubscriptionsPerPrincipal(Integer)",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumSubscriptionsPerPartition(Integer)",
           "matcherRuleId": "FINITE-MATCH-003",
-          "member": "maximumSubscriptionsPerPrincipal(Integer)",
+          "member": "maximumSubscriptionsPerPartition(Integer)",
           "owner": "com.soklet.McpServer.Builder"
         },
         {
@@ -1430,7 +1430,7 @@
         },
         {
           "accounting": "active subscriptions per admission partition and endpoint",
-          "key": "queue.subscriptions-per-principal",
+          "key": "queue.subscriptions-per-partition",
           "unit": "SUBSCRIPTIONS",
           "value": "32"
         }
@@ -2238,9 +2238,9 @@
     {
       "file": "src/main/java/com/soklet/McpAdmissionIdentity.java",
       "id": "FINITE-EX-003",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpAdmissionIdentity.java#com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpAdmissionIdentity.java#com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "member": "MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "member": "MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
       "owner": "com.soklet.McpAdmissionIdentity",
       "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     },
@@ -2265,18 +2265,18 @@
     {
       "file": "src/main/java/com/soklet/McpProtectionConfig.java",
       "id": "FINITE-EX-006",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_SIZE_IN_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "member": "DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES",
+      "member": "DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_SIZE_IN_BYTES",
       "owner": "com.soklet.McpProtectionConfig",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
       "file": "src/main/java/com/soklet/McpProtectionConfig.java",
       "id": "FINITE-EX-007",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_SIZE_IN_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "member": "DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES",
+      "member": "DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_SIZE_IN_BYTES",
       "owner": "com.soklet.McpProtectionConfig",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
@@ -2355,9 +2355,9 @@
     {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpAdmissionDecision.java",
       "id": "FINITE-EX-016",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpAdmissionDecision.java#com.soklet.internal.mcp.protocol.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpAdmissionDecision.java#com.soklet.internal.mcp.protocol.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "member": "MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "member": "MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
       "owner": "com.soklet.internal.mcp.protocol.McpAdmissionIdentity",
       "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     },
@@ -2544,18 +2544,18 @@
     {
       "file": "src/main/java/com/soklet/McpProtectionConfig.java",
       "id": "FINITE-EX-037",
-      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumDecodedRequestStateBytes(Integer)",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumDecodedRequestStateSizeInBytes(Integer)",
       "matcherRuleId": "FINITE-MATCH-003",
-      "member": "maximumDecodedRequestStateBytes(Integer)",
+      "member": "maximumDecodedRequestStateSizeInBytes(Integer)",
       "owner": "com.soklet.McpProtectionConfig.Builder",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
       "file": "src/main/java/com/soklet/McpProtectionConfig.java",
       "id": "FINITE-EX-038",
-      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumEncodedRequestStateBytes(Integer)",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumEncodedRequestStateSizeInBytes(Integer)",
       "matcherRuleId": "FINITE-MATCH-003",
-      "member": "maximumEncodedRequestStateBytes(Integer)",
+      "member": "maximumEncodedRequestStateSizeInBytes(Integer)",
       "owner": "com.soklet.McpProtectionConfig.Builder",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },

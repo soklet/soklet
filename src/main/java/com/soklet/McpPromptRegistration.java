@@ -52,7 +52,7 @@ public final class McpPromptRegistration {
 	@NonNull
 	private final List<@NonNull McpIcon> icons;
 	@NonNull
-	private final List<@NonNull McpPromptArgumentDefinition> arguments;
+	private final List<@NonNull McpPromptArgumentDeclaration> arguments;
 	@NonNull
 	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
 	@NonNull
@@ -70,8 +70,8 @@ public final class McpPromptRegistration {
 	 * @throws IllegalArgumentException if {@code name} is blank
 	 */
 	@NonNull
-	public static NamedBuilder withName(@NonNull String name) {
-		return new NamedBuilder(requireName(name));
+	public static HandlerStage withName(@NonNull String name) {
+		return new HandlerStage(requireName(name));
 	}
 
 	private McpPromptRegistration(@NonNull Builder builder) {
@@ -111,9 +111,9 @@ public final class McpPromptRegistration {
 		return this.icons;
 	}
 
-	/** @return immutable argument definitions in registration order */
+	/** @return immutable argument declarations in registration order */
 	@NonNull
-	public List<@NonNull McpPromptArgumentDefinition> getArguments() {
+	public List<@NonNull McpPromptArgumentDeclaration> getArguments() {
 		return this.arguments;
 	}
 
@@ -161,9 +161,9 @@ public final class McpPromptRegistration {
 		requireNonNull(rawArguments);
 		requireNonNull(features);
 
-		Map<String, McpPromptArgumentDefinition> definitions =
+		Map<String, McpPromptArgumentDeclaration> definitions =
 				new LinkedHashMap<>();
-		for (McpPromptArgumentDefinition argument : this.arguments)
+		for (McpPromptArgumentDeclaration argument : this.arguments)
 			definitions.put(argument.getName(), argument);
 
 		Map<String, String> values = new LinkedHashMap<>();
@@ -174,7 +174,7 @@ public final class McpPromptRegistration {
 				throw new McpInvalidPromptArgumentsException();
 			values.put(entry.getKey(), string.getValue());
 		}
-		for (McpPromptArgumentDefinition argument : this.arguments) {
+		for (McpPromptArgumentDeclaration argument : this.arguments) {
 			if (argument.isRequired() && !values.containsKey(argument.getName()))
 				throw new McpInvalidPromptArgumentsException();
 		}
@@ -194,11 +194,11 @@ public final class McpPromptRegistration {
 	}
 
 	@NonNull
-	private static List<@NonNull McpPromptArgumentDefinition> immutableArguments(
-			@NonNull List<@NonNull McpPromptArgumentDefinition> arguments) {
-		List<McpPromptArgumentDefinition> copied = List.copyOf(arguments);
+	private static List<@NonNull McpPromptArgumentDeclaration> immutableArguments(
+			@NonNull List<@NonNull McpPromptArgumentDeclaration> arguments) {
+		List<McpPromptArgumentDeclaration> copied = List.copyOf(arguments);
 		Set<String> names = new LinkedHashSet<>();
-		for (McpPromptArgumentDefinition argument : copied) {
+		for (McpPromptArgumentDeclaration argument : copied) {
 			if (!names.add(argument.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP prompt argument name: "
@@ -213,11 +213,11 @@ public final class McpPromptRegistration {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class NamedBuilder {
+	public static final class HandlerStage {
 		@NonNull
 		private final String name;
 
-		private NamedBuilder(@NonNull String name) {
+		private HandlerStage(@NonNull String name) {
 			this.name = requireNonNull(name);
 		}
 
@@ -251,7 +251,7 @@ public final class McpPromptRegistration {
 		@NonNull
 		private final List<@NonNull McpIcon> icons = new ArrayList<>();
 		@NonNull
-		private final List<@NonNull McpPromptArgumentDefinition> arguments =
+		private final List<@NonNull McpPromptArgumentDeclaration> arguments =
 				new ArrayList<>();
 		@NonNull
 		private final List<@NonNull McpInputRequestDeclaration>
@@ -283,20 +283,43 @@ public final class McpPromptRegistration {
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder icon(@NonNull McpIcon icon) {
+		public Builder addIcon(@NonNull McpIcon icon) {
 			this.icons.add(requireNonNull(icon));
 			return this;
 		}
 
-		/** @param argument argument definition to append
-		 * @return this builder */
+		/**
+		 * Appends one prompt-argument declaration.
+		 *
+		 * @param argument argument declaration
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder argument(
-				@NonNull McpPromptArgumentDefinition argument) {
+		public Builder addArgument(
+				@NonNull McpPromptArgumentDeclaration argument) {
 			this.arguments.add(requireNonNull(argument));
+			return this;
+		}
+
+		/**
+		 * Appends one input-request declaration for this prompt operation.
+		 *
+		 * @param inputRequestDeclaration declaration to append
+		 * @return this builder
+		 * @throws NullPointerException if the declaration is null
+		 */
+		@NonNull
+		public Builder addInputRequestDeclaration(
+				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
+			this.inputRequestDeclarations.add(
+					requireNonNull(inputRequestDeclaration));
 			return this;
 		}
 
@@ -310,7 +333,7 @@ public final class McpPromptRegistration {
 		 * @throws NullPointerException if the array or a declaration is null
 		 */
 		@NonNull
-		public Builder mayRequestInput(
+		public Builder addInputRequestDeclarations(
 				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
 			requireNonNull(declarations);
 			List<McpInputRequestDeclaration> copiedDeclarations =

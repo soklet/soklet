@@ -99,7 +99,7 @@ record McpAdmissionContext(@NonNull Request request,
  */
 @ThreadSafe
 final class McpAdmissionIdentity {
-	static final int MAXIMUM_PARTITION_KEY_UTF_8_BYTES = 256;
+	static final int MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES = 256;
 	@NonNull
 	private static final McpAdmissionIdentity ANONYMOUS = new McpAdmissionIdentity(
 			Optional.of("anonymous"), Optional.empty(), Optional.empty(), Optional.empty());
@@ -185,9 +185,9 @@ final class McpAdmissionIdentity {
 					name + " must contain valid Unicode text", exception);
 		}
 
-		if (encodedLength > MAXIMUM_PARTITION_KEY_UTF_8_BYTES)
+		if (encodedLength > MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES)
 			throw new IllegalArgumentException(name + " must contain at most "
-					+ MAXIMUM_PARTITION_KEY_UTF_8_BYTES + " UTF-8 bytes");
+					+ MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES + " UTF-8 bytes");
 		return value;
 	}
 

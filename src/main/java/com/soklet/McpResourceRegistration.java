@@ -69,7 +69,7 @@ public final class McpResourceRegistration {
 	@Nullable
 	private final McpContentAnnotations annotations;
 	@Nullable
-	private final Long size;
+	private final Long sizeInBytes;
 	@NonNull
 	private final McpCachePolicy cachePolicy;
 	@NonNull
@@ -99,9 +99,9 @@ public final class McpResourceRegistration {
 	 * not in ASCII wire form, or the name is blank
 	 */
 	@NonNull
-	public static ExactNamedBuilder withUriAndName(@NonNull URI uri,
+	public static ExactHandlerStage withUriAndName(@NonNull URI uri,
 			@NonNull String name) {
-		return new ExactNamedBuilder(requireExactUri(uri), requireName(name));
+		return new ExactHandlerStage(requireExactUri(uri), requireName(name));
 	}
 
 	/**
@@ -125,9 +125,9 @@ public final class McpResourceRegistration {
 	 * validation or the name is blank
 	 */
 	@NonNull
-	public static TemplateNamedBuilder withUriTemplateAndName(
+	public static TemplateHandlerStage withUriTemplateAndName(
 			@NonNull String uriTemplate, @NonNull String name) {
-		return new TemplateNamedBuilder(
+		return new TemplateHandlerStage(
 				requireBasicUriTemplate(uriTemplate), requireName(name));
 	}
 
@@ -141,7 +141,7 @@ public final class McpResourceRegistration {
 		this.mimeType = state.mimeType;
 		this.icons = List.copyOf(state.icons);
 		this.annotations = state.annotations;
-		this.size = state.size;
+		this.sizeInBytes = state.sizeInBytes;
 		this.cachePolicy = state.cachePolicy;
 		this.inputRequestDeclarations =
 				List.copyOf(state.inputRequestDeclarations);
@@ -210,8 +210,8 @@ public final class McpResourceRegistration {
 	 * @return nonnegative byte count, or empty when omitted or templated
 	 */
 	@NonNull
-	public Optional<@NonNull Long> getSize() {
-		return Optional.ofNullable(this.size);
+	public Optional<@NonNull Long> getSizeInBytes() {
+		return Optional.ofNullable(this.sizeInBytes);
 	}
 
 	/** @return fixed scope and default time to live for resource reads */
@@ -319,13 +319,13 @@ public final class McpResourceRegistration {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class ExactNamedBuilder {
+	public static final class ExactHandlerStage {
 		@NonNull
 		private final URI uri;
 		@NonNull
 		private final String name;
 
-		private ExactNamedBuilder(@NonNull URI uri, @NonNull String name) {
+		private ExactHandlerStage(@NonNull URI uri, @NonNull String name) {
 			this.uri = requireNonNull(uri);
 			this.name = requireNonNull(name);
 		}
@@ -349,13 +349,13 @@ public final class McpResourceRegistration {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class TemplateNamedBuilder {
+	public static final class TemplateHandlerStage {
 		@NonNull
 		private final String uriTemplate;
 		@NonNull
 		private final String name;
 
-		private TemplateNamedBuilder(@NonNull String uriTemplate,
+		private TemplateHandlerStage(@NonNull String uriTemplate,
 				@NonNull String name) {
 			this.uriTemplate = requireNonNull(uriTemplate);
 			this.name = requireNonNull(name);
@@ -413,10 +413,14 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public ExactBuilder icon(@NonNull McpIcon icon) {
+		public ExactBuilder addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -433,18 +437,18 @@ public final class McpResourceRegistration {
 		/**
 		 * Sets the exact resource's size in bytes.
 		 *
-		 * @param size nonnegative byte count
+		 * @param sizeInBytes nonnegative byte count
 		 * @return this builder
-		 * @throws NullPointerException if {@code size} is null
-		 * @throws IllegalArgumentException if {@code size} is negative
+		 * @throws NullPointerException if {@code sizeInBytes} is null
+		 * @throws IllegalArgumentException if {@code sizeInBytes} is negative
 		 */
 		@NonNull
-		public ExactBuilder size(@NonNull Long size) {
-			requireNonNull(size);
-			if (size < 0)
+		public ExactBuilder sizeInBytes(@NonNull Long sizeInBytes) {
+			requireNonNull(sizeInBytes);
+			if (sizeInBytes < 0)
 				throw new IllegalArgumentException(
 						"MCP resource sizes must not be negative.");
-			this.state.size = size;
+			this.state.sizeInBytes = sizeInBytes;
 			return this;
 		}
 
@@ -453,6 +457,21 @@ public final class McpResourceRegistration {
 		@NonNull
 		public ExactBuilder cachePolicy(@NonNull McpCachePolicy cachePolicy) {
 			this.state.cachePolicy = requireNonNull(cachePolicy);
+			return this;
+		}
+
+		/**
+		 * Appends one input-request declaration for this resource operation.
+		 *
+		 * @param inputRequestDeclaration declaration to append
+		 * @return this builder
+		 * @throws NullPointerException if the declaration is null
+		 */
+		@NonNull
+		public ExactBuilder addInputRequestDeclaration(
+				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
+			this.state.inputRequestDeclarations.add(
+					requireNonNull(inputRequestDeclaration));
 			return this;
 		}
 
@@ -466,7 +485,7 @@ public final class McpResourceRegistration {
 		 * @throws NullPointerException if the array or a declaration is null
 		 */
 		@NonNull
-		public ExactBuilder mayRequestInput(
+		public ExactBuilder addInputRequestDeclarations(
 				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
 			appendInputRequestDeclarations(this.state, declarations);
 			return this;
@@ -542,10 +561,14 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public TemplateBuilder icon(@NonNull McpIcon icon) {
+		public TemplateBuilder addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -569,6 +592,21 @@ public final class McpResourceRegistration {
 		}
 
 		/**
+		 * Appends one input-request declaration for this resource operation.
+		 *
+		 * @param inputRequestDeclaration declaration to append
+		 * @return this builder
+		 * @throws NullPointerException if the declaration is null
+		 */
+		@NonNull
+		public TemplateBuilder addInputRequestDeclaration(
+				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
+			this.state.inputRequestDeclarations.add(
+					requireNonNull(inputRequestDeclaration));
+			return this;
+		}
+
+		/**
 		 * Appends input-request declarations for this resource operation.
 		 *
 		 * <p>Repeated calls append declarations in order.
@@ -578,7 +616,7 @@ public final class McpResourceRegistration {
 		 * @throws NullPointerException if the array or a declaration is null
 		 */
 		@NonNull
-		public TemplateBuilder mayRequestInput(
+		public TemplateBuilder addInputRequestDeclarations(
 				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
 			appendInputRequestDeclarations(this.state, declarations);
 			return this;
@@ -645,7 +683,7 @@ public final class McpResourceRegistration {
 		@Nullable
 		private McpContentAnnotations annotations;
 		@Nullable
-		private Long size;
+		private Long sizeInBytes;
 		@NonNull
 		private McpCachePolicy cachePolicy =
 				McpCachePolicy.privateNoCacheInstance();

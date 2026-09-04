@@ -140,21 +140,21 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	public void nestedToolPromptAndResourceOutputRejectBeforeOutputConstruction() {
 		McpJsonObject reserved = reservedMetadata();
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpToolOutput.builder().content(McpEmbeddedResource.withResource(
+				McpToolOutput.builder().addContent(McpEmbeddedResource.withResource(
 						McpTextResourceContents.withUriAndText(
 								URI.create("test://nested/tool-text"), "secret")
 								.metadata(reserved).build()).build()).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpToolOutput.builder().content(McpEmbeddedResource.withResource(
+				McpToolOutput.builder().addContent(McpEmbeddedResource.withResource(
 						McpBlobResourceContents.withUriAndData(
 								URI.create("test://nested/tool-blob"), new byte[] { 1 })
 								.metadata(reserved).build()).build()).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpPromptOutput.builder().message(
+				McpPromptOutput.builder().addMessage(
 						McpPromptMessage.fromAssistantContent(McpTextContent
 								.withText("secret").metadata(reserved).build())).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpResourceOutput.builder().content(McpTextResourceContents
+				McpResourceOutput.withContent(McpTextResourceContents
 						.withUriAndText(RESOURCE_URI, "secret")
 						.metadata(reserved).build()).build());
 	}
@@ -162,19 +162,16 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	@Test
 	public void handlerFailuresProduceOnlyGenericToolPromptAndResourceErrors()
 			throws Exception {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"metadata-reserved-namespace-test",
 						"4.0.0").build())
-				.tool(invalidNestedTextTool())
-				.tool(invalidNestedBlobTool())
-				.prompt(invalidPrompt())
-				.resource(invalidResource())
+				.addTool(invalidNestedTextTool())
+				.addTool(invalidNestedBlobTool())
+				.addPrompt(invalidPrompt())
+				.addResource(invalidResource())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -211,10 +208,10 @@ public class McpMetadataBuilderReservedNamespaceTests {
 
 	private static McpToolRegistration<McpJsonObject> invalidNestedTextTool() {
 		return McpToolRegistration.withName("reserved.nested-text")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-								.content(McpEmbeddedResource.withResource(
+								.addContent(McpEmbeddedResource.withResource(
 										McpTextResourceContents.withUriAndText(
 												URI.create("test://handler/tool-text"),
 												SECRET_VALUE)
@@ -225,10 +222,10 @@ public class McpMetadataBuilderReservedNamespaceTests {
 
 	private static McpToolRegistration<McpJsonObject> invalidNestedBlobTool() {
 		return McpToolRegistration.withName("reserved.nested-blob")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-								.content(McpEmbeddedResource.withResource(
+								.addContent(McpEmbeddedResource.withResource(
 										McpBlobResourceContents.withUriAndData(
 												URI.create("test://handler/tool-blob"),
 												SECRET_VALUE.getBytes(StandardCharsets.UTF_8))
@@ -241,7 +238,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 		return McpPromptRegistration.withName("reserved.prompt")
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-								.message(McpPromptMessage.fromAssistantContent(
+								.addMessage(McpPromptMessage.fromAssistantContent(
 										McpTextContent.withText(SECRET_VALUE)
 												.metadata(reservedMetadata()).build()))
 								.build()))
@@ -252,8 +249,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 		return McpResourceRegistration.withUriAndName(RESOURCE_URI,
 				"Reserved metadata resource")
 				.handler((request, resource, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										resource.getUri(), SECRET_VALUE)
 										.metadata(reservedMetadata()).build())
 								.build()))

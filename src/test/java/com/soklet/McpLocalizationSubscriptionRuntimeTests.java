@@ -57,8 +57,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 	void theTerminalFrameIsPreRenderedLocalizedAtSubscriptionOpen() {
 		AtomicInteger contexts = new AtomicInteger();
 		AtomicInteger contextsAtResponse = new AtomicInteger(-1);
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					contexts.incrementAndGet();
 					return context(text -> McpLocalizationResult
 							.localized("FR:" + text.getDefaultText()));
@@ -91,9 +90,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 
 	@Test
 	void useDefaultTextPreRenderFailurePublishesTheCanonicalTerminal() {
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(text ->
-						McpLocalizationResult.failure()))
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(text -> McpLocalizationResult.failure()))
 				.build();
 
 		List<String> frames = subscribeAndDrain(localizer, 2, response ->
@@ -108,8 +106,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 	@Test
 	@Timeout(120)
 	void failRequestPreRenderRollsTheReservationBackExactlyOnce() {
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					throw new IllegalStateException("secret-subscription-detail");
 				})
 				.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
@@ -156,11 +153,11 @@ class McpLocalizationSubscriptionRuntimeTests {
 	}
 
 	private static List<String> subscribeAndDrain(McpLocalizer localizer,
-			int maximumSubscriptionsPerPrincipal, ResponseProbe probe) {
+			int maximumSubscriptionsPerPartition, ResponseProbe probe) {
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
 		SokletSimulator.run(simulatorConfig(localizer,
-				maximumSubscriptionsPerPrincipal), simulator -> {
+				maximumSubscriptionsPerPartition), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
 			escaped.set(simulation);
@@ -209,31 +206,29 @@ class McpLocalizationSubscriptionRuntimeTests {
 	}
 
 	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
-			int maximumSubscriptionsPerPrincipal) {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+			int maximumSubscriptionsPerPartition) {
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-subscription", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						java.net.URI.create("subscription://text"), "text")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(java.net.URI
 																.create("subscription://text"),
 																"unused")
 														.build())
 												.build()))
 						.build())
-				.subscriptions(McpSubscriptionConfig
+				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
-								McpLocalSubscriptionEventPublisher.fromDefaults())
-						.notificationTypes(EnumSet.of(
-								McpSubscriptionNotificationType
-										.RESOURCES_LIST_CHANGED))
+								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+								EnumSet.of(
+										McpSubscriptionNotificationType
+												.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		return SimulatorConfig.builder().mcpServer(0,
@@ -242,8 +237,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 					.host(LOOPBACK)
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
-					.maximumSubscriptionsPerPrincipal(
-							maximumSubscriptionsPerPrincipal)
+					.maximumSubscriptionsPerPartition(
+							maximumSubscriptionsPerPartition)
 					.maximumSubscriptionDuration(Duration.ofMillis(300))
 					.localizer(localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
@@ -251,10 +246,9 @@ class McpLocalizationSubscriptionRuntimeTests {
 	}
 
 	private static McpLocalizationContext context(
-			java.util.function.Function<McpLocalizableText,
-					McpLocalizationResult> provider) {
-		return McpLocalizationContext.withLocale(Locale.FRENCH)
-				.localizer(provider)
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizationContext.withLocale(Locale.FRENCH,
+				localizationLookup)
 				.build();
 	}
 

@@ -49,15 +49,16 @@ exactly which host/tool versions were manually exercised.
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
 `McpLocalizationContext` is a Soklet-owned final request value built through
-`withLocale(...)`, with an optional revision and an application localization
-callback; applications do not implement or subtype it.
+`withLocale(locale, localizationLookup)`, with an optional revision and a
+thread-safe `McpLocalizationLookup` over the captured translation snapshot;
+applications do not implement or subtype the context.
 
 Localization is node-local by design. Ordinary requests may be routed round-
 robin because each node creates a fresh context from the request's portable
 inputs and one response retains one immutable catalog snapshot. A live SSE
 subscription remains on the listener that accepted it; after node loss, the
 client reconnects to a survivor and that node creates a fresh context rather
-than recovering a distributed localization session. `catalogsChanged()` is
+than recovering a distributed localization session. `invalidateCatalogs()` is
 also server-local: after an atomic catalog swap, the application calls it on
 every applicable instance. A rolling activation may temporarily serve
 different revisions on different nodes, while a fleet-atomic cutover requires
@@ -76,8 +77,10 @@ event values are created through factories on their sealed root interfaces.
 Their nested final variants remain public for typed pattern matching and expose
 only conventional getters; applications do not invoke variant constructors.
 Metric aggregate keys use `fromDimensions(...)` and dimension getters. The
-trace-correlation configuration fingerprint is returned by Soklet controls and
-diagnostics and exposes `getValue()`; applications do not construct it.
+trace-correlation fingerprint is returned by
+`McpTraceCorrelationControl.getFingerprint()` and
+`McpServerDiagnostics.getTraceCorrelationFingerprint()`, and exposes
+`getValue()`; applications do not construct it.
 
 The downstream OpenTelemetry metric migration, modern admitted-request span
 policy, naming, parenting, and terminal behavior, and bounded off-network MCP
@@ -90,7 +93,8 @@ and does not cause Soklet to advertise a protocol capability.
 
 ## Server and request model
 
-`McpServer.withPort(...)` always creates an independent listener. A Soklet
+`McpServer.withPort(port, endpointRegistry, admissionController)` creates an
+independent listener and requires its unconditional inputs up front. A Soklet
 application may manage HTTP, SSE, and MCP servers together through the
 corresponding `SokletConfig` builder setters, but each retains its own bind
 address and port.
@@ -132,6 +136,44 @@ The listener binds to `127.0.0.1` by default. Use `host(...)` deliberately for
 a container or remote deployment, and configure the deployment's Host names
 with `allowedHosts(...)`. Soklet does not terminate TLS.
 
+## Construction and builder conventions
+
+MCP construction entrypoints include every unconditional required value. In
+addition to the server and endpoint factories above, the primary forms are:
+
+- `McpResourceOutput.withContent(resourceContents)` for one or more resource
+  values, or `McpResourceOutput.fromContent(resourceContents)` for the common
+  single-value result;
+- `McpInputRequiredResult.withInputRequest(key, inputRequest)`,
+  `withFrameworkRequestState(frameworkRequestState)`, or
+  `withApplicationRequestState(applicationRequestState)`, according to which
+  required value begins the result;
+- `McpLocalizer.withFallbackLocale(fallbackLocale,
+  localizationContextProvider)` and `McpLocalizationContext.withLocale(locale,
+  localizationLookup)`; and
+- `McpSubscriptionConfig.withEventPublisher(subscriptionEventPublisher,
+  notificationTypes)`, where the initial notification-type set is nonempty.
+
+Collection methods use one grammar throughout MCP: `addX(...)` and
+`addXs(...)` append, while a retained plural property setter such as
+`allowedHosts(...)`, `audience(...)`, `sizes(...)`, or
+`notificationTypes(...)` replaces the previous collection. Additive methods
+reject null elements.
+
+For optional or defaulted builder properties, passing null clears the optional
+feature or restores the documented built-in default. This includes server
+host and operational budgets, optional endpoint features, localizer revision,
+protection limits, simulation options, token-bucket refill settings, and
+metrics maps. Required construction values, mode-defining values, and
+additive elements remain non-null. Security-sensitive resets remain secure:
+for example, a null CORS authorizer restores reject-all behavior for present
+origins, and null allowed hosts restores the empty deployment-specific set.
+
+`McpTokenBucketConfig.withCapacity(capacity)` is a complete builder entrypoint.
+Without overrides it replenishes 60 tokens every one minute; passing null to
+`refillTokens(...)` or `refillInterval(...)` restores those values. Capacity
+remains required and has no null reset.
+
 ## Endpoint authoring
 
 ### Annotations
@@ -151,22 +193,57 @@ open to Soklet.
 
 `McpEndpointRegistry.fromClasses(...)` selects generated endpoint classes in an
 explicit order. `fromClasspathIntrospection(...)` loads every generated
-endpoint visible from the context class loader in binary-name order. Both
-forms accept an `InstanceProvider`; the provider is called for each annotated
-operation invocation, not during discovery or catalog listing, and Soklet does
-not retain or close the returned instance.
+endpoint visible from the context class loader in binary-name order. Discovery
+is provider-neutral. Each annotated operation acquires its endpoint instance
+from the `InstanceProvider` on the `SokletConfig` that owns the MCP server, at
+the point of handler invocation. The provider is not called during discovery or
+framework-owned static catalog listing; a custom annotated resource-list handler
+is an operation invocation and therefore does acquire its endpoint instance.
+Soklet does not retain or close the returned instance. This is the same
+application-wide provider used for annotation-created HTTP and SSE resource
+instances. If an application directly invokes a generated registration handler
+outside a Soklet-managed request, no owning configuration exists and the handler
+uses `InstanceProvider.defaultInstance()`.
 
 ### Programmatic registration
 
 Programmatic endpoints use the same immutable runtime model. Start with
-`McpEndpoint.withPath(...)`, provide the required `McpImplementation`, append
-tool, prompt, and resource registrations, and pass the built endpoints to
-`McpEndpointRegistry.fromEndpoints(...)`.
+`McpEndpoint.withPath(path, implementation)`, append tool, prompt, and resource
+registrations with `addTool(...)`, `addPrompt(...)`, and `addResource(...)`,
+and pass the built endpoints to `McpEndpointRegistry.fromEndpoints(...)`.
 
 Registration order is discovery order. Names and resource addresses must be
 unique within one endpoint. The advertised capability set is derived from the
 registrations; there is no separate capability switch that can drift from the
 handlers.
+
+### JSON and content values
+
+`McpJsonObject` and `McpJsonArray` are immutable structural values. Object
+member insertion order does not affect equality or hashing; array element order
+does. Use `McpJsonArray.emptyInstance()` for the shared empty value. Its builder
+accepts JSON values plus `String`, `BigDecimal`, `Integer`, `Long`, `Double`,
+and `Boolean`, and `addNull()` appends JSON `null`. A `Double` must be finite.
+
+The five `McpContentBlock` variants expose `getAnnotations()` and
+`getMetadata()` through the common interface. Their equality and hashing cover
+the complete value, including annotations, metadata, ordered icons, embedded
+resource contents, and image, audio, or embedded-blob bytes. These types do not
+render payload content through `toString()`.
+
+For common construction, `McpPromptMessage.fromUserText(...)` and
+`fromAssistantText(...)` create plain-text prompt messages, and
+`McpResourceLink.fromResourceDescriptor(...)` performs a lossless immutable
+conversion. `McpClientCapabilities.fromJson(...)`,
+`McpRequestStateProtectionContext.fromComponents(...)`,
+`McpTextCoordinate.fromComponents(...)`, and
+`McpLocalizableText.fromCoordinateAndDefaultText(...)` let applications test
+their capability, protection, and localization code without starting a server.
+Soklet still constructs the authoritative request-scoped values used at
+runtime.
+
+`McpToolOutput` structured content remains typed as `McpJsonValue`, not
+`McpJsonObject`, because the target protocol schema permits every JSON value.
 
 ## Tools and typed schemas
 
@@ -177,7 +254,7 @@ before a handler can be supplied:
 | --- | --- |
 | `types(argumentType, resultType)` | The tool always completes with a supported structured Java result. Soklet derives and enforces both schemas and converts in both directions. |
 | `argumentType(argumentType)` | Input should be converted to Java, but the advanced handler needs to return a recognized `McpOperationResult` directly. |
-| `jsonArguments()` | The handler wants the immutable `McpJsonObject` directly. Soklet publishes and enforces the fixed `{"type":"object"}` input schema. |
+| `jsonObjectArguments()` | The handler wants the immutable `McpJsonObject` directly. Soklet publishes and enforces the fixed `{"type":"object"}` input schema. |
 
 Class tokens cover ordinary types; `TypeReference<T>` preserves nested generic
 types such as `List<Item>`. Advanced handlers may produce supported text,
@@ -235,7 +312,7 @@ before allocation and returns sanitized validation failures.
 A prompt is a named, discoverable template that returns ordered user and
 assistant messages. Prompt arguments are strings rather than JSON-Schema
 values. `McpPromptRegistration` declares required/optional
-`McpPromptArgumentDefinition` entries; `@McpPromptArgument` is the annotated
+`McpPromptArgumentDeclaration` entries; `@McpPromptArgument` is the annotated
 equivalent. Missing, duplicate, unknown, or non-string arguments fail before
 the application handler runs.
 
@@ -359,7 +436,40 @@ kept private with a zero TTL; HTTP remains `no-store` in every case.
 Tools, prompt gets, and resource reads may return `McpInputRequiredResult`
 when they need a supported client request, state for a later retry, or both.
 Programmatic operations declare every possible `McpInputRequestDeclaration`
-with `mayRequestInput(...)`; annotated operations use `@McpMayRequestInput`.
+with `addInputRequestDeclaration(...)`; annotated operations use
+`@McpMayRequestInput`. For an annotated operation, `type` derives both the
+JSON-RPC method and its base client capability:
+
+| `McpInputRequestType` | JSON-RPC method | Base capability |
+| --- | --- | --- |
+| `ELICITATION_FORM` | `elicitation/create` | `ELICITATION_FORM` |
+| `ELICITATION_URL` | `elicitation/create` | `ELICITATION_URL` |
+| `SAMPLING` | `sampling/createMessage` | `SAMPLING` |
+| `ROOTS` | `roots/list` | `ROOTS` |
+
+The annotation's optional `samplingCapabilities` may contain only
+`SAMPLING_CONTEXT` and `SAMPLING_TOOLS`, and only when `type` is `SAMPLING`.
+Generated-registration validation rejects all other combinations instead of
+letting an annotation declare a mismatched method and capability set. For
+example:
+
+```text
+@McpTool(name = "catalog.continue",
+    mayRequestInput = @McpMayRequestInput(
+        type = McpInputRequestType.ELICITATION_FORM,
+        requirement = McpInputRequirement.CONDITIONAL))
+public McpOperationResult continueCatalog(...) {
+  // ...
+}
+```
+
+The programmatic factories remain
+`McpInputRequestDeclaration.fromElicitationForm(...)`,
+`fromElicitationUrl(...)`, `fromSampling(...)`, and `fromRoots(...)`. A
+declaration exposes the selected type through `getInputRequestType()`, the
+derived wire method through `getJsonRpcMethod()`, and the complete derived
+capability set through `getCapabilities()`.
+
 Soklet 4.0.x supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
 "latest" profile nor falls back. Active Elicitation is the default teaching surface;
 deprecated compatibility surfaces are documented separately below.
@@ -383,7 +493,9 @@ available through `McpRequestContext.getInputResponses()` as raw
 `McpJsonValue` values or through its intrinsic typed lookup methods. The same
 admitted `McpRequestContext` instance, including verified responses and state,
 is supplied to lifecycle callbacks, the handler interceptor, and the handler
-for that request.
+for that request. These request-data accessors are a required part of the
+framework-owned context contract; they do not have empty compatibility
+defaults that can silently discard retry data.
 
 Wire validation does not establish application semantics. The handler must
 correlate every response key to the request it emitted, handle missing,
@@ -404,11 +516,11 @@ McpInputRequestDeclaration form = McpInputRequestDeclaration.fromElicitationForm
 
 McpToolRegistration<McpJsonObject> tool = McpToolRegistration
   .withName("catalog.continue")
-  .jsonArguments()
+  .jsonObjectArguments()
   .handler((request, arguments, features) -> {
     if (request.getFrameworkRequestState().isEmpty()) {
-      return McpInputRequiredResult.builder()
-        .inputRequest("approval", McpInputRequest.fromDeclaration(
+      return McpInputRequiredResult.withInputRequest(
+          "approval", McpInputRequest.fromDeclaration(
           form, McpJsonObject.builder()
             .put("message", "Approve catalog access?")
 			.put("mode", "form")
@@ -426,7 +538,9 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
     return McpCompleteResult.fromToolText(((McpJsonString)
       state.find("phase").orElseThrow()).getValue());
   })
-  .mayRequestInput(form).requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED).build();
+  .addInputRequestDeclaration(form)
+  .requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+  .build();
 ```
 
 `McpRequestStateMode.NONE` is the default. The other modes have deliberately
@@ -459,9 +573,9 @@ accessors for application tests and result inspection.
 
 Choose framework protection explicitly:
 
-- `McpProtectionConfig.withKeyRing(...)` is the production built-in. Supply
+- `McpProtectionConfig.withKeyring(...)` is the production built-in. Supply
   operator-generated `McpProtectionKey` material through an initial
-  `McpProtectionKeyRing`; each server copies the ring and exposes live rotation
+  `McpProtectionKeyring`; each server copies the ring and exposes live rotation
   through `McpServer.getProtectionControl()`.
 - `withDevelopmentEphemeralProtection()` creates process-local keys and emits
   a startup diagnostic. State cannot survive a restart or move between server
@@ -472,6 +586,12 @@ Choose framework protection explicitly:
   `McpRequestStateProtectionContext`; Soklet still owns canonical JSON,
   binding, size, lifetime, round, and prior-request-ID checks.
 
+An initial `McpProtectionKeyring` exposes only the non-secret
+`getActiveKeyId()` and `getVerificationKeyIds()` views. Live server-owned state
+is inspected through `McpProtectionControl.getKeyringSnapshot()` and changed
+through stage, activate, `rotateActiveKey(...)`, and remove operations; no
+public keyring view exposes key material.
+
 The [built-in request-state security profile](release/MCP_REQUEST_STATE_SECURITY_PROFILE.md)
 is authoritative for the sole `soklet-mcp-protection-v1` spelling, frozen
 HKDF-SHA-256 labels, AES-256-GCM envelope and associated data, canonical
@@ -480,8 +600,10 @@ plaintext, and rejection rules. Production operators should use the
 the exact stage/compare/activate/drain/remove and rollback sequence.
 
 The defaults are 65,536 encoded bytes, 49,152 decoded bytes, a 15-minute
-lifetime, and 10 rounds; `McpProtectionConfig.Builder` can lower or raise them
-within its validated contract. Framework state is bound to the normalized
+lifetime, and 10 rounds. `McpProtectionConfig.Builder` exposes
+`maximumEncodedRequestStateSizeInBytes(...)` and
+`maximumDecodedRequestStateSizeInBytes(...)` alongside the lifetime and round
+settings, and validates their combined contract. Framework state is bound to the normalized
 endpoint path, protocol version, JSON-RPC method, admitted authorization
 partition, and stable request parameters. The parameter digest excludes only
 the retry's `inputResponses` and `requestState` plus transient `_meta`
@@ -657,13 +779,12 @@ complete tool-output sanitizer.
 
 Every application-owned tool, prompt, resource-read, and custom resource-list
 handler receives one invocation-scoped `CancelationToken`. Programmatic
-handlers retrieve the exact feature instance from `McpInvocationFeatures`:
+handlers use the direct built-in accessors on `McpInvocationFeatures`:
 
 ```java
-CancelationToken cancelation =
-    features.require(CancelationToken.class);
+CancelationToken cancelation = features.getCancelationToken();
 
-features.find(McpProgressReporter.class).ifPresent(reporter ->
+features.getProgressReporter().ifPresent(reporter ->
     reporter.report(McpProgressUpdate.withProgress(50.0d)
         .total(100.0d)
         .message("Halfway")
@@ -671,6 +792,10 @@ features.find(McpProgressReporter.class).ifPresent(reporter ->
 
 cancelation.throwIfCanceled();
 ```
+
+The generic `find(...)` and `require(...)` methods remain available for
+extension features. For the built-in token and reporter, the direct and
+generic accessors return the same invocation-scoped instances.
 
 Annotated tool, prompt, resource, and resource-list methods may instead inject
 one `CancelationToken` and one `Optional<McpProgressReporter>` directly. They
@@ -725,19 +850,20 @@ by attaching an `McpSubscriptionConfig` with an application-owned
 
 ```java
 McpSubscriptionEventPublisher publisher =
-    McpLocalSubscriptionEventPublisher.fromDefaults();
+    McpSubscriptionEventPublisher.fromInMemoryDefaults();
 
 McpSubscriptionConfig subscriptions =
-    McpSubscriptionConfig.withEventPublisher(publisher)
-        .notificationType(
-            McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
-        .notificationType(
-            McpSubscriptionNotificationType.RESOURCE_UPDATED)
+    McpSubscriptionConfig.withEventPublisher(publisher, Set.of(
+            McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+            McpSubscriptionNotificationType.RESOURCE_UPDATED))
         .build();
 
-McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+McpImplementation implementation = McpImplementation
+    .withNameAndVersion("example", "1.0.0")
+    .build();
+McpEndpoint endpoint = McpEndpoint.withPath("/mcp", implementation)
     // registrations
-    .subscriptions(subscriptions)
+    .subscriptionConfig(subscriptions)
     .build();
 ```
 
@@ -895,7 +1021,7 @@ session/replay header. Successful CORS responses can expose
 
 ## Mirrored tool headers
 
-`@McpHeader("Tenant")` on a typed tool argument publishes the `x-mcp-header`
+`@McpHeader(name = "Tenant")` on a typed tool argument publishes the `x-mcp-header`
 schema extension and requires `Mcp-Param-Tenant` to agree with that property
 already parsed from the JSON arguments. It never supplies an absent or null
 argument from the header. Mirroring is limited to statically reachable string,
@@ -1663,11 +1789,11 @@ methods: lifecycle accessors `getStatus()` and `getBoundAddress()`, plus all ten
 implemented diagnostic getters. The six numeric getters are the boxed,
 `@NonNull Integer` methods `getRequestHandlerConcurrency()`,
 `getRequestHandlerQueueCapacity()`, `getActiveHandlerExecutions()`,
-`getQueuedRequests()`, `getActiveRequestStreams()`, and
+`getRequestHandlerQueueDepth()`, `getActiveRequestStreams()`, and
 `getActiveSubscriptions()`. The other four are `getProtectionMode()`, boxed
 `@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-`getProtectionKeyRingFingerprint()`, and
-`getTraceCorrelationConfigurationFingerprint()`; both fingerprint getters
+`getProtectionKeyringFingerprint()`, and
+`getTraceCorrelationFingerprint()`; both fingerprint getters
 return non-null `Optional` values with non-null payload types.
 
 The configured numeric bounds are positive. Active and queued values are
@@ -1711,7 +1837,7 @@ application-owned `McpRequestStateProtector` SPI, not whether an operation uses
 framework protector and bypasses a configured custom protector.
 
 The protection-ring fingerprint is present exactly for
-`PRODUCTION_KEY_RING`; it is empty for unconfigured, custom-protector, and
+`PRODUCTION_KEYRING`; it is empty for unconfigured, custom-protector, and
 development-ephemeral modes. The trace-configuration fingerprint is independent
 of protection mode and is present exactly when trace correlation was enabled
 at construction. Successful live protection-ring or trace-key rotation changes
@@ -2192,10 +2318,13 @@ own its namespaced `requiredCapabilities.extensions` contribution.
 That future integration would require explicit API and compiler work. Today
 `McpClientCapabilityRequirement` is sealed to core requirements and
 `McpClientCapabilities.supports(...)` handles core capability values; both are
-known widening points. An annotated `@McpTool` must still return a typed
-application value that Soklet wraps as a completion result; `void` and direct
-`McpOperationResult` returns are rejected. Per-request Tasks negotiation would
-also have to honor SEP-2663's compatibility boundary:
+known widening points. An annotated `@McpTool` normally returns a typed
+application value that Soklet wraps as a completion result. A tool that needs
+direct content, input-required results, or request state may instead return
+`McpOperationResult`; that advanced path derives only the input schema and is
+not an application result-extension registry. `void` remains unsupported.
+Per-request Tasks negotiation would also have to honor SEP-2663's compatibility
+boundary:
 the legacy `task` member of `tools/call` is only an unknown parameter, not
 opt-in, and `tasks/result` remains an unknown method.
 

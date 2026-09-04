@@ -120,6 +120,7 @@ public final class McpIcon {
 
 		/**
 		 * Replaces the advertised icon sizes.
+		 * Passing no sizes clears the advertised icon sizes.
 		 *
 		 * @param sizes size tokens such as {@code 48x48} or {@code any}
 		 * @return this builder

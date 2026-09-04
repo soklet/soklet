@@ -143,18 +143,18 @@ public final class McpEndpointRegistry {
 	 *
 	 * @param annotatedEndpointClass annotated endpoint class whose generated
 	 *                               endpoint is selected
-	 * @param subscriptions resource-subscription configuration
+	 * @param subscriptionConfig resource-subscription configuration
 	 * @return a new immutable registry
 	 * @throws IllegalArgumentException if this registry did not load a generated
 	 *                                  endpoint for the exact supplied class
 	 * @throws NullPointerException if either argument is null
 	 */
 	@NonNull
-	public McpEndpointRegistry withSubscriptions(
+	public McpEndpointRegistry withSubscriptionConfig(
 			@NonNull Class<?> annotatedEndpointClass,
-			@NonNull McpSubscriptionConfig subscriptions) {
+			@NonNull McpSubscriptionConfig subscriptionConfig) {
 		requireNonNull(annotatedEndpointClass);
-		requireNonNull(subscriptions);
+		requireNonNull(subscriptionConfig);
 		McpEndpoint generatedEndpoint = this.generatedEndpoints.get(
 				annotatedEndpointClass);
 		if (generatedEndpoint == null)
@@ -166,8 +166,8 @@ public final class McpEndpointRegistry {
 		for (int index = 0; index < endpoints.size(); ++index) {
 			McpEndpoint endpoint = endpoints.get(index);
 			if (endpoint == generatedEndpoint) {
-				McpEndpoint replacedEndpoint = endpoint.withSubscriptions(
-						subscriptions);
+				McpEndpoint replacedEndpoint = endpoint.withSubscriptionConfig(
+						subscriptionConfig);
 				endpoints.set(index, replacedEndpoint);
 				Map<Class<?>, McpEndpoint> generatedEndpoints =
 						new IdentityHashMap<>(this.generatedEndpoints);
@@ -185,9 +185,13 @@ public final class McpEndpointRegistry {
 	 * current thread's context class loader.
 	 *
 	 * <p>Endpoint classes are not initialized and endpoint instances are not
-	 * acquired during descriptor discovery. Generated handlers use
-	 * {@link InstanceProvider#defaultInstance()} when they are invoked. Soklet
-	 * does not retain or close the returned endpoint instance.
+	 * acquired during descriptor discovery. When a generated handler is invoked,
+	 * it acquires its endpoint instance through the
+	 * {@link SokletConfig#getInstanceProvider() instance provider} configured on
+	 * the {@link SokletConfig} that owns the MCP server. Soklet does not retain or
+	 * close the returned endpoint instance. Direct invocation of a generated
+	 * registration handler outside a Soklet-managed request uses
+	 * {@link InstanceProvider#defaultInstance()}.
 	 *
 	 * @return an immutable registry ordered by endpoint binary name
 	 * @throws IllegalStateException if no generated descriptor is found or an
@@ -196,38 +200,13 @@ public final class McpEndpointRegistry {
 	 */
 	@NonNull
 	public static McpEndpointRegistry fromClasspathIntrospection() {
-		return fromClasspathIntrospection(InstanceProvider.defaultInstance());
-	}
-
-	/**
-	 * Resolves every generated MCP endpoint descriptor visible through the
-	 * current thread's context class loader.
-	 *
-	 * <p>The supplied provider may be called concurrently and is consulted once
-	 * per annotated operation invocation. It is not called during descriptor
-	 * discovery or list operations. The provider is application-owned and alone
-	 * determines whether returned instances are new, scoped, or shared; Soklet
-	 * neither caches nor closes them.
-	 *
-	 * @param instanceProvider application endpoint-instance provider
-	 * @return an immutable registry ordered by endpoint binary name
-	 * @throws IllegalStateException if no generated descriptor is found or an
-	 *                               index or provider is malformed, conflicting,
-	 *                               or cannot be loaded
-	 * @throws NullPointerException if the provider is null
-	 */
-	@NonNull
-	public static McpEndpointRegistry fromClasspathIntrospection(
-			@NonNull InstanceProvider instanceProvider) {
-		requireNonNull(instanceProvider);
 		ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 		if (classLoader == null)
 			classLoader = McpEndpointRegistry.class.getClassLoader();
 		try {
 			return new McpEndpointRegistry(
 					McpGeneratedEndpointProviderLoader.loadAllWithProvenance(
-							classLoader,
-							instanceProvider));
+							classLoader));
 		} catch (IllegalArgumentException exception) {
 			throw new IllegalStateException(
 					"Generated MCP endpoint descriptors conflict.", exception);
@@ -237,10 +216,14 @@ public final class McpEndpointRegistry {
 	/**
 	 * Resolves generated descriptors for endpoint classes in the supplied order.
 	 *
-	 * <p>Endpoint instances are acquired through
-	 * {@link InstanceProvider#defaultInstance()} only when an annotated
-	 * operation is invoked. Soklet does not retain or close the returned
-	 * instance.
+	 * <p>Endpoint classes are not initialized and endpoint instances are not
+	 * acquired during descriptor discovery. When a generated handler is invoked,
+	 * it acquires its endpoint instance through the
+	 * {@link SokletConfig#getInstanceProvider() instance provider} configured on
+	 * the {@link SokletConfig} that owns the MCP server. Soklet does not retain or
+	 * close the returned endpoint instance. Direct invocation of a generated
+	 * registration handler outside a Soklet-managed request uses
+	 * {@link InstanceProvider#defaultInstance()}.
 	 *
 	 * @param endpointClasses one or more annotated endpoint classes
 	 * @return an immutable registry in the supplied order
@@ -255,39 +238,10 @@ public final class McpEndpointRegistry {
 	@NonNull
 	public static McpEndpointRegistry fromClasses(
 			@NonNull Class<?> @NonNull ... endpointClasses) {
-		return fromClasses(InstanceProvider.defaultInstance(), endpointClasses);
-	}
-
-	/**
-	 * Resolves generated descriptors for endpoint classes in the supplied order.
-	 *
-	 * <p>The supplied provider may be called concurrently and is consulted once
-	 * per annotated operation invocation. It is not called during descriptor
-	 * discovery or list operations. The provider is application-owned and alone
-	 * determines whether returned instances are new, scoped, or shared; Soklet
-	 * neither caches nor closes them.
-	 *
-	 * @param instanceProvider application endpoint-instance provider
-	 * @param endpointClasses one or more annotated endpoint classes
-	 * @return an immutable registry in the supplied order
-	 * @throws IllegalArgumentException if no classes are supplied, a class is
-	 *                                  duplicated, or a class has no generated
-	 *                                  descriptor, or two selected endpoints
-	 *                                  have the same normalized path
-	 * @throws IllegalStateException if an index or provider is malformed,
-	 *                               conflicting, or cannot be loaded
-	 * @throws NullPointerException if the provider, array, or one of its classes
-	 *                              is null
-	 */
-	@NonNull
-	public static McpEndpointRegistry fromClasses(
-			@NonNull InstanceProvider instanceProvider,
-			@NonNull Class<?> @NonNull ... endpointClasses) {
-		requireNonNull(instanceProvider);
 		requireNonNull(endpointClasses);
 		return new McpEndpointRegistry(
 				McpGeneratedEndpointProviderLoader.loadClassesWithProvenance(
-						Arrays.asList(endpointClasses.clone()), instanceProvider));
+						Arrays.asList(endpointClasses.clone())));
 	}
 
 	/**

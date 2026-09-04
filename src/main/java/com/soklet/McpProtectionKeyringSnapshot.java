@@ -24,22 +24,22 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable, secret-free atomic snapshot of a live MCP protection key ring.
+ * Immutable, secret-free atomic snapshot of a live MCP protection keyring.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpProtectionKeyRingSnapshot {
+public final class McpProtectionKeyringSnapshot {
 	@NonNull
 	private final String activeKeyId;
 	@NonNull
 	private final Set<@NonNull String> verificationKeyIds;
 	@NonNull
-	private final McpProtectionKeyRingFingerprint fingerprint;
+	private final McpProtectionKeyringFingerprint fingerprint;
 
-	McpProtectionKeyRingSnapshot(@NonNull String activeKeyId,
+	McpProtectionKeyringSnapshot(@NonNull String activeKeyId,
 			@NonNull Set<@NonNull String> verificationKeyIds,
-			@NonNull McpProtectionKeyRingFingerprint fingerprint) {
+			@NonNull McpProtectionKeyringFingerprint fingerprint) {
 		this.activeKeyId = requireNonNull(activeKeyId);
 		this.verificationKeyIds = Set.copyOf(verificationKeyIds);
 		this.fingerprint = requireNonNull(fingerprint);
@@ -59,7 +59,7 @@ public final class McpProtectionKeyRingSnapshot {
 
 	/** @return fingerprint for the complete captured ring */
 	@NonNull
-	public McpProtectionKeyRingFingerprint getFingerprint() {
+	public McpProtectionKeyringFingerprint getFingerprint() {
 		return this.fingerprint;
 	}
 }

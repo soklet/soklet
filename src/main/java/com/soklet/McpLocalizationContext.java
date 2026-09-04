@@ -23,7 +23,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -38,14 +37,14 @@ import static java.util.Objects.requireNonNull;
  * facts.
  * <p>
  * The context is not closeable and must not own resources whose correctness
- * depends on an exact close callback. Its localizer must be safe for concurrent
+ * depends on an exact close callback. Its lookup must be safe for concurrent
  * calls. Locale and revision remain equal for its full lifetime; equal
  * localizable-text inputs must produce equal results independently of lookup
  * order, including under concurrent calls.
  * <p>
  * This is a borrowed invocation-scoped feature. An application handler or
  * interceptor must not retain it or its feature carrier after invocation
- * termination. The localizer should capture only the minimum immutable lookup
+ * termination. The lookup should capture only the minimum immutable
  * snapshot and must not capture the request or application object graph. Every
  * localization lookup must use that already-loaded snapshot and perform
  * bounded, in-memory, nonblocking work without remote TMS/network I/O, lazy
@@ -60,27 +59,28 @@ public final class McpLocalizationContext {
 	@Nullable
 	private final McpLocalizationRevision revision;
 	@NonNull
-	private final Function<@NonNull McpLocalizableText,
-			@NonNull McpLocalizationResult> localizer;
+	private final McpLocalizationLookup localizationLookup;
 
 	/**
-	 * Vends a context builder primed with the selected catalog locale.
+	 * Vends a context builder primed with its required construction values.
 	 *
 	 * @param locale canonical selected catalog locale
+	 * @param localizationLookup request-local immutable-snapshot lookup
 	 * @return localization-context builder
-	 * @throws NullPointerException if {@code locale} is null
+	 * @throws NullPointerException if an argument is null
 	 * @throws IllegalArgumentException if {@code locale} is not a canonical,
 	 * non-root BCP 47 locale of at most 255 ASCII bytes
 	 */
 	@NonNull
-	public static Builder withLocale(@NonNull Locale locale) {
-		return new Builder(locale);
+	public static Builder withLocale(@NonNull Locale locale,
+			@NonNull McpLocalizationLookup localizationLookup) {
+		return new Builder(locale, localizationLookup);
 	}
 
 	private McpLocalizationContext(@NonNull Builder builder) {
 		this.locale = builder.locale;
 		this.revision = builder.revision;
-		this.localizer = requireNonNull(builder.localizer);
+		this.localizationLookup = builder.localizationLookup;
 	}
 
 	/** @return canonical selected catalog locale */
@@ -105,7 +105,7 @@ public final class McpLocalizationContext {
 	 * captured snapshot. The lookup must be bounded, in-memory, and nonblocking;
 	 * it must not perform remote I/O or unbounded loading.
 	 * <p>
-	 * The localizer reports an unexpected lookup failure with
+	 * The localization lookup reports an unexpected failure with
 	 * {@link McpLocalizationResult#failure()}; it must not throw to report an
 	 * operational lookup failure. If an unchecked contract violation nevertheless
 	 * escapes while Soklet invokes this callback, Soklet treats it as untrusted
@@ -117,12 +117,13 @@ public final class McpLocalizationContext {
 	 * @param text structured coordinate and canonical source text
 	 * @return non-null localization result
 	 * @throws NullPointerException if {@code text} is null or the configured
-	 * localizer returns null
+	 * lookup returns null
 	 */
 	@NonNull
 	public McpLocalizationResult localize(@NonNull McpLocalizableText text) {
-		return requireNonNull(this.localizer.apply(requireNonNull(text, "text")),
-				"The MCP localization context localizer returned null.");
+		return requireNonNull(
+				this.localizationLookup.localize(requireNonNull(text, "text")),
+				"The MCP localization lookup returned null.");
 	}
 
 	/** @return redacted diagnostic rendering */
@@ -130,7 +131,7 @@ public final class McpLocalizationContext {
 	@NonNull
 	public String toString() {
 		return "McpLocalizationContext{locale=<redacted>, "
-				+ "revision=<redacted>, localizer=<redacted>}";
+				+ "revision=<redacted>, localizationLookup=<redacted>}";
 	}
 
 	/**
@@ -144,42 +145,25 @@ public final class McpLocalizationContext {
 		private final Locale locale;
 		@Nullable
 		private McpLocalizationRevision revision;
-		@Nullable
-		private Function<@NonNull McpLocalizableText,
-				@NonNull McpLocalizationResult> localizer;
+		@NonNull
+		private final McpLocalizationLookup localizationLookup;
 
-		private Builder(@NonNull Locale locale) {
+		private Builder(@NonNull Locale locale,
+				@NonNull McpLocalizationLookup localizationLookup) {
 			this.locale = McpLocaleSupport.requireCanonicalCatalogLocale(
 					locale, "locale");
+			this.localizationLookup = requireNonNull(localizationLookup);
 		}
 
 		/**
 		 * Sets the non-secret identity for the captured catalog snapshot.
 		 *
-		 * @param revision immutable snapshot revision
+		 * @param revision immutable snapshot revision, or null to clear it
 		 * @return this builder
-		 * @throws NullPointerException if {@code revision} is null
 		 */
 		@NonNull
-		public Builder revision(@NonNull McpLocalizationRevision revision) {
-			this.revision = requireNonNull(revision);
-			return this;
-		}
-
-		/**
-		 * Sets the thread-safe lookup function for the captured immutable
-		 * translation snapshot. The callback must obey the bounded, nonblocking,
-		 * deterministic contract documented by
-		 * {@link McpLocalizationContext#localize(McpLocalizableText)}.
-		 *
-		 * @param localizer request-local snapshot lookup
-		 * @return this builder
-		 * @throws NullPointerException if {@code localizer} is null
-		 */
-		@NonNull
-		public Builder localizer(@NonNull Function<@NonNull McpLocalizableText,
-				@NonNull McpLocalizationResult> localizer) {
-			this.localizer = requireNonNull(localizer);
+		public Builder revision(@Nullable McpLocalizationRevision revision) {
+			this.revision = revision;
 			return this;
 		}
 
@@ -187,13 +171,9 @@ public final class McpLocalizationContext {
 		 * Builds an immutable localization context.
 		 *
 		 * @return immutable request-local context
-		 * @throws IllegalStateException if no localizer was supplied
 		 */
 		@NonNull
 		public McpLocalizationContext build() {
-			if (this.localizer == null)
-				throw new IllegalStateException(
-						"An MCP localization context localizer must be configured.");
 			return new McpLocalizationContext(this);
 		}
 	}

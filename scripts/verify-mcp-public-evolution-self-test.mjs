@@ -67,7 +67,7 @@ const anonymousFixture = `
   final class McpPromptRegistrationTests {
     private static McpRequestContext requestContext() {
       return new McpRequestContext() {
-        @Override public Optional<McpLogLevel> getDeprecatedLogLevel() {
+        @Override public Optional<McpLogLevel> getLogLevel() {
           return Optional.empty();
         }
       };
@@ -104,13 +104,13 @@ assert.equal(externalRow.enforcementHost, 'R4/R7-workspace');
 const externalSource = `
   package com.soklet;
   interface McpRequestContext {
-    Optional<McpLogLevel> getDeprecatedLogLevel();
+    Optional<McpLogLevel> getLogLevel();
   }
 `;
 assert.equal(declarationResolutionCountForTest(externalSource,
   externalRow.declaration), 1);
 assert.equal(declarationResolutionCountForTest(externalSource.replace(
-  'getDeprecatedLogLevel()', 'getDeprecatedLogLevel(String changed)'),
+  'getLogLevel()', 'getLogLevel(String changed)'),
   externalRow.declaration), 0);
 assert.equal(declarationResolutionCountForTest(
   `${externalSource}\n${externalSource}`, externalRow.declaration), 2);

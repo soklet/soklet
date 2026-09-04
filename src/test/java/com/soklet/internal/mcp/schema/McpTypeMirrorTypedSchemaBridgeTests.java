@@ -235,10 +235,10 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						        description = "Items description")
 						    List<CompileItem> javaItems) {}
 						record CompileItem(String id, long score) {}
-						record HeaderRouting(@McpHeader("Shard") int shard) {}
+						record HeaderRouting(@McpHeader(name = "Shard") int shard) {}
 						record HeaderOutput(String value) {}
 						record HeaderInvalidOutput(
-						    @McpHeader("Output") String value) {}
+						    @McpHeader(name = "Output") String value) {}
 						""");
 		Compilation compilation = Compiler.javac()
 				.withOptions("--release", "17")
@@ -272,31 +272,31 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 	}
 
 	private record HeaderRuntimeInput(
-			@McpHeader("Tenant") String tenant,
+			@McpHeader(name = "Tenant") String tenant,
 			HeaderRuntimeRouting routing) {
 	}
 
-	private record HeaderRuntimeRouting(@McpHeader("Shard") int shard) {
+	private record HeaderRuntimeRouting(@McpHeader(name = "Shard") int shard) {
 	}
 
 	private record HeaderRuntimeOutput(String value) {
 	}
 
 	private record HeaderRuntimeInvalidToken(
-			@McpHeader("bad name") String value) {
+			@McpHeader(name = "bad name") String value) {
 	}
 
 	private record HeaderRuntimeDuplicate(
-			@McpHeader("Tenant") String first,
-			@McpHeader("tenant") boolean second) {
+			@McpHeader(name = "Tenant") String first,
+			@McpHeader(name = "tenant") boolean second) {
 	}
 
 	private record HeaderRuntimeInvalidScalar(
-			@McpHeader("Ratio") double ratio) {
+			@McpHeader(name = "Ratio") double ratio) {
 	}
 
 	private record HeaderRuntimeInvalidOutput(
-			@McpHeader("Output") String value) {
+			@McpHeader(name = "Output") String value) {
 	}
 
 	private static final class Inspection extends AbstractProcessor {

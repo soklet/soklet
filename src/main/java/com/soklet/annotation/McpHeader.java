@@ -27,8 +27,9 @@ import java.lang.annotation.Target;
  * Publishes and enforces an MCP custom mirrored header for one typed tool
  * input property.
  * <p>
- * The annotation value is the suffix of the corresponding
- * {@code Mcp-Param-*} request header. For example, {@code @McpHeader("Region")}
+ * The annotation name is the suffix of the corresponding
+ * {@code Mcp-Param-*} request header. For example,
+ * {@code @McpHeader(name = "Region")}
  * publishes {@code x-mcp-header: "Region"} on the derived property schema and
  * requires {@code Mcp-Param-Region} to agree with that property's request-body
  * value whenever the value is present and non-null. If the body property is
@@ -60,5 +61,5 @@ public @interface McpHeader {
 	 * @return mirrored-header suffix
 	 */
 	@NonNull
-	String value();
+	String name();
 }

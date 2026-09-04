@@ -67,16 +67,16 @@ public class McpShutdownObservabilityTests {
 	@Test
 	public void snapshotContractUsesReferenceCountsAndRejectsInvalidValues()
 			throws Exception {
-		Method getShutdowns = McpMetricsSnapshot.class.getMethod("getShutdowns");
+		Method getServerStops = McpMetricsSnapshot.class.getMethod("getServerStops");
 		Assertions.assertInstanceOf(ParameterizedType.class,
-				getShutdowns.getGenericReturnType());
+				getServerStops.getGenericReturnType());
 		ParameterizedType shutdownsType = (ParameterizedType)
-				getShutdowns.getGenericReturnType();
+				getServerStops.getGenericReturnType();
 		Assertions.assertArrayEquals(new Object[]{
 				ShutdownComponentDisposition.class, Long.class
 		}, shutdownsType.getActualTypeArguments());
 		Method setShutdowns = McpMetricsSnapshot.Builder.class.getMethod(
-				"shutdowns", Map.class);
+				"serverStops", Map.class);
 		Assertions.assertEquals(McpMetricsSnapshot.Builder.class,
 				setShutdowns.getReturnType());
 		Assertions.assertInstanceOf(ParameterizedType.class,
@@ -90,37 +90,37 @@ public class McpShutdownObservabilityTests {
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				McpMetricsSnapshot.emptyInstance());
 		Assertions.assertTrue(McpMetricsSnapshot.emptyInstance()
-				.getShutdowns().isEmpty());
+				.getServerStops().isEmpty());
 
 		Map<ShutdownComponentDisposition, Long> source = new HashMap<>();
 		source.put(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 2L);
 		source.put(ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 0L);
 		McpMetricsSnapshot snapshot = McpMetricsSnapshot.builder()
-				.shutdowns(source)
+				.serverStops(source)
 				.build();
 		source.put(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 99L);
 
 		Assertions.assertEquals(Map.of(
 				ShutdownComponentDisposition.GRACEFUL_TERMINATION, 2L,
 				ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 0L),
-				snapshot.getShutdowns());
+				snapshot.getServerStops());
 		Assertions.assertThrows(UnsupportedOperationException.class,
-				() -> snapshot.getShutdowns().put(
+				() -> snapshot.getServerStops().put(
 						ShutdownComponentDisposition.GRACEFUL_TERMINATION, 3L));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().shutdowns(null).build());
+		Assertions.assertTrue(McpMetricsSnapshot.builder().serverStops(null).build()
+				.getServerStops().isEmpty());
 
 		Map<ShutdownComponentDisposition, Long> nullKey = new HashMap<>();
 		nullKey.put(null, 1L);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().shutdowns(nullKey).build());
+				() -> McpMetricsSnapshot.builder().serverStops(nullKey).build());
 
 		Map<ShutdownComponentDisposition, Long> nullValue = new HashMap<>();
 		nullValue.put(ShutdownComponentDisposition.GRACEFUL_TERMINATION, null);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().shutdowns(nullValue).build());
+				() -> McpMetricsSnapshot.builder().serverStops(nullValue).build());
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpMetricsSnapshot.builder().shutdowns(Map.of(
+				() -> McpMetricsSnapshot.builder().serverStops(Map.of(
 						ShutdownComponentDisposition.RESIDUAL_ACTIVITY, -1L)).build());
 	}
 
@@ -128,7 +128,7 @@ public class McpShutdownObservabilityTests {
 	public void defaultCollectorAggregatesRendersFiltersAndResetsShutdowns() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		Assertions.assertTrue(collector.snapshot().orElseThrow()
-				.getMcpMetrics().getShutdowns().isEmpty());
+				.getMcpMetrics().getServerStops().isEmpty());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> collector.didRecordMcpMetricsEvent(null));
 
@@ -146,14 +146,14 @@ public class McpShutdownObservabilityTests {
 		Assertions.assertEquals(Map.of(
 				ShutdownComponentDisposition.GRACEFUL_TERMINATION, 2L,
 				ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-				retained.getShutdowns());
+				retained.getServerStops());
 
 		collector.didRecordMcpMetricsEvent(
 				McpMetricsEvent.serverStopped(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 		Assertions.assertEquals(2L,
-				retained.getShutdowns().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
+				retained.getServerStops().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 		Assertions.assertEquals(3L, collector.snapshot().orElseThrow()
-				.getMcpMetrics().getShutdowns().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
+				.getMcpMetrics().getServerStops().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 
 		Set<Map<String, String>> shutdownLabels =
 				java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -216,7 +216,7 @@ public class McpShutdownObservabilityTests {
 
 		collector.reset();
 		Assertions.assertTrue(collector.snapshot().orElseThrow().getMcpMetrics()
-				.getShutdowns().isEmpty());
+				.getServerStops().isEmpty());
 		String resetText = collector.snapshotText(
 				MetricsCollector.SnapshotTextOptions.withMetricsFormat(
 						MetricsCollector.MetricsFormat.PROMETHEUS)
@@ -224,7 +224,7 @@ public class McpShutdownObservabilityTests {
 		Assertions.assertFalse(resetText.contains(SHUTDOWN_METRIC_NAME),
 				"A reset collector must omit the empty shutdown metric family.");
 		Assertions.assertEquals(2L,
-				retained.getShutdowns().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION),
+				retained.getServerStops().get(ShutdownComponentDisposition.GRACEFUL_TERMINATION),
 				"Reset must not mutate a retained point-in-time snapshot.");
 	}
 
@@ -689,7 +689,7 @@ public class McpShutdownObservabilityTests {
 					collector.getServerStopOutcomes());
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.FORCED_TERMINATION, 1L),
-					collector.snapshot().orElseThrow().getMcpMetrics().getShutdowns());
+					collector.snapshot().orElseThrow().getMcpMetrics().getServerStops());
 
 			Assertions.assertDoesNotThrow(soklet::close);
 			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
@@ -864,7 +864,7 @@ public class McpShutdownObservabilityTests {
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerEntered.countDown();
 					try {
@@ -881,16 +881,12 @@ public class McpShutdownObservabilityTests {
 					}
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"shutdown-observability-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
@@ -943,7 +939,7 @@ public class McpShutdownObservabilityTests {
 			assertIncompleteShutdownParity(observer, collector, result);
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-					retained.getShutdowns(),
+					retained.getServerStops(),
 					"A retained residual snapshot must remain unchanged.");
 		} finally {
 			releaseHandler.countDown();
@@ -993,7 +989,7 @@ public class McpShutdownObservabilityTests {
 			expectedCounts.merge(outcome, 1L, Long::sum);
 		Assertions.assertEquals(expectedCounts,
 				collector.snapshot().orElseThrow().getMcpMetrics()
-						.getShutdowns());
+						.getServerStops());
 	}
 
 	private static void assertIncompleteShutdownParity(
@@ -1020,7 +1016,7 @@ public class McpShutdownObservabilityTests {
 				collector.getServerStopOutcomes());
 		Assertions.assertEquals(Map.of(
 				ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-				collector.snapshot().orElseThrow().getMcpMetrics().getShutdowns());
+				collector.snapshot().orElseThrow().getMcpMetrics().getServerStops());
 	}
 
 	private static void assertFailedStartLifecycle(
@@ -1144,8 +1140,7 @@ public class McpShutdownObservabilityTests {
 
 	@NonNull
 	private static McpServer newServer(@NonNull String path) {
-		McpEndpoint endpoint = McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"shutdown-observability-test", "4.0.0").build())
 				.build();
 		return serverFor(endpoint);
@@ -1168,12 +1163,9 @@ public class McpShutdownObservabilityTests {
 			@Nullable Duration shutdownTimeout) {
 		if (shutdownTimeout != null)
 			requireNonNull(shutdownTimeout);
-		McpServer.Builder builder = McpServer.withPort(0)
+		McpServer.Builder builder = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.copyOf(requireNonNull(endpoints))), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.copyOf(requireNonNull(endpoints))))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
 		return builder.build();
@@ -1183,16 +1175,14 @@ public class McpShutdownObservabilityTests {
 	private static McpEndpoint subscriptionEndpoint(@NonNull String path,
 			@NonNull McpSubscriptionEventPublisher publisher) {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(requireNonNull(publisher))
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+				.withEventPublisher(requireNonNull(publisher), Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
-		return McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"shutdown-observability-test", "4.0.0").build())
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(subscriptions)
+				.subscriptionConfig(subscriptions)
 				.build();
 	}
 
@@ -1348,7 +1338,7 @@ public class McpShutdownObservabilityTests {
 			return this.events.stream()
 					.filter(McpMetricsEvent.ServerStopped.class::isInstance)
 					.map(McpMetricsEvent.ServerStopped.class::cast)
-					.map(McpMetricsEvent.ServerStopped::getOutcome)
+					.map(McpMetricsEvent.ServerStopped::getShutdownComponentDisposition)
 					.toList();
 		}
 

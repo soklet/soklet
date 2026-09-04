@@ -65,6 +65,9 @@ public @interface McpPrompt {
 	 * Client requests this prompt operation may emit during multi-round-trip
 	 * handling.
 	 *
+	 * <p>A nonempty declaration requires the method to return
+	 * {@code McpOperationResult} or a subtype.
+	 *
 	 * @return input-request declarations
 	 */
 	@NonNull
@@ -72,6 +75,9 @@ public @interface McpPrompt {
 
 	/**
 	 * The request-state contract for this prompt operation.
+	 *
+	 * <p>A mode other than {@link McpRequestStateMode#NONE} requires the method
+	 * to return {@code McpOperationResult} or a subtype.
 	 *
 	 * @return request-state mode
 	 */

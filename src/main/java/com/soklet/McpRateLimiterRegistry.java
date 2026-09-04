@@ -117,7 +117,7 @@ public final class McpRateLimiterRegistry {
 		 * @throws IllegalArgumentException if the name is blank or duplicated
 		 */
 		@NonNull
-		public Builder rateLimiter(@NonNull String name,
+		public Builder addRateLimiter(@NonNull String name,
 				@NonNull McpRateLimiter rateLimiter) {
 			String validatedName = requireName(name);
 			requireNonNull(rateLimiter);

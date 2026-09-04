@@ -258,7 +258,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertTrue(firstContext.resourceListCursor().isEmpty());
 			assertTrue(secondContext.resourceListCursor().isEmpty());
 
-			fleet.second().catalogsChanged();
+			fleet.second().invalidateCatalogs();
 			assertListChanged(reconnectedSubscription.nextFrame(WAIT));
 			reconnectedSubscription.close();
 			awaitRuntime(fleet.second(), 0, 0);
@@ -355,7 +355,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		assertEquals(0, diagnostics.getActiveRequestStreams());
 		assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
@@ -518,11 +518,11 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private void activate(CatalogSnapshot snapshot) {
 			this.activeSnapshot.set(snapshot);
-			catalogsChanged();
+			invalidateCatalogs();
 		}
 
-		private void catalogsChanged() {
-			this.server.getLocalizationControl().catalogsChanged();
+		private void invalidateCatalogs() {
+			this.server.getLocalizationControl().invalidateCatalogs();
 			this.invalidations.incrementAndGet();
 		}
 
@@ -570,41 +570,38 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private McpServer buildServer() {
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 							.withNameAndVersion(this.name, "1.0")
 							.title("Canonical server title")
 							.description("Canonical server description")
 							.build())
-					.tool(McpToolRegistration.withName("fleet.tool")
-							.jsonArguments()
+					.addTool(McpToolRegistration.withName("fleet.tool")
+							.jsonObjectArguments()
 							.handler((request, arguments, features) ->
 									McpCompleteResult.fromToolText("unused"))
 							.title("Canonical tool title")
 							.description("Canonical tool description")
 							.build())
-					.resource(McpResourceRegistration.withUriAndName(
+					.addResource(McpResourceRegistration.withUriAndName(
 							URI.create("fleet://resource"), "fleet-resource")
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
-											McpResourceOutput.builder()
-													.content(McpTextResourceContents
+											McpResourceOutput.withContent(McpTextResourceContents
 															.withUriAndText(
 																	resource.getUri(), "unused")
 															.build())
 													.build()))
 							.build())
-					.subscriptions(McpSubscriptionConfig
+					.subscriptionConfig(McpSubscriptionConfig
 							.withEventPublisher(
-									McpLocalSubscriptionEventPublisher.fromDefaults())
-							.notificationTypes(EnumSet.of(
-									McpSubscriptionNotificationType
-											.RESOURCES_LIST_CHANGED))
+									McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+									EnumSet.of(
+											McpSubscriptionNotificationType
+													.RESOURCES_LIST_CHANGED))
 							.build())
 					.build();
 			McpLocalizer localizer = McpLocalizer
-					.withFallbackLocale(Locale.ENGLISH)
-					.contextProvider(request -> {
+					.withFallbackLocale(Locale.ENGLISH, request -> {
 						CatalogSnapshot captured = this.activeSnapshot.get();
 						Locale selectedLocale = Locale.lookup(
 								request.getLanguageRanges(),
@@ -614,9 +611,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 							selectedLocale = Locale.ENGLISH;
 						AtomicInteger lookup = new AtomicInteger();
 						McpLocalizationContext context = McpLocalizationContext
-								.withLocale(selectedLocale)
-								.revision(captured.revision())
-								.localizer(text -> {
+								.withLocale(selectedLocale, text -> {
 									if (lookup.incrementAndGet() == 1) {
 										RenderPause pause =
 												this.renderPause.getAndSet(null);
@@ -624,8 +619,10 @@ class McpLocalizationFleetPublicRuntimeTests {
 											pause.reachedFirstLookupAndAwaitRelease();
 									}
 									return McpLocalizationResult.localized(
-											captured.marker() + text.getDefaultText());
+											captured.marker()
+													+ text.getDefaultText());
 								})
+								.revision(captured.revision())
 								.build();
 						this.contexts.add(new ContextObservation(this.name, context,
 								request.getLanguageRanges(),
@@ -634,11 +631,10 @@ class McpLocalizationFleetPublicRuntimeTests {
 						return context;
 					})
 					.build();
-			return McpServer.withPort(0)
+			return McpServer.withPort(0,
+					McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+					McpAdmissionController.acceptAllInstance())
 					.host(LOOPBACK)
-					.endpointRegistry(
-							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-					.admissionController(McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

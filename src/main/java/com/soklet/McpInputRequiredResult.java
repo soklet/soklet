@@ -57,21 +57,49 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	private final McpJsonObject metadata;
 
 	/**
-	 * Vends an empty mutable builder.
+	 * Vends a builder containing its required first input request.
 	 *
+	 * @param key input-response correlation key
+	 * @param inputRequest server-initiated request
 	 * @return input-required-result builder
+	 * @throws NullPointerException if an argument is null
 	 */
 	@NonNull
-	public static Builder builder() {
-		return new Builder();
+	public static Builder withInputRequest(@NonNull String key,
+			@NonNull McpInputRequest inputRequest) {
+		return new Builder().addInputRequest(key, inputRequest);
+	}
+
+	/**
+	 * Vends a builder containing application JSON for Soklet to protect as
+	 * request state.
+	 *
+	 * @param frameworkRequestState application-defined JSON state
+	 * @return input-required-result builder
+	 * @throws NullPointerException if {@code frameworkRequestState} is null
+	 */
+	@NonNull
+	public static Builder withFrameworkRequestState(
+			@NonNull McpJsonValue frameworkRequestState) {
+		return new Builder().frameworkRequestState(frameworkRequestState);
+	}
+
+	/**
+	 * Vends a builder containing opaque request state protected by the
+	 * application.
+	 *
+	 * @param applicationRequestState nonempty opaque application-protected state
+	 * @return input-required-result builder
+	 * @throws NullPointerException if {@code applicationRequestState} is null
+	 * @throws IllegalArgumentException if {@code applicationRequestState} is empty
+	 */
+	@NonNull
+	public static Builder withApplicationRequestState(
+			@NonNull String applicationRequestState) {
+		return new Builder().applicationRequestState(applicationRequestState);
 	}
 
 	private McpInputRequiredResult(@NonNull Builder builder) {
-		if (builder.inputRequests.isEmpty()
-				&& builder.frameworkRequestState == null
-				&& builder.applicationRequestState == null)
-			throw new IllegalStateException(
-					"An input-required result needs an input request, request state, or both.");
 		this.inputRequests = Collections.unmodifiableMap(
 				new LinkedHashMap<>(builder.inputRequests));
 		this.frameworkRequestState = builder.frameworkRequestState;
@@ -152,20 +180,20 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * without replacing the original request.
 		 *
 		 * @param key input-response correlation key
-		 * @param request server-initiated request
+		 * @param inputRequest server-initiated request
 		 * @return this builder
 		 * @throws NullPointerException if an argument is null
 		 * @throws IllegalArgumentException if the key is already present
 		 */
 		@NonNull
-		public Builder inputRequest(@NonNull String key,
-				@NonNull McpInputRequest request) {
+		public Builder addInputRequest(@NonNull String key,
+				@NonNull McpInputRequest inputRequest) {
 			requireNonNull(key);
-			requireNonNull(request);
+			requireNonNull(inputRequest);
 			if (this.inputRequests.containsKey(key))
 				throw new IllegalArgumentException(
 						"Input-request keys must be unique within a result.");
-			this.inputRequests.put(key, request);
+			this.inputRequests.put(key, inputRequest);
 			return this;
 		}
 
@@ -176,13 +204,14 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * <p>This replaces any request state supplied by an earlier builder
 		 * call.
 		 *
-		 * @param state application-defined JSON state
+		 * @param frameworkRequestState application-defined JSON state
 		 * @return this builder
-		 * @throws NullPointerException if {@code state} is null
+		 * @throws NullPointerException if {@code frameworkRequestState} is null
 		 */
 		@NonNull
-		public Builder frameworkRequestState(@NonNull McpJsonValue state) {
-			McpJsonValue validatedState = requireNonNull(state);
+		public Builder frameworkRequestState(
+				@NonNull McpJsonValue frameworkRequestState) {
+			McpJsonValue validatedState = requireNonNull(frameworkRequestState);
 			this.frameworkRequestState = validatedState;
 			this.applicationRequestState = null;
 			return this;
@@ -201,14 +230,15 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * must return the handle on each retry; Soklet provides no repository
 		 * for it.
 		 *
-		 * @param state nonempty opaque application-protected state
+		 * @param applicationRequestState nonempty opaque application-protected state
 		 * @return this builder
-		 * @throws NullPointerException if {@code state} is null
-		 * @throws IllegalArgumentException if {@code state} is empty
+		 * @throws NullPointerException if {@code applicationRequestState} is null
+		 * @throws IllegalArgumentException if {@code applicationRequestState} is empty
 		 */
 		@NonNull
-		public Builder applicationRequestState(@NonNull String state) {
-			String validatedState = requireNonNull(state);
+		public Builder applicationRequestState(
+				@NonNull String applicationRequestState) {
+			String validatedState = requireNonNull(applicationRequestState);
 			if (validatedState.isEmpty())
 				throw new IllegalArgumentException(
 						"Application request state must not be empty.");
@@ -236,8 +266,6 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * Builds an immutable input-required result.
 		 *
 		 * @return immutable input-required result
-		 * @throws IllegalStateException if neither an input request nor request
-		 * state is present
 		 */
 		@NonNull
 		public McpInputRequiredResult build() {

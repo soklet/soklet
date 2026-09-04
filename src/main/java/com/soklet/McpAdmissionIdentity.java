@@ -40,7 +40,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class McpAdmissionIdentity {
 	/** Maximum UTF-8 encoding length of either partition key. */
-	public static final int MAXIMUM_PARTITION_KEY_UTF_8_BYTES = 256;
+	public static final int MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES = 256;
 	@NonNull
 	private static final McpAdmissionIdentity ANONYMOUS =
 			new Builder("anonymous").build();
@@ -133,9 +133,9 @@ public final class McpAdmissionIdentity {
 					.onMalformedInput(CodingErrorAction.REPORT)
 					.onUnmappableCharacter(CodingErrorAction.REPORT)
 					.encode(CharBuffer.wrap(value)).remaining();
-			if (length > MAXIMUM_PARTITION_KEY_UTF_8_BYTES)
+			if (length > MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES)
 				throw new IllegalArgumentException(name + " must contain at most "
-						+ MAXIMUM_PARTITION_KEY_UTF_8_BYTES + " UTF-8 bytes");
+						+ MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES + " UTF-8 bytes");
 		} catch (CharacterCodingException exception) {
 			throw new IllegalArgumentException(name + " must contain valid Unicode text", exception);
 		}

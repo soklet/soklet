@@ -98,8 +98,7 @@ class McpLocalizationPreferenceTests {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
 				new RequestObservationInput(
 						Request.withPath(HttpMethod.POST, "/mcp").build(),
-						McpEndpoint.withPath("/mcp").serverInformation(
-								McpImplementation.withNameAndVersion(
+						McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 										"physical-preference", "1").build()).build(),
 						Map.of(), "tools/call",
 						Optional.of(McpRequestId.fromString("request")),
@@ -120,26 +119,21 @@ class McpLocalizationPreferenceTests {
 			throws Exception {
 		AtomicReference<List<Locale.LanguageRange>> observedRanges =
 				new AtomicReference<>();
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observedRanges.set(List.copyOf(request.getLanguageRanges()));
-					return McpLocalizationContext.withLocale(Locale.ENGLISH)
-							.localizer(text ->
+					return McpLocalizationContext.withLocale(Locale.ENGLISH, text ->
 									McpLocalizationResult.useDefaultText())
 							.build();
 				})
 				.build();
 		String path = "/localization/physical-preference";
-		McpEndpoint endpoint = McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation
 						.withNameAndVersion("physical-preference", "1")
 						.title("Localized surface")
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(localizer)
@@ -331,7 +325,7 @@ class McpLocalizationPreferenceTests {
 	private static McpRequestContext requestContext() {
 		return new DefaultMcpRequestContext(new RequestObservationInput(
 				Request.withPath(HttpMethod.POST, "/mcp").build(),
-				McpEndpoint.withPath("/mcp").serverInformation(McpImplementation
+				McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("preference-test", "1").build()).build(),
 				Map.of(), "tools/call",
 				Optional.of(McpRequestId.fromString("request")), "2026-07-28",

@@ -118,7 +118,7 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
-	void annotatedToolsRequireTypedCompletionReturns() {
+	void annotatedToolsRequireSupportedNonVoidReturns() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.VoidToolEndpoint", """
 						package example;
@@ -139,12 +139,12 @@ public class McpAnnotationProcessorValidationTests {
 
 		assertThat(compilation).failed();
 		assertThat(compilation).hadErrorContaining(
-				"@McpTool method must declare a typed completion return value")
+				"@McpTool method must declare a supported non-void return type")
 				.inFile(source);
 	}
 
 	@Test
-	void annotatedToolsRejectDirectOperationResultReturns() {
+	void annotatedToolsAcceptDirectOperationResultReturns() throws IOException {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.OperationResultToolEndpoint", """
 						package example;
@@ -164,12 +164,15 @@ public class McpAnnotationProcessorValidationTests {
 				.withProcessors(new SokletProcessor())
 				.compile(source);
 
-		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining(
-				"MCP tool 'task-like' output schema is unsupported")
-				.inFile(source);
-		assertThat(compilation).hadErrorContaining("FRAMEWORK_TYPE")
-				.inFile(source);
+		assertThat(compilation).succeededWithoutWarnings();
+		String generatedSource = compilation.generatedSourceFiles().stream()
+				.filter(file -> file.getName().contains(
+						"SokletMcpEndpointProvider_"))
+				.findFirst().orElseThrow().getCharContent(false).toString();
+		Assertions.assertTrue(generatedSource.contains(
+				".argumentType(Tool0Arguments.class)"), generatedSource);
+		Assertions.assertTrue(generatedSource.contains("NO_OUTPUT_SCHEMA"),
+				generatedSource);
 	}
 
 	@Test
@@ -210,7 +213,7 @@ public class McpAnnotationProcessorValidationTests {
 						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
 						public final class MisplacedHeaderEndpoint {
 						  @McpTool(name = "invalid")
-						  public Result invalid(@McpHeader("Tenant") String tenant) {
+						  public Result invalid(@McpHeader(name = "Tenant") String tenant) {
 						    return new Result(tenant);
 						  }
 
@@ -243,20 +246,20 @@ public class McpAnnotationProcessorValidationTests {
 						public final class InvalidMirroredHeadersEndpoint {
 						  @McpTool(name = "invalid-token")
 						  public Result invalidToken(
-						      @McpToolArgument @McpHeader("bad name") String value) {
+						      @McpToolArgument @McpHeader(name = "bad name") String value) {
 						    return new Result(value);
 						  }
 
 						  @McpTool(name = "duplicate-headers")
 						  public Result duplicateHeaders(
-						      @McpToolArgument @McpHeader("Tenant") String first,
-						      @McpToolArgument @McpHeader("tenant") boolean second) {
+						      @McpToolArgument @McpHeader(name = "Tenant") String first,
+						      @McpToolArgument @McpHeader(name = "tenant") boolean second) {
 						    return new Result(first + second);
 						  }
 
 						  @McpTool(name = "invalid-scalar")
 						  public Result invalidScalar(
-						      @McpToolArgument @McpHeader("Ratio") double ratio) {
+						      @McpToolArgument @McpHeader(name = "Ratio") double ratio) {
 						    return new Result(Double.toString(ratio));
 						  }
 
@@ -268,7 +271,7 @@ public class McpAnnotationProcessorValidationTests {
 
 						  public record Result(String value) {}
 						  public record InvalidOutput(
-						      @McpHeader("Output") String value) {}
+						      @McpHeader(name = "Output") String value) {}
 						}
 						""");
 
@@ -663,8 +666,8 @@ public class McpAnnotationProcessorValidationTests {
 						  @McpResource(
 						      uri = "test://items/{identifier}",
 						      name = "invalid",
-						      size = 1,
-						      cacheTtlMs = -1)
+						      sizeInBytes = 1,
+						      cacheTimeToLiveInMilliseconds = -1)
 						  public String invalid(
 						      @McpResourceUriParameter Integer identifier,
 						      String missingAnnotation,
@@ -1248,7 +1251,7 @@ public class McpAnnotationProcessorValidationTests {
 						public final class PercentEncodedResourceEndpoint {
 						  @McpResource(uri = "test://items/{%6Eame.part}", name = "encoded")
 						  public McpResourceOutput read(
-						      @McpResourceUriParameter("%6Eame.part") String value) {
+						      @McpResourceUriParameter(name = "%6Eame.part") String value) {
 						    return null;
 						  }
 						}
@@ -1411,7 +1414,7 @@ public class McpAnnotationProcessorValidationTests {
 						public final class ResourceTemplateBoundEndpoint {
 						  @McpResource(uri = "%s", name = "bounded")
 						  public McpResourceOutput read(
-						      @McpResourceUriParameter("%s") String value) {
+						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
 						  }
 						}
@@ -1426,7 +1429,7 @@ public class McpAnnotationProcessorValidationTests {
 
 	private static Compilation compileExactResource(@NonNull String uri,
 			long size) {
-		String sizeDeclaration = size < 0 ? "" : ", size = " + size;
+		String sizeDeclaration = size < 0 ? "" : ", sizeInBytes = " + size;
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.ExactResourceBoundEndpoint", """
 						package example;
@@ -1453,7 +1456,7 @@ public class McpAnnotationProcessorValidationTests {
 
 					  @McpResource(uri = "test:///route-%d/{%s}", name = "resource-%d")
 					  public McpResourceOutput resource%d(
-					      @McpResourceUriParameter("%s") String value) {
+					      @McpResourceUriParameter(name = "%s") String value) {
 					    return null;
 					  }
 					""".formatted(index, variable, index, index, variable));
@@ -1492,13 +1495,13 @@ public class McpAnnotationProcessorValidationTests {
 						public final class ResourceTemplateOverlapBoundEndpoint {
 						  @McpResource(uri = "%s", name = "left")
 						  public McpResourceOutput left(
-						      @McpResourceUriParameter("%s") String value) {
+						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
 						  }
 
 						  @McpResource(uri = "%s", name = "right")
 						  public McpResourceOutput right(
-						      @McpResourceUriParameter("%s") String value) {
+						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
 						  }
 						}
@@ -1520,7 +1523,7 @@ public class McpAnnotationProcessorValidationTests {
 
 					  @McpResource(uri = "%s", name = "resource-%d")
 					  public McpResourceOutput resource%d(
-					      @McpResourceUriParameter("%s") String value) {
+					      @McpResourceUriParameter(name = "%s") String value) {
 					    return null;
 					  }
 					""".formatted(template, index, index, variable));

@@ -78,7 +78,7 @@ class McpRequestPropagationTests {
 		AtomicBoolean invoked = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> registration =
 				McpToolRegistration.withName("propagation")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((handlerRequest, arguments, features) -> {
 							assertEquals(traceContext,
 									handlerRequest.getTraceContext().orElseThrow());
@@ -186,8 +186,7 @@ class McpRequestPropagationTests {
 	}
 
 	private static McpEndpoint endpoint() {
-		return McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1")
 						.build())
 				.build();

@@ -20,6 +20,10 @@ Greenfield public-record elimination amendment reviewed: 2026-08-18
 
 Greenfield typed-request-state amendment reviewed: 2026-08-18
 
+MCP value-contract amendment reviewed: 2026-09-03
+
+Invocation and typed-input declaration amendment reviewed: 2026-09-03
+
 This record approves the Phase 6 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -35,16 +39,16 @@ the current full japicmp report.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 618 canonical
+The reviewed current incompatibility set contains exactly 621 canonical
 symbols and has SHA-256
-`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
+`25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
 The matching full japicmp report establishes an exact owner universe of:
 
 - 133 Phase 4 owners;
-- 36 Phase 5 owners;
+- 37 Phase 5 owners;
 - 64 Phase 6 owners;
 - zero provisional owners; and
-- 233 MCP owners, plus 38 reviewed non-MCP owners for 271 current-side owners.
+- 234 MCP owners, plus 38 reviewed non-MCP owners for 272 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory remains 133, while its signature snapshot includes
@@ -72,23 +76,23 @@ Phase 5 carrier owners and changes no Phase 6 descriptor.
 
 ## Frozen Phase 6 snapshot
 
-`phase-6.signatures.jsonl` contains exactly 421 canonical records:
+`phase-6.signatures.jsonl` contains exactly 424 canonical records:
 
 - 64 classes;
 - zero constructors;
 - 42 fields; and
-- 315 methods.
+- 318 methods.
 
 The reviewed file's SHA-256 is
-`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`.
+`09d69ee536b2408917836ab570b28c975f937c81ddc89c3ca94ab2118a4742ae`.
 The independent reflection contract freezes the Phase 6 JSpecify type-use
 layout with SHA-256
-`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
+`01eba9130dd61536076431c633833dc66b41f5ec605870cfb6f3a29a183db930`.
 The 64-entry `phase-6.includes` inventory has SHA-256
-`640eda42f3dd1cf1c5d8bf50e461281bc3083992de5dc83bf77a0478617606bc`.
+`9103918bad58c5b6d6d41384803518876f3dfc6ae7363bf3d9084e3fab37f139`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 421 records and was byte-for-
+current full japicmp report produced the same 424 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate now
 compares the Phase 4, Phase 5, and Phase 6 snapshots bidirectionally on every
 run, and `frozen-phases` lists the contiguous sorted prefix `4`, `5`, `6`.
@@ -124,7 +128,7 @@ cross-cutting review fixed the following public contracts:
   domain-separated external key. An adapter selects exactly one key strategy
   per catalog and never falls back between strategies.
 - `McpLocalizationControl` is a local-server control plane: `isEnabled()` plus
-  `catalogsChanged()`. It distributes nothing, carries no locale, tenant,
+  `invalidateCatalogs()`. It distributes nothing, carries no locale, tenant,
   revision, or key, and throws consistently when localization is disabled.
 - The three reviewed Phase 4 host amendments remain exact as corrected: direct
   `McpInvocationFeatures` input to `McpHandlerInterceptor.interceptHandler(...)`,
@@ -346,7 +350,7 @@ No canonical-constructor, component-accessor, record-shape, or deprecated
 compatibility alias is retained.
 
 Phase 6 owns 31 of those conversions: the top-level
-`McpTraceCorrelationConfigurationFingerprint`; the three nested
+`McpTraceCorrelationFingerprint`; the three nested
 `McpLocalizationResult` variants; all 23 nested `McpMetricsEvent` variants; and
 the four nested `McpMetricsSnapshot` aggregate-key types. The sealed result and
 event interfaces own their named factories, their fieldless variants are
@@ -508,3 +512,94 @@ Phase 6 descriptor. The exact non-MCP allowlist remains at 38 owners with
 SHA-256
 `f033df8701ffef4718fa0c62858ee02054910a0698503850670e80eafdddd6d6`,
 so the complete current-side owner inventory contains 271 types.
+
+## 2026-09-03 Revision 2 construction and localization-lookup amendment
+
+Localization construction now starts complete:
+`McpLocalizer.withFallbackLocale(...)` requires both the fallback locale and
+localization-context provider, while `McpLocalizationContext.withLocale(...)`
+requires the locale and an `McpLocalizationLookup`. The former nested
+`ContextProviderStage` has been replaced by that named top-level, thread-safe
+functional lookup contract; no compatibility alias preserves the incomplete
+staged shape. Nullable metrics maps reset to empty maps, and a nullable protocol
+revision clears the optional revision.
+
+The amended Phase 6 snapshot contains 422 records: 64 classes, no public
+constructors, 42 fields, and 316 methods. Its signature SHA-256 is
+`afe117cb8580b0e1cb9270dc881107c8311f692b60714f803bf23d7685124ccb`;
+the reflection/nullability SHA-256 is
+`7524969d683aafbc04c3eabffad6769fa5005e5d33255c8acbb2101650acf023`;
+and the include-inventory SHA-256 is
+`9103918bad58c5b6d6d41384803518876f3dfc6ae7363bf3d9084e3fab37f139`.
+The Phase 6 owner count remains 64, and the shared compatibility ledger contains
+622 records with SHA-256
+`c83e4e13f40b8c1773aac64d0fc2b4854879391ab322438187a6f3807cbbf2b8`.
+
+The aggregate API-freeze gate and the 23-test focused reflection contract
+passed against this development tree. These checks do not substitute for
+release-candidate provenance or publication evidence.
+
+## 2026-09-03 MCP value-contract amendment
+
+The owner-approved Revision 2 value pass adds complete public construction for
+`McpTextCoordinate` and `McpLocalizableText`. These two factories let custom
+localizers and localization-aware application code be unit-tested without a
+running server while preserving the existing validation and immutable value
+semantics.
+
+The amended Phase 6 snapshot contains 424 records: 64 classes, no public
+constructors, 42 fields, and 318 methods. Its signature SHA-256 is
+`09d69ee536b2408917836ab570b28c975f937c81ddc89c3ca94ab2118a4742ae`;
+the reflection/nullability SHA-256 is
+`01eba9130dd61536076431c633833dc66b41f5ec605870cfb6f3a29a183db930`;
+and the include-inventory SHA-256 remains
+`9103918bad58c5b6d6d41384803518876f3dfc6ae7363bf3d9084e3fab37f139`.
+The shared compatibility ledger contains 618 records with SHA-256
+`5846923de47c75e2ac5b926f4efdfbcf78f8d88beab1d1f1095bf62d09804114`.
+The owner partition is unchanged. The focused factory and reflection contracts
+and aggregate API-freeze gate are local development checks, not
+release-candidate provenance or publication evidence.
+
+## 2026-09-03 invocation and typed-input declaration amendment
+
+Revision 2 Section 6 changes only Phase 4 invocation/context owners and Phase
+5 input-declaration owners. The Phase 6 snapshot remains byte-identical at 424
+records, its 64-owner include inventory remains unchanged, and its signature,
+reflection/nullability, and include SHA-256 values remain
+`09d69ee536b2408917836ab570b28c975f937c81ddc89c3ca94ab2118a4742ae`,
+`01eba9130dd61536076431c633833dc66b41f5ec605870cfb6f3a29a183db930`,
+and
+`9103918bad58c5b6d6d41384803518876f3dfc6ae7363bf3d9084e3fab37f139`.
+
+The new Phase 5 enum raises the complete owner partition to 133/37/64/0, for
+234 MCP owners and 272 reviewed current-side owners. The three abstracted
+Phase 4 request-context methods raise the shared released-3.5.1 compatibility
+ledger to 621 records with SHA-256
+`25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
+These changes do not reopen any Phase 6 descriptor.
+
+## 2026-09-03 focused naming and fingerprint-surface amendment
+
+The owner-approved Revision 2 naming pass aligns Phase 6 localization,
+text-coordinate, protection-context, diagnostics, metrics, and trace-
+correlation vocabulary with their public properties. The trace-correlation
+fingerprint owner uses the shorter configuration-free name, and its encoding
+version remains available through the instance getter rather than a public
+implementation constant.
+
+Removing that public constant reduces the Phase 6 snapshot to 423 records
+across the unchanged 64 owners: 64 classes, no public constructors, 41 fields,
+and 318 methods. Its signature SHA-256 is
+`991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`;
+its reflection/nullability SHA-256 is
+`3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`;
+and the canonically sorted include inventory has SHA-256
+`29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
+
+The complete owner partition is now 133/36/64/0, or 233 MCP owners and 271
+reviewed current-side owners. The released-3.5.1 compatibility ledger remains
+621 records and now has SHA-256
+`38356e712db3eb747e9b525a8f2645a95ea59c50fa8de25dcfb4c21e79dc3e2e`.
+The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
+against this development tree. These are local development checks, not
+release-candidate provenance or publication evidence.

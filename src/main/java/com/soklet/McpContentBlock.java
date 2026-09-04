@@ -16,7 +16,10 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
 
 /**
  * Immutable content block carried by an MCP tool result or prompt message.
@@ -26,4 +29,19 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public sealed interface McpContentBlock permits McpAudioContent,
 		McpEmbeddedResource, McpImageContent, McpResourceLink, McpTextContent {
+	/**
+	 * Returns optional presentation annotations for this content block.
+	 *
+	 * @return content annotations, if supplied
+	 */
+	@NonNull
+	Optional<@NonNull McpContentAnnotations> getAnnotations();
+
+	/**
+	 * Returns protocol extension metadata associated with this content block.
+	 *
+	 * @return immutable extension metadata
+	 */
+	@NonNull
+	McpJsonObject getMetadata();
 }

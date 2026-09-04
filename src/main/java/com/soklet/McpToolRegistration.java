@@ -83,7 +83,7 @@ public final class McpToolRegistration<A> {
 	private final String rateLimiterName;
 	@Nullable
 	private final McpRateLimiter rateLimiter;
-	private final boolean structuredContentTextMirroringEnabled;
+	private final boolean structuredContentMirroredAsText;
 	@NonNull
 	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
 	@NonNull
@@ -99,7 +99,7 @@ public final class McpToolRegistration<A> {
 	 * Begins a staged registration for a named tool.
 	 *
 	 * <p>The next stage selects typed or raw-JSON arguments. Supplying both
-	 * argument and result types selects the simple typed-completion path;
+	 * argument and output types selects the simple typed-completion path;
 	 * supplying only an argument type selects the advanced
 	 * {@link McpOperationResult} path. No stage exposes {@code build()} before
 	 * a handler has been supplied.
@@ -110,8 +110,8 @@ public final class McpToolRegistration<A> {
 	 * from {@code A-Z}, {@code a-z}, {@code 0-9}, underscore, hyphen, and dot
 	 */
 	@NonNull
-	public static NamedBuilder withName(@NonNull String name) {
-		return new NamedBuilder(requireName(name));
+	public static ArgumentTypeStage withName(@NonNull String name) {
+		return new ArgumentTypeStage(requireName(name));
 	}
 
 	private McpToolRegistration(@NonNull RegistrationState<A> state) {
@@ -128,8 +128,8 @@ public final class McpToolRegistration<A> {
 		this.annotations = state.annotations;
 		this.rateLimiterName = state.rateLimiterName;
 		this.rateLimiter = state.rateLimiter;
-		this.structuredContentTextMirroringEnabled =
-				state.structuredContentTextMirroringEnabled;
+		this.structuredContentMirroredAsText =
+				state.structuredContentMirroredAsText;
 		this.inputRequestDeclarations =
 				List.copyOf(state.inputRequestDeclarations);
 		this.requestStateMode = state.requestStateMode;
@@ -237,8 +237,8 @@ public final class McpToolRegistration<A> {
 	 * @return {@code true} when mirroring is enabled
 	 */
 	@NonNull
-	public Boolean isStructuredContentTextMirroringEnabled() {
-		return this.structuredContentTextMirroringEnabled;
+	public Boolean isStructuredContentMirroredAsText() {
+		return this.structuredContentMirroredAsText;
 	}
 
 	/**
@@ -332,85 +332,85 @@ public final class McpToolRegistration<A> {
 	}
 
 	/**
-	 * Staged selection of a tool's argument and result shapes.
+	 * Staged selection of a tool's argument and output shapes.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class NamedBuilder {
+	public static final class ArgumentTypeStage {
 		@NonNull
 		private final String name;
 
-		private NamedBuilder(@NonNull String name) {
+		private ArgumentTypeStage(@NonNull String name) {
 			this.name = requireNonNull(name);
 		}
 
 		/**
-		 * Selects class-token argument and result types.
+		 * Selects class-token argument and output types.
 		 *
 		 * @param argumentType argument type
-		 * @param resultType structured result type
+		 * @param outputType structured output type
 		 * @param <T> argument type
-		 * @param <R> result type
+		 * @param <R> output type
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> types(
+		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
 				@NonNull Class<T> argumentType,
-				@NonNull Class<R> resultType) {
-			return typedStage(argumentType, resultType);
+				@NonNull Class<R> outputType) {
+			return typedStage(argumentType, outputType);
 		}
 
 		/**
-		 * Selects a class-token argument type and generic result type.
+		 * Selects a class-token argument type and generic output type.
 		 *
 		 * @param argumentType argument type
-		 * @param resultType structured result type token
+		 * @param outputType structured output type token
 		 * @param <T> argument type
-		 * @param <R> result type
+		 * @param <R> output type
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> types(
+		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
 				@NonNull Class<T> argumentType,
-				@NonNull TypeReference<R> resultType) {
-			requireNonNull(resultType);
-			return typedStage(argumentType, resultType.getType());
+				@NonNull TypeReference<R> outputType) {
+			requireNonNull(outputType);
+			return typedStage(argumentType, outputType.getType());
 		}
 
 		/**
-		 * Selects a generic argument type and class-token result type.
+		 * Selects a generic argument type and class-token output type.
 		 *
 		 * @param argumentType argument type token
-		 * @param resultType structured result type
+		 * @param outputType structured output type
 		 * @param <T> argument type
-		 * @param <R> result type
+		 * @param <R> output type
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> types(
+		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
 				@NonNull TypeReference<T> argumentType,
-				@NonNull Class<R> resultType) {
+				@NonNull Class<R> outputType) {
 			requireNonNull(argumentType);
-			return typedStage(argumentType.getType(), resultType);
+			return typedStage(argumentType.getType(), outputType);
 		}
 
 		/**
-		 * Selects generic argument and result types.
+		 * Selects generic argument and output types.
 		 *
 		 * @param argumentType argument type token
-		 * @param resultType structured result type token
+		 * @param outputType structured output type token
 		 * @param <T> argument type
-		 * @param <R> result type
+		 * @param <R> output type
 		 * @return typed handler-selection stage
 		 */
 		@NonNull
-		public <T, R> CompleteHandlerStage<T, R> types(
+		public <T, R> CompleteHandlerStage<T, R> argumentAndOutputTypes(
 				@NonNull TypeReference<T> argumentType,
-				@NonNull TypeReference<R> resultType) {
+				@NonNull TypeReference<R> outputType) {
 			requireNonNull(argumentType);
-			requireNonNull(resultType);
-			return typedStage(argumentType.getType(), resultType.getType());
+			requireNonNull(outputType);
+			return typedStage(argumentType.getType(), outputType.getType());
 		}
 
 		/**
@@ -449,7 +449,7 @@ public final class McpToolRegistration<A> {
 		 * @return raw-JSON handler-selection stage
 		 */
 		@NonNull
-		public OperationHandlerStage<McpJsonObject> jsonArguments() {
+		public OperationHandlerStage<McpJsonObject> jsonObjectArguments() {
 			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
 					JSON_OBJECT_SCHEMA, EMPTY_MIRRORED_HEADER_PLAN,
 					rawArguments -> rawArguments);
@@ -480,15 +480,15 @@ public final class McpToolRegistration<A> {
 
 		@NonNull
 		private <T, R> CompleteHandlerStage<T, R> typedStage(
-				@NonNull Type argumentType, @NonNull Type resultType) {
+				@NonNull Type argumentType, @NonNull Type outputType) {
 			requireNonNull(argumentType);
-			requireNonNull(resultType);
+			requireNonNull(outputType);
 			McpRuntimeTypedSchemaBridge<T> inputBridge =
 					McpRuntimeTypedSchemaBridge.compileToolInput(argumentType);
 			McpRuntimeTypedSchemaBridge<R> outputBridge =
-					McpRuntimeTypedSchemaBridge.compileToolOutput(resultType);
+					McpRuntimeTypedSchemaBridge.compileToolOutput(outputType);
 			return new CompleteHandlerStage<>(this.name, argumentType,
-					resultType, inputBridge, outputBridge);
+					outputType, inputBridge, outputBridge);
 		}
 
 		@NonNull
@@ -509,7 +509,7 @@ public final class McpToolRegistration<A> {
 	 * Handler-selection stage for the simple typed-completion path.
 	 *
 	 * @param <A> argument type
-	 * @param <R> structured result type
+	 * @param <R> structured output type
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
@@ -519,19 +519,19 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final Type argumentType;
 		@NonNull
-		private final Type resultType;
+		private final Type outputType;
 		@NonNull
 		private final McpRuntimeTypedSchemaBridge<A> inputBridge;
 		@NonNull
 		private final McpRuntimeTypedSchemaBridge<R> outputBridge;
 
 		private CompleteHandlerStage(@NonNull String name,
-				@NonNull Type argumentType, @NonNull Type resultType,
+				@NonNull Type argumentType, @NonNull Type outputType,
 				@NonNull McpRuntimeTypedSchemaBridge<A> inputBridge,
 				@NonNull McpRuntimeTypedSchemaBridge<R> outputBridge) {
 			this.name = requireNonNull(name);
 			this.argumentType = requireNonNull(argumentType);
-			this.resultType = requireNonNull(resultType);
+			this.outputType = requireNonNull(outputType);
 			this.inputBridge = requireNonNull(inputBridge);
 			this.outputBridge = requireNonNull(outputBridge);
 		}
@@ -543,7 +543,7 @@ public final class McpToolRegistration<A> {
 		 * @return optional-metadata builder
 		 */
 		@NonNull
-		public CompleteBuilder<A, R> handler(
+		public CompleteBuilder<A> handler(
 				@NonNull McpCompleteToolHandler<A, R> handler) {
 			requireNonNull(handler);
 			McpToolHandler<A> normalizedHandler = (request, arguments, features) -> {
@@ -559,7 +559,7 @@ public final class McpToolRegistration<A> {
 					this.argumentType,
 					new McpToolSchema(this.inputBridge.getSchemaDocument()),
 					this.inputBridge.getMirroredHeaderPlan(),
-					this.resultType,
+					this.outputType,
 					new McpToolSchema(this.outputBridge.getSchemaDocument()),
 					this.outputBridge,
 					normalizedHandler, this.inputBridge::decode);
@@ -604,12 +604,12 @@ public final class McpToolRegistration<A> {
 		 * @return optional-metadata builder
 		 */
 		@NonNull
-		public Builder<A> handler(@NonNull McpToolHandler<A> handler) {
+		public OperationBuilder<A> handler(@NonNull McpToolHandler<A> handler) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
 					null, null, null,
 					requireNonNull(handler), this.argumentDecoder);
-			return new Builder<>(state);
+			return new OperationBuilder<>(state);
 		}
 	}
 
@@ -621,18 +621,18 @@ public final class McpToolRegistration<A> {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class Builder<A> {
+	public static final class OperationBuilder<A> {
 		@NonNull
 		private final RegistrationState<A> state;
 
-		private Builder(@NonNull RegistrationState<A> state) {
+		private OperationBuilder(@NonNull RegistrationState<A> state) {
 			this.state = requireNonNull(state);
 		}
 
 		/** @param title human-readable title
 		 * @return this builder */
 		@NonNull
-		public Builder<A> title(@NonNull String title) {
+		public OperationBuilder<A> title(@NonNull String title) {
 			this.state.title = requireNonNull(title);
 			return this;
 		}
@@ -640,15 +640,19 @@ public final class McpToolRegistration<A> {
 		/** @param description human-readable description
 		 * @return this builder */
 		@NonNull
-		public Builder<A> description(@NonNull String description) {
+		public OperationBuilder<A> description(@NonNull String description) {
 			this.state.description = requireNonNull(description);
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder<A> icon(@NonNull McpIcon icon) {
+		public OperationBuilder<A> addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -656,7 +660,7 @@ public final class McpToolRegistration<A> {
 		/** @param annotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public Builder<A> annotations(
+		public OperationBuilder<A> annotations(
 				@NonNull McpToolAnnotations annotations) {
 			this.state.annotations = requireNonNull(annotations);
 			return this;
@@ -671,7 +675,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder<A> rateLimiterName(@NonNull String limiterName) {
+		public OperationBuilder<A> rateLimiterName(@NonNull String limiterName) {
 			this.state.rateLimiterName = requireNonBlank(limiterName,
 					"Rate-limiter name");
 			this.state.rateLimiter = null;
@@ -687,7 +691,8 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder<A> rateLimiter(@NonNull McpRateLimiter rateLimiter) {
+		public OperationBuilder<A> rateLimiter(
+				@NonNull McpRateLimiter rateLimiter) {
 			this.state.rateLimiter = requireNonNull(rateLimiter);
 			this.state.rateLimiterName = null;
 			return this;
@@ -706,8 +711,25 @@ public final class McpToolRegistration<A> {
 		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public Builder<A> mirrorStructuredContentAsText(@NonNull Boolean enabled) {
-			this.state.structuredContentTextMirroringEnabled = requireNonNull(enabled);
+		public OperationBuilder<A> structuredContentMirroredAsText(
+				@NonNull Boolean enabled) {
+			this.state.structuredContentMirroredAsText =
+					requireNonNull(enabled);
+			return this;
+		}
+
+		/**
+		 * Appends one input-request declaration for this advanced operation.
+		 *
+		 * @param inputRequestDeclaration declaration to append
+		 * @return this builder
+		 * @throws NullPointerException if the declaration is null
+		 */
+		@NonNull
+		public OperationBuilder<A> addInputRequestDeclaration(
+				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
+			this.state.inputRequestDeclarations.add(
+					requireNonNull(inputRequestDeclaration));
 			return this;
 		}
 
@@ -721,7 +743,7 @@ public final class McpToolRegistration<A> {
 		 * @throws NullPointerException if the array or a declaration is null
 		 */
 		@NonNull
-		public Builder<A> mayRequestInput(
+		public OperationBuilder<A> addInputRequestDeclarations(
 				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
 			requireNonNull(declarations);
 			List<McpInputRequestDeclaration> copiedDeclarations =
@@ -739,7 +761,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder<A> requestStateMode(
+		public OperationBuilder<A> requestStateMode(
 				@NonNull McpRequestStateMode requestStateMode) {
 			this.state.requestStateMode = requireNonNull(requestStateMode);
 			return this;
@@ -748,7 +770,7 @@ public final class McpToolRegistration<A> {
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
-		public Builder<A> metadata(@NonNull McpJsonObject metadata) {
+		public OperationBuilder<A> metadata(@NonNull McpJsonObject metadata) {
 			this.state.metadata = requireNonNull(metadata);
 			return this;
 		}
@@ -769,11 +791,10 @@ public final class McpToolRegistration<A> {
 	 * output-schema, or converter override.
 	 *
 	 * @param <A> argument type
-	 * @param <R> structured result type
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class CompleteBuilder<A, R> {
+	public static final class CompleteBuilder<A> {
 		@NonNull
 		private final RegistrationState<A> state;
 
@@ -784,7 +805,7 @@ public final class McpToolRegistration<A> {
 		/** @param title human-readable title
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A, R> title(@NonNull String title) {
+		public CompleteBuilder<A> title(@NonNull String title) {
 			this.state.title = requireNonNull(title);
 			return this;
 		}
@@ -792,16 +813,20 @@ public final class McpToolRegistration<A> {
 		/** @param description human-readable description
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A, R> description(
+		public CompleteBuilder<A> description(
 				@NonNull String description) {
 			this.state.description = requireNonNull(description);
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public CompleteBuilder<A, R> icon(@NonNull McpIcon icon) {
+		public CompleteBuilder<A> addIcon(@NonNull McpIcon icon) {
 			this.state.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -809,7 +834,7 @@ public final class McpToolRegistration<A> {
 		/** @param annotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A, R> annotations(
+		public CompleteBuilder<A> annotations(
 				@NonNull McpToolAnnotations annotations) {
 			this.state.annotations = requireNonNull(annotations);
 			return this;
@@ -824,7 +849,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A, R> rateLimiterName(
+		public CompleteBuilder<A> rateLimiterName(
 				@NonNull String limiterName) {
 			this.state.rateLimiterName = requireNonBlank(limiterName,
 					"Rate-limiter name");
@@ -841,7 +866,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A, R> rateLimiter(
+		public CompleteBuilder<A> rateLimiter(
 				@NonNull McpRateLimiter rateLimiter) {
 			this.state.rateLimiter = requireNonNull(rateLimiter);
 			this.state.rateLimiterName = null;
@@ -861,16 +886,17 @@ public final class McpToolRegistration<A> {
 		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public CompleteBuilder<A, R> mirrorStructuredContentAsText(
+		public CompleteBuilder<A> structuredContentMirroredAsText(
 				@NonNull Boolean enabled) {
-			this.state.structuredContentTextMirroringEnabled = requireNonNull(enabled);
+			this.state.structuredContentMirroredAsText =
+					requireNonNull(enabled);
 			return this;
 		}
 
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<A, R> metadata(
+		public CompleteBuilder<A> metadata(
 				@NonNull McpJsonObject metadata) {
 			this.state.metadata = requireNonNull(metadata);
 			return this;
@@ -960,7 +986,7 @@ public final class McpToolRegistration<A> {
 		private String rateLimiterName;
 		@Nullable
 		private McpRateLimiter rateLimiter;
-		private boolean structuredContentTextMirroringEnabled = true;
+		private boolean structuredContentMirroredAsText = true;
 		@NonNull
 		private final List<@NonNull McpInputRequestDeclaration>
 				inputRequestDeclarations = new ArrayList<>();

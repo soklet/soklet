@@ -134,7 +134,7 @@ class McpLocalizationHttpBoundaryTests {
 		McpAdmissionRejection wildcard = McpAdmissionRejection
 				.withStatusCodeAndError(403,
 						McpJsonRpcError.fromApplication(-31_001, "denied"))
-				.header("Vary", "*")
+				.addHeader("Vary", "*")
 				.build();
 		Capture wildcardCapture = capture(localizer(),
 				CorsAuthorizer.acceptAllInstance(),
@@ -149,7 +149,7 @@ class McpLocalizationHttpBoundaryTests {
 		McpAdmissionRejection duplicateTokens = McpAdmissionRejection
 				.withStatusCodeAndError(403,
 						McpJsonRpcError.fromApplication(-31_002, "denied"))
-				.header("Vary",
+				.addHeader("Vary",
 						"X-Tenant, accept-language, ORIGIN, x-tenant")
 				.build();
 		Capture normalizedCapture = capture(localizer(),
@@ -169,8 +169,8 @@ class McpLocalizationHttpBoundaryTests {
 		// The handler emits text that looks exactly like localizable JSON and
 		// also localizes for itself from the exact provider context.
 		AtomicReference<Locale> observedLocale = new AtomicReference<>();
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.FRENCH,
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.FRENCH,
 						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
@@ -192,17 +192,14 @@ class McpLocalizationHttpBoundaryTests {
 	}
 
 	private static McpLocalizer localizer() {
-		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.FRENCH,
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> context(Locale.FRENCH,
 						text -> McpLocalizationResult.useDefaultText()))
 				.build();
 	}
 
 	private static McpLocalizationContext context(Locale locale,
-			java.util.function.Function<McpLocalizableText,
-					McpLocalizationResult> provider) {
-		return McpLocalizationContext.withLocale(locale)
-				.localizer(provider)
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizationContext.withLocale(locale, localizationLookup)
 				.build();
 	}
 
@@ -234,8 +231,7 @@ class McpLocalizationHttpBoundaryTests {
 			CorsAuthorizer corsAuthorizer, Request request,
 			McpAdmissionController admissionController,
 			AtomicReference<Locale> observedLocale) {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-http", "1.0")
 						.title("Canonical title")
 						.build())
@@ -243,12 +239,11 @@ class McpLocalizationHttpBoundaryTests {
 						Duration.ofSeconds(60)))
 				.resourceTemplateListCachePolicy(McpCachePolicy
 						.fromPublicTimeToLive(Duration.ofSeconds(60)))
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/text"), "text")
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(resource.getUri(),
 																"cacheable text")
 														.build())
@@ -256,7 +251,7 @@ class McpLocalizationHttpBoundaryTests {
 						.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 								Duration.ofSeconds(45)))
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/dynamic"), "dynamic")
 						.handler((resourceRequest, resource, features) -> {
 							Locale locale = features
@@ -265,8 +260,7 @@ class McpLocalizationHttpBoundaryTests {
 									.orElse(Locale.ROOT);
 							observedLocale.set(locale);
 							return McpCompleteResult.fromResourceOutput(
-									McpResourceOutput.builder()
-											.content(McpTextResourceContents
+									McpResourceOutput.withContent(McpTextResourceContents
 													.withUriAndText(resource.getUri(),
 															"{\"title\":\"Dynamic title\","
 																	+ "\"description\":\"Dynamic\"}"
@@ -276,20 +270,19 @@ class McpLocalizationHttpBoundaryTests {
 											.build());
 						})
 						.build())
-				.resource(McpResourceRegistration.withUriTemplateAndName(
+				.addResource(McpResourceRegistration.withUriTemplateAndName(
 						"http://cache/item/{id}", "item")
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(URI.create(
 																"http://cache/item/1"),
 																"unused")
 														.build())
 												.build()))
 						.build())
-				.tool(McpToolRegistration.withName("cache.tool")
-						.jsonArguments()
+				.addTool(McpToolRegistration.withName("cache.tool")
+						.jsonObjectArguments()
 						.handler((toolRequest, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.build())

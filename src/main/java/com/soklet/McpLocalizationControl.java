@@ -45,5 +45,5 @@ public interface McpLocalizationControl {
 	 *
 	 * @throws IllegalStateException if localization is disabled
 	 */
-	void catalogsChanged();
+	void invalidateCatalogs();
 }

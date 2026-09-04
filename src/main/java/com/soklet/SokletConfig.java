@@ -390,7 +390,9 @@ public final class SokletConfig {
 		}
 
 		/**
-		 * Sets how Soklet creates application instances.
+		 * Sets how Soklet creates application instances for HTTP, SSE, and MCP
+		 * handlers and application parameter values. The provider may be called
+		 * concurrently.
 		 *
 		 * @param instanceProvider the instance provider, or {@code null} to use the default
 		 * @return this builder

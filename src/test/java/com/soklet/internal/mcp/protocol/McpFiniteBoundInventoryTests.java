@@ -17,6 +17,10 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpLocalizer;
+import com.soklet.McpAdmissionController;
+import com.soklet.McpEndpoint;
+import com.soklet.McpEndpointRegistry;
+import com.soklet.McpImplementation;
 import com.soklet.McpServer;
 import com.soklet.McpSimulationOptions;
 import org.junit.jupiter.api.Assertions;
@@ -159,7 +163,7 @@ public class McpFiniteBoundInventoryTests {
 		Map<String, String> values = new LinkedHashMap<>();
 		McpHttpTransportConfiguration transport =
 				McpHttpTransportConfiguration.productionDefaults(0);
-		Object publicBuilder = McpServer.withPort(0);
+		Object publicBuilder = publicServerBuilder();
 		put(values, "transport.accept-backlog", transport.acceptBacklog());
 		put(values, "transport.read-buffer-bytes", transport.readBufferSize());
 		put(values, "transport.maximum-connections", transport.maximumConnections());
@@ -210,8 +214,8 @@ public class McpFiniteBoundInventoryTests {
 				fieldValue(publicBuilder, "requestHandlerQueueCapacity"));
 		Assertions.assertEquals(subscription.streamQueueCapacity(),
 				fieldValue(publicBuilder, "streamQueueCapacity"));
-		Assertions.assertEquals(subscription.maximumSubscriptionsPerPrincipal(),
-				fieldValue(publicBuilder, "maximumSubscriptionsPerPrincipal"));
+		Assertions.assertEquals(subscription.maximumSubscriptionsPerPartition(),
+				fieldValue(publicBuilder, "maximumSubscriptionsPerPartition"));
 		Assertions.assertEquals(subscription.keepAliveInterval(),
 				fieldValue(publicBuilder, "keepAliveInterval"));
 		Assertions.assertEquals(subscription.maximumSubscriptionDuration(),
@@ -396,8 +400,8 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "queue.protocol-capacity",
 				transport.requestProcessorQueueCapacity());
 		put(values, "queue.stream-capacity", subscription.streamQueueCapacity());
-		put(values, "queue.subscriptions-per-principal",
-				subscription.maximumSubscriptionsPerPrincipal());
+		put(values, "queue.subscriptions-per-partition",
+				subscription.maximumSubscriptionsPerPartition());
 		McpSimulationOptions simulation = McpSimulationOptions.defaultInstance();
 		put(values, "queue.simulation-item-capacity",
 				simulation.getStreamItemQueueCapacity());
@@ -513,6 +517,16 @@ public class McpFiniteBoundInventoryTests {
 		Field field = target.getClass().getDeclaredField(fieldName);
 		field.setAccessible(true);
 		return field.get(target);
+	}
+
+	private static McpServer.Builder publicServerBuilder() {
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+				McpImplementation.withNameAndVersion(
+						"finite-bound-inventory-tests", "4.0.0").build())
+				.build();
+		return McpServer.withPort(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance());
 	}
 
 	private static BigInteger staticBigInteger(String className, String fieldName)

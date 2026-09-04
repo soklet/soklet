@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -128,10 +129,12 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						""));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().protocolErrors(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().unknownMirroredHeaders(null));
+		McpMetricsSnapshot resetMaps = McpMetricsSnapshot.builder()
+				.protocolErrors(null)
+				.unknownMirroredHeaders(null)
+				.build();
+		Assertions.assertTrue(resetMaps.getProtocolErrors().isEmpty());
+		Assertions.assertTrue(resetMaps.getUnknownMirroredHeaders().isEmpty());
 		assertInvalidCountMapInputs(routedKey);
 	}
 
@@ -430,6 +433,8 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
 		Assertions.assertEquals(0, getter.getParameterCount());
 		Assertions.assertEquals(Map.class, getter.getReturnType());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 		assertCountMapType(getter.getGenericReturnType(),
 				getter.getAnnotatedReturnType(), requireNonNull(keyType));
 
@@ -440,6 +445,8 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 				builder.getReturnType());
 		Assertions.assertTrue(builder.getAnnotatedReturnType()
 				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(builder.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
 		assertCountMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0], keyType);
 	}
@@ -451,10 +458,8 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		Assertions.assertEquals(Map.class, parameterizedType.getRawType());
 		Assertions.assertArrayEquals(new Type[]{requireNonNull(keyType), Long.class},
 				parameterizedType.getActualTypeArguments());
-		Assertions.assertTrue(requireNonNull(annotatedType)
-				.isAnnotationPresent(NonNull.class));
 		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
-				annotatedType);
+				requireNonNull(annotatedType));
 		for (AnnotatedType argument : ((AnnotatedParameterizedType) annotatedType)
 				.getAnnotatedActualTypeArguments())
 			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
@@ -578,16 +583,12 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH, McpImplementation.withNameAndVersion(
 						"protocol-header-metrics-test", "4.0.0")
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

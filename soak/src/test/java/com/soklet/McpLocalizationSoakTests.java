@@ -185,7 +185,7 @@ class McpLocalizationSoakTests {
 			for (int wave = 0; wave < revisionWaves; wave++) {
 				String revision = "%s-r%04d".formatted(runId, wave + 1);
 				state.installRevision(revision);
-				server.getLocalizationControl().catalogsChanged();
+				server.getLocalizationControl().invalidateCatalogs();
 				state.invalidationsRequested.incrementAndGet();
 				String invalidation = awaitItem(subscription);
 				assertContains(invalidation,
@@ -259,7 +259,7 @@ class McpLocalizationSoakTests {
 	private static McpEndpoint endpoint() {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
 				.title(TOOL_TITLE)
@@ -268,23 +268,23 @@ class McpLocalizationSoakTests {
 				.withUriAndName(URI.create("soak://localization/resource"),
 						"localization-soak-resource")
 				.handler((request, read, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
-										read.getUri(), "unused").build())
-								.build()))
+						McpCompleteResult.fromResourceOutput(
+								McpResourceOutput.withContent(
+										McpTextResourceContents.withUriAndText(
+												read.getUri(), "unused").build())
+										.build()))
 				.build();
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-mcp-localization-soak", "4.0.0")
 						.title(SERVER_TITLE)
 						.build())
-				.tool(tool)
-				.resource(resource)
-				.subscriptions(McpSubscriptionConfig
+				.addTool(tool)
+				.addResource(resource)
+				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
-								McpLocalSubscriptionEventPublisher.fromDefaults())
-						.notificationTypes(Set.of(
-								McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
+								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+								Set.of(McpSubscriptionNotificationType
+										.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 	}
@@ -303,8 +303,8 @@ class McpLocalizationSoakTests {
 				.keepAliveInterval(PROFILE.keepAliveInterval())
 				.requestTimeout(PROFILE.requestTimeout())
 				.writeTimeout(PROFILE.writeTimeout())
-				.maximumSubscriptionsPerPrincipal(
-						PROFILE.maximumSubscriptionsPerPrincipal())
+				.maximumSubscriptionsPerPartition(
+						PROFILE.maximumSubscriptionsPerPartition())
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
 				.localizer(state.localizer())
@@ -388,7 +388,7 @@ class McpLocalizationSoakTests {
 				diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
@@ -410,7 +410,7 @@ class McpLocalizationSoakTests {
 	private record LocalizationSoakProfile(int concurrentClients,
 			int cyclesPerClient,
 			@NonNull Duration keepAliveInterval,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
 			int requestHandlerConcurrency,
 			int requestHandlerQueueCapacity,
@@ -429,7 +429,7 @@ class McpLocalizationSoakTests {
 					profile.integer("mcp.concurrentClients"),
 					profile.integer("mcp.cyclesPerClient"),
 					profile.durationMillis("mcp.keepAliveIntervalMillis"),
-					profile.integer("mcp.maximumSubscriptionsPerPrincipal"),
+					profile.integer("mcp.maximumSubscriptionsPerPartition"),
 					profile.durationMillis(
 							"mcp.maximumSubscriptionDurationMillis"),
 					profile.integer("mcp.requestHandlerConcurrency"),
@@ -496,22 +496,20 @@ class McpLocalizationSoakTests {
 
 		@NonNull
 		private McpLocalizer localizer() {
-			return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-					.contextProvider(request -> {
+			return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 						McpLocalizationRevision captured = this.revision.get();
 						this.contextsCreated.incrementAndGet();
 						if (request.getLanguageRanges().stream()
 								.anyMatch(range -> "fr-ca".equals(range.getRange())))
 							this.boundedPreferenceMatches.incrementAndGet();
 						return McpLocalizationContext
-								.withLocale(LOCALIZED_LOCALE)
-								.revision(captured)
-								.localizer(text -> {
+								.withLocale(LOCALIZED_LOCALE, text -> {
 									localizationLookups.incrementAndGet();
 									return McpLocalizationResult.localized(
 											"FR[" + captured.getValue() + "]:"
 													+ text.getDefaultText());
 								})
+								.revision(captured)
 								.build();
 					})
 					.build();

@@ -87,24 +87,30 @@ public class McpInterceptionConfigurationTests {
 	}
 
 	@Test
-	public void builderRejectsNullHooksImmediately() {
-		McpServer.Builder builder = McpServer.withPort(0);
+	public void builderNullHooksRestorePassThroughDefaults() {
+		McpHandlerInterceptor interceptor = (request, features, continuation) ->
+				McpCompleteResult.fromToolText("intercepted");
+		McpToolOutputSanitizer sanitizer =
+				(request, toolName, rawArguments, output) ->
+						McpToolOutput.fromText("sanitized");
+		McpServer server = serverBuilder()
+				.handlerInterceptor(interceptor)
+				.handlerInterceptor(null)
+				.toolOutputSanitizer(sanitizer)
+				.toolOutputSanitizer(null)
+				.build();
 
-		Assertions.assertThrows(NullPointerException.class,
-				() -> builder.handlerInterceptor(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> builder.toolOutputSanitizer(null));
+		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),
+				server.getHandlerInterceptor());
+		Assertions.assertSame(McpToolOutputSanitizer.passThroughInstance(),
+				server.getToolOutputSanitizer());
 	}
 
 	private static McpServer.Builder serverBuilder() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"interception-tests", "4.0.0").build())
 				.build();
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpRequestContext requestContext() {

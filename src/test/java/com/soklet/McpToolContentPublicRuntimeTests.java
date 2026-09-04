@@ -50,13 +50,13 @@ public class McpToolContentPublicRuntimeTests {
 			throws Exception {
 		McpToolRegistration<McpJsonObject> imageTool = tool(IMAGE_TOOL,
 				McpToolOutput.builder()
-						.content(McpImageContent.withDataAndMimeType(
+						.addContent(McpImageContent.withDataAndMimeType(
 								new byte[] { 0, 1, 2, (byte) 255 }, "image/png")
 								.build())
 						.build());
 		McpToolRegistration<McpJsonObject> audioTool = tool(AUDIO_TOOL,
 				McpToolOutput.builder()
-						.content(McpAudioContent.withDataAndMimeType(
+						.addContent(McpAudioContent.withDataAndMimeType(
 								new byte[] { 'R', 'I', 'F', 'F' }, "audio/wav")
 								.build())
 						.build());
@@ -67,7 +67,7 @@ public class McpToolContentPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> embeddedResourceTool = tool(
 				EMBEDDED_RESOURCE_TOOL, McpToolOutput.builder()
-						.content(McpEmbeddedResource.withResource(embeddedContents)
+						.addContent(McpEmbeddedResource.withResource(embeddedContents)
 								.build())
 						.build());
 		McpTextResourceContents mixedResource = McpTextResourceContents
@@ -77,23 +77,20 @@ public class McpToolContentPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> mixedContentTool = tool(
 				MIXED_CONTENT_TOOL, McpToolOutput.builder()
-						.content(McpTextContent.fromText("first"))
-						.content(McpImageContent.withDataAndMimeType(
+						.addContent(McpTextContent.fromText("first"))
+						.addContent(McpImageContent.withDataAndMimeType(
 								new byte[] { 9, 8, 7 }, "image/gif").build())
-						.content(McpEmbeddedResource.withResource(mixedResource).build())
+						.addContent(McpEmbeddedResource.withResource(mixedResource).build())
 						.build());
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"tool-content-public-runtime-test", "4.0.0").build())
-				.tool(imageTool)
-				.tool(audioTool)
-				.tool(embeddedResourceTool)
-				.tool(mixedContentTool)
+				.addTool(imageTool)
+				.addTool(audioTool)
+				.addTool(embeddedResourceTool)
+				.addTool(mixedContentTool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -149,7 +146,7 @@ public class McpToolContentPublicRuntimeTests {
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			McpToolOutput output) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(output))
 				.description("Public runtime content fixture")

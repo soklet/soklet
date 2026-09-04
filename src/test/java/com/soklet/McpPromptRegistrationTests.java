@@ -41,6 +41,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 class McpPromptRegistrationTests {
 	@Test
+	void promptTextFactoriesWrapTextWithTheRequestedRole() {
+		McpPromptMessage user = McpPromptMessage.fromUserText("user text");
+		McpPromptMessage assistant =
+				McpPromptMessage.fromAssistantText("assistant text");
+
+		assertEquals(McpRole.USER, user.getRole());
+		assertEquals("user text", assertInstanceOf(McpTextContent.class,
+				user.getContent()).getText());
+		assertEquals(McpRole.ASSISTANT, assistant.getRole());
+		assertEquals("assistant text", assertInstanceOf(McpTextContent.class,
+				assistant.getContent()).getText());
+		assertThrows(NullPointerException.class,
+				() -> McpPromptMessage.fromUserText(null));
+		assertThrows(NullPointerException.class,
+				() -> McpPromptMessage.fromAssistantText(null));
+	}
+
+	@Test
 	void promptMessagesExposeValueSemanticsWithoutRenderingContent() {
 		String secret = "prompt-content-secret";
 		McpTextContent content = McpTextContent.fromText(secret);
@@ -66,13 +84,13 @@ class McpPromptRegistrationTests {
 	@Test
 	void registrationPreservesDescriptorAndExactStringArguments()
 			throws Exception {
-		McpPromptArgumentDefinition required = McpPromptArgumentDefinition
+		McpPromptArgumentDeclaration required = McpPromptArgumentDeclaration
 				.withName("audience")
 				.title("Audience")
 				.description("Intended audience")
 				.required(true)
 				.build();
-		McpPromptArgumentDefinition optional = McpPromptArgumentDefinition
+		McpPromptArgumentDeclaration optional = McpPromptArgumentDeclaration
 				.withName("tone")
 				.required(false)
 				.build();
@@ -92,9 +110,9 @@ class McpPromptRegistrationTests {
 				})
 				.title("Recommend")
 				.description("Builds a recommendation prompt")
-				.icon(icon)
-				.argument(required)
-				.argument(optional)
+				.addIcon(icon)
+				.addArgument(required)
+				.addArgument(optional)
 				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
 				.build();
 		McpJsonObject input = McpJsonObject.builder()
@@ -142,9 +160,9 @@ class McpPromptRegistrationTests {
 					return McpCompleteResult.fromPromptOutput(
 							McpPromptOutput.fromMessages());
 				})
-				.argument(McpPromptArgumentDefinition.withName("required")
+				.addArgument(McpPromptArgumentDeclaration.withName("required")
 						.required(true).build())
-				.argument(McpPromptArgumentDefinition.withName("optional")
+				.addArgument(McpPromptArgumentDeclaration.withName("optional")
 						.build())
 				.build();
 
@@ -162,20 +180,20 @@ class McpPromptRegistrationTests {
 		assertThrows(IllegalArgumentException.class,
 				() -> McpPromptRegistration.withName(" "));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpPromptArgumentDefinition.withName(""));
+				() -> McpPromptArgumentDeclaration.withName(""));
 		assertThrows(NullPointerException.class,
-				() -> McpPromptArgumentDefinition.withName("argument")
+				() -> McpPromptArgumentDeclaration.withName("argument")
 						.required(null));
 
-		McpPromptArgumentDefinition duplicate =
-				McpPromptArgumentDefinition.withName("same").build();
+		McpPromptArgumentDeclaration duplicate =
+				McpPromptArgumentDeclaration.withName("same").build();
 		assertThrows(IllegalStateException.class, () -> McpPromptRegistration
 				.withName("duplicates")
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
-				.argument(duplicate)
-				.argument(duplicate)
+				.addArgument(duplicate)
+				.addArgument(duplicate)
 				.build());
 
 		IllegalArgumentException applicationFailure =
@@ -206,14 +224,14 @@ class McpPromptRegistrationTests {
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
 				.build();
-		McpEndpoint endpoint = endpointBuilder().prompt(prompt).build();
+		McpEndpoint endpoint = endpointBuilder().addPrompt(prompt).build();
 
 		assertEquals(List.of(prompt), endpoint.getPrompts());
 		assertThrows(UnsupportedOperationException.class,
 				() -> endpoint.getPrompts().clear());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.prompt(prompt)
-				.prompt(McpPromptRegistration.withName("one")
+				.addPrompt(prompt)
+				.addPrompt(McpPromptRegistration.withName("one")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -222,8 +240,7 @@ class McpPromptRegistrationTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"prompt-tests", "4.0.0").build());
 	}
 
@@ -266,8 +283,17 @@ class McpPromptRegistrationTests {
 			@Override public McpJsonObject getRequestMetadata() {
 				return McpJsonObject.emptyInstance();
 			}
+			@Override public McpInputResponses getInputResponses() {
+				return McpInputResponses.emptyInstance();
+			}
+			@Override public Optional<McpJsonValue> getFrameworkRequestState() {
+				return Optional.empty();
+			}
+			@Override public Optional<String> getApplicationRequestState() {
+				return Optional.empty();
+			}
 			@Override
-			public Optional<McpLogLevel> getDeprecatedLogLevel() {
+			public Optional<McpLogLevel> getLogLevel() {
 				return Optional.empty();
 			}
 			@Override public Optional<TraceContext> getTraceContext() {

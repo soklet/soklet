@@ -119,10 +119,14 @@ public final class McpResourcePage implements McpOperationResult {
 		private Builder() {
 		}
 
-		/** @param resource resource descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one resource descriptor.
+		 *
+		 * @param resource resource descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder resource(@NonNull McpResourceDescriptor resource) {
+		public Builder addResource(@NonNull McpResourceDescriptor resource) {
 			this.resources.add(requireNonNull(resource));
 			return this;
 		}
@@ -134,10 +138,10 @@ public final class McpResourcePage implements McpOperationResult {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder resources(
+		public Builder addResources(
 				@NonNull Collection<? extends @NonNull McpResourceDescriptor> resources) {
 			requireNonNull(resources);
-			resources.forEach(this::resource);
+			resources.forEach(this::addResource);
 			return this;
 		}
 

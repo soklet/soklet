@@ -29,7 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -282,30 +281,30 @@ class McpLocalizationRendererTests {
 	}
 
 	private static McpLocalizationContext localeContext(Locale locale,
-			Function<McpLocalizableText, McpLocalizationResult> provider) {
-		return McpLocalizationContext.withLocale(locale)
-				.localizer(provider)
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizationContext.withLocale(locale, localizationLookup)
 				.build();
 	}
 
 	private static McpLocalizationRenderer.Outcome render(long ceiling,
-			Function<McpLocalizableText, McpLocalizationResult> provider) {
-		return render(catalog(), ceiling, provider);
+			McpLocalizationLookup localizationLookup) {
+		return render(catalog(), ceiling, localizationLookup);
 	}
 
 	private static McpLocalizationRenderer.Outcome render(McpJsonObject canonical,
-			long ceiling, Function<McpLocalizableText, McpLocalizationResult> provider) {
+			long ceiling, McpLocalizationLookup localizationLookup) {
 		return render(canonical, ceiling,
-				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false, provider);
+				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
+				localizationLookup);
 	}
 
 	private static McpLocalizationRenderer.Outcome render(McpJsonObject canonical,
 			long ceiling, McpLocalizationFailurePolicy failurePolicy,
 			McpLocalizationRenderer.TerminalBoundary boundary,
-			Function<McpLocalizableText, McpLocalizationResult> provider) {
+			McpLocalizationLookup localizationLookup) {
 		return McpLocalizationRenderer.render(canonical,
 				CODEC.toUtf8Bytes(canonical).length, ENVELOPE_BYTES, ceiling,
-				MAXIMUM_REPLACEMENT_CHARACTERS, slots(), context(provider),
+				MAXIMUM_REPLACEMENT_CHARACTERS, slots(), context(localizationLookup),
 				failurePolicy, boundary,
 				document -> CODEC.toUtf8Bytes(document).length);
 	}
@@ -326,8 +325,8 @@ class McpLocalizationRendererTests {
 	}
 
 	private static McpLocalizationContext context(
-			Function<McpLocalizableText, McpLocalizationResult> provider) {
-		return localeContext(Locale.FRENCH, provider);
+			McpLocalizationLookup localizationLookup) {
+		return localeContext(Locale.FRENCH, localizationLookup);
 	}
 
 	private static McpJsonObject catalog() {

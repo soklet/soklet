@@ -48,19 +48,39 @@ public final class McpTextCoordinate {
 	@NonNull
 	private final String endpointPath;
 	@NonNull
-	private final McpTextOwnerType mcpTextOwnerType;
+	private final McpTextOwnerType ownerType;
 	@NonNull
-	private final String subjectIdentifier;
+	private final String subjectId;
 	@NonNull
 	private final String memberPath;
 
+	/**
+	 * Creates a text coordinate from its structured components.
+	 *
+	 * @param endpointPath normalized endpoint path
+	 * @param ownerType MCP text owner type
+	 * @param subjectId stable owner identity within the endpoint
+	 * @param memberPath deterministic RFC 6901-escaped semantic member path
+	 * @return immutable text coordinate
+	 * @throws NullPointerException if any argument is null
+	 * @throws IllegalArgumentException if a string argument contains malformed
+	 * UTF-16
+	 */
+	@NonNull
+	public static McpTextCoordinate fromComponents(
+			@NonNull String endpointPath,
+			@NonNull McpTextOwnerType ownerType,
+			@NonNull String subjectId, @NonNull String memberPath) {
+		return new McpTextCoordinate(endpointPath, ownerType, subjectId,
+				memberPath);
+	}
+
 	McpTextCoordinate(@NonNull String endpointPath,
-			@NonNull McpTextOwnerType mcpTextOwnerType,
-			@NonNull String subjectIdentifier, @NonNull String memberPath) {
+			@NonNull McpTextOwnerType ownerType,
+			@NonNull String subjectId, @NonNull String memberPath) {
 		this.endpointPath = requireValidUnicode(endpointPath, "endpointPath");
-		this.mcpTextOwnerType = requireNonNull(mcpTextOwnerType);
-		this.subjectIdentifier = requireValidUnicode(subjectIdentifier,
-				"subjectIdentifier");
+		this.ownerType = requireNonNull(ownerType);
+		this.subjectId = requireValidUnicode(subjectId, "subjectId");
 		this.memberPath = requireValidUnicode(memberPath, "memberPath");
 	}
 
@@ -72,14 +92,14 @@ public final class McpTextCoordinate {
 
 	/** @return MCP text owner type */
 	@NonNull
-	public McpTextOwnerType getMcpTextOwnerType() {
-		return this.mcpTextOwnerType;
+	public McpTextOwnerType getOwnerType() {
+		return this.ownerType;
 	}
 
 	/** @return stable owner identity within the endpoint */
 	@NonNull
-	public String getSubjectIdentifier() {
-		return this.subjectIdentifier;
+	public String getSubjectId() {
+		return this.subjectId;
 	}
 
 	/** @return deterministic RFC 6901-escaped semantic member path */
@@ -93,7 +113,7 @@ public final class McpTextCoordinate {
 	 * {@code soklet-mcp-text-v1.<owner-type-token>.<digest>}. The digest is unpadded
 	 * Base64URL SHA-256 over the ASCII domain
 	 * {@code soklet-mcp-text-coordinate-v1\0}, followed by four UTF-8 components:
-	 * endpoint path, fixed lowercase owner-type token, subject identifier, and member
+	 * endpoint path, fixed lowercase owner-type token, subject ID, and member
 	 * path. Each component is preceded by its four-byte unsigned big-endian byte
 	 * length. Components are encoded exactly, without normalization or case
 	 * folding; malformed UTF-16 is rejected when the coordinate is constructed.
@@ -102,12 +122,12 @@ public final class McpTextCoordinate {
 	 */
 	@NonNull
 	public String toExternalKey() {
-		String ownerTypeToken = ownerTypeToken(this.mcpTextOwnerType);
+		String ownerTypeToken = ownerTypeToken(this.ownerType);
 		MessageDigest digest = sha256();
 		digest.update(EXTERNAL_KEY_DOMAIN);
 		updateComponent(digest, this.endpointPath);
 		updateComponent(digest, ownerTypeToken);
-		updateComponent(digest, this.subjectIdentifier);
+		updateComponent(digest, this.subjectId);
 		updateComponent(digest, this.memberPath);
 		String encodedDigest = Base64.getUrlEncoder().withoutPadding()
 				.encodeToString(digest.digest());
@@ -136,8 +156,8 @@ public final class McpTextCoordinate {
 
 	@NonNull
 	private static String ownerTypeToken(
-			@NonNull McpTextOwnerType mcpTextOwnerType) {
-		return switch (mcpTextOwnerType) {
+			@NonNull McpTextOwnerType ownerType) {
+		return switch (ownerType) {
 			case SERVER_INFORMATION -> "server-information";
 			case ENDPOINT -> "endpoint";
 			case TOOL -> "tool";
@@ -174,24 +194,24 @@ public final class McpTextCoordinate {
 		if (!(other instanceof McpTextCoordinate coordinate))
 			return false;
 		return this.endpointPath.equals(coordinate.endpointPath)
-				&& this.mcpTextOwnerType == coordinate.mcpTextOwnerType
-				&& this.subjectIdentifier.equals(coordinate.subjectIdentifier)
+				&& this.ownerType == coordinate.ownerType
+				&& this.subjectId.equals(coordinate.subjectId)
 				&& this.memberPath.equals(coordinate.memberPath);
 	}
 
 	/** @return value-based hash code */
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.endpointPath, this.mcpTextOwnerType,
-				this.subjectIdentifier, this.memberPath);
+		return Objects.hash(this.endpointPath, this.ownerType,
+				this.subjectId, this.memberPath);
 	}
 
 	/** @return coordinate-only rendering that never includes source text */
 	@Override
 	@NonNull
 	public String toString() {
-		return "McpTextCoordinate{endpointPath=<redacted>, mcpTextOwnerType="
-				+ this.mcpTextOwnerType + ", subjectIdentifier=<redacted>, "
+		return "McpTextCoordinate{endpointPath=<redacted>, ownerType="
+				+ this.ownerType + ", subjectId=<redacted>, "
 				+ "memberPath=<redacted>}";
 	}
 }

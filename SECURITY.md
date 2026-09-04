@@ -181,7 +181,7 @@ authentication state or a distributed session. Every request reconstructs its
 context from the request's bounded preferences and authenticated application
 policy. For a rolling reload, build and validate the complete candidate off the
 request path, atomically install it on one node, and only then call that node's
-`catalogsChanged()` control; repeat explicitly for every applicable node and
+`invalidateCatalogs()` control; repeat explicitly for every applicable node and
 expect temporary cross-node revision drift. If the deployment requires a
 fleet-atomic cutover, stage and validate the candidate everywhere before any
 node mutates, then use an application-owned coordinator, proxy, or traffic
@@ -246,7 +246,7 @@ fixed canaries are test doubles and deployment examples, not Soklet services
 or universal security classifiers.
 The
 [localized cursor fleet pattern](src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java)
-adds independently configured nodes with copied application key rings and
+adds independently configured nodes with copied application keyrings and
 retained snapshots. It proves exact cursor-byte preservation through provider
 preselection and handler authentication, authorization binding as HMAC
 associated data, locale/catalog/localization revision checks, exact expiry,
@@ -272,11 +272,14 @@ Request-state protection has two distinct trust boundaries:
   or start without `McpProtectionConfig`.
 
 Production deployments should use
-`McpProtectionConfig.withKeyRing(...)` with operator-generated, purpose-specific
+`McpProtectionConfig.withKeyring(...)` with operator-generated, purpose-specific
 key material containing at least 256 bits of cryptographic entropy. Soklet's
 built-in versioned envelope uses authenticated encryption, copies the initial
 ring into server-owned state, redacts key material from public surfaces, and
 supports live stage/activate/remove rotation through `McpProtectionControl`.
+The initial `McpProtectionKeyring` exposes only its non-secret active and
+verification key IDs; live inspection likewise returns only a secret-free
+`McpProtectionKeyringSnapshot`.
 For a fleet, stage the identical new key everywhere, compare secret-free
 snapshots, activate it everywhere, wait at least the configured state lifetime
 and for outstanding sealing reservations, then remove the former key.
@@ -286,7 +289,7 @@ define the frozen labels, envelope, binding, vectors, publication boundary,
 drain check, rollback, and emergency-revocation procedure. In particular, a
 ring fingerprint proves complete configuration equality but does not prove
 that sealing reservations have drained; removal is the authoritative drain
-check and must be retried after `McpKeyInUseException`.
+check and must be retried after `McpProtectionKeyInUseException`.
 
 `withDevelopmentEphemeralProtection()` is an explicit development convenience.
 Its state is process-local and becomes unreadable after restart or on another
@@ -1035,12 +1038,12 @@ work. Phase 6 remained provisional and unfrozen at that checkpoint.
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
 getters. Six are boxed `@NonNull Integer` values from
 `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
-`getActiveHandlerExecutions()`, `getQueuedRequests()`,
+`getActiveHandlerExecutions()`, `getRequestHandlerQueueDepth()`,
 `getActiveRequestStreams()`, and `getActiveSubscriptions()`. The remaining four
 are `getProtectionMode()`, boxed
 `@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-`getProtectionKeyRingFingerprint()`, and
-`getTraceCorrelationConfigurationFingerprint()`; both fingerprint getters
+`getProtectionKeyringFingerprint()`, and
+`getTraceCorrelationFingerprint()`; both fingerprint getters
 return non-null `Optional` containers with non-null payload types.
 
 The numeric fields cover configured handler bounds, occupied handler slots,
@@ -1075,7 +1078,7 @@ and stable across listener stop/restart. The flag is `true` exactly in
 protector and bypasses one even when configured.
 
 The protection-ring fingerprint is present exactly for
-`PRODUCTION_KEY_RING`. It is absent for no framework keys, custom protection,
+`PRODUCTION_KEYRING`. It is absent for no framework keys, custom protection,
 and development-ephemeral protection. The trace-configuration fingerprint is
 independent of protection mode and present exactly when trace correlation was
 enabled at construction. Successful live ring/key rotations appear in fresh

@@ -53,8 +53,8 @@ com.soklet.McpJsonString
 com.soklet.McpJsonValue
 com.soklet.McpLogLevel
 com.soklet.McpOperationResult
-com.soklet.McpPromptArgumentDefinition
-com.soklet.McpPromptArgumentDefinition$Builder
+com.soklet.McpPromptArgumentDeclaration
+com.soklet.McpPromptArgumentDeclaration$Builder
 com.soklet.McpPromptGetContext
 com.soklet.McpPromptHandler
 com.soklet.McpPromptMessage
@@ -62,7 +62,7 @@ com.soklet.McpPromptOutput
 com.soklet.McpPromptOutput$Builder
 com.soklet.McpPromptRegistration
 com.soklet.McpPromptRegistration$Builder
-com.soklet.McpPromptRegistration$NamedBuilder
+com.soklet.McpPromptRegistration$HandlerStage
 com.soklet.McpRateLimitContext
 com.soklet.McpRateLimitDecision
 com.soklet.McpRateLimitDecision$Allowed
@@ -89,9 +89,9 @@ com.soklet.McpResourceReadContext
 com.soklet.McpResourceReadHandler
 com.soklet.McpResourceRegistration
 com.soklet.McpResourceRegistration$ExactBuilder
-com.soklet.McpResourceRegistration$ExactNamedBuilder
+com.soklet.McpResourceRegistration$ExactHandlerStage
 com.soklet.McpResourceRegistration$TemplateBuilder
-com.soklet.McpResourceRegistration$TemplateNamedBuilder
+com.soklet.McpResourceRegistration$TemplateHandlerStage
 com.soklet.McpRole
 com.soklet.McpServer
 com.soklet.McpServer$Builder
@@ -109,10 +109,10 @@ com.soklet.McpToolOutput
 com.soklet.McpToolOutput$Builder
 com.soklet.McpToolOutputSanitizer
 com.soklet.McpToolRegistration
-com.soklet.McpToolRegistration$Builder
+com.soklet.McpToolRegistration$ArgumentTypeStage
 com.soklet.McpToolRegistration$CompleteBuilder
 com.soklet.McpToolRegistration$CompleteHandlerStage
-com.soklet.McpToolRegistration$NamedBuilder
+com.soklet.McpToolRegistration$OperationBuilder
 com.soklet.McpToolRegistration$OperationHandlerStage
 com.soklet.McpToolSchema
 com.soklet.McpUnknownMirroredHeaderPolicy

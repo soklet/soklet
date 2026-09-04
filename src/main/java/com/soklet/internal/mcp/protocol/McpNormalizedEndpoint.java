@@ -43,7 +43,7 @@ final class McpNormalizedEndpoint {
 	private final Optional<@NonNull String> instructions;
 	@NonNull
 	private final McpDiscoveryCachePolicy discoveryCachePolicy;
-	private final boolean includeServerInformation;
+	private final boolean serverInformationIncluded;
 	@NonNull
 	private final McpJsonObject discoveryMetadata;
 	@NonNull
@@ -61,7 +61,7 @@ final class McpNormalizedEndpoint {
 	private final McpResourceCachePolicy resourceTemplateListCachePolicy;
 	private final int maximumCursorSizeInBytes;
 	@NonNull
-	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
+	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig;
 
 	@NonNull
 	static Builder withServerInformation(@NonNull McpImplementationMetadata serverInformation) {
@@ -72,7 +72,7 @@ final class McpNormalizedEndpoint {
 		this.serverInformation = builder.serverInformation;
 		this.instructions = builder.instructions;
 		this.discoveryCachePolicy = builder.discoveryCachePolicy;
-		this.includeServerInformation = builder.includeServerInformation;
+		this.serverInformationIncluded = builder.serverInformationIncluded;
 		this.discoveryMetadata = builder.discoveryMetadata;
 		this.tools = immutableOperations(builder.tools, "tool");
 		this.prompts = immutableOperations(builder.prompts, "prompt");
@@ -93,11 +93,11 @@ final class McpNormalizedEndpoint {
 		this.resourceListCachePolicy = builder.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy = builder.resourceTemplateListCachePolicy;
 		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
-		this.subscriptions = builder.subscriptions;
+		this.subscriptionConfig = builder.subscriptionConfig;
 
-		if (this.subscriptions.isPresent() && !hasResourceSurface())
+		if (this.subscriptionConfig.isPresent() && !hasResourceSurface())
 			throw new IllegalStateException(
-					"Resource subscriptions require an exact resource, template, or custom list handler.");
+					"Resource subscriptionConfig require an exact resource, template, or custom list handler.");
 	}
 
 	@NonNull
@@ -115,8 +115,8 @@ final class McpNormalizedEndpoint {
 		return discoveryCachePolicy;
 	}
 
-	boolean includeServerInformation() {
-		return includeServerInformation;
+	boolean serverInformationIncluded() {
+		return serverInformationIncluded;
 	}
 
 	@NonNull
@@ -163,8 +163,8 @@ final class McpNormalizedEndpoint {
 	}
 
 	@NonNull
-	Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions() {
-		return subscriptions;
+	Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig() {
+		return subscriptionConfig;
 	}
 
 	boolean hasResourceSurface() {
@@ -286,7 +286,7 @@ final class McpNormalizedEndpoint {
 		private Optional<@NonNull String> instructions;
 		@NonNull
 		private McpDiscoveryCachePolicy discoveryCachePolicy;
-		private boolean includeServerInformation;
+		private boolean serverInformationIncluded;
 		@NonNull
 		private McpJsonObject discoveryMetadata;
 		@NonNull
@@ -304,13 +304,13 @@ final class McpNormalizedEndpoint {
 		private McpResourceCachePolicy resourceTemplateListCachePolicy;
 		private int maximumCursorSizeInBytes;
 		@NonNull
-		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
+		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig;
 
 		private Builder(@NonNull McpImplementationMetadata serverInformation) {
 			this.serverInformation = requireNonNull(serverInformation);
 			this.instructions = Optional.empty();
 			this.discoveryCachePolicy = McpDiscoveryCachePolicy.privateNoCache();
-			this.includeServerInformation = true;
+			this.serverInformationIncluded = true;
 			this.discoveryMetadata = McpJsonObject.empty();
 			this.tools = new ArrayList<>();
 			this.prompts = new ArrayList<>();
@@ -321,7 +321,7 @@ final class McpNormalizedEndpoint {
 					McpResourceCachePolicy.privateNoCache();
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
-			this.subscriptions = Optional.empty();
+			this.subscriptionConfig = Optional.empty();
 		}
 
 		@NonNull
@@ -338,8 +338,8 @@ final class McpNormalizedEndpoint {
 		}
 
 		@NonNull
-		Builder includeServerInformation(boolean includeServerInformation) {
-			this.includeServerInformation = includeServerInformation;
+		Builder serverInformationIncluded(boolean serverInformationIncluded) {
+			this.serverInformationIncluded = serverInformationIncluded;
 			return this;
 		}
 
@@ -455,9 +455,9 @@ final class McpNormalizedEndpoint {
 		}
 
 		@NonNull
-		Builder subscriptions(
-				@NonNull McpNormalizedSubscriptionConfiguration subscriptions) {
-			this.subscriptions = Optional.of(requireNonNull(subscriptions));
+		Builder subscriptionConfig(
+				@NonNull McpNormalizedSubscriptionConfiguration subscriptionConfig) {
+			this.subscriptionConfig = Optional.of(requireNonNull(subscriptionConfig));
 			return this;
 		}
 

@@ -327,11 +327,11 @@ maintenance or security fixes afterward. See the explicit
   all ten implemented diagnostic getters. Six are boxed `@NonNull Integer`
   methods: `getRequestHandlerConcurrency()`,
   `getRequestHandlerQueueCapacity()`, `getActiveHandlerExecutions()`,
-  `getQueuedRequests()`, `getActiveRequestStreams()`, and
+  `getRequestHandlerQueueDepth()`, `getActiveRequestStreams()`, and
   `getActiveSubscriptions()`. The other four are `getProtectionMode()`, boxed
   `@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-  `getProtectionKeyRingFingerprint()`, and
-  `getTraceCorrelationConfigurationFingerprint()`; both fingerprint getters
+  `getProtectionKeyringFingerprint()`, and
+  `getTraceCorrelationFingerprint()`; both fingerprint getters
   return non-null `Optional` containers with non-null payloads.
 - Lifecycle, address, handler, queue, stream, and subscription fields form one
   runtime-owned atomic tuple. The protection/trace fields form a separate
@@ -346,7 +346,7 @@ maintenance or security fixes afterward. See the explicit
 - Protection mode and custom-protector presence are construction-time values;
   the boxed flag is true exactly for `CUSTOM_PROTECTOR` and does not mean an
   operation selected `APPLICATION_PROTECTED`. The production-ring fingerprint
-  is present exactly for `PRODUCTION_KEY_RING`; the independent trace
+  is present exactly for `PRODUCTION_KEYRING`; the independent trace
   fingerprint is present exactly when trace correlation was enabled. Live
   rotations update only fresh snapshots and persist across listener restart.
   Fingerprints are deterministic operational comparison metadata, not

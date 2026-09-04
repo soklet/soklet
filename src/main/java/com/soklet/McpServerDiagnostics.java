@@ -104,7 +104,7 @@ public interface McpServerDiagnostics {
 	 * @return the queued-request count
 	 */
 	@NonNull
-	Integer getQueuedRequests();
+	Integer getRequestHandlerQueueDepth();
 
 	/**
 	 * The number of open request-scoped SSE streams in this snapshot.
@@ -167,17 +167,17 @@ public interface McpServerDiagnostics {
 	 * ring in this snapshot.
 	 * <p>
 	 * The fingerprint is present exactly when {@link #getProtectionMode()} is
-	 * {@link McpProtectionMode#PRODUCTION_KEY_RING}. Successful live ring
+	 * {@link McpProtectionMode#PRODUCTION_KEYRING}. Successful live ring
 	 * mutations are reflected only in subsequently obtained snapshots. The value
 	 * excludes trace-correlation configuration, request-state epochs, and cursors,
 	 * and exposes neither raw keys nor per-key fingerprint tags. It is operational
 	 * deployment-comparison metadata, not an authentication input.
 	 *
-	 * @return the live production key-ring fingerprint, or the empty optional
+	 * @return the live production keyring fingerprint, or the empty optional
 	 */
 	@NonNull
-	Optional<@NonNull McpProtectionKeyRingFingerprint>
-			getProtectionKeyRingFingerprint();
+	Optional<@NonNull McpProtectionKeyringFingerprint>
+			getProtectionKeyringFingerprint();
 
 	/**
 	 * The secret-free fingerprint of the active trace-correlation configuration
@@ -194,6 +194,6 @@ public interface McpServerDiagnostics {
 	 *         optional when trace correlation is disabled
 	 */
 	@NonNull
-	Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
-			getTraceCorrelationConfigurationFingerprint();
+	Optional<@NonNull McpTraceCorrelationFingerprint>
+			getTraceCorrelationFingerprint();
 }

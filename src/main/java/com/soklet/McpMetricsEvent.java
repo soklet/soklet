@@ -290,13 +290,14 @@ public sealed interface McpMetricsEvent permits
 	/**
 	 * Creates an event indicating that a real listener stop completed.
 	 *
-	 * @param outcome fixed listener shutdown outcome
+	 * @param shutdownComponentDisposition fixed listener shutdown-component
+	 *                                     disposition
 	 * @return server-stopped event
 	 */
 	@NonNull
 	static ServerStopped serverStopped(
-			@NonNull ShutdownComponentDisposition outcome) {
-		return new ServerStopped(outcome);
+			@NonNull ShutdownComponentDisposition shutdownComponentDisposition) {
+		return new ServerStopped(shutdownComponentDisposition);
 	}
 
 	/**
@@ -1349,20 +1350,21 @@ public sealed interface McpMetricsEvent permits
 	@ThreadSafe
 	public final class ServerStopped implements McpMetricsEvent {
 		@NonNull
-		private final ShutdownComponentDisposition outcome;
+		private final ShutdownComponentDisposition shutdownComponentDisposition;
 
 		private ServerStopped(
-				@NonNull ShutdownComponentDisposition outcome) {
-			this.outcome = requireNonNull(outcome);
+				@NonNull ShutdownComponentDisposition shutdownComponentDisposition) {
+			this.shutdownComponentDisposition =
+					requireNonNull(shutdownComponentDisposition);
 		}
 
-		/** @return fixed listener shutdown outcome */
+		/** @return fixed listener shutdown-component disposition */
 		@NonNull
-		public ShutdownComponentDisposition getOutcome() {
-			return this.outcome;
+		public ShutdownComponentDisposition getShutdownComponentDisposition() {
+			return this.shutdownComponentDisposition;
 		}
 
-		/** @return whether this object contains the same shutdown outcome */
+		/** @return whether this object contains the same shutdown disposition */
 		@Override
 		public boolean equals(@Nullable Object other) {
 			if (this == other)
@@ -1370,20 +1372,22 @@ public sealed interface McpMetricsEvent permits
 			if (other == null || getClass() != other.getClass())
 				return false;
 			ServerStopped that = (ServerStopped) other;
-			return this.outcome.equals(that.outcome);
+			return this.shutdownComponentDisposition.equals(
+					that.shutdownComponentDisposition);
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return this.outcome.hashCode();
+			return this.shutdownComponentDisposition.hashCode();
 		}
 
 		/** @return diagnostic rendering */
 		@Override
 		@NonNull
 		public String toString() {
-			return "ServerStopped{outcome=" + this.outcome + "}";
+			return "ServerStopped{shutdownComponentDisposition="
+					+ this.shutdownComponentDisposition + "}";
 		}
 	}
 

@@ -92,43 +92,37 @@ public class McpStreamTests {
 				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<com.soklet.McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					features.find(McpProgressReporter.class).ifPresent(reporter ->
 							reporter.report(McpProgressUpdate.withProgress(1.0).build()));
-					return McpInputRequiredResult.builder()
-							.inputRequest("roots", McpInputRequest.fromDeclaration(
+					return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 									roots, com.soklet.McpJsonObject.emptyInstance()))
 							.build();
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+				.withEventPublisher(publisher, Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "Stream test resource")
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
-								McpResourceOutput.builder()
-										.content(McpTextResourceContents
+								McpResourceOutput.withContent(McpTextResourceContents
 												.withUriAndText(read.getUri(), "test")
 												.build())
 										.build()))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"stream-test", "4.0.0").build())
-				.tool(tool)
-				.resource(resource)
-				.subscriptions(subscriptions)
+				.addTool(tool)
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

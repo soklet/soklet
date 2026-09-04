@@ -665,8 +665,8 @@ function matcherIds(body) {
       || /\bSet\.of\s*\([\s\S]{0,360}?\)\s*\.containsAll\s*\([\s\S]{0,120}?\.keySet\s*\(\s*\)\s*\)/u.test(body)
       || /\b(?:[A-Za-z_$][\w$]*\.)*(?:members\s*\(\s*\)\.)?keySet\s*\(\s*\)\.equals\s*\(\s*[A-Z][A-Z0-9_]*FIELDS\s*\)/u.test(body))
     ids.push('OPEN-MATCH-002');
-  if (/\bswitch\s*\(\s*(?:(?:[\w$]+\.)*method\s*\(\s*\)|(?:method|type|wireValue|capability|coreCapability))\s*\)/u.test(body)
-      || /\bswitch\s*\(\s*requireNonNull\s*\(\s*(?:method|type|wireValue|capability|coreCapability)\s*\)\s*\)/u.test(body)
+  if (/\bswitch\s*\(\s*(?:(?:[\w$]+\.)*method\s*\(\s*\)|(?:method|type|inputRequestType|wireValue|capability|coreCapability))\s*\)/u.test(body)
+      || /\bswitch\s*\(\s*requireNonNull\s*\(\s*(?:method|type|inputRequestType|wireValue|capability|coreCapability)\s*\)\s*\)/u.test(body)
       || /\b[A-Z][A-Z0-9_]*(?:KEYWORDS|METHODS|CAPABILITIES|CAPABILITY_NAMES|ROLES)\.contains(?:All)?\s*\(\s*(?:method|name|capability|wireValue|type|keyword|allowedMethods)\s*\)/u.test(body)
       || /\b[A-Z][A-Z0-9_]*(?:KEYWORDS|METHODS|CAPABILITIES|CAPABILITY_NAMES|ROLES)\.contains(?:All)?\s*\(\s*requireNonNull\s*\(\s*(?:method|clientRequestMethod|name|capability|wireValue|type|keyword|allowedMethods)\s*\)\s*\)/u.test(body)
       || /\bfor\s*\([^:]+:\s*(?:[A-Za-z_$][\w$]*\.)?values\s*\(\s*\)\s*\)[\s\S]{0,800}?\.(?:wireValue\s*\(\s*\)|schemaName)\.equals\s*\(\s*(?:wireValue|name)\s*\)[\s\S]{0,800}?(?:throw\s+|Optional\.empty\s*\(\s*\))/u.test(body))

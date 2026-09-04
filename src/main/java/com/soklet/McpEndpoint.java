@@ -47,7 +47,7 @@ public final class McpEndpoint {
 	private final String path;
 	@NonNull
 	private final McpImplementation serverInformation;
-	private final boolean includeServerInformation;
+	private final boolean serverInformationIncluded;
 	@Nullable
 	private final String instructions;
 	@NonNull
@@ -67,34 +67,33 @@ public final class McpEndpoint {
 	@Nullable
 	private final McpRateLimiter toolRateLimiter;
 	@Nullable
-	private final McpSubscriptionConfig subscriptions;
+	private final McpSubscriptionConfig subscriptionConfig;
 
 	/**
-	 * Vends a builder primed with an MCP endpoint path.
+	 * Vends a builder primed with its required construction values.
 	 *
 	 * @param path the absolute endpoint path in ASCII raw URI form; percent-encode
 	 *             non-ASCII characters
+	 * @param implementation implementation information advertised by the endpoint
 	 * @return a builder for endpoint registrations
+	 * @throws NullPointerException if an argument is null
 	 * @throws IllegalArgumentException if the path is not a non-root absolute
 	 *                                  path, is not valid ASCII raw URI form,
 	 *                                  contains a query or fragment, or exceeds
 	 *                                  8192 bytes after normalization
 	 */
 	@NonNull
-	public static Builder withPath(@NonNull String path) {
-		return new Builder(normalizePath(path));
+	public static Builder withPath(@NonNull String path,
+			@NonNull McpImplementation implementation) {
+		return new Builder(normalizePath(path), implementation);
 	}
 
 	private McpEndpoint(@NonNull Builder builder) {
 		requireNonNull(builder);
 
-		if (builder.serverInformation == null)
-			throw new IllegalStateException(
-					"MCP endpoint server information must be configured.");
-
 		this.path = builder.path;
 		this.serverInformation = builder.serverInformation;
-		this.includeServerInformation = builder.includeServerInformation;
+		this.serverInformationIncluded = builder.serverInformationIncluded;
 		this.instructions = builder.instructions;
 		this.tools = List.copyOf(builder.tools);
 		this.prompts = List.copyOf(builder.prompts);
@@ -105,7 +104,7 @@ public final class McpEndpoint {
 				builder.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = builder.toolRateLimiterName;
 		this.toolRateLimiter = builder.toolRateLimiter;
-		this.subscriptions = builder.subscriptions;
+		this.subscriptionConfig = builder.subscriptionConfig;
 
 		Set<String> toolNames = new LinkedHashSet<>();
 		for (McpToolRegistration<?> tool : this.tools) {
@@ -137,11 +136,11 @@ public final class McpEndpoint {
 	}
 
 	private McpEndpoint(@NonNull McpEndpoint endpoint,
-			@NonNull McpSubscriptionConfig subscriptions) {
+			@NonNull McpSubscriptionConfig subscriptionConfig) {
 		requireNonNull(endpoint);
 		this.path = endpoint.path;
 		this.serverInformation = endpoint.serverInformation;
-		this.includeServerInformation = endpoint.includeServerInformation;
+		this.serverInformationIncluded = endpoint.serverInformationIncluded;
 		this.instructions = endpoint.instructions;
 		this.tools = endpoint.tools;
 		this.prompts = endpoint.prompts;
@@ -152,7 +151,7 @@ public final class McpEndpoint {
 				endpoint.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = endpoint.toolRateLimiterName;
 		this.toolRateLimiter = endpoint.toolRateLimiter;
-		this.subscriptions = requireNonNull(subscriptions);
+		this.subscriptionConfig = requireNonNull(subscriptionConfig);
 	}
 
 	/**
@@ -183,7 +182,7 @@ public final class McpEndpoint {
 	 */
 	@NonNull
 	public Boolean isServerInformationIncluded() {
-		return this.includeServerInformation;
+		return this.serverInformationIncluded;
 	}
 
 	/**
@@ -299,14 +298,14 @@ public final class McpEndpoint {
 	 * configured
 	 */
 	@NonNull
-	public Optional<@NonNull McpSubscriptionConfig> getSubscriptions() {
-		return Optional.ofNullable(this.subscriptions);
+	public Optional<@NonNull McpSubscriptionConfig> getSubscriptionConfig() {
+		return Optional.ofNullable(this.subscriptionConfig);
 	}
 
 	@NonNull
-	McpEndpoint withSubscriptions(
-			@NonNull McpSubscriptionConfig subscriptions) {
-		return new McpEndpoint(this, subscriptions);
+	McpEndpoint withSubscriptionConfig(
+			@NonNull McpSubscriptionConfig subscriptionConfig) {
+		return new McpEndpoint(this, subscriptionConfig);
 	}
 
 	@NonNull
@@ -338,9 +337,9 @@ public final class McpEndpoint {
 	public static final class Builder {
 		@NonNull
 		private final String path;
-		@Nullable
+		@NonNull
 		private McpImplementation serverInformation;
-		private boolean includeServerInformation;
+		private boolean serverInformationIncluded;
 		@Nullable
 		private String instructions;
 		@NonNull
@@ -360,11 +359,13 @@ public final class McpEndpoint {
 		@Nullable
 		private McpRateLimiter toolRateLimiter;
 		@Nullable
-		private McpSubscriptionConfig subscriptions;
+		private McpSubscriptionConfig subscriptionConfig;
 
-		private Builder(@NonNull String path) {
+		private Builder(@NonNull String path,
+				@NonNull McpImplementation implementation) {
 			this.path = requireNonNull(path);
-			this.includeServerInformation = true;
+			this.serverInformation = requireNonNull(implementation);
+			this.serverInformationIncluded = true;
 			this.tools = new ArrayList<>();
 			this.prompts = new ArrayList<>();
 			this.resources = new ArrayList<>();
@@ -377,13 +378,13 @@ public final class McpEndpoint {
 		/**
 		 * Sets the required implementation information advertised by this endpoint.
 		 *
-		 * @param serverInformation the server implementation information
+		 * @param implementation the server implementation information
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder serverInformation(
-				@NonNull McpImplementation serverInformation) {
-			this.serverInformation = requireNonNull(serverInformation);
+				@NonNull McpImplementation implementation) {
+			this.serverInformation = requireNonNull(implementation);
 			return this;
 		}
 
@@ -392,30 +393,28 @@ public final class McpEndpoint {
 		 * {@code _meta["io.modelcontextprotocol/serverInfo"]} in MCP results. The
 		 * default is {@code true}.
 		 *
-		 * @param includeServerInformation whether MCP result metadata includes server
-		 *                                 information
+		 * @param serverInformationIncluded whether MCP result metadata includes server
+		 *                                 information, or null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code includeServerInformation} is null
 		 */
 		@NonNull
-		public Builder includeServerInformation(
-				@NonNull Boolean includeServerInformation) {
-			this.includeServerInformation = requireNonNull(includeServerInformation);
+		public Builder serverInformationIncluded(
+				@Nullable Boolean serverInformationIncluded) {
+			this.serverInformationIncluded = serverInformationIncluded == null
+					? true : serverInformationIncluded;
 			return this;
 		}
 
 		/**
 		 * Sets nonblank human-readable instructions for clients using this endpoint.
 		 *
-		 * @param instructions the endpoint instructions
+		 * @param instructions the endpoint instructions, or null to clear them
 		 * @return this builder
 		 * @throws IllegalArgumentException if the instructions are blank
 		 */
 		@NonNull
-		public Builder instructions(@NonNull String instructions) {
-			requireNonNull(instructions);
-
-			if (instructions.isBlank())
+		public Builder instructions(@Nullable String instructions) {
+			if (instructions != null && instructions.isBlank())
 				throw new IllegalArgumentException(
 						"MCP endpoint instructions must not be blank.");
 
@@ -430,7 +429,7 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder tool(@NonNull McpToolRegistration<?> tool) {
+		public Builder addTool(@NonNull McpToolRegistration<?> tool) {
 			this.tools.add(requireNonNull(tool));
 			return this;
 		}
@@ -442,11 +441,11 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder tools(
+		public Builder addTools(
 				@NonNull Collection<? extends @NonNull McpToolRegistration<?>> tools) {
 			requireNonNull(tools);
 			for (McpToolRegistration<?> tool : tools)
-				tool(tool);
+				addTool(tool);
 			return this;
 		}
 
@@ -457,7 +456,7 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder prompt(@NonNull McpPromptRegistration prompt) {
+		public Builder addPrompt(@NonNull McpPromptRegistration prompt) {
 			this.prompts.add(requireNonNull(prompt));
 			return this;
 		}
@@ -469,11 +468,11 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder prompts(
+		public Builder addPrompts(
 				@NonNull Collection<? extends @NonNull McpPromptRegistration> prompts) {
 			requireNonNull(prompts);
 			for (McpPromptRegistration prompt : prompts)
-				prompt(prompt);
+				addPrompt(prompt);
 			return this;
 		}
 
@@ -484,7 +483,7 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder resource(@NonNull McpResourceRegistration resource) {
+		public Builder addResource(@NonNull McpResourceRegistration resource) {
 			this.resources.add(requireNonNull(resource));
 			return this;
 		}
@@ -496,11 +495,11 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder resources(
+		public Builder addResources(
 				@NonNull Collection<? extends @NonNull McpResourceRegistration> resources) {
 			requireNonNull(resources);
 			for (McpResourceRegistration resource : resources)
-				resource(resource);
+				addResource(resource);
 			return this;
 		}
 
@@ -508,20 +507,17 @@ public final class McpEndpoint {
 		 * Installs the sole custom {@code resources/list} handler.
 		 * <p>
 		 * A custom handler is authoritative for every returned page; exact resource
-		 * registrations are not merged automatically. Omitting this setting selects
-		 * the static single-page fallback.
+		 * registrations are not merged automatically. Null selects the static
+		 * single-page fallback. Sequential calls are last-call-wins.
 		 *
-		 * @param resourceListHandler custom list handler
+		 * @param resourceListHandler custom list handler, or null for the static
+		 *                            fallback
 		 * @return this builder
-		 * @throws IllegalStateException if a handler was already installed
 		 */
 		@NonNull
 		public Builder resourceListHandler(
-				@NonNull McpResourceListHandler resourceListHandler) {
-			if (this.resourceListHandler != null)
-				throw new IllegalStateException(
-						"An MCP resource-list handler is already configured.");
-			this.resourceListHandler = requireNonNull(resourceListHandler);
+				@Nullable McpResourceListHandler resourceListHandler) {
+			this.resourceListHandler = resourceListHandler;
 			return this;
 		}
 
@@ -530,13 +526,15 @@ public final class McpEndpoint {
 		 * {@code resources/list} page. The default is private scope with a zero
 		 * time to live.
 		 *
-		 * @param cachePolicy resources-list cache policy
+		 * @param cachePolicy resources-list cache policy, or null to restore the
+		 *                    default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder resourceListCachePolicy(
-				@NonNull McpCachePolicy cachePolicy) {
-			this.resourceListCachePolicy = requireNonNull(cachePolicy);
+				@Nullable McpCachePolicy cachePolicy) {
+			this.resourceListCachePolicy = cachePolicy == null
+					? McpCachePolicy.privateNoCacheInstance() : cachePolicy;
 			return this;
 		}
 
@@ -545,13 +543,15 @@ public final class McpEndpoint {
 		 * {@code resources/templates/list}. The default is private scope with a
 		 * zero time to live.
 		 *
-		 * @param cachePolicy resource-template-list cache policy
+		 * @param cachePolicy resource-template-list cache policy, or null to restore
+		 *                    the default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder resourceTemplateListCachePolicy(
-				@NonNull McpCachePolicy cachePolicy) {
-			this.resourceTemplateListCachePolicy = requireNonNull(cachePolicy);
+				@Nullable McpCachePolicy cachePolicy) {
+			this.resourceTemplateListCachePolicy = cachePolicy == null
+					? McpCachePolicy.privateNoCacheInstance() : cachePolicy;
 			return this;
 		}
 
@@ -561,12 +561,17 @@ public final class McpEndpoint {
 		 * Sequential named and direct setter calls are last-call-wins. This call
 		 * clears any direct limiter previously configured on this builder.
 		 *
-		 * @param limiterName nonblank name in the server limiter registry
+		 * @param limiterName nonblank name in the server limiter registry, or null
+		 *                    to clear the endpoint override
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolRateLimiterName(@NonNull String limiterName) {
-			requireNonNull(limiterName);
+		public Builder toolRateLimiterName(@Nullable String limiterName) {
+			if (limiterName == null) {
+				this.toolRateLimiterName = null;
+				this.toolRateLimiter = null;
+				return this;
+			}
 			if (limiterName.isBlank())
 				throw new IllegalArgumentException(
 						"MCP rate-limiter name must not be blank.");
@@ -581,12 +586,13 @@ public final class McpEndpoint {
 		 * Sequential named and direct setter calls are last-call-wins. This call
 		 * clears any limiter name previously configured on this builder.
 		 *
-		 * @param toolRateLimiter direct tool limiter
+		 * @param toolRateLimiter direct tool limiter, or null to clear the endpoint
+		 *                        override
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolRateLimiter(@NonNull McpRateLimiter toolRateLimiter) {
-			this.toolRateLimiter = requireNonNull(toolRateLimiter);
+		public Builder toolRateLimiter(@Nullable McpRateLimiter toolRateLimiter) {
+			this.toolRateLimiter = toolRateLimiter;
 			this.toolRateLimiterName = null;
 			return this;
 		}
@@ -597,13 +603,14 @@ public final class McpEndpoint {
 		 * Sequential calls are last-call-wins. The immutable configuration and its
 		 * application-owned publisher are retained by reference.
 		 *
-		 * @param subscriptions resource-subscription configuration
+		 * @param subscriptionConfig resource-subscription configuration, or null to
+		 *                      disable subscriptionConfig
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder subscriptions(
-				@NonNull McpSubscriptionConfig subscriptions) {
-			this.subscriptions = requireNonNull(subscriptions);
+		public Builder subscriptionConfig(
+				@Nullable McpSubscriptionConfig subscriptionConfig) {
+			this.subscriptionConfig = subscriptionConfig;
 			return this;
 		}
 
@@ -615,8 +622,7 @@ public final class McpEndpoint {
 		 * URIs and resource URI templates.
 		 *
 		 * @return the endpoint
-		 * @throws IllegalStateException if server information was not configured or
-		 *                               a tool name, prompt name, exact resource URI,
+		 * @throws IllegalStateException if a tool name, prompt name, exact resource URI,
 		 *                               or resource URI template is duplicated
 		 */
 		@NonNull

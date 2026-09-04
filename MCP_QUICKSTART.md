@@ -113,11 +113,14 @@ import java.util.Set;
 
 public final class CatalogMcpApp {
   public static void main(String[] args) {
-    McpServer mcpServer = McpServer.withPort(8081)
+    McpEndpointRegistry endpointRegistry =
+        McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class);
+    McpAdmissionController admissionController =
+        McpAdmissionController.acceptAllInstance();
+
+    McpServer mcpServer = McpServer.withPort(
+            8081, endpointRegistry, admissionController)
         .host("127.0.0.1")
-        .endpointRegistry(
-            McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class))
-        .admissionController(McpAdmissionController.acceptAllInstance())
         .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
         .allowedHosts(Set.of("127.0.0.1"))

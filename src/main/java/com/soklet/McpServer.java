@@ -132,7 +132,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 	 * Returns this server's request-state protection control plane.
 	 * <p>
 	 * The control never exposes configured key material. Mutation methods reject
-	 * calls unless this server was built with a production key ring.
+	 * calls unless this server was built with a production keyring.
 	 *
 	 * @return server-owned protection control
 	 */
@@ -172,16 +172,22 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpServerDiagnostics getDiagnostics();
 
 	/**
-	 * Vends a server builder primed with a dedicated TCP port.
+	 * Vends a server builder primed with its required construction values.
 	 * Port {@code 0} requests an operating-system-assigned port.
 	 *
 	 * @param port port in the range 0 through 65535
+	 * @param endpointRegistry registry containing at least one endpoint
+	 * @param admissionController authentication, authorization, and admission
+	 *                            controller
 	 * @return server builder
-	 * @throws NullPointerException if {@code port} is null
+	 * @throws NullPointerException if an argument is null
 	 */
 	@NonNull
-	static Builder withPort(@NonNull Integer port) {
-		return new Builder(requirePort(requireNonNull(port)));
+	static Builder withPort(@NonNull Integer port,
+			@NonNull McpEndpointRegistry endpointRegistry,
+			@NonNull McpAdmissionController admissionController) {
+		return new Builder(requirePort(requireNonNull(port)), endpointRegistry,
+				admissionController);
 	}
 
 	/**
@@ -191,7 +197,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 	 */
 	@NotThreadSafe
 	final class Builder {
-		private static final int DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL = 32;
+		@NonNull
+		private static final String DEFAULT_HOST = "127.0.0.1";
+		private static final int DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
 		private static final int DEFAULT_STREAM_QUEUE_CAPACITY = 128;
@@ -207,7 +215,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 				Duration.ofSeconds(30);
 		private int port;
 		private int maximumCursorSizeInBytes;
-		private int maximumSubscriptionsPerPrincipal;
+		private int maximumSubscriptionsPerPartition;
 		private int requestHandlerConcurrency;
 		private int requestHandlerQueueCapacity;
 		private int streamQueueCapacity;
@@ -223,9 +231,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private Duration writeTimeout;
 		@Nullable
 		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
-		@Nullable
+		@NonNull
 		private McpEndpointRegistry endpointRegistry;
-		@Nullable
+		@NonNull
 		private McpAdmissionController admissionController;
 		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
@@ -256,17 +264,21 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@Nullable
 		private SimulatorMcpBuildRegistrar simulatorBuildRegistrar;
 
-		private Builder(int port) {
+		private Builder(int port,
+				@NonNull McpEndpointRegistry endpointRegistry,
+				@NonNull McpAdmissionController admissionController) {
 			this.port = port;
+			this.endpointRegistry = requireNonNull(endpointRegistry);
+			this.admissionController = requireNonNull(admissionController);
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
-			this.maximumSubscriptionsPerPrincipal =
-					DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL;
+			this.maximumSubscriptionsPerPartition =
+					DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION;
 			this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
 			this.requestHandlerQueueCapacity =
 					DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
 			this.streamQueueCapacity = DEFAULT_STREAM_QUEUE_CAPACITY;
-			this.host = "127.0.0.1";
+			this.host = DEFAULT_HOST;
 			this.keepAliveInterval = DEFAULT_KEEP_ALIVE_INTERVAL;
 			this.maximumSubscriptionDuration =
 					DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION;
@@ -313,12 +325,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 		/**
 		 * Sets the dedicated bind host. The default is {@code 127.0.0.1}.
 		 *
-		 * @param host nonblank bind host
+		 * @param host nonblank bind host, or null to restore the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder host(@NonNull String host) {
-			requireNonNull(host);
+		public Builder host(@Nullable String host) {
+			if (host == null) {
+				this.host = DEFAULT_HOST;
+				return this;
+			}
 			if (host.isBlank())
 				throw new IllegalArgumentException("MCP bind host must not be blank.");
 			this.host = host;
@@ -333,18 +348,19 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * representable by Soklet's strict request and response JSON profiles.
 		 *
 		 * @param maximumCursorSizeInBytes positive cursor-size limit of at most
-		 *                                 {@code 174762} bytes
+		 *                                 {@code 174762} bytes, or null to restore
+		 *                                 the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumCursorSizeInBytes} is null
 		 * @throws IllegalArgumentException if the limit is outside the supported
 		 *                                  range
 		 */
 		@NonNull
 		public Builder maximumCursorSizeInBytes(
-				@NonNull Integer maximumCursorSizeInBytes) {
-			this.maximumCursorSizeInBytes =
-					McpCursorLimit.requireSupportedMaximumSizeInBytes(
-							requireNonNull(maximumCursorSizeInBytes));
+				@Nullable Integer maximumCursorSizeInBytes) {
+			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes == null
+					? McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES
+					: McpCursorLimit.requireSupportedMaximumSizeInBytes(
+							maximumCursorSizeInBytes);
 			return this;
 		}
 
@@ -356,22 +372,25 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * can exhaust the bucket for every other anonymous caller. This setting has
 		 * neutral behavior until subscriptions are active.
 		 *
-		 * @param maximumSubscriptionsPerPrincipal subscription limit per endpoint
-		 *                                          and authorization/quota partition
+		 * @param maximumSubscriptionsPerPartition subscription limit per endpoint
+		 *                                          and authorization/quota partition,
+		 *                                          or null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumSubscriptionsPerPrincipal}
-		 *                              is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
-		public Builder maximumSubscriptionsPerPrincipal(
-				@NonNull Integer maximumSubscriptionsPerPrincipal) {
-			requireNonNull(maximumSubscriptionsPerPrincipal);
-			if (maximumSubscriptionsPerPrincipal < 1)
+		public Builder maximumSubscriptionsPerPartition(
+				@Nullable Integer maximumSubscriptionsPerPartition) {
+			if (maximumSubscriptionsPerPartition == null) {
+				this.maximumSubscriptionsPerPartition =
+						DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION;
+				return this;
+			}
+			if (maximumSubscriptionsPerPartition < 1)
 				throw new IllegalArgumentException(
-						"MCP maximum subscriptions per principal must be positive.");
-			this.maximumSubscriptionsPerPrincipal =
-					maximumSubscriptionsPerPrincipal;
+						"MCP maximum subscriptions per partition must be positive.");
+			this.maximumSubscriptionsPerPartition =
+					maximumSubscriptionsPerPartition;
 			return this;
 		}
 
@@ -380,17 +399,19 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * 24 hours. This setting has neutral behavior until subscriptions are
 		 * active.
 		 *
-		 * @param maximumSubscriptionDuration maximum subscription lifetime
+		 * @param maximumSubscriptionDuration maximum subscription lifetime, or
+		 *                                    null to restore the default
 		 * @return this builder
 		 * @throws IllegalArgumentException if the duration is not positive and
 		 *                                  representable as signed nanoseconds
 		 */
 		@NonNull
 		public Builder maximumSubscriptionDuration(
-				@NonNull Duration maximumSubscriptionDuration) {
-			this.maximumSubscriptionDuration = requirePositiveDuration(
-					maximumSubscriptionDuration,
-					"MCP maximum subscription duration");
+				@Nullable Duration maximumSubscriptionDuration) {
+			this.maximumSubscriptionDuration = maximumSubscriptionDuration == null
+					? DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION
+					: requirePositiveDuration(maximumSubscriptionDuration,
+							"MCP maximum subscription duration");
 			return this;
 		}
 
@@ -399,16 +420,17 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * forcibly terminate application code that ignores interruption.
 		 * The default is 60 seconds.
 		 *
-		 * @param requestTimeout positive finite request timeout
+		 * @param requestTimeout positive finite request timeout, or null to restore
+		 *                       the default
 		 * @return this builder
 		 * @throws IllegalArgumentException if the timeout is zero, negative, below
 		 *                                  one nanosecond, or too large to represent
 		 *                                  as signed nanoseconds
 		 */
 		@NonNull
-		public Builder requestTimeout(@NonNull Duration requestTimeout) {
-			this.requestTimeout = requirePositiveDuration(requestTimeout,
-					"MCP request timeout");
+		public Builder requestTimeout(@Nullable Duration requestTimeout) {
+			this.requestTimeout = requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT
+					: requirePositiveDuration(requestTimeout, "MCP request timeout");
 			return this;
 		}
 
@@ -416,15 +438,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Sets the positive, finite number of application handler dispatches that
 		 * may hold server-wide execution slots. The default is {@code 32}.
 		 *
-		 * @param requestHandlerConcurrency maximum active handler dispatches
+		 * @param requestHandlerConcurrency maximum active handler dispatches, or
+		 *                                  null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code requestHandlerConcurrency} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
 		public Builder requestHandlerConcurrency(
-				@NonNull Integer requestHandlerConcurrency) {
-			requireNonNull(requestHandlerConcurrency);
+				@Nullable Integer requestHandlerConcurrency) {
+			if (requestHandlerConcurrency == null) {
+				this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
+				return this;
+			}
 			if (requestHandlerConcurrency < 1)
 				throw new IllegalArgumentException(
 						"MCP request-handler concurrency must be positive.");
@@ -436,15 +461,19 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Sets the positive, finite number of admitted requests that may wait for
 		 * an application handler slot. The default is {@code 128}.
 		 *
-		 * @param requestHandlerQueueCapacity maximum queued handler dispatches
+		 * @param requestHandlerQueueCapacity maximum queued handler dispatches, or
+		 *                                    null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code requestHandlerQueueCapacity} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
 		public Builder requestHandlerQueueCapacity(
-				@NonNull Integer requestHandlerQueueCapacity) {
-			requireNonNull(requestHandlerQueueCapacity);
+				@Nullable Integer requestHandlerQueueCapacity) {
+			if (requestHandlerQueueCapacity == null) {
+				this.requestHandlerQueueCapacity =
+						DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
+				return this;
+			}
 			if (requestHandlerQueueCapacity < 1)
 				throw new IllegalArgumentException(
 						"MCP request-handler queue capacity must be positive.");
@@ -459,15 +488,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * down every returned executor. Its own handler-slot and queue bounds remain
 		 * authoritative regardless of executor capacity.
 		 *
-		 * @param requestHandlerExecutorServiceSupplier executor supplier
+		 * @param requestHandlerExecutorServiceSupplier executor supplier, or null
+		 *                                              to use Soklet's default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder requestHandlerExecutorServiceSupplier(
-				@NonNull Supplier<@NonNull ExecutorService>
+				@Nullable Supplier<@NonNull ExecutorService>
 						requestHandlerExecutorServiceSupplier) {
-			this.requestHandlerExecutorServiceSupplier = requireNonNull(
-					requestHandlerExecutorServiceSupplier);
+			this.requestHandlerExecutorServiceSupplier =
+					requestHandlerExecutorServiceSupplier;
 			return this;
 		}
 
@@ -476,14 +506,17 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * MCP response or subscription stream. The default is {@code 128}.
 		 * This setting has neutral behavior until its streaming owner is active.
 		 *
-		 * @param streamQueueCapacity maximum pending messages per stream
+		 * @param streamQueueCapacity maximum pending messages per stream, or null
+		 *                            to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code streamQueueCapacity} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
-		public Builder streamQueueCapacity(@NonNull Integer streamQueueCapacity) {
-			requireNonNull(streamQueueCapacity);
+		public Builder streamQueueCapacity(@Nullable Integer streamQueueCapacity) {
+			if (streamQueueCapacity == null) {
+				this.streamQueueCapacity = DEFAULT_STREAM_QUEUE_CAPACITY;
+				return this;
+			}
 			if (streamQueueCapacity < 1)
 				throw new IllegalArgumentException(
 						"MCP stream queue capacity must be positive.");
@@ -496,15 +529,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * write no bytes before Soklet closes it. The default is 30 seconds. The
 		 * configured keep-alive interval must be shorter than this interval.
 		 *
-		 * @param writeTimeout maximum interval without a stream write
+		 * @param writeTimeout maximum interval without a stream write, or null to
+		 *                     restore the default
 		 * @return this builder
 		 * @throws IllegalArgumentException if the duration is not positive and
 		 *                                  representable as signed nanoseconds
 		 */
 		@NonNull
-		public Builder writeTimeout(@NonNull Duration writeTimeout) {
-			this.writeTimeout = requirePositiveDuration(writeTimeout,
-					"MCP write timeout");
+		public Builder writeTimeout(@Nullable Duration writeTimeout) {
+			this.writeTimeout = writeTimeout == null ? DEFAULT_WRITE_TIMEOUT
+					: requirePositiveDuration(writeTimeout, "MCP write timeout");
 			return this;
 		}
 
@@ -513,15 +547,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * The default is 15 seconds. This setting has neutral behavior until its
 		 * streaming owner is active.
 		 *
-		 * @param keepAliveInterval SSE keep-alive interval
+		 * @param keepAliveInterval SSE keep-alive interval, or null to restore the
+		 *                          default
 		 * @return this builder
 		 * @throws IllegalArgumentException if the duration is not positive and
 		 *                                  representable as signed nanoseconds
 		 */
 		@NonNull
-		public Builder keepAliveInterval(@NonNull Duration keepAliveInterval) {
-			this.keepAliveInterval = requirePositiveDuration(keepAliveInterval,
-					"MCP keep-alive interval");
+		public Builder keepAliveInterval(@Nullable Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval == null
+					? DEFAULT_KEEP_ALIVE_INTERVAL
+					: requirePositiveDuration(keepAliveInterval,
+							"MCP keep-alive interval");
 			return this;
 		}
 
@@ -542,13 +579,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * text. Omission preserves the canonical source text and existing wire
 		 * behavior.
 		 *
-		 * @param localizer immutable localization behavior and policy
+		 * @param localizer immutable localization behavior and policy, or null to
+		 *                  disable localization
 		 * @return this builder
-		 * @throws NullPointerException if {@code localizer} is null
 		 */
 		@NonNull
-		public Builder localizer(@NonNull McpLocalizer localizer) {
-			this.localizer = requireNonNull(localizer);
+		public Builder localizer(@Nullable McpLocalizer localizer) {
+			this.localizer = localizer;
 			return this;
 		}
 
@@ -572,13 +609,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * invokes the downstream continuation without transforming its result. Soklet
 		 * may invoke one interceptor instance concurrently for independent handlers.
 		 *
-		 * @param handlerInterceptor application-owned handler interceptor
+		 * @param handlerInterceptor application-owned handler interceptor, or null
+		 *                           to restore pass-through behavior
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder handlerInterceptor(
-				@NonNull McpHandlerInterceptor handlerInterceptor) {
-			this.handlerInterceptor = requireNonNull(handlerInterceptor);
+				@Nullable McpHandlerInterceptor handlerInterceptor) {
+			this.handlerInterceptor = handlerInterceptor == null
+					? McpHandlerInterceptor.passThroughInstance()
+					: handlerInterceptor;
 			return this;
 		}
 
@@ -587,13 +627,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * preserves output unchanged. Soklet may invoke one sanitizer instance
 		 * concurrently for independent tool calls.
 		 *
-		 * @param toolOutputSanitizer application-owned tool-output sanitizer
+		 * @param toolOutputSanitizer application-owned tool-output sanitizer, or
+		 *                            null to restore pass-through behavior
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder toolOutputSanitizer(
-				@NonNull McpToolOutputSanitizer toolOutputSanitizer) {
-			this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
+				@Nullable McpToolOutputSanitizer toolOutputSanitizer) {
+			this.toolOutputSanitizer = toolOutputSanitizer == null
+					? McpToolOutputSanitizer.passThroughInstance()
+					: toolOutputSanitizer;
 			return this;
 		}
 
@@ -601,13 +644,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Configures the optional limiter applied once to every admitted MCP
 		 * request or notification.
 		 *
-		 * @param requestRateLimiter application-owned request limiter
+		 * @param requestRateLimiter application-owned request limiter, or null to
+		 *                           disable request-wide limiting
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder requestRateLimiter(
-				@NonNull McpRateLimiter requestRateLimiter) {
-			this.requestRateLimiter = requireNonNull(requestRateLimiter);
+				@Nullable McpRateLimiter requestRateLimiter) {
+			this.requestRateLimiter = requestRateLimiter;
 			return this;
 		}
 
@@ -616,12 +660,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * when any endpoint exposes a tool; endpoint and tool overrides replace it
 		 * instead of adding another charge.
 		 *
-		 * @param toolRateLimiter application-owned fallback tool limiter
+		 * @param toolRateLimiter application-owned fallback tool limiter, or null
+		 *                        to clear it
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolRateLimiter(@NonNull McpRateLimiter toolRateLimiter) {
-			this.toolRateLimiter = requireNonNull(toolRateLimiter);
+		public Builder toolRateLimiter(@Nullable McpRateLimiter toolRateLimiter) {
+			this.toolRateLimiter = toolRateLimiter;
 			return this;
 		}
 
@@ -629,13 +674,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Configures the immutable registry used to resolve named endpoint and tool
 		 * limiter overrides.
 		 *
-		 * @param rateLimiterRegistry rate-limiter registry
+		 * @param rateLimiterRegistry rate-limiter registry, or null to restore the
+		 *                            empty registry
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder rateLimiterRegistry(
-				@NonNull McpRateLimiterRegistry rateLimiterRegistry) {
-			this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
+				@Nullable McpRateLimiterRegistry rateLimiterRegistry) {
+			this.rateLimiterRegistry = rateLimiterRegistry == null
+					? McpRateLimiterRegistry.emptyInstance()
+					: rateLimiterRegistry;
 			return this;
 		}
 
@@ -646,12 +694,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * concurrently for independent requests, so custom implementations must be
 		 * thread-safe.
 		 *
-		 * @param corsAuthorizer Origin authorizer
+		 * @param corsAuthorizer Origin authorizer, or null to restore secure
+		 *                       reject-all behavior
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder corsAuthorizer(@NonNull CorsAuthorizer corsAuthorizer) {
-			this.corsAuthorizer = requireNonNull(corsAuthorizer);
+		public Builder corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
+			this.corsAuthorizer = corsAuthorizer;
 			return this;
 		}
 
@@ -659,13 +708,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Sets the policy for requests that omit Origin. The default is
 		 * {@link McpAbsentOriginPolicy#ALLOW}.
 		 *
-		 * @param absentOriginPolicy absent-Origin policy
+		 * @param absentOriginPolicy absent-Origin policy, or null to restore the
+		 *                           default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder absentOriginPolicy(
-				@NonNull McpAbsentOriginPolicy absentOriginPolicy) {
-			this.absentOriginPolicy = requireNonNull(absentOriginPolicy);
+				@Nullable McpAbsentOriginPolicy absentOriginPolicy) {
+			this.absentOriginPolicy = absentOriginPolicy == null
+					? McpAbsentOriginPolicy.ALLOW
+					: absentOriginPolicy;
 			return this;
 		}
 
@@ -679,15 +731,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * routing or authorization decisions from mirrored headers; it does not
 		 * apply to MCP notifications.
 		 *
-		 * @param unknownMirroredHeaderPolicy unknown-header policy
+		 * @param unknownMirroredHeaderPolicy unknown-header policy, or null to
+		 *                                    restore the default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder unknownMirroredHeaderPolicy(
-				@NonNull McpUnknownMirroredHeaderPolicy
+				@Nullable McpUnknownMirroredHeaderPolicy
 						unknownMirroredHeaderPolicy) {
-			this.unknownMirroredHeaderPolicy = requireNonNull(
-					unknownMirroredHeaderPolicy);
+			this.unknownMirroredHeaderPolicy =
+					unknownMirroredHeaderPolicy == null
+							? McpUnknownMirroredHeaderPolicy.IGNORE
+							: unknownMirroredHeaderPolicy;
 			return this;
 		}
 
@@ -714,14 +769,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * headerName=<name>}, where {@code <path>} is the registered endpoint path
 		 * and {@code <name>} is the sanitized, truncated received field name.
 		 *
-		 * @param enabled whether bounded name-bearing diagnostics are enabled
+		 * @param enabled whether bounded name-bearing diagnostics are enabled, or
+		 *                null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
 		public Builder unknownMirroredHeaderNameDiagnostics(
-				@NonNull Boolean enabled) {
-			this.unknownMirroredHeaderNameDiagnostics = requireNonNull(enabled);
+				@Nullable Boolean enabled) {
+			this.unknownMirroredHeaderNameDiagnostics = enabled == null ? false
+					: enabled;
 			return this;
 		}
 
@@ -734,13 +790,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * ID, token-format version, and pseudonymous token, but no raw trace ID unless
 		 * {@link #logRawValidatedTraceIds(Boolean)} is enabled independently.
 		 *
-		 * @param traceCorrelationKey initial trace-correlation key
+		 * @param traceCorrelationKey initial trace-correlation key, or null to
+		 *                            disable trace correlation
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder traceCorrelationKey(
-				@NonNull McpTraceCorrelationKey traceCorrelationKey) {
-			this.traceCorrelationKey = requireNonNull(traceCorrelationKey);
+				@Nullable McpTraceCorrelationKey traceCorrelationKey) {
+			this.traceCorrelationKey = traceCorrelationKey;
 			return this;
 		}
 
@@ -759,42 +816,49 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * APM join and account for the identifier's high cardinality and correlation
 		 * reach.</p>
 		 *
-		 * @param enabled whether raw validated trace IDs may appear in logs
+		 * @param enabled whether raw validated trace IDs may appear in logs, or
+		 *                null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public Builder logRawValidatedTraceIds(@NonNull Boolean enabled) {
-			this.logRawValidatedTraceIds = requireNonNull(enabled);
+		public Builder logRawValidatedTraceIds(@Nullable Boolean enabled) {
+			this.logRawValidatedTraceIds = enabled == null ? false : enabled;
 			return this;
 		}
 
 		/**
 		 * Configures framework request-state protection. Omission leaves framework
-		 * protection unconfigured. A production key ring is copied into independent
+		 * protection unconfigured. A production keyring is copied into independent
 		 * server-owned live state; runtime rotation is available only through
 		 * {@link McpServer#getProtectionControl()}.
 		 *
-		 * @param protectionConfig initial protection configuration
+		 * @param protectionConfig initial protection configuration, or null to
+		 *                         disable framework request-state protection
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder protectionConfig(
-				@NonNull McpProtectionConfig protectionConfig) {
-			this.protectionConfig = requireNonNull(protectionConfig);
+				@Nullable McpProtectionConfig protectionConfig) {
+			this.protectionConfig = protectionConfig;
 			return this;
 		}
 
 		/**
-		 * Adds hostname-only values accepted by MCP Host validation. Host ports
-		 * must still equal the effective bound port.
+		 * Replaces the hostname-only values accepted by MCP Host validation. Host
+		 * ports must still equal the effective bound port. The default is the empty
+		 * set.
 		 *
-		 * @param allowedHosts additional allowed hostnames or IP literals
+		 * @param allowedHosts allowed hostnames or IP literals, or null to restore
+		 *                     the empty set
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder allowedHosts(@NonNull Set<@NonNull String> allowedHosts) {
-			requireNonNull(allowedHosts);
+		public Builder allowedHosts(
+				@Nullable Set<@NonNull String> allowedHosts) {
+			if (allowedHosts == null) {
+				this.allowedHosts = Set.of();
+				return this;
+			}
 			LinkedHashSet<@NonNull String> copied = new LinkedHashSet<>();
 			allowedHosts.forEach(host -> copied.add(requireNonNull(host)));
 			this.allowedHosts = Set.copyOf(copied);
@@ -806,9 +870,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *
 		 * @return configured server
 		 * @throws IllegalStateException if the keep-alive interval is not shorter
-		 *                               than the write timeout, registry or admission
-		 *                               controller is absent, a configured limiter name is
-		 *                               unknown, or tools exist without a fallback
+		 *                               than the write timeout, a configured limiter
+		 *                               name is unknown, or tools exist without a fallback
 		 *                               tool limiter, or a configured localization
 		 *                               response exceeds its provider-lookup limit
 		 */
@@ -821,11 +884,6 @@ public sealed interface McpServer permits DefaultMcpServer {
 			if (this.keepAliveInterval.compareTo(this.writeTimeout) >= 0)
 				throw new IllegalStateException(
 						"The MCP keep-alive interval must be shorter than the write timeout.");
-			if (this.endpointRegistry == null)
-				throw new IllegalStateException("An MCP endpoint registry must be configured.");
-			if (this.admissionController == null)
-				throw new IllegalStateException(
-						"An MCP admission controller must be configured.");
 			boolean toolsPresent = this.endpointRegistry.getEndpoints().stream()
 					.anyMatch(endpoint -> !endpoint.getTools().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
@@ -847,7 +905,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.requestHandlerExecutorServiceSupplier,
 					this.streamQueueCapacity, this.writeTimeout,
 					this.keepAliveInterval,
-					this.maximumSubscriptionsPerPrincipal,
+					this.maximumSubscriptionsPerPartition,
 					this.maximumSubscriptionDuration,
 					this.endpointRegistry,
 					this.admissionController, this.handlerInterceptor,

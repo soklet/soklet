@@ -847,7 +847,8 @@ public class MicrohttpInternalTests {
 				.map(Header::value)
 				.toList());
 		Assertions.assertTrue(headResponse.headers().stream()
-				.anyMatch(header -> header.name().equals("X-Test") && header.value().equals("yes")));
+				.anyMatch(header -> header.name().equals("X-Test")
+						&& header.value().equals("yes")));
 	}
 
 	@Test

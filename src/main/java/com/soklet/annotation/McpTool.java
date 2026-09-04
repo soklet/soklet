@@ -29,9 +29,11 @@ import java.lang.annotation.Target;
  * Declares an MCP tool handler method.
  * <p>
  * Soklet's annotation processor derives the input schema from parameters
- * annotated with {@link McpToolArgument} and the output schema from the
- * method's declared return type. {@link McpToolProperty} customizes property
- * metadata on ordinary typed input and output records.
+ * annotated with {@link McpToolArgument}. For an ordinary typed-completion
+ * method, it derives the output schema from the declared return type. A method
+ * returning {@code McpOperationResult} or a subtype instead uses the advanced
+ * result path and has no derived output schema. {@link McpToolProperty}
+ * customizes property metadata on ordinary typed input and output records.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -72,17 +74,20 @@ public @interface McpTool {
 	 * @return the rate-limiter name, or an empty string to inherit
 	 */
 	@Nullable
-	String rateLimiter() default "";
+	String rateLimiterName() default "";
 
 	/**
 	 * Whether Soklet mirrors structured tool output into a text content block.
 	 *
 	 * @return {@code true} to mirror structured content as text
 	 */
-	boolean mirrorStructuredContentAsText() default true;
+	boolean structuredContentMirroredAsText() default true;
 
 	/**
 	 * Client requests this tool may emit during multi-round-trip handling.
+	 *
+	 * <p>A nonempty declaration requires the method to return
+	 * {@code McpOperationResult} or a subtype.
 	 *
 	 * @return input-request declarations
 	 */
@@ -91,6 +96,9 @@ public @interface McpTool {
 
 	/**
 	 * The request-state contract for this tool.
+	 *
+	 * <p>A mode other than {@link McpRequestStateMode#NONE} requires the method
+	 * to return {@code McpOperationResult} or a subtype.
 	 *
 	 * @return request-state mode
 	 */

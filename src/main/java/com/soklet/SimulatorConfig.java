@@ -269,11 +269,10 @@ public final class SimulatorConfig {
 					requireNonNull(mcpServerConfigurer);
 			requireMutable();
 			McpBuilderLease lease = this.configurationGraph
-					.openMcpBuilder(exactPort);
+					.openMcpBuilder(exactPort, exactEndpointRegistry,
+							exactAdmissionController);
 			try {
-				McpServer.Builder mcpServerBuilder = lease.builder()
-						.endpointRegistry(exactEndpointRegistry)
-						.admissionController(exactAdmissionController);
+				McpServer.Builder mcpServerBuilder = lease.builder();
 				beginTransportConfigurer();
 				try {
 					exactConfigurer.accept(mcpServerBuilder);
@@ -319,7 +318,9 @@ public final class SimulatorConfig {
 		}
 
 		/**
-		 * Sets how Soklet creates application instances.
+		 * Sets how Soklet creates application instances for HTTP, SSE, and MCP
+		 * handlers and application parameter values. The provider may be called
+		 * concurrently.
 		 *
 		 * @param instanceProvider instance provider, or {@code null} for the default
 		 * @return this builder
@@ -567,7 +568,9 @@ public final class SimulatorConfig {
 
 		@NonNull
 		private synchronized McpBuilderLease openMcpBuilder(
-				@NonNull Integer port) {
+				@NonNull Integer port,
+				@NonNull McpEndpointRegistry endpointRegistry,
+				@NonNull McpAdmissionController admissionController) {
 			requireOpen();
 			if (this.mcpServer != null)
 				throw new IllegalStateException(
@@ -576,7 +579,8 @@ public final class SimulatorConfig {
 				throw new IllegalStateException(
 						"A simulator MCP builder is already active");
 			McpBuilderLease lease = new McpBuilderLease(this,
-					requireNonNull(port));
+					requireNonNull(port), requireNonNull(endpointRegistry),
+					requireNonNull(admissionController));
 			this.activeMcpBuilderLease = lease;
 			return lease;
 		}
@@ -628,9 +632,13 @@ public final class SimulatorConfig {
 		private volatile @Nullable Thread buildThread;
 
 		private McpBuilderLease(@NonNull ConfigurationGraph configurationGraph,
-				@NonNull Integer port) {
+				@NonNull Integer port,
+				@NonNull McpEndpointRegistry endpointRegistry,
+				@NonNull McpAdmissionController admissionController) {
 			this.configurationGraph = requireNonNull(configurationGraph);
-			this.builder = McpServer.withPort(requireNonNull(port))
+			this.builder = McpServer.withPort(requireNonNull(port),
+					requireNonNull(endpointRegistry),
+					requireNonNull(admissionController))
 					.simulatorBuildRegistrar(this);
 		}
 

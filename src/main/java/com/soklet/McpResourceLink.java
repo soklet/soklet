@@ -24,8 +24,13 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
+import static com.soklet.McpContentValueSupport.annotationsEqual;
+import static com.soklet.McpContentValueSupport.annotationsHashCode;
+import static com.soklet.McpContentValueSupport.iconListHashCode;
+import static com.soklet.McpContentValueSupport.iconListsEqual;
 import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
@@ -51,7 +56,7 @@ public final class McpResourceLink implements McpContentBlock {
 	@Nullable
 	private final McpContentAnnotations annotations;
 	@Nullable
-	private final Long size;
+	private final Long sizeInBytes;
 	@NonNull
 	private final McpJsonObject metadata;
 
@@ -70,6 +75,34 @@ public final class McpResourceLink implements McpContentBlock {
 		return new Builder(uri, name);
 	}
 
+	/**
+	 * Creates a resource-link content block from an existing concrete resource
+	 * descriptor. Every descriptor property is preserved.
+	 *
+	 * @param resourceDescriptor resource descriptor to copy
+	 * @return immutable resource link
+	 * @throws NullPointerException if {@code resourceDescriptor} is null
+	 */
+	@NonNull
+	public static McpResourceLink fromResourceDescriptor(
+			@NonNull McpResourceDescriptor resourceDescriptor) {
+		return new McpResourceLink(resourceDescriptor);
+	}
+
+	private McpResourceLink(
+			@NonNull McpResourceDescriptor resourceDescriptor) {
+		McpResourceDescriptor descriptor = requireNonNull(resourceDescriptor);
+		this.uri = descriptor.getUri();
+		this.name = descriptor.getName();
+		this.title = descriptor.getTitle().orElse(null);
+		this.description = descriptor.getDescription().orElse(null);
+		this.mimeType = descriptor.getMimeType().orElse(null);
+		this.icons = List.copyOf(descriptor.getIcons());
+		this.annotations = descriptor.getAnnotations().orElse(null);
+		this.sizeInBytes = descriptor.getSizeInBytes().orElse(null);
+		this.metadata = descriptor.getMetadata();
+	}
+
 	private McpResourceLink(@NonNull Builder builder) {
 		this.uri = builder.uri;
 		this.name = builder.name;
@@ -78,7 +111,7 @@ public final class McpResourceLink implements McpContentBlock {
 		this.mimeType = builder.mimeType;
 		this.icons = List.copyOf(builder.icons);
 		this.annotations = builder.annotations;
-		this.size = builder.size;
+		this.sizeInBytes = builder.sizeInBytes;
 		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
@@ -119,6 +152,7 @@ public final class McpResourceLink implements McpContentBlock {
 	}
 
 	/** @return content annotations, if supplied */
+	@Override
 	@NonNull
 	public Optional<@NonNull McpContentAnnotations> getAnnotations() {
 		return Optional.ofNullable(this.annotations);
@@ -126,14 +160,45 @@ public final class McpResourceLink implements McpContentBlock {
 
 	/** @return resource size in bytes, if supplied */
 	@NonNull
-	public Optional<@NonNull Long> getSize() {
-		return Optional.ofNullable(this.size);
+	public Optional<@NonNull Long> getSizeInBytes() {
+		return Optional.ofNullable(this.sizeInBytes);
 	}
 
 	/** @return immutable extension metadata */
+	@Override
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every linked-resource property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpResourceLink link))
+			return false;
+		return this.uri.equals(link.uri)
+				&& this.name.equals(link.name)
+				&& Objects.equals(this.title, link.title)
+				&& Objects.equals(this.description, link.description)
+				&& Objects.equals(this.mimeType, link.mimeType)
+				&& iconListsEqual(this.icons, link.icons)
+				&& annotationsEqual(this.annotations, link.annotations)
+				&& Objects.equals(this.sizeInBytes, link.sizeInBytes)
+				&& this.metadata.equals(link.metadata);
+	}
+
+	/** @return structural linked-resource hash code */
+	@Override
+	public int hashCode() {
+		int result = Objects.hash(this.uri, this.name, this.title,
+				this.description, this.mimeType);
+		result = 31 * result + iconListHashCode(this.icons);
+		result = 31 * result + annotationsHashCode(this.annotations);
+		result = 31 * result + Objects.hashCode(this.sizeInBytes);
+		result = 31 * result + this.metadata.hashCode();
+		return result;
 	}
 
 	/**
@@ -158,7 +223,7 @@ public final class McpResourceLink implements McpContentBlock {
 		@Nullable
 		private McpContentAnnotations annotations;
 		@Nullable
-		private Long size;
+		private Long sizeInBytes;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
@@ -201,7 +266,7 @@ public final class McpResourceLink implements McpContentBlock {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder icon(@NonNull McpIcon icon) {
+		public Builder addIcon(@NonNull McpIcon icon) {
 			this.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -217,18 +282,18 @@ public final class McpResourceLink implements McpContentBlock {
 		/**
 		 * Sets the resource size in bytes.
 		 *
-		 * @param size nonnegative byte count
+		 * @param sizeInBytes nonnegative byte count
 		 * @return this builder
-		 * @throws NullPointerException if {@code size} is null
-		 * @throws IllegalArgumentException if {@code size} is negative
+		 * @throws NullPointerException if {@code sizeInBytes} is null
+		 * @throws IllegalArgumentException if {@code sizeInBytes} is negative
 		 */
 		@NonNull
-		public Builder size(@NonNull Long size) {
-			requireNonNull(size);
-			if (size < 0)
+		public Builder sizeInBytes(@NonNull Long sizeInBytes) {
+			requireNonNull(sizeInBytes);
+			if (sizeInBytes < 0)
 				throw new IllegalArgumentException(
 						"Resource size must not be negative.");
-			this.size = size;
+			this.sizeInBytes = sizeInBytes;
 			return this;
 		}
 

@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -102,6 +103,22 @@ public final class McpJsonObject implements McpJsonValue {
 	@NonNull
 	public Optional<@NonNull McpJsonValue> find(@NonNull String name) {
 		return Optional.ofNullable(this.members.get(requireNonNull(name)));
+	}
+
+	/** @return whether this object has structurally equal members */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpJsonObject object))
+			return false;
+		return this.members.equals(object.members);
+	}
+
+	/** @return structural member hash code */
+	@Override
+	public int hashCode() {
+		return this.members.hashCode();
 	}
 
 	/**

@@ -75,7 +75,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(APPLICATION_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
 					int invocation = handlerInvocations.incrementAndGet();
@@ -84,8 +84,7 @@ public class McpRequestStatePublicRuntimeTests {
 								request.getApplicationRequestState().isEmpty());
 						Assertions.assertTrue(
 								request.getFrameworkRequestState().isEmpty());
-						return McpInputRequiredResult.builder()
-								.applicationRequestState(APPLICATION_STATE)
+						return McpInputRequiredResult.withApplicationRequestState(APPLICATION_STATE)
 								.build();
 					}
 
@@ -100,7 +99,7 @@ public class McpRequestStatePublicRuntimeTests {
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("application-state-runtime-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
@@ -116,9 +115,9 @@ public class McpRequestStatePublicRuntimeTests {
 		Assertions.assertEquals(Boolean.TRUE, configuredDiagnostics
 				.isApplicationRequestStateProtectorConfigured());
 		Assertions.assertTrue(configuredDiagnostics
-				.getProtectionKeyRingFingerprint().isEmpty());
+				.getProtectionKeyringFingerprint().isEmpty());
 		Assertions.assertTrue(configuredDiagnostics
-				.getTraceCorrelationConfigurationFingerprint().isEmpty());
+				.getTraceCorrelationFingerprint().isEmpty());
 		Soklet soklet = managedSoklet(server, observer);
 
 		try {
@@ -195,12 +194,11 @@ public class McpRequestStatePublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getFrameworkRequestState().isEmpty())
-						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(applicationState)
@@ -221,11 +219,11 @@ public class McpRequestStatePublicRuntimeTests {
 					return McpCompleteResult.fromToolText(
 							"framework state accepted");
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("framework-state-runtime-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
@@ -282,12 +280,11 @@ public class McpRequestStatePublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getFrameworkRequestState().isEmpty())
-						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(applicationState)
@@ -304,15 +301,15 @@ public class McpRequestStatePublicRuntimeTests {
 					return McpCompleteResult.fromToolText(
 							"cross-instance state accepted");
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("cross-instance-state-runtime-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpProtectionKeyRing sharedKeyRing = productionKeyRing(
+		McpProtectionKeyring sharedKeyring = productionKeyring(
 				"fleet-key", "0123456789abcdef0123456789abcdef");
-		McpProtectionKeyRing mismatchedKeyRing = productionKeyRing(
+		McpProtectionKeyring mismatchedKeyring = productionKeyring(
 				"fleet-key", "fedcba9876543210fedcba9876543210");
 		McpAdmissionController sharedPartition =
 				partitionedAdmissionController("tenant-alpha");
@@ -323,7 +320,7 @@ public class McpRequestStatePublicRuntimeTests {
 			return continuation.proceed();
 		};
 
-		McpServer emittingServer = stateServer(endpoint, sharedKeyRing,
+		McpServer emittingServer = stateServer(endpoint, sharedKeyring,
 				sharedPartition, interceptor);
 		Soklet emittingSoklet = managedSoklet(emittingServer);
 		String protectedState;
@@ -342,7 +339,7 @@ public class McpRequestStatePublicRuntimeTests {
 		Assertions.assertEquals(1, handlerInvocations.get());
 		Assertions.assertEquals(1, interceptorInvocations.get());
 
-		McpServer acceptingServer = stateServer(endpoint, sharedKeyRing,
+		McpServer acceptingServer = stateServer(endpoint, sharedKeyring,
 				sharedPartition, interceptor);
 		Soklet acceptingSoklet = managedSoklet(acceptingServer);
 		try {
@@ -360,7 +357,7 @@ public class McpRequestStatePublicRuntimeTests {
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
-		McpServer wrongKeyServer = stateServer(endpoint, mismatchedKeyRing,
+		McpServer wrongKeyServer = stateServer(endpoint, mismatchedKeyring,
 				sharedPartition, interceptor);
 		Soklet wrongKeySoklet = managedSoklet(wrongKeyServer);
 		try {
@@ -376,7 +373,7 @@ public class McpRequestStatePublicRuntimeTests {
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
-		McpServer wrongPartitionServer = stateServer(endpoint, sharedKeyRing,
+		McpServer wrongPartitionServer = stateServer(endpoint, sharedKeyring,
 				mismatchedPartition, interceptor);
 		Soklet wrongPartitionSoklet = managedSoklet(wrongPartitionServer);
 		try {
@@ -404,16 +401,16 @@ public class McpRequestStatePublicRuntimeTests {
 				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("state-errors-runtime-test")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {
@@ -474,7 +471,7 @@ public class McpRequestStatePublicRuntimeTests {
 	public void onlyFrameworkProtectedRegistrationsRequireProtectionConfig() {
 		McpEndpoint frameworkEndpoint = endpointBuilder(
 				"framework-config-runtime-test")
-				.tool(noopTool("framework-config",
+				.addTool(noopTool("framework-config",
 						McpRequestStateMode.FRAMEWORK_PROTECTED))
 				.build();
 		IllegalStateException exception = Assertions.assertThrows(
@@ -486,20 +483,20 @@ public class McpRequestStatePublicRuntimeTests {
 
 		McpEndpoint applicationEndpoint = endpointBuilder(
 				"application-config-runtime-test")
-				.tool(noopTool("application-config",
+				.addTool(noopTool("application-config",
 						McpRequestStateMode.APPLICATION_PROTECTED))
 				.build();
 		McpServer applicationServer = serverBuilder(applicationEndpoint).build();
 		McpServerDiagnostics applicationDiagnostics =
 				applicationServer.getDiagnostics();
-		Assertions.assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+		Assertions.assertEquals(McpProtectionMode.NONE,
 				applicationDiagnostics.getProtectionMode());
 		Assertions.assertEquals(Boolean.FALSE, applicationDiagnostics
 				.isApplicationRequestStateProtectorConfigured());
 		Assertions.assertTrue(applicationDiagnostics
-				.getProtectionKeyRingFingerprint().isEmpty());
+				.getProtectionKeyringFingerprint().isEmpty());
 		Assertions.assertTrue(applicationDiagnostics
-				.getTraceCorrelationConfigurationFingerprint().isEmpty());
+				.getTraceCorrelationFingerprint().isEmpty());
 	}
 
 	@Test
@@ -516,8 +513,7 @@ public class McpRequestStatePublicRuntimeTests {
 					Assertions.assertTrue(
 							request.getFrameworkRequestState().isEmpty());
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents
+							McpResourceOutput.withContent(McpTextResourceContents
 											.withUriAndText(read.getUri(),
 													"stateful resource")
 											.mimeType("text/plain")
@@ -529,7 +525,7 @@ public class McpRequestStatePublicRuntimeTests {
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("resource-state-runtime-test")
-				.resource(resource)
+				.addResource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
@@ -557,36 +553,32 @@ public class McpRequestStatePublicRuntimeTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder(String implementationName) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						implementationName, "4.0.0").build());
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 	private static McpServer stateServer(McpEndpoint endpoint,
-			McpProtectionKeyRing keyRing,
+			McpProtectionKeyring keyring,
 			McpAdmissionController admissionController,
 			McpHandlerInterceptor interceptor) {
 		return serverBuilder(endpoint)
 				.admissionController(admissionController)
-				.protectionConfig(McpProtectionConfig.withKeyRing(keyRing).build())
+				.protectionConfig(McpProtectionConfig.withKeyring(keyring).build())
 				.handlerInterceptor(interceptor)
 				.build();
 	}
 
-	private static McpProtectionKeyRing productionKeyRing(String keyId,
+	private static McpProtectionKeyring productionKeyring(String keyId,
 			String keyMaterial) {
-		return McpProtectionKeyRing.withActiveKey(
+		return McpProtectionKeyring.withActiveKey(
 				McpProtectionKey.fromIdAndBytes(keyId,
 						keyMaterial.getBytes(StandardCharsets.US_ASCII)))
 				.build();
@@ -605,7 +597,7 @@ public class McpRequestStatePublicRuntimeTests {
 	private static McpToolRegistration<McpJsonObject> noopTool(String name,
 			McpRequestStateMode requestStateMode) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))
 				.requestStateMode(requestStateMode)

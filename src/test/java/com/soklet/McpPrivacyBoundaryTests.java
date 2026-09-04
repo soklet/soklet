@@ -111,7 +111,7 @@ class McpPrivacyBoundaryTests {
 				.put(SECRET, SECRET)
 				.build();
 		McpInputResponses inputResponses = McpInputResponses.builder()
-				.response(SECRET, McpJsonString.fromValue(SECRET))
+				.addResponse(SECRET, McpJsonString.fromValue(SECRET))
 				.build();
 		RequestObservationInput observationInput = new RequestObservationInput(
 				request, endpoint, Map.of(SECRET, SECRET), SECRET,
@@ -423,8 +423,7 @@ class McpPrivacyBoundaryTests {
 	}
 
 	private static McpEndpoint endpoint() {
-		return McpEndpoint.withPath("/" + SECRET)
-				.serverInformation(clientInformation())
+		return McpEndpoint.withPath("/" + SECRET, clientInformation())
 				.build();
 	}
 

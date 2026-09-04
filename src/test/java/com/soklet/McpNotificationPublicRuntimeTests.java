@@ -58,20 +58,19 @@ public class McpNotificationPublicRuntimeTests {
 		McpAdmissionRejection admissionRejection = McpAdmissionRejection
 				.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(1_001,
 						"Notification admission rejected"))
-				.header("WWW-Authenticate", "Bearer realm=soklet-mcp")
+				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("must-not-run")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromToolText("unexpected");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-boundary-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		McpEndpointRegistry endpointRegistry =
@@ -185,13 +184,13 @@ public class McpNotificationPublicRuntimeTests {
 	@Test
 	public void outboundFrameworkNotificationsOmitIdsWhileTerminalResponsePreservesRequestId() {
 		String requestId = "notification-boundary-request";
-		McpLocalSubscriptionEventPublisher publisher =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		AtomicInteger handlerCalls = new AtomicInteger();
 		AtomicInteger interceptorCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> progressTool = McpToolRegistration
 				.withName("emit-progress")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
 					features.require(McpProgressReporter.class).report(
@@ -200,27 +199,24 @@ public class McpNotificationPublicRuntimeTests {
 				})
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(EnumSet.of(
+				.withEventPublisher(publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-output-test", "4.0.0").build())
-				.tool(progressTool)
-				.resource(McpResourceRegistration.withUriAndName(
+				.addTool(progressTool)
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("https://example.com/notification-resource"),
 						"Notification resource")
 						.handler((request, read, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(read.getUri(),
 																"unused")
 														.build())
 												.build()))
 						.build())
-				.subscriptions(subscriptions)
+				.subscriptionConfig(subscriptions)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 
@@ -517,7 +513,7 @@ public class McpNotificationPublicRuntimeTests {
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
 		Assertions.assertEquals(0,
 				server.getDiagnostics().getActiveHandlerExecutions());
-		Assertions.assertEquals(0, server.getDiagnostics().getQueuedRequests());
+		Assertions.assertEquals(0, server.getDiagnostics().getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0,
 				server.getDiagnostics().getActiveRequestStreams());
 		Assertions.assertEquals(0,

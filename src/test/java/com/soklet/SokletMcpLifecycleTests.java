@@ -71,7 +71,7 @@ public class SokletMcpLifecycleTests {
 		CountDownLatch terminalObserved = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerEntered.countDown();
 					try {
@@ -89,16 +89,12 @@ public class SokletMcpLifecycleTests {
 					}
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"residual-lifecycle-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer mcpServer = McpServer.withPort(0)
+		McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(host)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(host))
@@ -575,14 +571,10 @@ public class SokletMcpLifecycleTests {
 
 	@NonNull
 	private static McpServer newMcpServer() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(
-						McpImplementation.withNameAndVersion("test-server", "1.0").build())
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test-server", "1.0").build())
 				.build();
 
-		return McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.build();
 	}
 

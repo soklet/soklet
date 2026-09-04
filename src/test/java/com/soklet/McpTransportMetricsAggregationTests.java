@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -104,8 +105,9 @@ public class McpTransportMetricsAggregationTests {
 				() -> McpMetricsSnapshot.builder().connectionsRejected(-1L));
 		Assertions.assertDoesNotThrow(() -> McpMetricsSnapshot.builder()
 				.connectionsAccepted(0L).connectionsRejected(0L).build());
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().transportFailures(null));
+		Assertions.assertTrue(McpMetricsSnapshot.builder()
+				.transportFailures(null).build()
+				.getTransportFailures().isEmpty());
 
 		Map<MetricsCollector.TransportFailureReason, Long> nullKey =
 				new HashMap<>();
@@ -416,6 +418,8 @@ public class McpTransportMetricsAggregationTests {
 		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
 		Assertions.assertEquals(0, getter.getParameterCount());
 		Assertions.assertEquals(Map.class, getter.getReturnType());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 		assertTransportFailureMapType(getter.getGenericReturnType(),
 				getter.getAnnotatedReturnType());
 
@@ -426,6 +430,8 @@ public class McpTransportMetricsAggregationTests {
 				builder.getReturnType());
 		Assertions.assertTrue(builder.getAnnotatedReturnType()
 				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(builder.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
 		assertTransportFailureMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0]);
 	}
@@ -438,10 +444,8 @@ public class McpTransportMetricsAggregationTests {
 		Assertions.assertArrayEquals(new Object[]{
 				MetricsCollector.TransportFailureReason.class, Long.class
 		}, parameterized.getActualTypeArguments());
-		Assertions.assertTrue(requireNonNull(annotatedType)
-				.isAnnotationPresent(NonNull.class));
 		AnnotatedParameterizedType annotated = Assertions.assertInstanceOf(
-				AnnotatedParameterizedType.class, annotatedType);
+				AnnotatedParameterizedType.class, requireNonNull(annotatedType));
 		for (AnnotatedType argument : annotated.getAnnotatedActualTypeArguments())
 			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
 					argument.toString());
@@ -495,15 +499,11 @@ public class McpTransportMetricsAggregationTests {
 	@NonNull
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/transport-metrics")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/transport-metrics", McpImplementation.withNameAndVersion(
 						"transport-metrics-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

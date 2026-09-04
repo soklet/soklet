@@ -24,11 +24,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable initial MCP request-state protection key ring.
+ * Immutable initial MCP request-state protection keyring.
  * <p>
  * Exactly one key is initially active for sealing. Other entries are initially
  * verification-only. Building a server copies the complete ring, including
@@ -38,7 +39,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpProtectionKeyRing {
+public final class McpProtectionKeyring {
 	@NonNull
 	private final McpProtectionKey activeKey;
 	@NonNull
@@ -48,20 +49,32 @@ public final class McpProtectionKeyRing {
 	 * Vends a builder primed with the initial active key.
 	 *
 	 * @param activeKey initial active key
-	 * @return key-ring builder
+	 * @return keyring builder
 	 */
 	@NonNull
 	public static Builder withActiveKey(@NonNull McpProtectionKey activeKey) {
 		return new Builder(activeKey);
 	}
 
-	private McpProtectionKeyRing(@NonNull Builder builder) {
+	private McpProtectionKeyring(@NonNull Builder builder) {
 		this.activeKey = copyOf(builder.activeKey);
 		LinkedHashMap<@NonNull String, @NonNull McpProtectionKey> copies =
 				new LinkedHashMap<>();
 		builder.verificationKeys.forEach(
 				(keyId, key) -> copies.put(keyId, copyOf(key)));
 		this.verificationKeys = Map.copyOf(copies);
+	}
+
+	/** @return non-secret active key ID */
+	@NonNull
+	public String getActiveKeyId() {
+		return this.activeKey.getKeyId();
+	}
+
+	/** @return immutable verification-only key ID set */
+	@NonNull
+	public Set<@NonNull String> getVerificationKeyIds() {
+		return this.verificationKeys.keySet();
 	}
 
 	@NonNull
@@ -85,7 +98,7 @@ public final class McpProtectionKeyRing {
 	}
 
 	/**
-	 * Single-threaded builder for an immutable initial key ring.
+	 * Single-threaded builder for an immutable initial keyring.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -111,9 +124,10 @@ public final class McpProtectionKeyRing {
 		 *                                  initial key
 		 */
 		@NonNull
-		public Builder verificationKey(
+		public Builder addVerificationKey(
 				@NonNull McpProtectionKey verificationKey) {
-			addVerificationKey(requireNonNull(verificationKey));
+			addVerificationKey(this.verificationKeys,
+					requireNonNull(verificationKey));
 			return this;
 		}
 
@@ -126,7 +140,7 @@ public final class McpProtectionKeyRing {
 		 *                                  initial key
 		 */
 		@NonNull
-		public Builder verificationKeys(
+		public Builder addVerificationKeys(
 				@NonNull Collection<@NonNull McpProtectionKey> verificationKeys) {
 			requireNonNull(verificationKeys);
 			LinkedHashMap<@NonNull String, @NonNull McpProtectionKey> updated =
@@ -137,15 +151,10 @@ public final class McpProtectionKeyRing {
 			return this;
 		}
 
-		/** @return immutable initial key ring */
+		/** @return immutable initial keyring */
 		@NonNull
-		public McpProtectionKeyRing build() {
-			return new McpProtectionKeyRing(this);
-		}
-
-		private void addVerificationKey(
-				@NonNull McpProtectionKey candidate) {
-			addVerificationKey(this.verificationKeys, candidate);
+		public McpProtectionKeyring build() {
+			return new McpProtectionKeyring(this);
 		}
 
 		private void addVerificationKey(

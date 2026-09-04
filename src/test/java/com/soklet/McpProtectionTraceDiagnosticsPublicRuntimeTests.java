@@ -47,15 +47,15 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	public void configurationModesAndApplicationProtectionProjectExactPresenceRules() {
 		McpServer unconfigured = serverBuilder("unconfigured").build();
 		assertSecurityDiagnostics(unconfigured.getDiagnostics(),
-				McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+				McpProtectionMode.NONE, false,
 				Optional.empty(), Optional.empty());
 
 		McpServer traceOnly = serverBuilder("trace-only")
 				.traceCorrelationKey(traceKey("trace-only", 1))
 				.build();
 		assertSecurityDiagnostics(traceOnly.getDiagnostics(),
-				McpProtectionMode.NO_FRAMEWORK_KEYS, false, Optional.empty(),
-				traceOnly.getTraceCorrelationControl().getConfigurationFingerprint());
+				McpProtectionMode.NONE, false, Optional.empty(),
+				traceOnly.getTraceCorrelationControl().getFingerprint());
 
 		McpRequestStateProtector protector = protector("custom-protector");
 		McpServer custom = serverBuilder("custom")
@@ -70,7 +70,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 				.protectionConfig(productionProtectionConfig())
 				.build();
 		assertSecurityDiagnostics(production.getDiagnostics(),
-				McpProtectionMode.PRODUCTION_KEY_RING, false,
+				McpProtectionMode.PRODUCTION_KEYRING, false,
 				Optional.of(protectionFingerprint(production)), Optional.empty());
 
 		McpServer development = serverBuilder("development")
@@ -93,12 +93,12 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 		Soklet firstOwner = managedSoklet(firstServer);
 		Soklet secondOwner = null;
 		McpServerDiagnostics beforeStart = firstServer.getDiagnostics();
-		McpProtectionKeyRingFingerprint initialProtection =
+		McpProtectionKeyringFingerprint initialProtection =
 				protectionFingerprint(firstServer);
-		McpTraceCorrelationConfigurationFingerprint initialTrace =
+		McpTraceCorrelationFingerprint initialTrace =
 				traceFingerprint(firstServer);
 		assertSecurityDiagnostics(beforeStart,
-				McpProtectionMode.PRODUCTION_KEY_RING, false,
+				McpProtectionMode.PRODUCTION_KEYRING, false,
 				Optional.of(initialProtection), Optional.of(initialTrace));
 		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				beforeStart.getStatus());
@@ -109,42 +109,42 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			Assertions.assertEquals(McpServerStatus.RUNNING,
 					started.getStatus());
 			assertSecurityDiagnostics(started,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(initialProtection), Optional.of(initialTrace));
 
 			firstServer.getProtectionControl().activateStagedKey("protection-b");
 			firstServer.getTraceCorrelationControl().rotateActiveKey(
 					rotatedTraceKey);
-			McpProtectionKeyRingSnapshot rotatedProtectionSnapshot = firstServer
-					.getProtectionControl().getKeyRingSnapshot().orElseThrow();
+			McpProtectionKeyringSnapshot rotatedProtectionSnapshot = firstServer
+					.getProtectionControl().getKeyringSnapshot().orElseThrow();
 			Assertions.assertEquals("protection-b",
 					rotatedProtectionSnapshot.getActiveKeyId());
 			Assertions.assertEquals(Set.of("protection-a"),
 					rotatedProtectionSnapshot.getVerificationKeyIds());
-			McpProtectionKeyRing rotatedProtectionKeyRing = McpProtectionKeyRing
+			McpProtectionKeyring rotatedProtectionKeyring = McpProtectionKeyring
 					.withActiveKey(protectionKey("protection-b", 2))
-					.verificationKey(protectionKey("protection-a", 1))
+					.addVerificationKey(protectionKey("protection-a", 1))
 					.build();
-			McpProtectionKeyRingFingerprint rotatedProtection =
+			McpProtectionKeyringFingerprint rotatedProtection =
 					protectionFingerprint(firstServer);
-			McpTraceCorrelationConfigurationFingerprint rotatedTrace =
+			McpTraceCorrelationFingerprint rotatedTrace =
 					traceFingerprint(firstServer);
 			Assertions.assertNotEquals(initialProtection, rotatedProtection);
 			Assertions.assertNotEquals(initialTrace, rotatedTrace);
 			assertSecurityDiagnostics(firstServer.getDiagnostics(),
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
 			firstOwner.close();
 			McpServerDiagnostics stopped = firstServer.getDiagnostics();
 			Assertions.assertEquals(McpServerStatus.TERMINATED, stopped.getStatus());
 			assertSecurityDiagnostics(stopped,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
 			McpServer secondServer = serverBuilder("lifecycle")
 					.protectionConfig(McpProtectionConfig
-							.withKeyRing(rotatedProtectionKeyRing).build())
+							.withKeyring(rotatedProtectionKeyring).build())
 					.traceCorrelationKey(rotatedTraceKey)
 					.build();
 			Assertions.assertEquals(rotatedProtection,
@@ -156,19 +156,19 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			Assertions.assertEquals(McpServerStatus.RUNNING,
 					restarted.getStatus());
 			assertSecurityDiagnostics(restarted,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
 			assertSecurityDiagnostics(beforeStart,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(initialProtection), Optional.of(initialTrace));
 			assertSecurityDiagnostics(started,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(initialProtection), Optional.of(initialTrace));
 			Assertions.assertEquals(McpServerStatus.RUNNING,
 					started.getStatus());
 			assertSecurityDiagnostics(stopped,
-					McpProtectionMode.PRODUCTION_KEY_RING, false,
+					McpProtectionMode.PRODUCTION_KEYRING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 			Assertions.assertEquals(McpServerStatus.TERMINATED, stopped.getStatus());
 		} finally {
@@ -189,28 +189,28 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 		McpTraceCorrelationKey traceA = traceKey("trace-a", 3);
 		McpTraceCorrelationKey traceB = traceKey("trace-b", 4);
 		McpServer server = serverBuilder("concurrent")
-				.protectionConfig(McpProtectionConfig.withKeyRing(
-						McpProtectionKeyRing.withActiveKey(protectionA)
-								.verificationKey(protectionB).build()).build())
+				.protectionConfig(McpProtectionConfig.withKeyring(
+						McpProtectionKeyring.withActiveKey(protectionA)
+								.addVerificationKey(protectionB).build()).build())
 				.traceCorrelationKey(traceA)
 				.build();
 
-		McpProtectionKeyRingFingerprint protectionAFingerprint =
+		McpProtectionKeyringFingerprint protectionAFingerprint =
 				protectionFingerprint(server);
 		server.getProtectionControl().activateStagedKey("protection-b");
-		McpProtectionKeyRingFingerprint protectionBFingerprint =
+		McpProtectionKeyringFingerprint protectionBFingerprint =
 				protectionFingerprint(server);
 		server.getProtectionControl().activateStagedKey("protection-a");
-		Set<McpProtectionKeyRingFingerprint> protectionFingerprints = Set.of(
+		Set<McpProtectionKeyringFingerprint> protectionFingerprints = Set.of(
 				protectionAFingerprint, protectionBFingerprint);
 
-		McpTraceCorrelationConfigurationFingerprint traceAFingerprint =
+		McpTraceCorrelationFingerprint traceAFingerprint =
 				traceFingerprint(server);
 		server.getTraceCorrelationControl().rotateActiveKey(traceB);
-		McpTraceCorrelationConfigurationFingerprint traceBFingerprint =
+		McpTraceCorrelationFingerprint traceBFingerprint =
 				traceFingerprint(server);
 		server.getTraceCorrelationControl().rotateActiveKey(traceA);
-		Set<McpTraceCorrelationConfigurationFingerprint> traceFingerprints =
+		Set<McpTraceCorrelationFingerprint> traceFingerprints =
 				Set.of(traceAFingerprint, traceBFingerprint);
 
 		McpServerDiagnostics retained = server.getDiagnostics();
@@ -225,7 +225,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			futures.add(executor.submit(() -> {
 				start.await();
 				for (int iteration = 0; iteration < 500; ++iteration)
-					server.getProtectionControl().rotateTo(
+					server.getProtectionControl().rotateActiveKey(
 							iteration % 2 == 0 ? protectionB : protectionA);
 				return null;
 			}));
@@ -242,15 +242,15 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 					for (int iteration = 0; iteration < 1_000; ++iteration) {
 						McpServerDiagnostics diagnostics = server.getDiagnostics();
 						Assertions.assertEquals(
-								McpProtectionMode.PRODUCTION_KEY_RING,
+								McpProtectionMode.PRODUCTION_KEYRING,
 								diagnostics.getProtectionMode());
 						Assertions.assertEquals(Boolean.FALSE, diagnostics
 								.isApplicationRequestStateProtectorConfigured());
 						Assertions.assertTrue(protectionFingerprints.contains(
-								diagnostics.getProtectionKeyRingFingerprint()
+								diagnostics.getProtectionKeyringFingerprint()
 										.orElseThrow()));
 						Assertions.assertTrue(traceFingerprints.contains(diagnostics
-								.getTraceCorrelationConfigurationFingerprint()
+								.getTraceCorrelationFingerprint()
 								.orElseThrow()));
 						snapshotReads.incrementAndGet();
 					}
@@ -267,7 +267,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 
 		Assertions.assertEquals(2_000, snapshotReads.get());
 		assertSecurityDiagnostics(retained,
-				McpProtectionMode.PRODUCTION_KEY_RING, false,
+				McpProtectionMode.PRODUCTION_KEYRING, false,
 				Optional.of(protectionAFingerprint),
 				Optional.of(traceAFingerprint));
 	}
@@ -280,8 +280,8 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 				"PROTECTION-MATERIAL-CANARY-".repeat(2);
 		String traceMaterialCanary = "TRACE-MATERIAL-CANARY-".repeat(2);
 		McpServer production = serverBuilder("redaction")
-				.protectionConfig(McpProtectionConfig.withKeyRing(
-						McpProtectionKeyRing.withActiveKey(
+				.protectionConfig(McpProtectionConfig.withKeyring(
+						McpProtectionKeyring.withActiveKey(
 								McpProtectionKey.fromIdAndBytes(
 										protectionKeyIdCanary,
 										protectionMaterialCanary.getBytes(
@@ -298,10 +298,10 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			Assertions.assertFalse(productionRendering.contains(canary),
 					productionRendering);
 		Assertions.assertTrue(productionRendering.contains(
-				productionDiagnostics.getProtectionKeyRingFingerprint()
+				productionDiagnostics.getProtectionKeyringFingerprint()
 						.orElseThrow().getValue()));
 		Assertions.assertTrue(productionRendering.contains(
-				productionDiagnostics.getTraceCorrelationConfigurationFingerprint()
+				productionDiagnostics.getTraceCorrelationFingerprint()
 						.orElseThrow().getValue()));
 
 		String protectorIdentityCanary = "CUSTOM-PROTECTOR-IDENTITY-CANARY";
@@ -319,34 +319,34 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	private static void assertSecurityDiagnostics(
 			McpServerDiagnostics diagnostics, McpProtectionMode protectionMode,
 			boolean applicationRequestStateProtectorConfigured,
-			Optional<McpProtectionKeyRingFingerprint> protectionFingerprint,
-			Optional<McpTraceCorrelationConfigurationFingerprint> traceFingerprint) {
+			Optional<McpProtectionKeyringFingerprint> protectionFingerprint,
+			Optional<McpTraceCorrelationFingerprint> traceFingerprint) {
 		Assertions.assertEquals(protectionMode, diagnostics.getProtectionMode());
 		Assertions.assertEquals(
 				Boolean.valueOf(applicationRequestStateProtectorConfigured),
 				diagnostics.isApplicationRequestStateProtectorConfigured());
 		Assertions.assertEquals(protectionFingerprint,
-				diagnostics.getProtectionKeyRingFingerprint());
+				diagnostics.getProtectionKeyringFingerprint());
 		Assertions.assertEquals(traceFingerprint,
-				diagnostics.getTraceCorrelationConfigurationFingerprint());
+				diagnostics.getTraceCorrelationFingerprint());
 	}
 
-	private static McpProtectionKeyRingFingerprint protectionFingerprint(
+	private static McpProtectionKeyringFingerprint protectionFingerprint(
 			McpServer server) {
-		return server.getProtectionControl().getKeyRingSnapshot().orElseThrow()
+		return server.getProtectionControl().getKeyringSnapshot().orElseThrow()
 				.getFingerprint();
 	}
 
-	private static McpTraceCorrelationConfigurationFingerprint traceFingerprint(
+	private static McpTraceCorrelationFingerprint traceFingerprint(
 			McpServer server) {
-		return server.getTraceCorrelationControl().getConfigurationFingerprint()
+		return server.getTraceCorrelationControl().getFingerprint()
 				.orElseThrow();
 	}
 
 	private static McpProtectionConfig productionProtectionConfig() {
-		return McpProtectionConfig.withKeyRing(McpProtectionKeyRing
+		return McpProtectionConfig.withKeyring(McpProtectionKeyring
 				.withActiveKey(protectionKey("protection-a", 1))
-				.verificationKey(protectionKey("protection-b", 2))
+				.addVerificationKey(protectionKey("protection-b", 2))
 				.build()).build();
 	}
 
@@ -386,15 +386,11 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	}
 
 	private static McpServer.Builder serverBuilder(String implementationName) {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						implementationName, "4.0.0").build())
 				.build();
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
 	}

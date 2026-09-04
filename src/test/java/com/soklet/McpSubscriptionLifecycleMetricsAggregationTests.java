@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -75,7 +76,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 					McpStreamTerminationReason.DEADLINE_EXCEEDED,
 					McpStreamTerminationReason.WRITE_FAILED,
 					McpStreamTerminationReason.BACKPRESSURE,
-					McpStreamTerminationReason.SERVER_STOPPED,
+					McpStreamTerminationReason.SERVER_STOPPING,
 					McpStreamTerminationReason
 							.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 					McpStreamTerminationReason
@@ -177,8 +178,9 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				() -> McpMetricsSnapshot.builder().activeSubscriptions(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpMetricsSnapshot.builder().activeSubscriptions(-1L));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().subscriptionDurations(null));
+		Assertions.assertTrue(McpMetricsSnapshot.builder()
+				.subscriptionDurations(null).build()
+				.getSubscriptionDurations().isEmpty());
 		Map<McpMetricsSnapshot.SubscriptionTerminationKey,
 				MetricsCollector.HistogramSnapshot> nullKey = new HashMap<>();
 		nullKey.put(null, completedHistogram);
@@ -457,6 +459,8 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
 		Assertions.assertEquals(0, getter.getParameterCount());
 		Assertions.assertEquals(Map.class, getter.getReturnType());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 		assertSubscriptionDurationMapType(getter.getGenericReturnType(),
 				getter.getAnnotatedReturnType());
 		Method builder = McpMetricsSnapshot.Builder.class.getMethod(
@@ -466,6 +470,8 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				builder.getReturnType());
 		Assertions.assertTrue(builder.getAnnotatedReturnType()
 				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(builder.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
 		assertSubscriptionDurationMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0]);
 	}
@@ -491,10 +497,8 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				McpMetricsSnapshot.SubscriptionTerminationKey.class,
 				MetricsCollector.HistogramSnapshot.class
 		}, parameterized.getActualTypeArguments());
-		Assertions.assertTrue(requireNonNull(annotatedType)
-				.isAnnotationPresent(NonNull.class));
 		AnnotatedParameterizedType annotated = Assertions.assertInstanceOf(
-				AnnotatedParameterizedType.class, annotatedType);
+				AnnotatedParameterizedType.class, requireNonNull(annotatedType));
 		for (AnnotatedType argument : annotated.getAnnotatedActualTypeArguments())
 			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
 					argument.toString());
@@ -595,16 +599,12 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH, McpImplementation.withNameAndVersion(
 						"subscription-lifecycle-metrics-test",
 						"4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

@@ -65,24 +65,19 @@ public class McpMultiEndpointPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> secondTool = tool(
 				"Second shared tool", "Tool registered only on the second endpoint",
 				"second-result", secondHandlerInvocations, secondObservedEndpoint);
-		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-first", "1.0").build())
 				.instructions("Instructions for the first endpoint.")
-				.tool(firstTool)
+				.addTool(firstTool)
 				.build();
-		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-second", "2.0").build())
 				.instructions("Instructions for the second endpoint.")
-				.tool(secondTool)
+				.addTool(secondTool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -167,28 +162,24 @@ public class McpMultiEndpointPublicRuntimeTests {
 		List<McpEndpoint> admittedEndpoints = new CopyOnWriteArrayList<>();
 		List<McpEndpoint> requestLimitedEndpoints = new CopyOnWriteArrayList<>();
 		List<McpEndpoint> toolLimitedEndpoints = new CopyOnWriteArrayList<>();
-		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-policy-first", "1.0").build())
-				.tool(tool("First policy tool", "First policy tool",
+				.addTool(tool("First policy tool", "First policy tool",
 						"first-policy-result", new AtomicInteger(),
 						new AtomicReference<>()))
 				.build();
-		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-policy-second", "1.0").build())
-				.tool(tool("Second policy tool", "Second policy tool",
+				.addTool(tool("Second policy tool", "Second policy tool",
 						"second-policy-result", new AtomicInteger(),
 						new AtomicReference<>()))
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)), context -> {
 					admittedEndpoints.add(context.getEndpoint());
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					requestLimitedEndpoints.add(context.getEndpoint());
 					return McpRateLimitDecision.allowed();
@@ -245,24 +236,19 @@ public class McpMultiEndpointPublicRuntimeTests {
 				"first-resource-result", firstResourceEndpoint);
 		McpResourceRegistration secondResource = resource("Second shared resource",
 				"second-resource-result", secondResourceEndpoint);
-		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-capability-first", "1.0").build())
-				.prompt(firstPrompt)
-				.resource(firstResource)
+				.addPrompt(firstPrompt)
+				.addResource(firstResource)
 				.build();
-		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-capability-second", "1.0").build())
-				.prompt(secondPrompt)
-				.resource(secondResource)
+				.addPrompt(secondPrompt)
+				.addResource(secondResource)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -347,7 +333,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			@NonNull AtomicInteger invocations,
 			@NonNull AtomicReference<McpEndpoint> observedEndpoint) {
 		return McpToolRegistration.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();
 					observedEndpoint.set(request.getEndpoint());
@@ -382,8 +368,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.handler((request, resource, features) -> {
 					observedEndpoint.set(request.getEndpoint());
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents
+							McpResourceOutput.withContent(McpTextResourceContents
 											.withUriAndText(resource.getUri(), result)
 											.mimeType("text/plain")
 											.build())

@@ -64,21 +64,17 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlers.add(request);
 					return McpCompleteResult.fromToolText("allowed");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"self-report-identity-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					admissions.add(context);
 					IdentityFixture identity = context.getRequest()
 							.getHeader("Authorization")
@@ -88,6 +84,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 							? McpAdmissionDecision.rejected(rejection)
 							: McpAdmissionDecision.accepted(identity.identity());
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					rateLimits.add(context);
 					return McpRateLimitDecision.allowed();

@@ -181,7 +181,7 @@ try {
     'A clean roadmap verification must not mutate candidate or signature bytes/metadata.');
   assert.equal(result.negativeInventoryCount, 14);
   assert.equal(result.deferredFeatureCount, 15);
-  assert.equal(result.opennessValidatorCount, 49);
+  assert.equal(result.opennessValidatorCount, 50);
   assert.equal(result.activeTextRuleCount, 22);
 
   expectRejected('planning-authority JSON must be canonical', () => {
@@ -370,6 +370,18 @@ try {
           return switch (method) {
             case "known" -> 1;
             default -> throw new IllegalArgumentException();
+          };
+        }
+      }
+    `, 'OPEN-MATCH-003'],
+    ['input-request type selector switch', `
+      package com.soklet.internal.mcp.protocol;
+      final class McpOpennessSelfTestFixture {
+        enum InputRequestType { FORM, SAMPLING }
+        int validate(InputRequestType inputRequestType) {
+          return switch (inputRequestType) {
+            case FORM -> 1;
+            case SAMPLING -> 2;
           };
         }
       }

@@ -229,24 +229,21 @@ public class McpAuthorizationIntegrationTests {
 					return McpCompleteResult.fromToolText("must not run");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"authorization-integration-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		return McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					state.admissions.add(context);
 					String challenge = context.isNotification()
 							? NOTIFICATION_CHALLENGE : TOOL_CHALLENGE;
 					return McpAdmissionDecision.rejected(McpAdmissionRejection
 							.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(
 									-31901, "Authentication required"))
-							.header("WWW-Authenticate", challenge)
+							.addHeader("WWW-Authenticate", challenge)
 							.build());
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					state.requestLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
@@ -427,14 +424,14 @@ public class McpAuthorizationIntegrationTests {
 
 	private static void assertZeroLoad(McpServerDiagnostics diagnostics) {
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
 
 	private static boolean isZeroLoad(McpServerDiagnostics diagnostics) {
 		return diagnostics.getActiveHandlerExecutions() == 0
-				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getRequestHandlerQueueDepth() == 0
 				&& diagnostics.getActiveRequestStreams() == 0
 				&& diagnostics.getActiveSubscriptions() == 0;
 	}
@@ -442,7 +439,7 @@ public class McpAuthorizationIntegrationTests {
 	private record HeaderLine(String name, String value) {
 	}
 
-	private record ScopedArguments(@McpHeader("Tenant") String tenant) {
+	private record ScopedArguments(@McpHeader(name = "Tenant") String tenant) {
 	}
 
 	private static final class FixtureState {

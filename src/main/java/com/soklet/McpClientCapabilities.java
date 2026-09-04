@@ -37,8 +37,18 @@ public final class McpClientCapabilities {
 	@NonNull
 	private final Map<@NonNull String, @NonNull McpJsonObject> extensions;
 
+	/**
+	 * Creates client capabilities from their immutable JSON representation.
+	 * This factory is useful when unit-testing application code that consumes
+	 * client capabilities outside a live MCP request.
+	 *
+	 * @param json client-capability JSON object
+	 * @return immutable client capabilities
+	 * @throws NullPointerException if {@code json} is null
+	 */
 	@NonNull
-	static McpClientCapabilities fromJson(@NonNull McpJsonObject json) {
+	public static McpClientCapabilities fromJson(
+			@NonNull McpJsonObject json) {
 		return new McpClientCapabilities(json);
 	}
 

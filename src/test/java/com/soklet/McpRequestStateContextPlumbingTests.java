@@ -99,8 +99,7 @@ public class McpRequestStateContextPlumbingTests {
 	}
 
 	private static McpEndpoint endpoint() {
-		return McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1")
 						.build())
 				.build();

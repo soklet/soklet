@@ -164,14 +164,11 @@ public class ResourceLeakTests {
 	public void mcpListenerAndRequestReturnResourcesAfterCompleteShutdown()
 			throws Exception {
 		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp-resource-leak")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp-resource-leak", McpImplementation.withNameAndVersion(
 						"resource-leak", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

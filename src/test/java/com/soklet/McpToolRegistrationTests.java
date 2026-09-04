@@ -48,7 +48,7 @@ class McpToolRegistrationTests {
 		AtomicReference<McpJsonObject> rawArguments = new AtomicReference<>();
 		McpToolRegistration<Arguments> registration =
 				McpToolRegistration.withName("catalog.search")
-						.types(Arguments.class, Result.class)
+						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.handler((request, arguments, features) -> {
 							rawArguments.set(arguments.getRawArguments());
 							assertEquals(" exact ", arguments.getConvertedArguments().query());
@@ -90,7 +90,7 @@ class McpToolRegistrationTests {
 				.getDocument().find("type").orElseThrow());
 		assertEquals(McpJsonString.fromValue("object"), registration.getOutputSchema()
 				.orElseThrow().getDocument().find("type").orElseThrow());
-		assertTrue(registration.isStructuredContentTextMirroringEnabled());
+		assertTrue(registration.isStructuredContentMirroredAsText());
 		McpJsonArray items = assertInstanceOf(McpJsonArray.class,
 				structured.find("items").orElseThrow());
 		McpJsonObject item = assertInstanceOf(McpJsonObject.class,
@@ -133,7 +133,7 @@ class McpToolRegistrationTests {
 						.argumentType(NonprimitiveHeader.class));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpToolRegistration.withName("mirrored-output")
-						.types(MirroredArguments.class, MirroredOutput.class));
+						.argumentAndOutputTypes(MirroredArguments.class, MirroredOutput.class));
 	}
 
 	@Test
@@ -144,21 +144,21 @@ class McpToolRegistrationTests {
 				new TypeReference<>() {};
 
 		assertEquals(Result.class, McpToolRegistration.withName("one")
-				.types(Arguments.class, Result.class)
+				.argumentAndOutputTypes(Arguments.class, Result.class)
 				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getOutputType().orElseThrow());
 		assertEquals(results.getType(), McpToolRegistration.withName("two")
-				.types(Arguments.class, results)
+				.argumentAndOutputTypes(Arguments.class, results)
 				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
 		assertEquals(argumentType.getType(), McpToolRegistration.withName("three")
-				.types(argumentType, Result.class)
+				.argumentAndOutputTypes(argumentType, Result.class)
 				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getArgumentType());
 		assertEquals(results.getType(), McpToolRegistration.withName("four")
-				.types(argumentType, results)
+				.argumentAndOutputTypes(argumentType, results)
 				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
 	}
@@ -172,11 +172,11 @@ class McpToolRegistrationTests {
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
 										arguments.getConvertedArguments().query()))
-						.mirrorStructuredContentAsText(false)
+						.structuredContentMirroredAsText(false)
 						.build();
 		McpToolRegistration<McpJsonObject> raw =
 				McpToolRegistration.withName("raw")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolStructuredContent(
 										arguments.getConvertedArguments()))
@@ -187,12 +187,12 @@ class McpToolRegistrationTests {
 				.argumentType(Arguments.class)
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
-				.mirrorStructuredContentAsText(null));
+				.structuredContentMirroredAsText(null));
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
 				.withName("typed-null-mirror")
-				.types(Arguments.class, Result.class)
+				.argumentAndOutputTypes(Arguments.class, Result.class)
 				.handler((request, arguments, features) -> new Result(List.of()))
-				.mirrorStructuredContentAsText(null));
+				.structuredContentMirroredAsText(null));
 
 		McpCompleteResult advancedResult =
 				assertInstanceOf(McpCompleteResult.class,
@@ -206,8 +206,8 @@ class McpToolRegistrationTests {
 				advancedResult.getPayload()).getContent().get(0)).getText());
 		assertSame(input, ((McpToolOutput) rawResult.getPayload())
 				.getStructuredContent().orElseThrow());
-		assertFalse(advanced.isStructuredContentTextMirroringEnabled());
-		assertTrue(raw.isStructuredContentTextMirroringEnabled());
+		assertFalse(advanced.isStructuredContentMirroredAsText());
+		assertTrue(raw.isStructuredContentMirroredAsText());
 		assertEquals(McpJsonObject.class, raw.getArgumentType());
 		assertEquals(McpJsonString.fromValue("object"),
 				raw.getInputSchema().getDocument().find("type").orElseThrow());
@@ -228,11 +228,11 @@ class McpToolRegistrationTests {
 						.argumentType(String.class));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpToolRegistration.withName("bad-output")
-						.types(Arguments.class, String.class));
+						.argumentAndOutputTypes(Arguments.class, String.class));
 
 		McpToolRegistration<Arguments> nullResult =
 				McpToolRegistration.withName("null-result")
-						.types(Arguments.class, Result.class)
+						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.handler((request, arguments, features) -> null)
 						.build();
 		assertThrows(NullPointerException.class, () -> nullResult.invoke(
@@ -308,7 +308,7 @@ class McpToolRegistrationTests {
 				.put("email", "a@example.test")
 				.build();
 
-		assertFalse(Modifier.isPublic(McpToolRegistration.NamedBuilder.class
+		assertFalse(Modifier.isPublic(McpToolRegistration.ArgumentTypeStage.class
 				.getDeclaredMethod("conformanceInputSchema", McpJsonObject.class)
 				.getModifiers()));
 		assertSame(inputSchema, registration.getInputSchema().getDocument());
@@ -461,7 +461,22 @@ class McpToolRegistrationTests {
 			}
 
 			@Override
-			public Optional<McpLogLevel> getDeprecatedLogLevel() {
+			public McpInputResponses getInputResponses() {
+				return McpInputResponses.emptyInstance();
+			}
+
+			@Override
+			public Optional<McpJsonValue> getFrameworkRequestState() {
+				return Optional.empty();
+			}
+
+			@Override
+			public Optional<String> getApplicationRequestState() {
+				return Optional.empty();
+			}
+
+			@Override
+			public Optional<McpLogLevel> getLogLevel() {
 				return Optional.empty();
 			}
 
@@ -498,24 +513,24 @@ class McpToolRegistrationTests {
 	}
 
 	private record MirroredArguments(
-			@McpHeader("Tenant") String tenant, Routing routing,
+			@McpHeader(name = "Tenant") String tenant, Routing routing,
 			String unmirrored) {
 	}
 
-	private record Routing(@McpHeader("Dry-Run") boolean dryRun,
-			@McpHeader("Shard") int shard) {
+	private record Routing(@McpHeader(name = "Dry-Run") boolean dryRun,
+			@McpHeader(name = "Shard") int shard) {
 	}
 
-	private record InvalidHeaderName(@McpHeader("bad name") String value) {
+	private record InvalidHeaderName(@McpHeader(name = "bad name") String value) {
 	}
 
-	private record DuplicateHeaders(@McpHeader("Tenant") String first,
-			@McpHeader("tenant") boolean second) {
+	private record DuplicateHeaders(@McpHeader(name = "Tenant") String first,
+			@McpHeader(name = "tenant") boolean second) {
 	}
 
-	private record NonprimitiveHeader(@McpHeader("Routing") Routing routing) {
+	private record NonprimitiveHeader(@McpHeader(name = "Routing") Routing routing) {
 	}
 
-	private record MirroredOutput(@McpHeader("Output") String value) {
+	private record MirroredOutput(@McpHeader(name = "Output") String value) {
 	}
 }

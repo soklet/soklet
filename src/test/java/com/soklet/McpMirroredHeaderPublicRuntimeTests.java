@@ -394,11 +394,10 @@ public class McpMirroredHeaderPublicRuntimeTests {
 
 	private static McpEndpoint endpoint(String path,
 			McpToolRegistration<?> tool) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"mirrored-header-public-runtime-test",
 						"4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
@@ -410,13 +409,11 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(int port,
 			List<McpEndpoint> endpoints, AtomicInteger admissions,
 			CorsAuthorizer corsAuthorizer) {
-		return McpServer.withPort(port)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.admissionController(context -> {
+		return McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(endpoints), context -> {
 					admissions.incrementAndGet();
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(corsAuthorizer)
 				.allowedHosts(Set.of(LOOPBACK));
@@ -559,17 +556,17 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				.build();
 	}
 
-	private record MirroredArguments(@McpHeader("Tenant") String tenant,
+	private record MirroredArguments(@McpHeader(name = "Tenant") String tenant,
 			Routing routing, String privilege) {
 	}
 
-	private record Routing(@McpHeader("Dry-Run") boolean dryRun,
-			@McpHeader("Shard") int shard) {
+	private record Routing(@McpHeader(name = "Dry-Run") boolean dryRun,
+			@McpHeader(name = "Shard") int shard) {
 	}
 
-	private record TenantArguments(@McpHeader("Tenant") String tenant) {
+	private record TenantArguments(@McpHeader(name = "Tenant") String tenant) {
 	}
 
-	private record RegionArguments(@McpHeader("Region") String region) {
+	private record RegionArguments(@McpHeader(name = "Region") String region) {
 	}
 }

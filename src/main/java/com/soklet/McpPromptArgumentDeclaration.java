@@ -35,7 +35,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpPromptArgumentDefinition {
+public final class McpPromptArgumentDeclaration {
 	@NonNull
 	private final String name;
 	@Nullable
@@ -48,7 +48,7 @@ public final class McpPromptArgumentDefinition {
 	 * Vends a builder primed with the published argument name.
 	 *
 	 * @param name nonblank published argument name
-	 * @return argument-definition builder
+	 * @return argument-declaration builder
 	 * @throws IllegalArgumentException if {@code name} is blank
 	 */
 	@NonNull
@@ -56,7 +56,7 @@ public final class McpPromptArgumentDefinition {
 		return new Builder(requireName(name));
 	}
 
-	private McpPromptArgumentDefinition(@NonNull Builder builder) {
+	private McpPromptArgumentDeclaration(@NonNull Builder builder) {
 		this.name = builder.name;
 		this.title = builder.title;
 		this.description = builder.description;
@@ -97,7 +97,7 @@ public final class McpPromptArgumentDefinition {
 	}
 
 	/**
-	 * Mutable builder for an immutable prompt argument definition.
+	 * Mutable builder for an immutable prompt argument declaration.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -152,10 +152,10 @@ public final class McpPromptArgumentDefinition {
 			return this;
 		}
 
-		/** @return immutable prompt argument definition */
+		/** @return immutable prompt argument declaration */
 		@NonNull
-		public McpPromptArgumentDefinition build() {
-			return new McpPromptArgumentDefinition(this);
+		public McpPromptArgumentDeclaration build() {
+			return new McpPromptArgumentDeclaration(this);
 		}
 	}
 }

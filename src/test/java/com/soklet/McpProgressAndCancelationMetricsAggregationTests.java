@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -149,10 +150,12 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						""));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().cancelationsSignaled(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().progressEmitted(null));
+		McpMetricsSnapshot resetMaps = McpMetricsSnapshot.builder()
+				.cancelationsSignaled(null)
+				.progressEmitted(null)
+				.build();
+		Assertions.assertTrue(resetMaps.getCancelationsSignaled().isEmpty());
+		Assertions.assertTrue(resetMaps.getProgressEmitted().isEmpty());
 		assertInvalidCountMapInputs(routedKey);
 	}
 
@@ -374,6 +377,8 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
 		Assertions.assertEquals(0, getter.getParameterCount());
 		Assertions.assertEquals(Map.class, getter.getReturnType());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 		assertEndpointMethodCountMapType(getter.getGenericReturnType(),
 				getter.getAnnotatedReturnType());
 
@@ -384,6 +389,8 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 				builder.getReturnType());
 		Assertions.assertTrue(builder.getAnnotatedReturnType()
 				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(builder.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
 		assertEndpointMethodCountMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0]);
 	}
@@ -409,10 +416,8 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertArrayEquals(new java.lang.reflect.Type[]{
 				McpMetricsSnapshot.EndpointMethodKey.class, Long.class},
 				parameterizedType.getActualTypeArguments());
-		Assertions.assertTrue(requireNonNull(annotatedType)
-				.isAnnotationPresent(NonNull.class));
 		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
-				annotatedType);
+				requireNonNull(annotatedType));
 		for (AnnotatedType argument : ((AnnotatedParameterizedType) annotatedType)
 				.getAnnotatedActualTypeArguments())
 			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
@@ -515,16 +520,12 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH, McpImplementation.withNameAndVersion(
 						"progress-cancelation-metrics-test", "4.0.0")
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))

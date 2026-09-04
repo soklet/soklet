@@ -710,9 +710,13 @@ A minimal loopback configuration for an annotation-driven, tool-bearing
 endpoint looks like this:
 
 ```java
-McpServer mcpServer = McpServer.withPort(8081)
-  .endpointRegistry(McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class))
-  .admissionController(McpAdmissionController.acceptAllInstance())
+McpEndpointRegistry endpointRegistry =
+    McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class);
+McpAdmissionController admissionController =
+    McpAdmissionController.acceptAllInstance();
+
+McpServer mcpServer = McpServer.withPort(
+    8081, endpointRegistry, admissionController)
   .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
   .build();
 
@@ -738,8 +742,9 @@ Framework-owned catalog text - server, tool, prompt, resource, and schema
 titles and descriptions - can be localized per request through a
 library-neutral seam that keeps Soklet free of any translation dependency.
 `McpLocalizationContext` is a Soklet-owned final value built with
-`withLocale(...)`; applications provide a localization callback instead of a
-custom context implementation.
+`withLocale(locale, localizationLookup)`; applications provide the named,
+thread-safe `McpLocalizationLookup` callback instead of a custom context
+implementation.
 The other public MCP value carriers follow the same style: final immutable
 classes, named factories or builders, private constructors, and conventional
 `get...` accessors. Sealed decision, localization, subscription, and metric
@@ -749,6 +754,11 @@ Omitting a localizer leaves wire output byte-identical. See
 [MCP localization](https://www.soklet.com/docs/mcp-localization).
 
 Every selected application handler receives one cooperative `CancelationToken`.
+Programmatic MCP handlers obtain it from
+`McpInvocationFeatures.getCancelationToken()` and obtain request-scoped
+progress, when available, from `getProgressReporter()`. The generic
+`find(...)` and `require(...)` methods remain available for extension feature
+types.
 Framework cancellation exposes only a fixed `StreamTerminationReason`; its
 underlying cause is empty, including through
 `StreamingResponseCanceledException`. On HTTP, an incoming
@@ -998,6 +1008,10 @@ public Response multipart(
 In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have the DI infrastructure vend your instances.
 
 Soklet integrates via an [`InstanceProvider`](https://javadoc.soklet.com/com/soklet/InstanceProvider.html).
+The single provider configured on `SokletConfig` creates annotation-backed
+HTTP/SSE resources, generated MCP endpoint classes, and injectable application
+parameter values. Soklet may call it concurrently, so custom providers must
+support concurrent invocation.
 
 Here's how it might look if you use [Google Guice](https://github.com/google/guice):
 
@@ -1512,12 +1526,12 @@ even when metrics are disabled. `McpServerDiagnostics` declares exactly 12
 zero-argument methods: `getStatus()` and `getBoundAddress()`, plus all ten
 implemented diagnostic getters. Six are boxed `@NonNull Integer` values:
 `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
-`getActiveHandlerExecutions()`, `getQueuedRequests()`,
+`getActiveHandlerExecutions()`, `getRequestHandlerQueueDepth()`,
 `getActiveRequestStreams()`, and `getActiveSubscriptions()`. The other four are
 `getProtectionMode()`, boxed
 `@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-`getProtectionKeyRingFingerprint()`, and
-`getTraceCorrelationConfigurationFingerprint()`; both fingerprint accessors
+`getProtectionKeyringFingerprint()`, and
+`getTraceCorrelationFingerprint()`; both fingerprint accessors
 return non-null `Optional` values with non-null payloads.
 
 The configured numeric values are positive and stable before start and through
@@ -1553,7 +1567,7 @@ remain stable across listener lifecycle. The flag is `true` exactly for
 `McpRequestStateProtector`, not `APPLICATION_PROTECTED` operation selection.
 Application-protected opaque state requires no framework protector and bypasses
 one even when configured. The protection fingerprint is present exactly for a
-live `PRODUCTION_KEY_RING`; development-ephemeral, custom, and unconfigured
+live `PRODUCTION_KEYRING`; development-ephemeral, custom, and unconfigured
 modes return empty. The trace fingerprint is independent of protection mode
 and is present exactly when trace correlation was enabled at construction.
 Successful live rotations update only fresh snapshots, remain visible through
@@ -2391,7 +2405,7 @@ concurrent mutation, add structured-log or raw-ID emission, complete
 privacy/cardinality work, or prove every-operation simulation, sustained,
 release-readiness, review, or the later Phase 6 freeze.
 
-For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
+For MCP shutdowns, `snapshot().getMcpMetrics().getServerStops()` is an immutable,
 enum-ordered `Map<ShutdownComponentDisposition, Long>`. The default collector omits
 unobserved outcomes, resets the map to empty, and emits `soklet_mcp_shutdowns_total`
 only for `not_started`, `graceful_termination`, `forced_termination`,

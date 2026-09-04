@@ -55,7 +55,7 @@ public interface McpProtectionControl {
 	 * @return secret-free snapshot, or empty when no production ring is active
 	 */
 	@NonNull
-	Optional<@NonNull McpProtectionKeyRingSnapshot> getKeyRingSnapshot();
+	Optional<@NonNull McpProtectionKeyringSnapshot> getKeyringSnapshot();
 
 	/**
 	 * Adds a verification-only key to the live production ring.
@@ -67,7 +67,7 @@ public interface McpProtectionControl {
 	 *
 	 * @param verificationKey key to stage
 	 * @throws IllegalArgumentException if the mutation is invalid
-	 * @throws IllegalStateException if this server has no production key ring
+	 * @throws IllegalStateException if this server has no production keyring
 	 */
 	void stageVerificationKey(@NonNull McpProtectionKey verificationKey);
 
@@ -77,7 +77,7 @@ public interface McpProtectionControl {
 	 *
 	 * @param keyId staged verification-key ID
 	 * @throws IllegalArgumentException if the ID is unknown
-	 * @throws IllegalStateException if this server has no production key ring
+	 * @throws IllegalStateException if this server has no production keyring
 	 */
 	void activateStagedKey(@NonNull String keyId);
 
@@ -89,22 +89,22 @@ public interface McpProtectionControl {
 	 *
 	 * @param activeKey new active key
 	 * @throws IllegalArgumentException if the mutation is invalid
-	 * @throws IllegalStateException if this server has no production key ring
+	 * @throws IllegalStateException if this server has no production keyring
 	 */
-	void rotateTo(@NonNull McpProtectionKey activeKey);
+	void rotateActiveKey(@NonNull McpProtectionKey activeKey);
 
 	/**
 	 * Removes a verification-only key.
 	 * <p>
 	 * An absent ID returns {@code false}; removing the active ID is rejected. A
 	 * key with an outstanding sealing reservation fails transiently with
-	 * {@link McpKeyInUseException}.
+	 * {@link McpProtectionKeyInUseException}.
 	 *
 	 * @param keyId verification-only key ID
 	 * @return whether a key was removed
 	 * @throws IllegalArgumentException if the ID names the active key
-	 * @throws IllegalStateException if this server has no production key ring
-	 * @throws McpKeyInUseException if the key is still used for sealing
+	 * @throws IllegalStateException if this server has no production keyring
+	 * @throws McpProtectionKeyInUseException if the key is still used for sealing
 	 */
 	@NonNull
 	Boolean removeVerificationKey(@NonNull String keyId);

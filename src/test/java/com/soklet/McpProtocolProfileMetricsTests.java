@@ -41,14 +41,11 @@ public class McpProtocolProfileMetricsTests {
 	public void unsupportedMissingMetadataRecordsUnsupportedVersionNotInvalidParams()
 			throws Exception {
 		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"profile-metrics-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.build();

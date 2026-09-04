@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.generated;
 
 import com.soklet.InstanceProvider;
 import com.soklet.McpEndpoint;
+import com.soklet.McpRequestContext;
 import com.soklet.McpToolSchema;
 import com.soklet.McpToolRegistration;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
@@ -48,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -62,6 +64,26 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpGeneratedEndpointProviderLoader {
+	private static final String ABSENT_OUTPUT_SCHEMA_DIGEST =
+			"NO_OUTPUT_SCHEMA";
+
+	/**
+	 * Internal request-context contract used only by generated endpoint adapters.
+	 * It deliberately exposes instance acquisition rather than the owning
+	 * application provider itself.
+	 */
+	public interface GeneratedInvocationContext {
+		/**
+		 * Acquires the application instance for one generated endpoint invocation.
+		 *
+		 * @param instanceClass generated endpoint class
+		 * @param <T> endpoint type
+		 * @return application-owned endpoint instance
+		 */
+		@NonNull
+		<T> T provideGeneratedEndpointInstance(@NonNull Class<T> instanceClass);
+	}
+
 	private McpGeneratedEndpointProviderLoader() {
 	}
 
@@ -69,30 +91,24 @@ public final class McpGeneratedEndpointProviderLoader {
 	 * Loads every indexed endpoint visible through a class loader.
 	 *
 	 * @param classLoader class loader used for index and provider discovery
-	 * @param instanceProvider application endpoint-instance provider
 	 * @return immutable endpoints ordered by endpoint binary name
 	 */
 	@NonNull
 	public static List<@NonNull McpEndpoint> loadAll(
-			@NonNull ClassLoader classLoader,
-			@NonNull InstanceProvider instanceProvider) {
-		return List.copyOf(loadAllWithProvenance(classLoader,
-				instanceProvider).values());
+			@NonNull ClassLoader classLoader) {
+		return List.copyOf(loadAllWithProvenance(classLoader).values());
 	}
 
 	/**
 	 * Loads every indexed endpoint and its exact source-class identity.
 	 *
 	 * @param classLoader class loader used for index and provider discovery
-	 * @param instanceProvider application endpoint-instance provider
 	 * @return immutable class-to-endpoint mappings ordered by endpoint binary name
 	 */
 	@NonNull
 	public static Map<@NonNull Class<?>, @NonNull McpEndpoint>
-			loadAllWithProvenance(@NonNull ClassLoader classLoader,
-					@NonNull InstanceProvider instanceProvider) {
+			loadAllWithProvenance(@NonNull ClassLoader classLoader) {
 		requireNonNull(classLoader);
-		requireNonNull(instanceProvider);
 		Map<String, McpGeneratedEndpointProviderIndex.Entry> entries =
 				readEntries(classLoader);
 		if (entries.isEmpty())
@@ -100,8 +116,7 @@ public final class McpGeneratedEndpointProviderLoader {
 					"No generated MCP endpoint descriptors were found.");
 		Map<Class<?>, McpEndpoint> endpoints = new LinkedHashMap<>();
 		for (McpGeneratedEndpointProviderIndex.Entry entry : entries.values()) {
-			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry, null,
-					instanceProvider);
+			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry, null);
 			endpoints.put(loadedEndpoint.endpointClass(),
 					loadedEndpoint.endpoint());
 		}
@@ -112,31 +127,25 @@ public final class McpGeneratedEndpointProviderLoader {
 	 * Loads generated descriptors for explicitly selected endpoint classes.
 	 *
 	 * @param endpointClasses endpoint classes in caller-selected order
-	 * @param instanceProvider application endpoint-instance provider
 	 * @return immutable endpoints in the supplied order
 	 */
 	@NonNull
 	public static List<@NonNull McpEndpoint> loadClasses(
-			@NonNull List<@NonNull Class<?>> endpointClasses,
-			@NonNull InstanceProvider instanceProvider) {
-		return List.copyOf(loadClassesWithProvenance(endpointClasses,
-				instanceProvider).values());
+			@NonNull List<@NonNull Class<?>> endpointClasses) {
+		return List.copyOf(loadClassesWithProvenance(endpointClasses).values());
 	}
 
 	/**
 	 * Loads selected generated endpoints and their exact source-class identities.
 	 *
 	 * @param endpointClasses endpoint classes in caller-selected order
-	 * @param instanceProvider application endpoint-instance provider
 	 * @return immutable class-to-endpoint mappings in the supplied order
 	 */
 	@NonNull
 	public static Map<@NonNull Class<?>, @NonNull McpEndpoint>
 			loadClassesWithProvenance(
-					@NonNull List<@NonNull Class<?>> endpointClasses,
-					@NonNull InstanceProvider instanceProvider) {
+					@NonNull List<@NonNull Class<?>> endpointClasses) {
 		requireNonNull(endpointClasses);
-		requireNonNull(instanceProvider);
 		if (endpointClasses.isEmpty())
 			throw new IllegalArgumentException(
 					"At least one annotated MCP endpoint class is required.");
@@ -164,7 +173,7 @@ public final class McpGeneratedEndpointProviderLoader {
 						"No generated MCP endpoint descriptor exists for '"
 								+ endpointClass.getName() + "'.");
 			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry,
-					endpointClass, instanceProvider);
+					endpointClass);
 			endpoints.put(loadedEndpoint.endpointClass(),
 					loadedEndpoint.endpoint());
 		}
@@ -243,8 +252,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	@NonNull
 	private static LoadedEndpoint loadEndpoint(@NonNull ClassLoader classLoader,
 			McpGeneratedEndpointProviderIndex.@NonNull Entry entry,
-			@Nullable Class<?> selectedEndpointClass,
-			@NonNull InstanceProvider instanceProvider) {
+			@Nullable Class<?> selectedEndpointClass) {
 		try {
 			Class<?> endpointClass = selectedEndpointClass == null
 					? Class.forName(entry.endpointClassName(), false, classLoader)
@@ -267,7 +275,7 @@ public final class McpGeneratedEndpointProviderLoader {
 			Method endpointClassMethod = providerClass.getDeclaredMethod(
 					"endpointClass");
 			Method endpointMethod = providerClass.getDeclaredMethod("endpoint",
-					InstanceProvider.class);
+					Function.class);
 			Method schemaDigestsMethod = providerClass.getDeclaredMethod(
 					"schemaDigests");
 			if (endpointClassMethod.getReturnType() != Class.class
@@ -295,7 +303,8 @@ public final class McpGeneratedEndpointProviderLoader {
 						"Generated MCP endpoint provider identity does not match '"
 								+ entry.endpointClassName() + "'.");
 			McpEndpoint endpoint = (McpEndpoint) requireProviderValue(
-					endpointMethod.invoke(provider, instanceProvider),
+					endpointMethod.invoke(provider,
+							instanceResolver(endpointClass)),
 					"The generated MCP endpoint provider returned null.");
 			if (!entry.endpointPath().equals(endpoint.getPath()))
 				throw new IllegalStateException(
@@ -320,6 +329,22 @@ public final class McpGeneratedEndpointProviderLoader {
 							+ entry.endpointClassName() + "'.",
 					exception);
 		}
+	}
+
+	@NonNull
+	private static <T> Function<@NonNull McpRequestContext, @NonNull T>
+			instanceResolver(@NonNull Class<T> endpointClass) {
+		Class<T> exactEndpointClass = requireNonNull(endpointClass);
+		return requestContext -> {
+			McpRequestContext exactContext = requireNonNull(requestContext);
+			T endpointInstance = exactContext
+					instanceof GeneratedInvocationContext context
+					? context.provideGeneratedEndpointInstance(exactEndpointClass)
+					: InstanceProvider.defaultInstance().provide(exactEndpointClass);
+			return requireNonNull(endpointInstance,
+					"The application instance provider returned null for '"
+							+ exactEndpointClass.getName() + "'.");
+		};
 	}
 
 	private record LoadedEndpoint(@NonNull Class<?> endpointClass,
@@ -375,13 +400,16 @@ public final class McpGeneratedEndpointProviderLoader {
 		for (int index = 0; index < tools.size(); index++) {
 			McpToolRegistration<?> tool = tools.get(index);
 			int digestIndex = index * 3;
-			McpToolSchema outputSchema = tool.getOutputSchema()
-					.orElseThrow(() -> schemaMismatch(entry));
+			String expectedOutputDigest = schemaDigests[digestIndex + 2];
+			boolean outputSchemaMatches = tool.getOutputSchema()
+					.map(outputSchema -> schemaDigest(outputSchema).equals(
+							expectedOutputDigest))
+					.orElseGet(() -> ABSENT_OUTPUT_SCHEMA_DIGEST.equals(
+							expectedOutputDigest));
 			if (!tool.getName().equals(schemaDigests[digestIndex])
 					|| !schemaDigest(tool.getInputSchema()).equals(
 						schemaDigests[digestIndex + 1])
-					|| !schemaDigest(outputSchema).equals(
-						schemaDigests[digestIndex + 2]))
+					|| !outputSchemaMatches)
 				throw schemaMismatch(entry);
 		}
 	}

@@ -44,15 +44,20 @@ public final class McpSubscriptionConfig {
 	private final Set<@NonNull McpSubscriptionNotificationType> notificationTypes;
 
 	/**
-	 * Vends a builder primed with an application event publisher.
+	 * Vends a builder primed with its required construction values.
 	 *
-	 * @param eventPublisher application-owned broadcast publisher
+	 * @param subscriptionEventPublisher application-owned broadcast publisher
+	 * @param notificationTypes nonempty supported notification families
 	 * @return a subscription-configuration builder
+	 * @throws NullPointerException if an argument or notification type is null
+	 * @throws IllegalArgumentException if {@code notificationTypes} is empty
 	 */
 	@NonNull
 	public static Builder withEventPublisher(
-			@NonNull McpSubscriptionEventPublisher eventPublisher) {
-		return new Builder(eventPublisher);
+			@NonNull McpSubscriptionEventPublisher subscriptionEventPublisher,
+			@NonNull Set<@NonNull McpSubscriptionNotificationType>
+					notificationTypes) {
+		return new Builder(subscriptionEventPublisher, notificationTypes);
 	}
 
 	private McpSubscriptionConfig(@NonNull Builder builder) {
@@ -98,10 +103,16 @@ public final class McpSubscriptionConfig {
 				notificationTypes;
 
 		private Builder(
-				@NonNull McpSubscriptionEventPublisher eventPublisher) {
-			this.eventPublisher = requireNonNull(eventPublisher);
+				@NonNull McpSubscriptionEventPublisher subscriptionEventPublisher,
+				@NonNull Set<@NonNull McpSubscriptionNotificationType>
+						notificationTypes) {
+			this.eventPublisher = requireNonNull(subscriptionEventPublisher);
 			this.notificationTypes = EnumSet.noneOf(
 					McpSubscriptionNotificationType.class);
+			replaceNotificationTypes(notificationTypes);
+			if (this.notificationTypes.isEmpty())
+				throw new IllegalArgumentException(
+						"At least one MCP subscription notification type must be configured.");
 		}
 
 		/**
@@ -111,7 +122,7 @@ public final class McpSubscriptionConfig {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder notificationType(
+		public Builder addNotificationType(
 				@NonNull McpSubscriptionNotificationType notificationType) {
 			this.notificationTypes.add(requireNonNull(notificationType));
 			return this;
@@ -127,12 +138,7 @@ public final class McpSubscriptionConfig {
 		public Builder notificationTypes(
 				@NonNull Set<@NonNull McpSubscriptionNotificationType>
 						notificationTypes) {
-			requireNonNull(notificationTypes);
-			EnumSet<@NonNull McpSubscriptionNotificationType> copiedTypes =
-					EnumSet.noneOf(McpSubscriptionNotificationType.class);
-			copiedTypes.addAll(notificationTypes);
-			this.notificationTypes.clear();
-			this.notificationTypes.addAll(copiedTypes);
+			replaceNotificationTypes(notificationTypes);
 			return this;
 		}
 
@@ -148,6 +154,19 @@ public final class McpSubscriptionConfig {
 				throw new IllegalStateException(
 						"At least one MCP subscription notification type must be configured.");
 			return new McpSubscriptionConfig(this);
+		}
+
+		private void replaceNotificationTypes(
+				@NonNull Set<@NonNull McpSubscriptionNotificationType>
+						notificationTypes) {
+			requireNonNull(notificationTypes);
+			EnumSet<@NonNull McpSubscriptionNotificationType> copiedTypes =
+					EnumSet.noneOf(McpSubscriptionNotificationType.class);
+			notificationTypes.forEach(
+					notificationType -> copiedTypes.add(
+							requireNonNull(notificationType)));
+			this.notificationTypes.clear();
+			this.notificationTypes.addAll(copiedTypes);
 		}
 	}
 }

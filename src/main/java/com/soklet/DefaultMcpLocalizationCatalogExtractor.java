@@ -115,7 +115,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 					resourceTemplateSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse);
 
-			if (endpoint.getSubscriptions().isPresent()) {
+			if (endpoint.getSubscriptionConfig().isPresent()) {
 				List<McpCanonicalLocalizationPlan.Slot> terminal =
 						serverInformationSlots(endpoint, catalog);
 				addResponse(responses,
@@ -241,7 +241,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 					prompt.getName(), "/description", target + "/description", text));
 			for (int argumentIndex = 0;
 					argumentIndex < prompt.getArguments().size(); ++argumentIndex) {
-				McpPromptArgumentDefinition argument =
+				McpPromptArgumentDeclaration argument =
 						prompt.getArguments().get(argumentIndex);
 				String member = McpLocalizationSchemaWalker.childPointer(
 						"", "arguments", argument.getName());
@@ -313,14 +313,13 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	private static void addIfNonblank(
 			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
-			@NonNull McpTextOwnerType mcpTextOwnerType,
-			@NonNull String subjectIdentifier, @NonNull String memberPath,
+			@NonNull McpTextOwnerType ownerType,
+			@NonNull String subjectId, @NonNull String memberPath,
 			@NonNull String targetPointer, @NonNull String defaultText) {
 		if (defaultText.isBlank())
 			return;
 		McpTextCoordinate coordinate = new McpTextCoordinate(endpointPath,
-				mcpTextOwnerType,
-				subjectIdentifier, memberPath);
+				ownerType, subjectId, memberPath);
 		McpLocalizableText text = catalog.register(coordinate, defaultText);
 		slots.add(new McpCanonicalLocalizationPlan.Slot(text, targetPointer));
 	}

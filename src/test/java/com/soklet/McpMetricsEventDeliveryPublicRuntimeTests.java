@@ -608,17 +608,13 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	@NonNull
 	private static McpServer server(int port, @NonNull String... paths) {
 		List<McpEndpoint> endpoints = java.util.Arrays.stream(paths)
-				.map(path -> McpEndpoint.withPath(path)
-						.serverInformation(McpImplementation.withNameAndVersion(
+				.map(path -> McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 								"metric-delivery-test", "4.0.0")
 								.build())
 						.build())
 				.toList();
-		return McpServer.withPort(port)
+		return McpServer.withPort(port, McpEndpointRegistry.fromEndpoints(endpoints), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.build();

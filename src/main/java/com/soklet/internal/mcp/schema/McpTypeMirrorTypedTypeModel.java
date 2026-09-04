@@ -274,7 +274,7 @@ final class McpTypeMirrorTypedTypeModel
 					property == null ? "" : requireNonNull(property.title()),
 					property == null ? "" : requireNonNull(property.description()),
 					header == null ? Optional.empty()
-							: Optional.of(requireNonNull(header.value()))));
+							: Optional.of(requireNonNull(header.name()))));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(binaryName(declaration),
 				described, genericArgumentStructuralComplexity,

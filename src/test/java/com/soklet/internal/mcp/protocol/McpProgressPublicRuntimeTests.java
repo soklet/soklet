@@ -228,7 +228,7 @@ public class McpProgressPublicRuntimeTests {
 		AtomicBoolean inputReporterSuppressed = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> complete =
 				McpToolRegistration.withName("progress.conditional-complete")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							if (request.getClientCapabilities().supports(
 									com.soklet.McpClientCapability.ROOTS)) {
@@ -241,21 +241,20 @@ public class McpProgressPublicRuntimeTests {
 							return McpCompleteResult.fromToolText(
 									"conditional complete");
 						})
-						.mayRequestInput(roots)
+						.addInputRequestDeclarations(roots)
 						.build();
 		McpToolRegistration<McpJsonObject> input =
 				McpToolRegistration.withName("progress.conditional-input")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							inputReporterSuppressed.set(features
 									.find(McpProgressReporter.class).isEmpty());
-							return McpInputRequiredResult.builder()
-									.inputRequest("roots", McpInputRequest.fromDeclaration(
+							return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 											roots,
 													McpJsonObject.emptyInstance()))
 									.build();
 						})
-						.mayRequestInput(roots)
+						.addInputRequestDeclarations(roots)
 						.build();
 		McpServer server = server(List.of(complete, input));
 		Soklet soklet = managedSoklet(server);
@@ -486,7 +485,7 @@ public class McpProgressPublicRuntimeTests {
 			var diagnostics = server.getDiagnostics();
 			Assertions.assertEquals(0,
 					diagnostics.getActiveHandlerExecutions());
-			Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+			Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 			Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 			Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 			Assertions.assertEquals(1,
@@ -689,7 +688,7 @@ public class McpProgressPublicRuntimeTests {
 					"Accepted progress and terminal events must retain request FIFO.");
 			Assertions.assertEquals(0,
 					server.getDiagnostics().getActiveHandlerExecutions());
-			Assertions.assertEquals(0, server.getDiagnostics().getQueuedRequests());
+			Assertions.assertEquals(0, server.getDiagnostics().getRequestHandlerQueueDepth());
 			Assertions.assertEquals(0,
 					server.getDiagnostics().getActiveRequestStreams());
 		} finally {
@@ -733,7 +732,7 @@ public class McpProgressPublicRuntimeTests {
 			throws InterruptedException {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
 		while ((server.getDiagnostics().getActiveHandlerExecutions() != 0
-				|| server.getDiagnostics().getQueuedRequests() != 0
+				|| server.getDiagnostics().getRequestHandlerQueueDepth() != 0
 				|| server.getDiagnostics().getActiveRequestStreams() != 0)
 				&& System.nanoTime() - deadline < 0L)
 			Thread.sleep(5L);
@@ -760,23 +759,19 @@ public class McpProgressPublicRuntimeTests {
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			McpToolHandler<McpJsonObject> handler) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler(handler)
 				.build();
 	}
 
 	private static McpServer server(
 			List<McpToolRegistration<?>> tools) {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"progress-public-runtime-test", "4.0.0").build())
-				.tools(tools)
+				.addTools(tools)
 				.build();
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

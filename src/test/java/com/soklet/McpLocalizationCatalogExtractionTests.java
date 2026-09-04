@@ -142,7 +142,7 @@ class McpLocalizationCatalogExtractionTests {
 				.response(McpCanonicalLocalizationPlan.ResponseKind
 						.RESOURCE_TEMPLATES_LIST).isPresent());
 		Set<McpTextOwnerType> ownerTypes = plan.texts().stream()
-				.map(text -> text.getCoordinate().getMcpTextOwnerType())
+				.map(text -> text.getCoordinate().getOwnerType())
 				.collect(java.util.stream.Collectors.toSet());
 		assertFalse(ownerTypes.contains(McpTextOwnerType.RESOURCE));
 		assertTrue(ownerTypes.contains(McpTextOwnerType.RESOURCE_TEMPLATE));
@@ -171,29 +171,28 @@ class McpLocalizationCatalogExtractionTests {
 	void subscriptionTerminalUsesActualResultMetadataPointerShape() {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 				.withEventPublisher(
-						McpLocalSubscriptionEventPublisher.fromDefaults())
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+						Set.of(
+								McpSubscriptionNotificationType
+										.RESOURCES_LIST_CHANGED))
 				.build();
-		McpEndpoint subscribed = McpEndpoint.withPath("/subscribed")
-				.serverInformation(McpImplementation
+		McpEndpoint subscribed = McpEndpoint.withPath("/subscribed", McpImplementation
 						.withNameAndVersion("subscribed", "1")
 						.title("Subscribed title")
 						.description("Subscribed description")
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://subscribed"), "subscribed")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(
 																URI.create("catalog://subscribed"),
 																"unused")
 														.build())
 												.build()))
 						.build())
-				.subscriptions(subscriptions)
+				.subscriptionConfig(subscriptions)
 				.build();
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
@@ -213,27 +212,26 @@ class McpLocalizationCatalogExtractionTests {
 	@Test
 	void publicFactoryDelegatesToFinalResolverExtraction() {
 		McpEndpointRegistry programmatic = McpEndpointRegistry.fromEndpoints(List.of(
-				McpEndpoint.withPath("/generated/catalog")
-						.serverInformation(McpImplementation
+				McpEndpoint.withPath("/generated/catalog", McpImplementation
 								.withNameAndVersion("generated", "1")
 								.title("Generated server")
 								.description("Generated description")
 								.build())
 						.instructions("Generated instructions")
-						.tool(McpToolRegistration.withName("generated.search")
+						.addTool(McpToolRegistration.withName("generated.search")
 								.argumentType(GeneratedArguments.class)
 								.handler((request, arguments, features) ->
 										McpCompleteResult.fromToolText("unused"))
 								.title("Generated tool")
 								.description("Generated tool description")
 								.build())
-						.prompt(McpPromptRegistration.withName("generated.prompt")
+						.addPrompt(McpPromptRegistration.withName("generated.prompt")
 								.handler((request, prompt, features) ->
 										McpCompleteResult.fromPromptOutput(
 												McpPromptOutput.fromMessages()))
 								.title("Generated prompt")
 								.description("Generated prompt description")
-								.argument(McpPromptArgumentDefinition.withName("topic")
+								.addArgument(McpPromptArgumentDeclaration.withName("topic")
 										.title("Generated topic")
 										.description("Generated topic description")
 										.required(true)
@@ -249,9 +247,8 @@ class McpLocalizationCatalogExtractionTests {
 	void serverConstructionRetainsPlanAndRejectsOverBudgetResponse() {
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(List.of(
 				wireEndpoint()));
-		McpLocalizer bounded = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> localizationContext(
-						new AtomicInteger()))
+		McpLocalizer bounded = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> localizationContext(new AtomicInteger()))
 				.maximumLocalizableTextCountPerResponse(2)
 				.build();
 
@@ -260,9 +257,8 @@ class McpLocalizationCatalogExtractionTests {
 		assertTrue(exception.getMessage().contains("callback limit"));
 
 		McpLocalizer sufficient = McpLocalizer
-				.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> localizationContext(
-						new AtomicInteger()))
+				.withFallbackLocale(Locale.ENGLISH,
+						request -> localizationContext(new AtomicInteger()))
 				.maximumLocalizableTextCountPerResponse(3)
 				.build();
 		DefaultMcpServer server = (DefaultMcpServer) wireServerBuilder(registry)
@@ -318,8 +314,7 @@ class McpLocalizationCatalogExtractionTests {
 		AtomicInteger contextInvocations = new AtomicInteger();
 		AtomicInteger localizationInvocations = new AtomicInteger();
 		McpLocalizer localizer = McpLocalizer
-				.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+				.withFallbackLocale(Locale.ENGLISH, request -> {
 					contextInvocations.incrementAndGet();
 					return localizationContext(localizationInvocations);
 				})
@@ -374,8 +369,7 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpLocalizationContext localizationContext(
 			AtomicInteger localizationInvocations) {
-		return McpLocalizationContext.withLocale(Locale.ENGLISH)
-				.localizer(text -> {
+		return McpLocalizationContext.withLocale(Locale.ENGLISH, text -> {
 				localizationInvocations.incrementAndGet();
 				return McpLocalizationResult.useDefaultText();
 			})
@@ -383,8 +377,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpEndpoint wireEndpoint() {
-		return McpEndpoint.withPath(WIRE_PATH)
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("localization-wire", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
@@ -395,11 +388,8 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpServer.Builder wireServerBuilder(
 			McpEndpointRegistry registry) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -484,7 +474,7 @@ class McpLocalizationCatalogExtractionTests {
 			McpServerDiagnostics diagnostics) {
 		assertTrue(diagnostics.getBoundAddress().isEmpty());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		assertEquals(0, diagnostics.getActiveRequestStreams());
 		assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
@@ -549,43 +539,44 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpEndpoint parityEndpoint() {
 		McpResourceReadHandler resourceHandler = (request, resource, features) ->
-				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-						.content(McpTextResourceContents.withUriAndText(
-								URI.create("catalog://unused"), "unused").build())
-						.build());
-		return McpEndpoint.withPath("/localized/catalog")
-				.serverInformation(McpImplementation
+				McpCompleteResult.fromResourceOutput(
+						McpResourceOutput.withContent(
+								McpTextResourceContents.withUriAndText(
+										URI.create("catalog://unused"), "unused")
+										.build())
+								.build());
+		return McpEndpoint.withPath("/localized/catalog", McpImplementation
 						.withNameAndVersion("localized-catalog", "1.0")
 						.title("Catalog server")
 						.description("Catalog server description")
 						.build())
 				.instructions("Use catalog.search.")
-				.tool(McpToolRegistration.withName("catalog.search")
-						.types(ParityArguments.class, ParityResult.class)
+				.addTool(McpToolRegistration.withName("catalog.search")
+						.argumentAndOutputTypes(ParityArguments.class, ParityResult.class)
 						.handler((request, arguments, features) ->
 								new ParityResult("unused"))
 						.title("Catalog search")
 						.description("Searches the catalog")
 						.build())
-				.prompt(McpPromptRegistration.withName("catalog.compose")
+				.addPrompt(McpPromptRegistration.withName("catalog.compose")
 						.handler((request, prompt, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Catalog composer")
 						.description("Builds a catalog prompt")
-						.argument(McpPromptArgumentDefinition.withName("subject")
+						.addArgument(McpPromptArgumentDeclaration.withName("subject")
 								.title("Prompt subject")
 								.description("Subject to discuss")
 								.required(true)
 								.build())
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Catalog summary")
 						.description("Summary contents")
 						.build())
-				.resource(McpResourceRegistration.withUriTemplateAndName(
+				.addResource(McpResourceRegistration.withUriTemplateAndName(
 						"catalog://items/{id}", "item")
 						.handler(resourceHandler)
 						.title("Catalog item")
@@ -675,7 +666,7 @@ class McpLocalizationCatalogExtractionTests {
 				      title = "Catalog item",
 				      description = "Item contents")
 				  public McpResourceOutput item(
-				      @McpResourceUriParameter("id") String id) { return null; }
+				      @McpResourceUriParameter(name = "id") String id) { return null; }
 
 				  public record SearchResult(
 				      @McpToolProperty(
@@ -722,7 +713,7 @@ class McpLocalizationCatalogExtractionTests {
 				.build();
 		McpToolRegistration<EmptyArguments> outputTool = McpToolRegistration
 				.withName("catalog.output")
-				.types(EmptyArguments.class, OutputArguments.class)
+				.argumentAndOutputTypes(EmptyArguments.class, OutputArguments.class)
 				.handler((request, arguments, features) ->
 						new OutputArguments("value"))
 				.build();
@@ -733,33 +724,34 @@ class McpLocalizationCatalogExtractionTests {
 								McpPromptOutput.fromMessages()))
 				.title("Prompt title")
 				.description("Prompt description")
-				.argument(McpPromptArgumentDefinition.withName("topic")
+				.addArgument(McpPromptArgumentDeclaration.withName("topic")
 						.title("Topic title")
 						.description("Topic description")
 						.build())
 				.build();
 		McpResourceReadHandler resourceHandler = (request, resource, features) ->
-				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-						.content(McpTextResourceContents.withUriAndText(
-								URI.create("catalog://unused"), "unused").build())
-						.build());
-		McpEndpoint.Builder builder = McpEndpoint.withPath("/catalog/mcp")
-				.serverInformation(McpImplementation
+				McpCompleteResult.fromResourceOutput(
+						McpResourceOutput.withContent(
+								McpTextResourceContents.withUriAndText(
+										URI.create("catalog://unused"), "unused")
+										.build())
+								.build());
+		McpEndpoint.Builder builder = McpEndpoint.withPath("/catalog/mcp", McpImplementation
 						.withNameAndVersion("catalog", "1")
 						.title("Server title")
 						.description("Server description")
 						.build())
 				.instructions("Endpoint instructions")
-				.tool(tool)
-				.tool(outputTool)
-				.prompt(prompt)
-				.resource(McpResourceRegistration.withUriAndName(
+				.addTool(tool)
+				.addTool(outputTool)
+				.addPrompt(prompt)
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
 						.build())
-				.resource(McpResourceRegistration.withUriTemplateAndName(
+				.addResource(McpResourceRegistration.withUriTemplateAndName(
 						"catalog://item/{id}", "item")
 						.handler(resourceHandler)
 						.title("Template title")

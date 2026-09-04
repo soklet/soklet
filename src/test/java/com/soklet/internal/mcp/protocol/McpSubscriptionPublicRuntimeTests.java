@@ -349,7 +349,7 @@ public class McpSubscriptionPublicRuntimeTests {
 							1_001, "Subscription forbidden"))
 					.build());
 		})
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient admitted = null;
@@ -423,7 +423,7 @@ public class McpSubscriptionPublicRuntimeTests {
 					throw new IllegalStateException("secret subscription admission failure");
 				return null;
 			})
-					.maximumSubscriptionsPerPrincipal(1)
+					.maximumSubscriptionsPerPartition(1)
 					.build();
 			Soklet owner = managedSoklet(server);
 			McpChunkedHttpClient admitted = null;
@@ -536,7 +536,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpServer server = serverBuilder(List.of(endpoint),
 				McpAdmissionController.acceptAllInstance())
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient first = null;
@@ -583,7 +583,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			return McpAdmissionDecision.accepted(identity);
 		};
 		McpServer server = serverBuilder(List.of(endpoint), partitionedAdmission)
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient alpha = null;
@@ -730,7 +730,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpServer firstServer = serverBuilder(List.of(firstEndpoint),
 				McpAdmissionController.acceptAllInstance())
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet firstOwner = managedSoklet(firstServer);
 		McpChunkedHttpClient client = null;
@@ -761,7 +761,7 @@ public class McpSubscriptionPublicRuntimeTests {
 					McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 			McpServer freshServer = serverBuilder(List.of(freshEndpoint),
 					McpAdmissionController.acceptAllInstance())
-					.maximumSubscriptionsPerPrincipal(1)
+					.maximumSubscriptionsPerPartition(1)
 					.build();
 			freshOwner = managedSoklet(freshServer);
 			freshOwner.start();
@@ -855,7 +855,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		SubscriptionObservations observations = new SubscriptionObservations();
 		McpServer server = serverBuilder(List.of(endpoint),
 				McpAdmissionController.acceptAllInstance())
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet soklet = managedSoklet(server, observations);
 		McpChunkedHttpClient client = null;
@@ -1021,7 +1021,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(List.of(endpoint),
 				McpAdmissionController.acceptAllInstance())
 				.streamQueueCapacity(1)
-				.maximumSubscriptionsPerPrincipal(1)
+				.maximumSubscriptionsPerPartition(1)
 				.build();
 		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient backpressured = null;
@@ -1307,10 +1307,8 @@ public class McpSubscriptionPublicRuntimeTests {
 
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
 			McpAdmissionController admissionController) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(endpoints), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.admissionController(admissionController)
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -1332,22 +1330,19 @@ public class McpSubscriptionPublicRuntimeTests {
 		EnumSet<McpSubscriptionNotificationType> notificationTypes =
 				EnumSet.of(first, remaining);
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(notificationTypes)
+				.withEventPublisher(publisher, notificationTypes)
 				.build();
-		McpEndpoint.Builder builder = McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint.Builder builder = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"subscription-public-runtime-test",
 						"4.0.0").build())
-				.subscriptions(subscriptions);
+				.subscriptionConfig(subscriptions);
 		for (URI resourceUri : resourceUris) {
-			builder.resource(McpResourceRegistration
+			builder.addResource(McpResourceRegistration
 					.withUriAndName(resourceUri,
 							"Subscription test resource")
 					.handler((request, read, features) ->
 							McpCompleteResult.fromResourceOutput(
-									McpResourceOutput.builder()
-											.content(McpTextResourceContents
+									McpResourceOutput.withContent(McpTextResourceContents
 													.withUriAndText(read.getUri(), "test")
 													.build())
 											.build()))

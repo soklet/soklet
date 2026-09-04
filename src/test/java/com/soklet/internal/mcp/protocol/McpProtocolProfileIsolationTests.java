@@ -402,7 +402,7 @@ public class McpProtocolProfileIsolationTests {
 						"profile-isolation-test", "4.0.0"))
 				.tool(McpNormalizedOperation.named(TOOL))
 				.exactResource("test://profile/resource")
-				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+				.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 						McpResourceNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 	}

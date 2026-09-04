@@ -305,7 +305,7 @@ public class McpErrorMappingGoldenProductionTests {
 							",\"name\":\"" + HOLD_TOOL
 									+ "\",\"arguments\":{}"),
 							toolHeaders(HOLD_TOOL, PROTOCOL_VERSION))));
-			awaitCondition(() -> server.getDiagnostics().getQueuedRequests() == 1);
+			awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
 
 			WireResponse overload = exchange(port,
 					post("overload", requestBody("\"overload\"",
@@ -337,7 +337,7 @@ public class McpErrorMappingGoldenProductionTests {
 				McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> regular = McpToolRegistration
 				.withName(REGULAR_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.regularHandlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("unused");
@@ -345,31 +345,30 @@ public class McpErrorMappingGoldenProductionTests {
 				.build();
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
 				.withName(REQUIRED_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.requiredHandlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must-not-run");
 				})
-				.mayRequestInput(requiredRoots)
+				.addInputRequestDeclarations(requiredRoots)
 				.build();
 		McpToolRegistration<McpJsonObject> conditional = McpToolRegistration
 				.withName(CONDITIONAL_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.conditionalHandlerInvocations.incrementAndGet();
-					return McpInputRequiredResult.builder()
-							.inputRequest("roots-" + CONDITIONAL_SECRET,
+					return McpInputRequiredResult.withInputRequest("roots-" + CONDITIONAL_SECRET,
 									McpInputRequest.fromDeclaration(conditionalRoots,
 											McpJsonObject.emptyInstance()))
 							.metadata(McpJsonObject.builder()
 									.put("secret", CONDITIONAL_SECRET).build())
 							.build();
 				})
-				.mayRequestInput(conditionalRoots)
+				.addInputRequestDeclarations(conditionalRoots)
 				.build();
 		McpToolRegistration<McpJsonObject> hold = McpToolRegistration
 				.withName(HOLD_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.holdHandlerInvocations.incrementAndGet();
 					if ("overload-active".equals(request.getRequest()
@@ -382,15 +381,12 @@ public class McpErrorMappingGoldenProductionTests {
 					return McpCompleteResult.fromToolText("released");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"error-mapping-golden", "4.0.0").build())
-				.tools(List.of(regular, required, conditional, hold))
+				.addTools(List.of(regular, required, conditional, hold))
 				.build();
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> "rate-limit".equals(context.getRequest()
 						.getHeader(CASE_HEADER).orElse(""))
 						? McpRateLimitDecision.denied(Duration.ofMillis(1))
@@ -614,7 +610,7 @@ public class McpErrorMappingGoldenProductionTests {
 
 	private static boolean zeroLoad(McpServerDiagnostics diagnostics) {
 		return diagnostics.getActiveHandlerExecutions() == 0
-				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getRequestHandlerQueueDepth() == 0
 				&& diagnostics.getActiveRequestStreams() == 0
 				&& diagnostics.getActiveSubscriptions() == 0;
 	}

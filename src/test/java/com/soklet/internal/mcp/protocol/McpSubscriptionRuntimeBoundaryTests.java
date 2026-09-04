@@ -1234,7 +1234,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
 						"subscription-boundary-test", "4.0.0"))
 				.exactResource(RESOURCE_URI.toString())
-				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+				.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 						McpResourceNotificationType.RESOURCES_LIST_CHANGED,
 						McpResourceNotificationType.RESOURCE_UPDATED))
 				.build();

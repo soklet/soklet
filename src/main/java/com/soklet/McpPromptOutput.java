@@ -55,7 +55,7 @@ public final class McpPromptOutput implements McpCompletePayload {
 	@NonNull
 	public static McpPromptOutput fromMessages(
 			@NonNull McpPromptMessage... messages) {
-		return builder().messages(List.of(messages)).build();
+		return builder().addMessages(List.of(messages)).build();
 	}
 
 	private McpPromptOutput(@NonNull Builder builder) {
@@ -99,10 +99,14 @@ public final class McpPromptOutput implements McpCompletePayload {
 			return this;
 		}
 
-		/** @param message prompt message
-		 * @return this builder */
+		/**
+		 * Appends one prompt message.
+		 *
+		 * @param message prompt message
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder message(@NonNull McpPromptMessage message) {
+		public Builder addMessage(@NonNull McpPromptMessage message) {
 			this.messages.add(requireNonNull(message));
 			return this;
 		}
@@ -114,10 +118,10 @@ public final class McpPromptOutput implements McpCompletePayload {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder messages(
+		public Builder addMessages(
 				@NonNull Collection<@NonNull McpPromptMessage> messages) {
 			requireNonNull(messages);
-			messages.forEach(this::message);
+			messages.forEach(this::addMessage);
 			return this;
 		}
 

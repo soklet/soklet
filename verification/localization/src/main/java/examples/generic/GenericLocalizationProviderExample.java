@@ -69,7 +69,7 @@ public final class GenericLocalizationProviderExample
 
 	/**
 	 * Atomically installs a validated replacement catalog. The application
-	 * calls {@code McpServer.getLocalizationControl().catalogsChanged()} on
+	 * calls {@code McpServer.getLocalizationControl().invalidateCatalogs()} on
 	 * every applicable instance afterward.
 	 */
 	public void installCatalogs(Map<Locale, Map<String, String>> replacement) {
@@ -87,7 +87,7 @@ public final class GenericLocalizationProviderExample
 	}
 
 	@Override
-	public McpLocalizationContext createContext(McpLocalizationRequest request) {
+	public McpLocalizationContext provideContext(McpLocalizationRequest request) {
 		// One atomic read keeps every localized field in a response on the same
 		// immutable application catalog snapshot.
 		Map<Locale, Map<String, String>> snapshot = this.catalogs.get();
@@ -95,8 +95,7 @@ public final class GenericLocalizationProviderExample
 				.orElseGet(() -> select(request.getLanguageRanges(), snapshot));
 		Map<String, String> catalog = snapshot.getOrDefault(selected, Map.of());
 
-		return McpLocalizationContext.withLocale(selected)
-				.localizer(text -> {
+		return McpLocalizationContext.withLocale(selected, text -> {
 					String translated = catalog.get(key(text));
 					return translated == null
 							? McpLocalizationResult.useDefaultText()
@@ -132,8 +131,7 @@ public final class GenericLocalizationProviderExample
 				new GenericLocalizationProviderExample(
 						initialCatalogs,
 						KeyStrategy.SOURCE_TEXT, Locale.ENGLISH);
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(provider)
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, provider)
 				.build();
 
 		if (!Locale.ENGLISH.equals(localizer.getFallbackLocale()))
@@ -143,7 +141,7 @@ public final class GenericLocalizationProviderExample
 		McpLocalizationRequest request = frenchCanadianRequest(frenchCanadian);
 		initialFrench.put("Search", "Mutated initial text");
 		initialCatalogs.clear();
-		assertLocalizedText(provider.createContext(request).localize(search),
+		assertLocalizedText(provider.provideContext(request).localize(search),
 				"Rechercher");
 
 		Map<String, String> installedFrench = new LinkedHashMap<>();
@@ -153,7 +151,7 @@ public final class GenericLocalizationProviderExample
 		provider.installCatalogs(installedCatalogs);
 		installedFrench.put("Search", "Mutated installed text");
 		installedCatalogs.clear();
-		assertLocalizedText(provider.createContext(request).localize(search),
+		assertLocalizedText(provider.provideContext(request).localize(search),
 				"Chercher");
 
 		System.out.println("Generic localization provider example is usable "
@@ -161,8 +159,7 @@ public final class GenericLocalizationProviderExample
 	}
 
 	private static McpLocalizableText searchText() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/localization-verification")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/localization-verification", McpImplementation.withNameAndVersion(
 						"localization-verification", "1.0")
 						.title("Search")
 						.build())

@@ -475,7 +475,7 @@ public class McpSelectedProfileBindingTests {
 				.prompt(McpNormalizedOperation.named("summarize"))
 				.exactResource("test://profile/resource")
 				.resourceTemplate("test://profile/{id}")
-				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+				.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 						McpResourceNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 	}

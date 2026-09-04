@@ -111,7 +111,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpHandlerQueueDepth;
 	private final LongAdder mcpHandlerCapacityRejections;
 	private final Map<ShutdownComponentDisposition, LongAdder>
-			mcpShutdownsByOutcome;
+			mcpServerStopsByDisposition;
 	private final LongAdder mcpConnectionsAccepted;
 	private final LongAdder mcpConnectionsRejected;
 	private final Map<TransportFailureReason, LongAdder>
@@ -192,12 +192,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpActiveHandlerExecutions = new AtomicLong();
 		this.mcpHandlerQueueDepth = new AtomicLong();
 		this.mcpHandlerCapacityRejections = new LongAdder();
-		EnumMap<ShutdownComponentDisposition, LongAdder> mcpShutdowns =
+		EnumMap<ShutdownComponentDisposition, LongAdder> mcpServerStops =
 				new EnumMap<>(ShutdownComponentDisposition.class);
-		for (ShutdownComponentDisposition outcome
+		for (ShutdownComponentDisposition disposition
 				: ShutdownComponentDisposition.values())
-			mcpShutdowns.put(outcome, new LongAdder());
-		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
+			mcpServerStops.put(disposition, new LongAdder());
+		this.mcpServerStopsByDisposition =
+				Collections.unmodifiableMap(mcpServerStops);
 		this.mcpConnectionsAccepted = new LongAdder();
 		this.mcpConnectionsRejected = new LongAdder();
 		EnumMap<TransportFailureReason, LongAdder> mcpTransportFailures =
@@ -883,7 +884,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.mcpHandlerCapacityRejections.increment();
 		} else if (event instanceof McpMetricsEvent.ServerStopped serverStopped) {
 			this.includeMcpServerMetrics.set(true);
-			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.getOutcome()))
+			requireNonNull(this.mcpServerStopsByDisposition.get(
+					serverStopped.getShutdownComponentDisposition()))
 					.increment();
 		}
 	}
@@ -1038,7 +1040,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					snapshot.getMcpMetrics().getHandlerCapacityRejections(), options);
 		}
 		appendCounter(sb, "soklet_mcp_shutdowns_total", "Total MCP server shutdowns by outcome",
-				snapshot.getMcpMetrics().getShutdowns(),
+				snapshot.getMcpMetrics().getServerStops(),
 				DefaultMetricsCollector::labelsForMcpShutdownDisposition, options);
 
 		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
@@ -1267,12 +1269,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@NonNull
 	McpMetricsSnapshot snapshotMcpMetrics() {
-		EnumMap<ShutdownComponentDisposition, Long> shutdowns =
+		EnumMap<ShutdownComponentDisposition, Long> serverStops =
 				new EnumMap<>(ShutdownComponentDisposition.class);
-		this.mcpShutdownsByOutcome.forEach((outcome, counter) -> {
+		this.mcpServerStopsByDisposition.forEach((disposition, counter) -> {
 			long count = counter.sum();
 			if (count != 0L)
-				shutdowns.put(outcome, count);
+				serverStops.put(disposition, count);
 		});
 		EnumMap<TransportFailureReason, Long> transportFailures =
 				new EnumMap<>(TransportFailureReason.class);
@@ -1314,7 +1316,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshotCounterMap(
 						this.mcpUnknownMirroredHeadersByEndpointAndMethod);
 		if (activeHandlerExecutions == 0L && handlerQueueDepth == 0L
-				&& handlerCapacityRejections == 0L && shutdowns.isEmpty()
+				&& handlerCapacityRejections == 0L && serverStops.isEmpty()
 				&& connectionsAccepted == 0L && connectionsRejected == 0L
 				&& transportFailures.isEmpty() && serverStarts == 0L
 				&& requestsAccepted == 0L && requestsRejected == 0L
@@ -1330,7 +1332,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.activeHandlerExecutions(activeHandlerExecutions)
 				.handlerQueueDepth(handlerQueueDepth)
 				.handlerCapacityRejections(handlerCapacityRejections)
-				.shutdowns(shutdowns)
+				.serverStops(serverStops)
 				.connectionsAccepted(connectionsAccepted)
 				.connectionsRejected(connectionsRejected)
 				.transportFailures(transportFailures)
@@ -1365,7 +1367,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		// observations. Preserve them across reset so later balanced terminal
 		// transitions cannot underflow the new collection window.
 		this.mcpHandlerCapacityRejections.reset();
-		this.mcpShutdownsByOutcome.values().forEach(LongAdder::reset);
+		this.mcpServerStopsByDisposition.values().forEach(LongAdder::reset);
 		this.mcpConnectionsAccepted.reset();
 		this.mcpConnectionsRejected.reset();
 		this.mcpTransportFailuresByReason.values().forEach(LongAdder::reset);

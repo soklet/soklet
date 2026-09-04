@@ -45,16 +45,33 @@ public final class McpResourceOutput implements McpCompletePayload {
 	@Nullable
 	private final Duration cacheTimeToLiveOverride;
 
-	/** @return an empty resource-output builder */
+	/**
+	 * Vends a builder containing its required first resource value.
+	 *
+	 * @param resourceContents resource contents
+	 * @return resource-output builder
+	 * @throws NullPointerException if {@code resourceContents} is null
+	 */
 	@NonNull
-	public static Builder builder() {
-		return new Builder();
+	public static Builder withContent(
+			@NonNull McpResourceContents resourceContents) {
+		return new Builder(resourceContents);
+	}
+
+	/**
+	 * Creates output containing exactly one resource value.
+	 *
+	 * @param resourceContents resource contents
+	 * @return immutable resource output
+	 * @throws NullPointerException if {@code resourceContents} is null
+	 */
+	@NonNull
+	public static McpResourceOutput fromContent(
+			@NonNull McpResourceContents resourceContents) {
+		return withContent(resourceContents).build();
 	}
 
 	private McpResourceOutput(@NonNull Builder builder) {
-		if (builder.contents.isEmpty())
-			throw new IllegalStateException(
-					"A successful MCP resource output must contain at least one value.");
 		this.contents = List.copyOf(builder.contents);
 		this.cacheTimeToLiveOverride = builder.cacheTimeToLiveOverride;
 	}
@@ -88,28 +105,35 @@ public final class McpResourceOutput implements McpCompletePayload {
 		@Nullable
 		private Duration cacheTimeToLiveOverride;
 
-		private Builder() {
+		private Builder(@NonNull McpResourceContents resourceContents) {
+			this.contents.add(requireNonNull(resourceContents));
 		}
 
-		/** @param content resource contents
-		 * @return this builder */
+		/**
+		 * Appends one resource-content value.
+		 *
+		 * @param resourceContents resource contents
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder content(@NonNull McpResourceContents content) {
-			this.contents.add(requireNonNull(content));
+		public Builder addContent(
+				@NonNull McpResourceContents resourceContents) {
+			this.contents.add(requireNonNull(resourceContents));
 			return this;
 		}
 
 		/**
 		 * Appends resource contents in iteration order.
 		 *
-		 * @param contents resource contents
+		 * @param resourceContents resource contents
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder contents(
-				@NonNull Collection<? extends @NonNull McpResourceContents> contents) {
-			requireNonNull(contents);
-			contents.forEach(this::content);
+		public Builder addContents(
+				@NonNull Collection<? extends @NonNull McpResourceContents>
+						resourceContents) {
+			requireNonNull(resourceContents);
+			resourceContents.forEach(this::addContent);
 			return this;
 		}
 

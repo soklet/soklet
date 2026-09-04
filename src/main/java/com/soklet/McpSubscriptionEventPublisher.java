@@ -47,6 +47,23 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public interface McpSubscriptionEventPublisher {
 	/**
+	 * Creates an independent in-memory publisher with default behavior.
+	 * <p>
+	 * The publisher reaches only listeners registered with that instance in the
+	 * current process and invokes them synchronously on the publishing thread.
+	 * Closing a registration does not wait for a delivery already selected or
+	 * in flight. If a listener throws a runtime exception, all other current
+	 * listeners are still attempted before the first exception is rethrown with
+	 * later exceptions suppressed.
+	 *
+	 * @return in-memory event publisher
+	 */
+	@NonNull
+	static McpSubscriptionEventPublisher fromInMemoryDefaults() {
+		return new DefaultMcpSubscriptionEventPublisher();
+	}
+
+	/**
 	 * Registers a listener for broadcast events.
 	 *
 	 * @param listener thread-safe listener

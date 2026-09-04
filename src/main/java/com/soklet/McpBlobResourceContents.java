@@ -89,6 +89,14 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		return this.data.length;
 	}
 
+	boolean dataEquals(@NonNull McpBlobResourceContents other) {
+		return Arrays.equals(this.data, requireNonNull(other).data);
+	}
+
+	int dataHashCode() {
+		return Arrays.hashCode(this.data);
+	}
+
 	/**
 	 * Returns the resource MIME type, if one was supplied.
 	 *

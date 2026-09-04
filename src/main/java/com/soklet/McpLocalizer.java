@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -51,24 +52,24 @@ public final class McpLocalizer {
 	private final int maximumLocalizableTextCountPerResponse;
 
 	/**
-	 * Begins staged construction with the canonical non-root fallback locale.
-	 * A context provider must be supplied before policy can be configured or an
-	 * immutable localizer can be built.
+	 * Vends a builder primed with the canonical non-root fallback locale and
+	 * application-owned context provider.
 	 *
 	 * @param fallbackLocale canonical BCP 47 fallback locale
-	 * @return required context-provider stage
-	 * @throws NullPointerException if {@code fallbackLocale} is null
+	 * @param localizationContextProvider request context provider
+	 * @return localizer builder
+	 * @throws NullPointerException if an argument is null
 	 * @throws IllegalArgumentException if {@code fallbackLocale} is not a
 	 * canonical, non-root BCP 47 locale of at most 255 ASCII bytes
 	 */
 	@NonNull
-	public static ContextProviderStage withFallbackLocale(
-			@NonNull Locale fallbackLocale) {
+	public static Builder withFallbackLocale(@NonNull Locale fallbackLocale,
+			@NonNull McpLocalizationContextProvider
+					localizationContextProvider) {
 		Locale requiredFallbackLocale =
 				McpLocaleSupport.requireCanonicalCatalogLocale(
 						fallbackLocale, "fallbackLocale");
-		return contextProvider -> new Builder(
-				requiredFallbackLocale, contextProvider);
+		return new Builder(requiredFallbackLocale, localizationContextProvider);
 	}
 
 	private McpLocalizer(@NonNull Builder builder) {
@@ -114,27 +115,6 @@ public final class McpLocalizer {
 	}
 
 	/**
-	 * Required immutable stage that installs the application-owned context
-	 * provider.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@ThreadSafe
-	@FunctionalInterface
-	public interface ContextProviderStage {
-		/**
-		 * Supplies the application-owned request context provider.
-		 *
-		 * @param contextProvider context provider
-		 * @return policy builder
-		 * @throws NullPointerException if {@code contextProvider} is null
-		 */
-		@NonNull
-		Builder contextProvider(
-				@NonNull McpLocalizationContextProvider contextProvider);
-	}
-
-	/**
 	 * Single-threaded builder for an immutable localizer.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -150,9 +130,10 @@ public final class McpLocalizer {
 		private int maximumLocalizableTextCountPerResponse;
 
 		private Builder(@NonNull Locale fallbackLocale,
-				@NonNull McpLocalizationContextProvider contextProvider) {
+				@NonNull McpLocalizationContextProvider
+						localizationContextProvider) {
 			this.fallbackLocale = fallbackLocale;
-			this.contextProvider = requireNonNull(contextProvider);
+			this.contextProvider = requireNonNull(localizationContextProvider);
 			this.failurePolicy =
 					McpLocalizationFailurePolicy.USE_DEFAULT_TEXT;
 			this.maximumLocalizableTextCountPerResponse =
@@ -165,14 +146,15 @@ public final class McpLocalizer {
 		 * fallback text. Application context-creation failure remains a sanitized
 		 * failure before handler/interceptor entry under either policy.
 		 *
-		 * @param failurePolicy failure policy
+		 * @param failurePolicy failure policy, or null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code failurePolicy} is null
 		 */
 		@NonNull
 		public Builder failurePolicy(
-				@NonNull McpLocalizationFailurePolicy failurePolicy) {
-			this.failurePolicy = requireNonNull(failurePolicy);
+				@Nullable McpLocalizationFailurePolicy failurePolicy) {
+			this.failurePolicy = failurePolicy == null
+					? McpLocalizationFailurePolicy.USE_DEFAULT_TEXT
+					: failurePolicy;
 			return this;
 		}
 
@@ -180,18 +162,21 @@ public final class McpLocalizer {
 		 * Sets the maximum provider lookup count for one framework response.
 		 * The default is 32,768 and the supported range is 1 through 100,000.
 		 *
-		 * @param maximumLocalizableTextCountPerResponse positive bounded limit
+		 * @param maximumLocalizableTextCountPerResponse positive bounded limit, or
+		 *                                               null to restore the default
 		 * @return this builder
-		 * @throws NullPointerException if
-		 * {@code maximumLocalizableTextCountPerResponse} is null
 		 * @throws IllegalArgumentException if the value is outside the supported
 		 * range
 		 */
 		@NonNull
 		public Builder maximumLocalizableTextCountPerResponse(
-				@NonNull Integer maximumLocalizableTextCountPerResponse) {
-			int requiredMaximum = requireNonNull(
-					maximumLocalizableTextCountPerResponse);
+				@Nullable Integer maximumLocalizableTextCountPerResponse) {
+			if (maximumLocalizableTextCountPerResponse == null) {
+				this.maximumLocalizableTextCountPerResponse =
+						DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE;
+				return this;
+			}
+			int requiredMaximum = maximumLocalizableTextCountPerResponse;
 			if (requiredMaximum < 1
 					|| requiredMaximum
 					> MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE)

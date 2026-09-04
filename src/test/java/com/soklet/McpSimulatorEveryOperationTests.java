@@ -328,7 +328,7 @@ public class McpSimulatorEveryOperationTests {
 	@NonNull
 	private static String replaySubscription(@NonNull McpSimulation simulation,
 			@NonNull McpSimulationResponse response,
-			@NonNull McpLocalSubscriptionEventPublisher publisher,
+			@NonNull McpSubscriptionEventPublisher publisher,
 			@NonNull String id) {
 		Assertions.assertEquals(McpSimulationBodyType.SSE,
 				response.getBodyType());
@@ -451,7 +451,7 @@ public class McpSimulatorEveryOperationTests {
 			@NonNull McpServerDiagnostics diagnostics) {
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
@@ -532,8 +532,8 @@ public class McpSimulatorEveryOperationTests {
 	}
 
 	private static final class Fixture {
-		private final McpLocalSubscriptionEventPublisher publisher =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		private final McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		private final RecordingMetrics metrics;
 		private final RecordingLifecycle lifecycle;
 		private final boolean blockingTool;
@@ -561,7 +561,7 @@ public class McpSimulatorEveryOperationTests {
 		@NonNull
 		private SimulatorConfig config() {
 			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME).jsonArguments()
+				.withName(TOOL_NAME).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					this.handlerCalls.incrementAndGet();
 					if (this.blockingTool) {
@@ -578,7 +578,7 @@ public class McpSimulatorEveryOperationTests {
 					this.handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 							.description("Matrix prompt")
-							.message(McpPromptMessage.fromUserContent(
+							.addMessage(McpPromptMessage.fromUserContent(
 									McpTextContent.fromText(
 											"matrix prompt complete")))
 							.build());
@@ -596,19 +596,17 @@ public class McpSimulatorEveryOperationTests {
 					return completeText(read.getUri(), "matrix template complete");
 				}).build();
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(this.publisher)
-				.notificationTypes(EnumSet.of(
+				.withEventPublisher(this.publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-every-operation-test",
 						"4.0.0").build())
-				.tool(tool)
-				.prompt(prompt)
-				.resource(exact)
-				.resource(template)
-				.subscriptions(subscriptions)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(exact)
+				.addResource(template)
+				.subscriptionConfig(subscriptions)
 				.build();
 			McpEndpointRegistry endpointRegistry =
 					McpEndpointRegistry.fromEndpoints(List.of(endpoint));
@@ -659,8 +657,7 @@ public class McpSimulatorEveryOperationTests {
 		@NonNull
 		private static McpCompleteResult completeText(@NonNull URI uri,
 				@NonNull String text) {
-			return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-					.content(McpTextResourceContents.withUriAndText(uri, text).build())
+			return McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(uri, text).build())
 					.build());
 		}
 
@@ -753,7 +750,7 @@ public class McpSimulatorEveryOperationTests {
 			assertStoppedDiagnostics(this.server.get());
 		}
 
-		private McpLocalSubscriptionEventPublisher publisher() {
+		private McpSubscriptionEventPublisher publisher() {
 			return this.publisher;
 		}
 

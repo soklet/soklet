@@ -18,6 +18,7 @@ package com.soklet.annotation;
 
 import com.soklet.McpClientCapability;
 import com.soklet.McpInputRequirement;
+import com.soklet.McpInputRequestType;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -37,20 +38,27 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpMayRequestInput {
 	/**
-	 * The client request method.
+	 * The core client-input request type.
 	 *
-	 * @return client request method
+	 * <p>The selected type determines the JSON-RPC method and base client
+	 * capability.
+	 *
+	 * @return client-input request type
 	 */
 	@NonNull
-	String method();
+	McpInputRequestType type();
 
 	/**
-	 * Every client capability required by the request.
+	 * Optional sampling capabilities required by the request.
 	 *
-	 * @return required client capabilities
+	 * <p>Only {@link McpClientCapability#SAMPLING_CONTEXT} and
+	 * {@link McpClientCapability#SAMPLING_TOOLS} are permitted, and only when
+	 * {@link #type()} is {@link McpInputRequestType#SAMPLING}.
+	 *
+	 * @return optional sampling capabilities
 	 */
 	@NonNull
-	McpClientCapability @NonNull [] capabilities();
+	McpClientCapability @NonNull [] samplingCapabilities() default {};
 
 	/**
 	 * When the declared capabilities are required.

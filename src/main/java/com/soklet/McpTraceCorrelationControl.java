@@ -42,8 +42,8 @@ public interface McpTraceCorrelationControl {
 
 	/** @return active configuration fingerprint, or empty when disabled */
 	@NonNull
-	Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
-			getConfigurationFingerprint();
+	Optional<@NonNull McpTraceCorrelationFingerprint>
+			getFingerprint();
 
 	/**
 	 * Atomically rotates both active key ID and material.

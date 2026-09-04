@@ -16,12 +16,11 @@
 
 package com.soklet.internal.mcp.generated;
 
-import com.soklet.InstanceProvider;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpInvocationFeatures;
 import com.soklet.McpJsonObject;
-import com.soklet.McpLocalSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpOperationResult;
 import com.soklet.McpRequestContext;
 import com.soklet.McpSubscriptionConfig;
@@ -53,7 +52,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -110,6 +109,12 @@ public class McpGeneratedEndpointProviderLoaderTests {
 	@NonNull
 	private static final String NULL_DIGESTS_PROVIDER =
 			FIXTURES_CLASS_NAME + "$NullDigestsProvider";
+	@NonNull
+	private static final String STALE_V3_PROVIDER =
+			FIXTURES_CLASS_NAME + "$StaleV3Provider";
+	@NonNull
+	private static final String LEGACY_INSTANCE_PROVIDER_PROVIDER =
+			FIXTURES_CLASS_NAME + "$LegacyInstanceProviderProvider";
 
 	@TempDir
 	private static Path temporaryDirectory;
@@ -152,22 +157,18 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				+ "\n";
 		try (IndexedClassLoader classLoader = newClassLoader(firstIndex,
 				secondIndex)) {
-			CountingInstanceProvider instanceProvider =
-					new CountingInstanceProvider();
 			ClassLoader previous = Thread.currentThread().getContextClassLoader();
 			try {
 				Thread.currentThread().setContextClassLoader(classLoader);
 				McpEndpointRegistry registry = McpEndpointRegistry
-						.fromClasspathIntrospection(instanceProvider);
+						.fromClasspathIntrospection();
 				assertEquals(List.of("/a", "/b"), endpointPaths(registry));
-				assertEquals(0, instanceProvider.invocationCount());
 				registry.getEndpoints().forEach(endpoint -> {
 					endpoint.getTools().forEach(tool -> {
 						tool.getInputSchema().getDocument();
 						tool.getOutputSchema().orElseThrow().getDocument();
 					});
 				});
-				assertEquals(0, instanceProvider.invocationCount());
 			} finally {
 				Thread.currentThread().setContextClassLoader(previous);
 			}
@@ -182,30 +183,25 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			Class<?> endpointB = Class.forName(ENDPOINT_B, false, classLoader);
 			Class<?> samePathImpostor = Class.forName(UNINDEXED_ENDPOINT, false,
 					classLoader);
-			CountingInstanceProvider instanceProvider =
-					new CountingInstanceProvider();
-
 			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
-					instanceProvider, endpointB, endpointA);
+					endpointB, endpointA);
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 					.withEventPublisher(
-							McpLocalSubscriptionEventPublisher.fromDefaults())
-					.notificationType(
-							McpSubscriptionNotificationType.RESOURCE_UPDATED)
+							McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
+									McpSubscriptionNotificationType.RESOURCE_UPDATED))
 					.build();
-			McpEndpointRegistry overlaid = registry.withSubscriptions(endpointB,
+			McpEndpointRegistry overlaid = registry.withSubscriptionConfig(endpointB,
 					subscriptions);
 
 			assertEquals(List.of("/b", "/a"), endpointPaths(registry));
-			assertTrue(registry.getEndpoints().get(0).getSubscriptions().isEmpty());
+			assertTrue(registry.getEndpoints().get(0).getSubscriptionConfig().isEmpty());
 			assertSame(subscriptions, overlaid.getEndpoints().get(0)
-					.getSubscriptions().orElseThrow());
+					.getSubscriptionConfig().orElseThrow());
 			assertSame(registry.getEndpoints().get(1),
 					overlaid.getEndpoints().get(1));
 			assertThrows(IllegalArgumentException.class,
-					() -> registry.withSubscriptions(samePathImpostor,
+					() -> registry.withSubscriptionConfig(samePathImpostor,
 							subscriptions));
-			assertEquals(0, instanceProvider.invocationCount());
 		}
 	}
 
@@ -217,23 +213,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			Class<?> endpointA = Class.forName(ENDPOINT_A, false, classLoader);
 			Class<?> unindexed = Class.forName(UNINDEXED_ENDPOINT, false,
 					classLoader);
-			CountingInstanceProvider instanceProvider =
-					new CountingInstanceProvider();
-
 			IllegalArgumentException duplicate = assertThrows(
 					IllegalArgumentException.class,
-					() -> McpEndpointRegistry.fromClasses(instanceProvider,
-							endpointA, endpointA));
+					() -> McpEndpointRegistry.fromClasses(endpointA, endpointA));
 			assertTrue(duplicate.getMessage().contains(
 					"Duplicate annotated MCP endpoint class"));
 
 			IllegalArgumentException missing = assertThrows(
 					IllegalArgumentException.class,
-					() -> McpEndpointRegistry.fromClasses(instanceProvider,
-							unindexed));
+					() -> McpEndpointRegistry.fromClasses(unindexed));
 			assertTrue(missing.getMessage().contains(
 					"No generated MCP endpoint descriptor exists"));
-			assertEquals(0, instanceProvider.invocationCount());
 		}
 	}
 
@@ -247,12 +237,14 @@ public class McpGeneratedEndpointProviderLoaderTests {
 					() -> McpGeneratedEndpointProviderIndex.formatLine(ENDPOINT_A,
 							PROVIDER_A, FIXTURES_CLASS_NAME, path));
 
+		String currentIndexLine = indexLine(ENDPOINT_A, PROVIDER_A);
+		assertTrue(currentIndexLine.startsWith("4|"), currentIndexLine);
+		String staleVersionIndexLine = "3" + currentIndexLine.substring(1);
 		try (IndexedClassLoader malformed = newClassLoader(
-				"2|not-a-supported-row")) {
+				staleVersionIndexLine)) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(malformed,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(malformed));
 			assertTrue(exception.getMessage().contains(
 					"Malformed generated MCP endpoint-provider index"));
 		}
@@ -263,8 +255,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				conflictingIndex)) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(conflicting,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(conflicting));
 			assertTrue(exception.getMessage().contains(
 					"Conflicting generated MCP endpoint providers"));
 		}
@@ -276,7 +267,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
 					() -> McpGeneratedEndpointProviderLoader.loadAll(
-							reusedProvider, InstanceProvider.defaultInstance()));
+							reusedProvider));
 			assertTrue(exception.getMessage().contains(
 					"is assigned to multiple endpoint classes"));
 		}
@@ -289,8 +280,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
 					() -> McpGeneratedEndpointProviderLoader.loadAll(
-							conflictingOwner,
-							InstanceProvider.defaultInstance()));
+							conflictingOwner));
 			assertTrue(exception.getMessage().contains(
 					"Conflicting generated MCP endpoint providers"));
 		}
@@ -300,8 +290,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
 					() -> McpGeneratedEndpointProviderLoader.loadAll(
-							incorrectOwner,
-							InstanceProvider.defaultInstance()));
+							incorrectOwner));
 			assertTrue(exception.getMessage().contains(
 					"top-level owner does not match"));
 		}
@@ -346,7 +335,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
 					() -> McpGeneratedEndpointProviderLoader.loadAll(
-							oversized, InstanceProvider.defaultInstance()));
+							oversized));
 			assertTrue(exception.getMessage().contains(
 					"Malformed generated MCP endpoint-provider index"));
 		}
@@ -359,8 +348,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, BAD_CONTRACT_PROVIDER))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(incompatible,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(incompatible));
 			assertTrue(exception.getMessage().contains(
 					"has an incompatible provider contract"));
 		}
@@ -369,8 +357,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, "example.MissingProvider"))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(missing,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(missing));
 			assertTrue(exception.getMessage().contains(
 					"Unable to load generated MCP endpoint descriptor"));
 		}
@@ -380,8 +367,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
 					() -> McpGeneratedEndpointProviderLoader.loadAll(
-							noPublicConstructor,
-							InstanceProvider.defaultInstance()));
+							noPublicConstructor));
 			assertTrue(exception.getMessage().contains(
 					"Unable to load generated MCP endpoint descriptor"));
 			assertInstanceOf(NoSuchMethodException.class, exception.getCause());
@@ -391,8 +377,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, NON_FINAL_PROVIDER))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(nonFinal,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(nonFinal));
 			assertTrue(exception.getMessage().contains("must be public and final"));
 		}
 
@@ -400,10 +385,27 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, STATIC_METHOD_PROVIDER))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(staticMethods,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(staticMethods));
 			assertTrue(exception.getMessage().contains(
 					"has an incompatible provider contract"));
+		}
+	}
+
+	@Test
+	void staleGeneratedProviderAbisAreRejected() throws Exception {
+		for (String providerClassName : List.of(STALE_V3_PROVIDER,
+				LEGACY_INSTANCE_PROVIDER_PROVIDER)) {
+			try (IndexedClassLoader classLoader = newClassLoader(
+					indexLine(ENDPOINT_A, providerClassName))) {
+				IllegalStateException exception = assertThrows(
+						IllegalStateException.class,
+						() -> McpGeneratedEndpointProviderLoader.loadAll(
+								classLoader));
+				assertTrue(exception.getMessage().contains(
+						"Unable to load generated MCP endpoint descriptor"));
+				assertInstanceOf(NoSuchMethodException.class,
+						exception.getCause());
+			}
 		}
 	}
 
@@ -444,8 +446,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				PROVIDER_A, FIXTURES_CLASS_NAME, "/b"))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader));
 			assertTrue(exception.getMessage().contains(
 					"endpoint path does not match"));
 		}
@@ -468,8 +469,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, providerClassName))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader));
 			assertTrue(exception.getMessage().contains(expectedMessage),
 					exception.getMessage());
 		}
@@ -481,8 +481,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				indexLine(ENDPOINT_A, BAD_DIGEST_PROVIDER))) {
 			IllegalStateException exception = assertThrows(
 					IllegalStateException.class,
-					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader,
-							InstanceProvider.defaultInstance()));
+					() -> McpGeneratedEndpointProviderLoader.loadAll(classLoader));
 			assertTrue(exception.getMessage().contains(
 					"schema does not match its runtime types"));
 		}
@@ -490,20 +489,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 	@Test
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	void instanceProviderIsCalledExactlyOncePerHandlerInvocation()
+	void generatedHandlerUsesDefaultInstancesForAnUnmanagedRequestContext()
 			throws Exception {
 		try (IndexedClassLoader classLoader = newClassLoader(
 				indexLine(ENDPOINT_A, PROVIDER_A))) {
-			CountingInstanceProvider instanceProvider =
-					new CountingInstanceProvider();
 			ClassLoader previous = Thread.currentThread().getContextClassLoader();
 			try {
 				Thread.currentThread().setContextClassLoader(classLoader);
 				McpEndpointRegistry registry = McpEndpointRegistry
-						.fromClasspathIntrospection(instanceProvider);
+						.fromClasspathIntrospection();
 				McpToolRegistration<?> tool = registry.getEndpoints().get(0)
 						.getTools().get(0);
-				assertEquals(0, instanceProvider.invocationCount());
 
 				Class<?> argumentsClass = Class.forName(
 						ENDPOINT_A + "$Arguments", true, classLoader);
@@ -528,10 +524,8 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 				McpOperationResult first = handler.handle(request, arguments, features);
 				assertInstanceOf(McpCompleteResult.class, first);
-				assertEquals(1, instanceProvider.invocationCount());
 				McpOperationResult second = handler.handle(request, arguments, features);
 				assertInstanceOf(McpCompleteResult.class, second);
-				assertEquals(2, instanceProvider.invocationCount());
 			} finally {
 				Thread.currentThread().setContextClassLoader(previous);
 			}
@@ -620,8 +614,10 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				import com.soklet.InstanceProvider;
 				import com.soklet.McpEndpoint;
 				import com.soklet.McpImplementation;
+				import com.soklet.McpRequestContext;
 				import com.soklet.McpToolRegistration;
 				import com.soklet.annotation.McpServerEndpoint;
+				import java.util.function.Function;
 
 				public final class Fixtures {
 				  private static final String SCHEMA_DIGEST =
@@ -662,17 +658,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class ProviderA {
 				    public ProviderA() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
 				      McpToolRegistration<EndpointA.Arguments> tool =
 				          McpToolRegistration.withName("tool-a")
-				              .types(EndpointA.Arguments.class, EndpointA.Result.class)
-				              .handler((request, arguments, features) -> instanceProvider
-				                  .provide(EndpointA.class).invoke(arguments.getConvertedArguments()))
+				              .argumentAndOutputTypes(EndpointA.Arguments.class, EndpointA.Result.class)
+				              .handler((request, arguments, features) -> instanceResolver
+				                  .apply(request).invoke(arguments.getConvertedArguments()))
 				              .build();
-				      return McpEndpoint.withPath("/a")
-				          .serverInformation(McpImplementation
+				      return McpEndpoint.withPath("/a", McpImplementation
 				              .withNameAndVersion("endpoint-a", "1").build())
-				          .tool(tool)
+				          .addTool(tool)
 				          .build();
 				    }
 				    public String[] schemaDigests() {
@@ -683,17 +679,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class ProviderB {
 				    public ProviderB() {}
 				    public Class<?> endpointClass() { return EndpointB.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointB> instanceResolver) {
 				      McpToolRegistration<EndpointB.Arguments> tool =
 				          McpToolRegistration.withName("tool-b")
-				              .types(EndpointB.Arguments.class, EndpointB.Result.class)
-				              .handler((request, arguments, features) -> instanceProvider
-				                  .provide(EndpointB.class).invoke(arguments.getConvertedArguments()))
+				              .argumentAndOutputTypes(EndpointB.Arguments.class, EndpointB.Result.class)
+				              .handler((request, arguments, features) -> instanceResolver
+				                  .apply(request).invoke(arguments.getConvertedArguments()))
 				              .build();
-				      return McpEndpoint.withPath("/b")
-				          .serverInformation(McpImplementation
+				      return McpEndpoint.withPath("/b", McpImplementation
 				              .withNameAndVersion("endpoint-b", "1").build())
-				          .tool(tool)
+				          .addTool(tool)
 				          .build();
 				    }
 				    public String[] schemaDigests() {
@@ -704,8 +700,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class BadContractProvider {
 				    public BadContractProvider() {}
 				    public String endpointClass() { return EndpointA.class.getName(); }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public String[] schemaDigests() {
 				      return new ProviderA().schemaDigests();
@@ -715,8 +712,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class BadDigestProvider {
 				    public BadDigestProvider() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public String[] schemaDigests() {
 				      return new String[] { "tool-a", "wrong", "wrong" };
@@ -726,12 +724,12 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class DuplicatePathProvider {
 				    public DuplicatePathProvider() {}
 				    public Class<?> endpointClass() { return EndpointB.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      McpEndpoint original = new ProviderB().endpoint(instanceProvider);
-				      return McpEndpoint.withPath("/a")
-				          .serverInformation(McpImplementation
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointB> instanceResolver) {
+				      McpEndpoint original = new ProviderB().endpoint(instanceResolver);
+				      return McpEndpoint.withPath("/a", McpImplementation
 				              .withNameAndVersion("endpoint-b", "1").build())
-				          .tool(original.getTools().get(0))
+				          .addTool(original.getTools().get(0))
 				          .build();
 				    }
 				    public String[] schemaDigests() {
@@ -742,8 +740,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static class NonFinalProvider {
 				    public NonFinalProvider() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public String[] schemaDigests() {
 				      return new ProviderA().schemaDigests();
@@ -753,8 +752,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class StaticMethodProvider {
 				    public StaticMethodProvider() {}
 				    public static Class<?> endpointClass() { return EndpointA.class; }
-				    public static McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public static McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public static String[] schemaDigests() {
 				      return new ProviderA().schemaDigests();
@@ -764,8 +764,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class NullEndpointClassProvider {
 				    public NullEndpointClassProvider() {}
 				    public Class<?> endpointClass() { return null; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public String[] schemaDigests() {
 				      return new ProviderA().schemaDigests();
@@ -775,7 +776,8 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class NullEndpointProvider {
 				    public NullEndpointProvider() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
 				      return null;
 				    }
 				    public String[] schemaDigests() {
@@ -786,8 +788,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class NullDigestsProvider {
 				    public NullDigestsProvider() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
-				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
 				    }
 				    public String[] schemaDigests() { return null; }
 				  }
@@ -795,8 +798,32 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  public static final class NoPublicConstructorProvider {
 				    private NoPublicConstructorProvider() {}
 				    public Class<?> endpointClass() { return EndpointA.class; }
+				    public McpEndpoint endpoint(
+				        Function<McpRequestContext, EndpointA> instanceResolver) {
+				      return new ProviderA().endpoint(instanceResolver);
+				    }
+				    public String[] schemaDigests() {
+				      return new ProviderA().schemaDigests();
+				    }
+				  }
+
+				  public static final class StaleV3Provider {
+				    public StaleV3Provider() {}
+				    public Class<?> endpointClass() { return EndpointA.class; }
+				    public McpEndpoint endpoint() {
+				      return new ProviderA().endpoint(request -> new EndpointA());
+				    }
+				    public String[] schemaDigests() {
+				      return new ProviderA().schemaDigests();
+				    }
+				  }
+
+				  public static final class LegacyInstanceProviderProvider {
+				    public LegacyInstanceProviderProvider() {}
+				    public Class<?> endpointClass() { return EndpointA.class; }
 				    public McpEndpoint endpoint(InstanceProvider instanceProvider) {
-				      return new ProviderA().endpoint(instanceProvider);
+				      return new ProviderA().endpoint(request ->
+				          instanceProvider.provide(EndpointA.class));
 				    }
 				    public String[] schemaDigests() {
 				      return new ProviderA().schemaDigests();
@@ -804,29 +831,6 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				  }
 				}
 				""";
-	}
-
-	@ThreadSafe
-	private static final class CountingInstanceProvider
-			implements InstanceProvider {
-		@NonNull
-		private final AtomicInteger invocationCount = new AtomicInteger();
-
-		@Override
-		@NonNull
-		public <T> T provide(@NonNull Class<T> instanceClass) {
-			this.invocationCount.incrementAndGet();
-			try {
-				return instanceClass.cast(
-						instanceClass.getConstructor().newInstance());
-			} catch (ReflectiveOperationException exception) {
-				throw new IllegalStateException(exception);
-			}
-		}
-
-		int invocationCount() {
-			return this.invocationCount.get();
-		}
 	}
 
 	private static final class IndexedClassLoader extends URLClassLoader {

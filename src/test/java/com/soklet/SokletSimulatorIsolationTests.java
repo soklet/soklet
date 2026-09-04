@@ -444,13 +444,13 @@ public class SokletSimulatorIsolationTests {
 		AtomicInteger overridingAdmissions = new AtomicInteger();
 		AtomicInteger authoritativeCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> authoritativeTool = McpToolRegistration
-				.withName("authoritative").jsonArguments()
+				.withName("authoritative").jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					authoritativeCalls.incrementAndGet();
 					return McpCompleteResult.fromToolText("authoritative");
 				}).build();
 		McpToolRegistration<McpJsonObject> overridingTool = McpToolRegistration
-				.withName("overriding").jsonArguments()
+				.withName("overriding").jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("overriding"))
 				.build();
@@ -956,13 +956,10 @@ public class SokletSimulatorIsolationTests {
 		CountDownLatch executorTaskEntered = new CountDownLatch(1);
 		CountDownLatch releaseExecutorTask = new CountDownLatch(1);
 		AtomicReference<ExecutorService> handlerExecutor = new AtomicReference<>();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"rejected-session-proof-test", "4.0.0").build())
 				.build();
-		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> {
 					ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -1155,7 +1152,7 @@ public class SokletSimulatorIsolationTests {
 		AtomicReference<McpServer> escapedServer = new AtomicReference<>();
 		AtomicInteger handlerCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("complete").jsonArguments()
+				.withName("complete").jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromToolText("scope complete");
@@ -1202,7 +1199,7 @@ public class SokletSimulatorIsolationTests {
 	@Test
 	public void rejectsMultipleMcpBuildsAndEscapedBuilder() throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("complete").jsonArguments()
+				.withName("complete").jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))
 				.build();
@@ -1531,10 +1528,9 @@ public class SokletSimulatorIsolationTests {
 	@NonNull
 	private static McpEndpointRegistry mcpEndpointRegistry(
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"isolated-simulator-test", "4.0.0").build())
-				.tools(tools)
+				.addTools(tools)
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}
@@ -1552,15 +1548,14 @@ public class SokletSimulatorIsolationTests {
 	@NonNull
 	private static McpEndpoint subscriptionEndpoint(@NonNull String path,
 			@NonNull McpSubscriptionEventPublisher publisher) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"isolated-simulator-subscription-test",
 						"4.0.0").build())
 				.resourceListHandler((request, resourceList, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 	}

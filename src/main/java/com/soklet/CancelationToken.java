@@ -27,11 +27,12 @@ import java.util.Optional;
  * <p>
  * Producers and handlers should check this token between expensive or blocking
  * operations and stop work when it becomes canceled. Soklet exposes it through
- * streaming response contexts and as an always-present
- * {@link McpInvocationFeatures MCP invocation feature}. Soklet cancels the
- * token when the associated response can no longer continue, such as when the
- * client disconnects, the server shuts down, the request HTTP version cannot
- * support streaming, or a response deadline or streaming timeout is reached.
+ * streaming response contexts and through
+ * {@link McpInvocationFeatures#getCancelationToken()} for selected MCP
+ * application handlers. Soklet cancels the token when the associated response
+ * can no longer continue, such as when the client disconnects, the server shuts
+ * down, the request HTTP version cannot support streaming, or a response
+ * deadline or streaming timeout is reached.
  *
  * <p>Normal completion does not mark the token canceled. MCP invocation
  * tokens release registered callbacks when the invocation completes normally,

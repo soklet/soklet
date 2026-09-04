@@ -50,7 +50,7 @@ public final class McpResourceDescriptor {
 	@Nullable
 	private final McpContentAnnotations annotations;
 	@Nullable
-	private final Long size;
+	private final Long sizeInBytes;
 	@NonNull
 	private final McpJsonObject metadata;
 
@@ -77,7 +77,7 @@ public final class McpResourceDescriptor {
 		this.mimeType = builder.mimeType;
 		this.icons = List.copyOf(builder.icons);
 		this.annotations = builder.annotations;
-		this.size = builder.size;
+		this.sizeInBytes = builder.sizeInBytes;
 		this.metadata = builder.metadata;
 	}
 
@@ -125,8 +125,8 @@ public final class McpResourceDescriptor {
 
 	/** @return resource size in bytes, if configured */
 	@NonNull
-	public Optional<@NonNull Long> getSize() {
-		return Optional.ofNullable(this.size);
+	public Optional<@NonNull Long> getSizeInBytes() {
+		return Optional.ofNullable(this.sizeInBytes);
 	}
 
 	/** @return immutable protocol extension metadata */
@@ -180,7 +180,7 @@ public final class McpResourceDescriptor {
 		@Nullable
 		private McpContentAnnotations annotations;
 		@Nullable
-		private Long size;
+		private Long sizeInBytes;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
@@ -218,10 +218,14 @@ public final class McpResourceDescriptor {
 			return this;
 		}
 
-		/** @param icon icon descriptor to append
-		 * @return this builder */
+		/**
+		 * Appends one icon descriptor.
+		 *
+		 * @param icon icon descriptor
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder icon(@NonNull McpIcon icon) {
+		public Builder addIcon(@NonNull McpIcon icon) {
 			this.icons.add(requireNonNull(icon));
 			return this;
 		}
@@ -237,18 +241,18 @@ public final class McpResourceDescriptor {
 		/**
 		 * Sets the resource size in bytes.
 		 *
-		 * @param size nonnegative byte count
+		 * @param sizeInBytes nonnegative byte count
 		 * @return this builder
-		 * @throws NullPointerException if {@code size} is null
-		 * @throws IllegalArgumentException if {@code size} is negative
+		 * @throws NullPointerException if {@code sizeInBytes} is null
+		 * @throws IllegalArgumentException if {@code sizeInBytes} is negative
 		 */
 		@NonNull
-		public Builder size(@NonNull Long size) {
-			requireNonNull(size);
-			if (size < 0)
+		public Builder sizeInBytes(@NonNull Long sizeInBytes) {
+			requireNonNull(sizeInBytes);
+			if (sizeInBytes < 0)
 				throw new IllegalArgumentException(
 						"MCP resource sizes must not be negative.");
-			this.size = size;
+			this.sizeInBytes = sizeInBytes;
 			return this;
 		}
 

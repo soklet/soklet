@@ -447,7 +447,7 @@ public final class McpServerRuntimeBridge {
 					requestStateProtectionPlan,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration) {
 		this(host, port, endpointPlans, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
@@ -460,7 +460,7 @@ public final class McpServerRuntimeBridge {
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				requestObservationAdapter, requestStateProtectionPlan,
 				streamQueueCapacity, writeTimeout, keepAliveInterval,
-				shutdownTimeout, maximumSubscriptionsPerPrincipal,
+				shutdownTimeout, maximumSubscriptionsPerPartition,
 				maximumSubscriptionDuration,
 				McpApplicationExecutionObserver.disabledInstance());
 	}
@@ -492,7 +492,7 @@ public final class McpServerRuntimeBridge {
 					requestStateProtectionPlan,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpApplicationExecutionObserver applicationExecutionObserver) {
 		this(host, port, endpointPlans, allowedHosts, requireOrigin,
@@ -506,7 +506,7 @@ public final class McpServerRuntimeBridge {
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				requestObservationAdapter, requestStateProtectionPlan,
 				streamQueueCapacity, writeTimeout, keepAliveInterval,
-				shutdownTimeout, maximumSubscriptionsPerPrincipal,
+				shutdownTimeout, maximumSubscriptionsPerPartition,
 				maximumSubscriptionDuration, applicationExecutionObserver,
 				LifecycleAdapter.disabledInstance());
 	}
@@ -538,7 +538,7 @@ public final class McpServerRuntimeBridge {
 					requestStateProtectionPlan,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
 			@NonNull LifecycleAdapter lifecycleAdapter) {
@@ -555,7 +555,7 @@ public final class McpServerRuntimeBridge {
 				streamQueueCapacity, writeTimeout, keepAliveInterval,
 				McpSubscriptionRuntimeConfiguration.productionDefaults()
 						.shutdownTimeout(),
-				maximumSubscriptionsPerPrincipal, maximumSubscriptionDuration,
+				maximumSubscriptionsPerPartition, maximumSubscriptionDuration,
 				applicationExecutionObserver, lifecycleAdapter);
 	}
 
@@ -587,7 +587,7 @@ public final class McpServerRuntimeBridge {
 					requestStateProtectionPlan,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
 			@NonNull LifecycleAdapter lifecycleAdapter) {
@@ -604,7 +604,7 @@ public final class McpServerRuntimeBridge {
 				requireNonNull(requestStateProtectionPlan),
 				new McpSubscriptionRuntimeConfiguration(streamQueueCapacity,
 						writeTimeout, keepAliveInterval, shutdownTimeout,
-						maximumSubscriptionsPerPrincipal,
+						maximumSubscriptionsPerPartition,
 						maximumSubscriptionDuration),
 				requireNonNull(applicationExecutionObserver),
 				requireNonNull(lifecycleAdapter));
@@ -889,11 +889,11 @@ public final class McpServerRuntimeBridge {
 				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
 		McpNormalizedEndpoint.Builder endpointBuilder =
 				McpNormalizedEndpoint.withServerInformation(implementation)
-						.includeServerInformation(
+						.serverInformationIncluded(
 								publicEndpoint.isServerInformationIncluded());
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
 		Optional<McpSubscriptionEventSource> subscriptionEventSource =
-				publicEndpoint.getSubscriptions().map(configuration -> {
+				publicEndpoint.getSubscriptionConfig().map(configuration -> {
 					Set<McpResourceNotificationType> notificationTypes =
 							EnumSet.noneOf(McpResourceNotificationType.class);
 					for (McpSubscriptionNotificationType notificationType
@@ -905,7 +905,7 @@ public final class McpServerRuntimeBridge {
 									McpResourceNotificationType.RESOURCE_UPDATED;
 						});
 					}
-					endpointBuilder.subscriptions(
+					endpointBuilder.subscriptionConfig(
 							new McpNormalizedSubscriptionConfiguration(
 									notificationTypes));
 					return toInternal(configuration);
@@ -1577,7 +1577,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull McpJsonObject> outputSchemaDocument,
 			@NonNull McpJsonObject descriptorFields,
 			@NonNull McpJsonObject metadata,
-			boolean mirrorStructuredContentAsText,
+			boolean structuredContentMirroredAsText,
 			@NonNull RateLimitAdapter toolRateLimitAdapter,
 			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
 					inputRequestDeclarations,
@@ -1592,12 +1592,12 @@ public final class McpServerRuntimeBridge {
 				@NonNull Optional<@NonNull McpJsonObject> outputSchemaDocument,
 				@NonNull McpJsonObject descriptorFields,
 				@NonNull McpJsonObject metadata,
-				boolean mirrorStructuredContentAsText,
+				boolean structuredContentMirroredAsText,
 				@NonNull RateLimitAdapter toolRateLimitAdapter,
 				@NonNull ToolInvoker invoker) {
 			this(name, inputSchemaDocument, mirroredHeaderPlan,
 					outputSchemaDocument, descriptorFields, metadata,
-					mirrorStructuredContentAsText, toolRateLimitAdapter,
+					structuredContentMirroredAsText, toolRateLimitAdapter,
 					List.of(), McpRequestStateMode.NONE, invoker);
 		}
 
@@ -1624,8 +1624,8 @@ public final class McpServerRuntimeBridge {
 			return "ToolPlan[outputSchemaPresent=" + outputSchemaDocument.isPresent()
 					+ ", descriptorFieldCount=" + descriptorFields.getMembers().size()
 					+ ", metadataFieldCount=" + metadata.getMembers().size()
-					+ ", mirrorStructuredContentAsText="
-					+ mirrorStructuredContentAsText + "]";
+					+ ", structuredContentMirroredAsText="
+					+ structuredContentMirroredAsText + "]";
 		}
 	}
 
@@ -2811,19 +2811,19 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record RequestStateProtectionPlan(
-			int maximumEncodedRequestStateBytes,
-			int maximumDecodedRequestStateBytes,
+			int maximumEncodedRequestStateSizeInBytes,
+			int maximumDecodedRequestStateSizeInBytes,
 			@NonNull Duration maximumRequestStateLifetime,
 			int maximumRequestStateRounds,
 			@NonNull RequestStateProtectionAdapter adapter) {
 		/** Validates the protection limits and adapter. */
 		public RequestStateProtectionPlan {
-			if (maximumEncodedRequestStateBytes < 1)
+			if (maximumEncodedRequestStateSizeInBytes < 1)
 				throw new IllegalArgumentException(
 						"Maximum encoded request-state bytes must be positive.");
-			if (maximumDecodedRequestStateBytes < 1
-					|| maximumDecodedRequestStateBytes
-					> maximumEncodedRequestStateBytes)
+			if (maximumDecodedRequestStateSizeInBytes < 1
+					|| maximumDecodedRequestStateSizeInBytes
+					> maximumEncodedRequestStateSizeInBytes)
 				throw new IllegalArgumentException(
 						"Maximum decoded request-state bytes must be positive and no greater than the encoded limit.");
 			requireNonNull(maximumRequestStateLifetime);
@@ -3241,7 +3241,7 @@ public final class McpServerRuntimeBridge {
 		if (result instanceof ToolInvocationResult.Complete complete) {
 			resultFields = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.resultFields());
-			if (toolPlan.mirrorStructuredContentAsText())
+			if (toolPlan.structuredContentMirroredAsText())
 				resultFields = withStructuredContentTextMirror(resultFields);
 			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.metadata());
@@ -3250,7 +3250,7 @@ public final class McpServerRuntimeBridge {
 					toInternal(structured.structuredContent());
 			List<com.soklet.internal.mcp.protocol.McpJsonValue> content =
 					new ArrayList<>();
-			if (toolPlan.mirrorStructuredContentAsText()) {
+			if (toolPlan.structuredContentMirroredAsText()) {
 				Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> textBlock =
 						new LinkedHashMap<>();
 				textBlock.put("type",
@@ -3618,7 +3618,7 @@ public final class McpServerRuntimeBridge {
 				new LinkedHashSet<>();
 		for (McpClientCapability capability : declaration.getCapabilities())
 			capabilities.add(toInternal(capability));
-		return new McpInputRequestDeclaration(declaration.getMethod(), capabilities,
+		return new McpInputRequestDeclaration(declaration.getJsonRpcMethod(), capabilities,
 				toInternal(declaration.getRequirement()));
 	}
 
@@ -3719,7 +3719,7 @@ public final class McpServerRuntimeBridge {
 					McpStreamTerminationReason.DEADLINE_EXCEEDED;
 			case WRITE_FAILED -> McpStreamTerminationReason.WRITE_FAILED;
 			case BACKPRESSURE -> McpStreamTerminationReason.BACKPRESSURE;
-			case SERVER_STOPPING -> McpStreamTerminationReason.SERVER_STOPPED;
+			case SERVER_STOPPING -> McpStreamTerminationReason.SERVER_STOPPING;
 			case PROTOCOL_UNSUPPORTED, PRODUCER_FAILED, INTERNAL_ERROR,
 					SIMULATOR_LIMIT_EXCEEDED, UNKNOWN ->
 					McpStreamTerminationReason.INTERNAL_ERROR;

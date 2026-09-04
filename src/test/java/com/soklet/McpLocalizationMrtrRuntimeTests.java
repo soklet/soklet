@@ -159,12 +159,10 @@ class McpLocalizationMrtrRuntimeTests {
 
 	private static McpLocalizer localizer(List<Optional<Locale>> observed,
 			LocaleChoice choice) {
-		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observed.add(request.getContinuationLocale());
 					Locale locale = choice.select(request.getContinuationLocale());
-					return McpLocalizationContext.withLocale(locale)
-							.localizer(text ->
+					return McpLocalizationContext.withLocale(locale, text ->
 									McpLocalizationResult.useDefaultText())
 							.build();
 				})
@@ -176,13 +174,12 @@ class McpLocalizationMrtrRuntimeTests {
 				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 
 					if (request.getFrameworkRequestState().isEmpty())
-						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(McpJsonObject.builder()
@@ -195,13 +192,12 @@ class McpLocalizationMrtrRuntimeTests {
 							.orElse("none");
 					return McpCompleteResult.fromToolText("locale:" + tag);
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-mrtr", "1.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
@@ -212,8 +208,8 @@ class McpLocalizationMrtrRuntimeTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
-				.protectionConfig(McpProtectionConfig.withKeyRing(
-						McpProtectionKeyRing.withActiveKey(
+				.protectionConfig(McpProtectionConfig.withKeyring(
+						McpProtectionKeyring.withActiveKey(
 								McpProtectionKey.fromIdAndBytes("mrtr-key",
 										KEY_MATERIAL.getBytes(
 												StandardCharsets.US_ASCII)))

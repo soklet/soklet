@@ -40,15 +40,36 @@ public final class McpRequestStateProtectionContext {
 	@NonNull
 	private final String protocolVersion;
 	@NonNull
-	private final String method;
+	private final String jsonRpcMethod;
 	private final byte @NonNull [] associatedData;
 
+	/**
+	 * Creates a protection context from its components. This factory is useful
+	 * for exercising application-provided request-state protectors in isolation;
+	 * Soklet constructs the authoritative contexts used for live requests.
+	 *
+	 * @param endpointPath normalized endpoint path
+	 * @param protocolVersion validated MCP protocol version
+	 * @param jsonRpcMethod MCP JSON-RPC method
+	 * @param associatedData canonical associated data, defensively copied
+	 * @return immutable request-state protection context
+	 * @throws NullPointerException if any argument is null
+	 */
+	@NonNull
+	public static McpRequestStateProtectionContext fromComponents(
+			@NonNull String endpointPath, @NonNull String protocolVersion,
+			@NonNull String jsonRpcMethod,
+			byte @NonNull [] associatedData) {
+		return new McpRequestStateProtectionContext(endpointPath, protocolVersion,
+				jsonRpcMethod, associatedData);
+	}
+
 	McpRequestStateProtectionContext(@NonNull String endpointPath,
-			@NonNull String protocolVersion, @NonNull String method,
+			@NonNull String protocolVersion, @NonNull String jsonRpcMethod,
 			byte @NonNull [] associatedData) {
 		this.endpointPath = requireNonNull(endpointPath);
 		this.protocolVersion = requireNonNull(protocolVersion);
-		this.method = requireNonNull(method);
+		this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
 		this.associatedData = requireNonNull(associatedData).clone();
 	}
 
@@ -66,8 +87,8 @@ public final class McpRequestStateProtectionContext {
 
 	/** @return MCP JSON-RPC method */
 	@NonNull
-	public String getMethod() {
-		return this.method;
+	public String getJsonRpcMethod() {
+		return this.jsonRpcMethod;
 	}
 
 	/** @return defensive copy of the canonical associated data */

@@ -97,7 +97,7 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 			BigInteger.valueOf(Long.MAX_VALUE);
 	@NonNull
 	private final McpTokenBucketConfig configuration;
-	private final long refillPeriodNanos;
+	private final long refillIntervalNanos;
 	@NonNull
 	private final BigInteger tokenUnit;
 	@NonNull
@@ -119,8 +119,8 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 	DefaultMcpRateLimiter(@NonNull McpTokenBucketConfig configuration,
 			@NonNull McpRateLimiterClock clock, int maximumRetainedPartitions) {
 		this.configuration = requireNonNull(configuration);
-		this.refillPeriodNanos = configuration.getRefillPeriod().toNanos();
-		this.tokenUnit = BigInteger.valueOf(this.refillPeriodNanos);
+		this.refillIntervalNanos = configuration.getRefillInterval().toNanos();
+		this.tokenUnit = BigInteger.valueOf(this.refillIntervalNanos);
 		this.capacityUnits = this.tokenUnit.multiply(
 				BigInteger.valueOf(configuration.getCapacity()));
 		this.refillTokens = BigInteger.valueOf(configuration.getRefillTokens());
@@ -196,7 +196,7 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 				minimumNanos = candidate;
 		}
 		if (minimumNanos == null)
-			return this.configuration.getRefillPeriod();
+			return this.configuration.getRefillInterval();
 		long boundedNanos = minimumNanos.min(LONG_MAXIMUM).longValueExact();
 		return Duration.ofNanos(Math.max(1L, boundedNanos));
 	}

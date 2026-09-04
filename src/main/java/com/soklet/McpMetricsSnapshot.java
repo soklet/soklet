@@ -53,7 +53,7 @@ public final class McpMetricsSnapshot {
 	private final Long handlerCapacityRejections;
 	@NonNull
 	private final Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
-			shutdowns;
+			serverStops;
 	@NonNull
 	private final Long connectionsAccepted;
 	@NonNull
@@ -102,7 +102,7 @@ public final class McpMetricsSnapshot {
 		this.activeHandlerExecutions = builder.activeHandlerExecutions;
 		this.handlerQueueDepth = builder.handlerQueueDepth;
 		this.handlerCapacityRejections = builder.handlerCapacityRejections;
-		this.shutdowns = copyShutdowns(builder.shutdowns);
+		this.serverStops = copyServerStops(builder.serverStops);
 		this.connectionsAccepted = builder.connectionsAccepted;
 		this.connectionsRejected = builder.connectionsRejected;
 		this.transportFailures = copyTransportFailures(builder.transportFailures);
@@ -141,17 +141,17 @@ public final class McpMetricsSnapshot {
 
 	@NonNull
 	private static Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
-			copyShutdowns(@NonNull Map<@NonNull ShutdownComponentDisposition,
-					@NonNull Long> shutdowns) {
+			copyServerStops(@NonNull Map<@NonNull ShutdownComponentDisposition,
+					@NonNull Long> serverStops) {
 		EnumMap<ShutdownComponentDisposition, Long> copied =
 				new EnumMap<>(ShutdownComponentDisposition.class);
-		requireNonNull(shutdowns).forEach((outcome, count) -> {
-			requireNonNull(outcome);
+		requireNonNull(serverStops).forEach((disposition, count) -> {
+			requireNonNull(disposition);
 			requireNonNull(count);
 			if (count < 0L)
 				throw new IllegalArgumentException(
-						"MCP shutdown counts must not be negative.");
-			copied.put(outcome, count);
+						"MCP server-stop counts must not be negative.");
+			copied.put(disposition, count);
 		});
 		return Collections.unmodifiableMap(copied);
 	}
@@ -313,14 +313,15 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
-	 * Returns nonnegative shutdown counts grouped by fixed shutdown outcome.
+	 * Returns nonnegative server-stop counts grouped by fixed shutdown
+	 * disposition.
 	 *
-	 * @return immutable, enum-ordered shutdown counts
+	 * @return immutable, enum-ordered server-stop counts
 	 */
 	@NonNull
 	public Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
-			getShutdowns() {
-		return this.shutdowns;
+			getServerStops() {
+		return this.serverStops;
 	}
 
 	/**
@@ -865,7 +866,7 @@ public final class McpMetricsSnapshot {
 		private Long handlerCapacityRejections;
 		@NonNull
 		private Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
-				shutdowns;
+				serverStops;
 		@NonNull
 		private Long connectionsAccepted;
 		@NonNull
@@ -913,7 +914,7 @@ public final class McpMetricsSnapshot {
 			this.activeHandlerExecutions = 0L;
 			this.handlerQueueDepth = 0L;
 			this.handlerCapacityRejections = 0L;
-			this.shutdowns = Map.of();
+			this.serverStops = Map.of();
 			this.connectionsAccepted = 0L;
 			this.connectionsRejected = 0L;
 			this.transportFailures = Map.of();
@@ -982,17 +983,20 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets nonnegative shutdown counts grouped by fixed shutdown outcome.
+		 * Sets nonnegative server-stop counts grouped by fixed shutdown
+		 * disposition.
 		 *
-		 * @param shutdowns nonnegative shutdown counts
+		 * @param serverStops nonnegative server-stop counts, or {@code null} for
+		 *                    an empty map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
-		public Builder shutdowns(
-				@NonNull Map<@NonNull ShutdownComponentDisposition,
-						@NonNull Long> shutdowns) {
-			this.shutdowns = copyShutdowns(shutdowns);
+		public Builder serverStops(
+				@Nullable Map<@NonNull ShutdownComponentDisposition,
+						@NonNull Long> serverStops) {
+			this.serverStops = serverStops == null ? Map.of()
+					: copyServerStops(serverStops);
 			return this;
 		}
 
@@ -1029,15 +1033,17 @@ public final class McpMetricsSnapshot {
 		/**
 		 * Sets nonnegative MCP transport-failure counts grouped by fixed reason.
 		 *
-		 * @param transportFailures nonnegative MCP transport-failure counts
+		 * @param transportFailures nonnegative MCP transport-failure counts, or
+		 *                          {@code null} for an empty map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder transportFailures(
-				@NonNull Map<MetricsCollector.@NonNull TransportFailureReason,
+				@Nullable Map<MetricsCollector.@NonNull TransportFailureReason,
 						@NonNull Long> transportFailures) {
-			this.transportFailures = copyTransportFailures(transportFailures);
+			this.transportFailures = transportFailures == null ? Map.of()
+					: copyTransportFailures(transportFailures);
 			return this;
 		}
 
@@ -1103,14 +1109,15 @@ public final class McpMetricsSnapshot {
 		 * Sets nonnegative completed-request counts grouped by bounded endpoint,
 		 * method, and terminal outcome dimensions.
 		 *
-		 * @param requests completed-request counts
+		 * @param requests completed-request counts, or {@code null} for an empty
+		 *                 map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder requests(
-				@NonNull Map<@NonNull RequestOutcomeKey, @NonNull Long> requests) {
-			this.requests = copyRequests(requests);
+				@Nullable Map<@NonNull RequestOutcomeKey, @NonNull Long> requests) {
+			this.requests = requests == null ? Map.of() : copyRequests(requests);
 			return this;
 		}
 
@@ -1118,14 +1125,16 @@ public final class McpMetricsSnapshot {
 		 * Sets request-duration histograms grouped by bounded endpoint, method,
 		 * and terminal outcome dimensions.
 		 *
-		 * @param requestDurations request-duration histograms
+		 * @param requestDurations request-duration histograms, or {@code null} for
+		 *                         an empty map
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder requestDurations(
-				@NonNull Map<@NonNull RequestOutcomeKey,
+				@Nullable Map<@NonNull RequestOutcomeKey,
 						MetricsCollector.@NonNull HistogramSnapshot> requestDurations) {
-			this.requestDurations = copyRequestDurations(requestDurations);
+			this.requestDurations = requestDurations == null ? Map.of()
+					: copyRequestDurations(requestDurations);
 			return this;
 		}
 
@@ -1147,16 +1156,18 @@ public final class McpMetricsSnapshot {
 		 * Sets request-stream duration histograms grouped by bounded endpoint,
 		 * method, and fixed termination reason dimensions.
 		 *
-		 * @param requestStreamDurations request-stream duration histograms
+		 * @param requestStreamDurations request-stream duration histograms, or
+		 *                               {@code null} for an empty map
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder requestStreamDurations(
-				@NonNull Map<@NonNull RequestStreamTerminationKey,
+				@Nullable Map<@NonNull RequestStreamTerminationKey,
 						MetricsCollector.@NonNull HistogramSnapshot>
 						requestStreamDurations) {
-			this.requestStreamDurations =
-					copyRequestStreamDurations(requestStreamDurations);
+			this.requestStreamDurations = requestStreamDurations == null
+					? Map.of()
+					: copyRequestStreamDurations(requestStreamDurations);
 			return this;
 		}
 
@@ -1178,16 +1189,18 @@ public final class McpMetricsSnapshot {
 		 * Sets subscription-duration histograms grouped by bounded endpoint and
 		 * fixed termination reason dimensions.
 		 *
-		 * @param subscriptionDurations subscription-duration histograms
+		 * @param subscriptionDurations subscription-duration histograms, or
+		 *                              {@code null} for an empty map
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder subscriptionDurations(
-				@NonNull Map<@NonNull SubscriptionTerminationKey,
+				@Nullable Map<@NonNull SubscriptionTerminationKey,
 						MetricsCollector.@NonNull HistogramSnapshot>
 						subscriptionDurations) {
-			this.subscriptionDurations =
-					copySubscriptionDurations(subscriptionDurations);
+			this.subscriptionDurations = subscriptionDurations == null
+					? Map.of()
+					: copySubscriptionDurations(subscriptionDurations);
 			return this;
 		}
 
@@ -1195,17 +1208,19 @@ public final class McpMetricsSnapshot {
 		 * Sets nonnegative cooperative request-cancelation signals grouped by
 		 * bounded endpoint and method dimensions.
 		 *
-		 * @param cancelationsSignaled cancelation-signaled counts
+		 * @param cancelationsSignaled cancelation-signaled counts, or {@code null}
+		 *                             for an empty map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder cancelationsSignaled(
-				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+				@Nullable Map<@NonNull EndpointMethodKey, @NonNull Long>
 						cancelationsSignaled) {
-			this.cancelationsSignaled = copyEndpointMethodCounts(
-					cancelationsSignaled,
-					"MCP cancelation-signaled counts must not be negative.");
+			this.cancelationsSignaled = cancelationsSignaled == null
+					? Map.of()
+					: copyEndpointMethodCounts(cancelationsSignaled,
+							"MCP cancelation-signaled counts must not be negative.");
 			return this;
 		}
 
@@ -1213,16 +1228,18 @@ public final class McpMetricsSnapshot {
 		 * Sets nonnegative progress notifications accepted for delivery grouped by
 		 * bounded endpoint and method dimensions.
 		 *
-		 * @param progressEmitted progress-emitted counts
+		 * @param progressEmitted progress-emitted counts, or {@code null} for an
+		 *                        empty map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder progressEmitted(
-				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+				@Nullable Map<@NonNull EndpointMethodKey, @NonNull Long>
 						progressEmitted) {
-			this.progressEmitted = copyEndpointMethodCounts(progressEmitted,
-					"MCP progress-emitted counts must not be negative.");
+			this.progressEmitted = progressEmitted == null ? Map.of()
+					: copyEndpointMethodCounts(progressEmitted,
+							"MCP progress-emitted counts must not be negative.");
 			return this;
 		}
 
@@ -1244,14 +1261,16 @@ public final class McpMetricsSnapshot {
 		 * Sets nonnegative client-visible MCP protocol-error counts grouped by
 		 * error code.
 		 *
-		 * @param protocolErrors protocol-error counts
+		 * @param protocolErrors protocol-error counts, or {@code null} for an empty
+		 *                       map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder protocolErrors(
-				@NonNull Map<@NonNull Integer, @NonNull Long> protocolErrors) {
-			this.protocolErrors = copyProtocolErrorCounts(protocolErrors);
+				@Nullable Map<@NonNull Integer, @NonNull Long> protocolErrors) {
+			this.protocolErrors = protocolErrors == null ? Map.of()
+					: copyProtocolErrorCounts(protocolErrors);
 			return this;
 		}
 
@@ -1259,17 +1278,19 @@ public final class McpMetricsSnapshot {
 		 * Sets nonnegative unknown mirrored-header occurrences grouped by bounded
 		 * endpoint and method dimensions.
 		 *
-		 * @param unknownMirroredHeaders unknown mirrored-header counts
+		 * @param unknownMirroredHeaders unknown mirrored-header counts, or
+		 *                               {@code null} for an empty map
 		 * @return this builder
 		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder unknownMirroredHeaders(
-				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+				@Nullable Map<@NonNull EndpointMethodKey, @NonNull Long>
 						unknownMirroredHeaders) {
-			this.unknownMirroredHeaders = copyEndpointMethodCounts(
-					unknownMirroredHeaders,
-					"MCP unknown mirrored-header counts must not be negative.");
+			this.unknownMirroredHeaders = unknownMirroredHeaders == null
+					? Map.of()
+					: copyEndpointMethodCounts(unknownMirroredHeaders,
+							"MCP unknown mirrored-header counts must not be negative.");
 			return this;
 		}
 

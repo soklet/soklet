@@ -243,7 +243,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 					property == null ? "" : requireNonNull(property.title()),
 					property == null ? "" : requireNonNull(property.description()),
 					header == null ? Optional.empty()
-							: Optional.of(requireNonNull(header.value()))));
+							: Optional.of(requireNonNull(header.name()))));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(recordClass.getName(),
 				described, genericArgumentStructuralComplexity,

@@ -157,11 +157,10 @@ public class McpSimulatorPublicRuntimeTests {
 						return McpCompleteResult.fromToolText(
 								"default host accepted");
 					});
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-default-host-test",
 							"4.0.0").build())
-					.tool(tool)
+					.addTool(tool)
 					.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(),
@@ -263,7 +262,7 @@ public class McpSimulatorPublicRuntimeTests {
 		McpAdmissionRejection rejection = McpAdmissionRejection
 				.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(1_001,
 						"Simulator admission rejected"))
-				.header("WWW-Authenticate", "Bearer realm=soklet-mcp-simulator")
+				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp-simulator")
 				.build();
 		ServerFixture server = server(() -> List.of(tool("complete",
 				(request, arguments, features) ->
@@ -331,7 +330,7 @@ public class McpSimulatorPublicRuntimeTests {
 		RecordingMetrics metrics = new RecordingMetrics(0, 0, 2);
 		ServerFixture server = server(() -> List.of(McpToolRegistration
 				.withName("multi-round-trip")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
 					if (handlerCalls.incrementAndGet() == 1) {
@@ -341,8 +340,7 @@ public class McpSimulatorPublicRuntimeTests {
 								request.getApplicationRequestState().isEmpty());
 						Assertions.assertTrue(
 								request.getFrameworkRequestState().isEmpty());
-						return McpInputRequiredResult.builder()
-								.applicationRequestState(requestState)
+						return McpInputRequiredResult.withApplicationRequestState(requestState)
 								.build();
 					}
 					Assertions.assertEquals(McpRequestId.fromString("mrtr-continued"),
@@ -514,34 +512,31 @@ public class McpSimulatorPublicRuntimeTests {
 
 	@Test
 	public void subscriptionReplayPreservesAcknowledgmentEventAndCancelationOrder() {
-		McpLocalSubscriptionEventPublisher publisher =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		RecordingMetrics metrics = new RecordingMetrics(0, 1);
 		ServerFixture server = new ServerFixture(Duration.ofMillis(250),
 				() -> {
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-					.withEventPublisher(publisher)
-					.notificationTypes(EnumSet.of(
+					.withEventPublisher(publisher, EnumSet.of(
 							McpSubscriptionNotificationType
 									.RESOURCES_LIST_CHANGED))
 					.build();
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-subscription-test",
 							"4.0.0").build())
-					.resource(McpResourceRegistration.withUriAndName(
+					.addResource(McpResourceRegistration.withUriAndName(
 							URI.create("https://example.com/simulator-resource"),
 							"Simulator resource")
 							.handler((resourceRequest, read, features) ->
 									McpCompleteResult.fromResourceOutput(
-											McpResourceOutput.builder()
-													.content(McpTextResourceContents
+											McpResourceOutput.withContent(McpTextResourceContents
 															.withUriAndText(read.getUri(),
 																	"simulated")
 															.build())
 													.build()))
 							.build())
-					.subscriptions(subscriptions)
+					.subscriptionConfig(subscriptions)
 					.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(),
@@ -786,11 +781,10 @@ public class McpSimulatorPublicRuntimeTests {
 					fastHandlerEntered.countDown();
 					return McpCompleteResult.fromToolText("unrelated complete");
 				});
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-capture-isolation-test",
 						"4.0.0").build())
-				.tools(List.of(slow, fast))
+				.addTools(List.of(slow, fast))
 				.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(), mcpServerBuilder -> {
@@ -1206,7 +1200,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(
 			@NonNull String name, @NonNull McpToolHandler<McpJsonObject> handler) {
-		return McpToolRegistration.withName(name).jsonArguments()
+		return McpToolRegistration.withName(name).jsonObjectArguments()
 				.handler(handler).build();
 	}
 
@@ -1232,11 +1226,10 @@ public class McpSimulatorPublicRuntimeTests {
 		return new ServerFixture(shutdownTimeout, () -> {
 			List<McpToolRegistration<?>> tools = new ArrayList<>();
 			tools.addAll(toolsFactory.get());
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-public-runtime-test",
 							"4.0.0").build())
-					.tools(tools)
+					.addTools(tools)
 					.build();
 			return List.of(endpoint);
 		}, admissionController, McpSimulatorPublicRuntimeTests::configureBaseServer);
@@ -1419,7 +1412,7 @@ public class McpSimulatorPublicRuntimeTests {
 			@NonNull McpServerDiagnostics diagnostics) {
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}

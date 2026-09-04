@@ -39,9 +39,9 @@ import com.soklet.McpJsonObject;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
-import com.soklet.McpLocalSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpOfficialSchemaConformanceTool;
-import com.soklet.McpPromptArgumentDefinition;
+import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
@@ -49,7 +49,7 @@ import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtectionConfig;
 import com.soklet.McpProtectionKey;
-import com.soklet.McpProtectionKeyRing;
+import com.soklet.McpProtectionKeyring;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRateLimiter;
 import com.soklet.McpAdmissionController;
@@ -117,8 +117,14 @@ public final class McpConformanceFixture {
 			McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED);
 	private static final McpCachePolicy CACHE_POLICY =
 			McpCachePolicy.fromPublicTimeToLive(Duration.ofMinutes(5));
+	private static final LifecyclePolicy LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupCancelationTimeout(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(5))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build();
 	private static final McpProtectionConfig REQUEST_STATE_PROTECTION =
-			McpProtectionConfig.withKeyRing(McpProtectionKeyRing.withActiveKey(
+			McpProtectionConfig.withKeyring(McpProtectionKeyring.withActiveKey(
 					McpProtectionKey.fromIdAndBytes("conformance-v1",
 							"0123456789abcdef0123456789abcdef"
 									.getBytes(StandardCharsets.US_ASCII)))
@@ -235,11 +241,7 @@ public final class McpConformanceFixture {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
-				.lifecyclePolicy(LifecyclePolicy.builder()
-						.startupCancelationTimeout(Duration.ofSeconds(1))
-						.gracefulShutdownTimeout(Duration.ofSeconds(5))
-						.forcedShutdownTimeout(Duration.ofSeconds(1))
-						.build());
+				.lifecyclePolicy(LIFECYCLE_POLICY);
 		if (metricsCollector != null)
 			configured.metricsCollector(metricsCollector);
 		return configured.build();
@@ -248,16 +250,15 @@ public final class McpConformanceFixture {
 	private static SokletConfig configForScenario(String scenario,
 			CorsAuthorizer corsAuthorizer,
 			LifecycleObserver lifecycleObserver) {
+		McpEndpoint endpoint = endpointForScenario(scenario);
 		McpServer mcpServer = mcpServerForScenario(scenario, corsAuthorizer,
-				McpServer.withPort(0));
+				McpServer.withPort(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance()));
 		return SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
-				.lifecyclePolicy(LifecyclePolicy.builder()
-						.startupCancelationTimeout(Duration.ofSeconds(1))
-						.gracefulShutdownTimeout(Duration.ofSeconds(5))
-						.forcedShutdownTimeout(Duration.ofSeconds(1))
-						.build())
+				.lifecyclePolicy(LIFECYCLE_POLICY)
 				.build();
 	}
 
@@ -265,11 +266,8 @@ public final class McpConformanceFixture {
 			CorsAuthorizer corsAuthorizer,
 			McpServer.Builder mcpServerBuilder) {
 		requireSupportedScenario(scenario);
-		McpEndpoint endpoint = endpointForScenario(scenario);
 		return configureMcpServerForScenario(scenario, corsAuthorizer,
 				mcpServerBuilder)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.build();
 	}
 
@@ -296,33 +294,30 @@ public final class McpConformanceFixture {
 	}
 
 	static McpEndpoint endpointForScenario(String scenario) {
-		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-public-conformance", "4.0.0")
 						.description("Soklet MCP conformance fixture")
 						.build())
-				.includeServerInformation(true)
-				.tools(tools(scenario))
-				.prompts(prompts(scenario))
-				.resources(resources())
+				.serverInformationIncluded(true)
+				.addTools(tools(scenario))
+				.addPrompts(prompts(scenario))
+				.addResources(resources())
 				.resourceListHandler((request, list, features) -> {
 					if (list.getCursor().isPresent())
 						throw new McpJsonRpcException(
 								McpJsonRpcError.fromInvalidParameters(
 										"The resource-list cursor is invalid."));
 					return McpResourcePage.builder()
-							.resources(list.getRegisteredResourceDescriptors())
+							.addResources(list.getRegisteredResourceDescriptors())
 							.build();
 				})
 				.resourceListCachePolicy(CACHE_POLICY)
 				.resourceTemplateListCachePolicy(CACHE_POLICY);
 		if ("server-stateless".equals(scenario))
-			builder.subscriptions(McpSubscriptionConfig.withEventPublisher(
-					McpLocalSubscriptionEventPublisher.fromDefaults())
-					.notificationType(
-							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
-					.notificationType(
-							McpSubscriptionNotificationType.RESOURCE_UPDATED)
+			builder.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(
+					McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
+							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+							McpSubscriptionNotificationType.RESOURCE_UPDATED))
 					.build());
 		return builder.build();
 	}
@@ -357,7 +352,7 @@ public final class McpConformanceFixture {
 						() -> McpCompleteResult.fromToolErrorText(
 								"This tool intentionally returns an error for testing")),
 				McpToolRegistration.withName("test_tool_with_progress")
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							McpProgressReporter reporter = features
 									.find(McpProgressReporter.class)
@@ -398,23 +393,22 @@ public final class McpConformanceFixture {
 							.build())
 					.build();
 			tools.add(McpToolRegistration.withName("test_missing_capability")
-					.jsonArguments()
+					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText(
 									"Sampling capability was declared."))
-					.mayRequestInput(sampling)
+					.addInputRequestDeclarations(sampling)
 					.description("Requires the base sampling capability.")
 					.build());
 			tools.add(McpToolRegistration.withName("test_streaming_elicitation")
-					.jsonArguments()
+					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
-							McpInputRequiredResult.builder()
-									.inputRequest("conformance-value",
+							McpInputRequiredResult.withInputRequest("conformance-value",
 											McpInputRequest.fromDeclaration(
 													elicitation,
 													elicitationParameters))
 									.build())
-					.mayRequestInput(elicitation)
+					.addInputRequestDeclarations(elicitation)
 					.description("Returns one embedded elicitation input request.")
 					.build());
 			tools.add(rawTool("test_logging_tool",
@@ -449,16 +443,15 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> elicitationTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_elicitation")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getInputResponses().find("user_name").isPresent())
 						return McpCompleteResult.fromToolText("Hello, Alice!");
-					return McpInputRequiredResult.builder()
-							.inputRequest("user_name", formInput(
+					return McpInputRequiredResult.withInputRequest("user_name", formInput(
 									"What is your name?", "name", "string"))
 							.build();
 				})
-				.mayRequestInput(FORM_INPUT)
+				.addInputRequestDeclarations(FORM_INPUT)
 				.description("Collects a user name through embedded elicitation.")
 				.build();
 	}
@@ -466,18 +459,17 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> samplingTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_sampling")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getInputResponses().find(
 							"capital_question").isPresent())
 						return McpCompleteResult.fromToolText(
 								"The capital of France is Paris.");
-					return McpInputRequiredResult.builder()
-							.inputRequest("capital_question", samplingInput(
+					return McpInputRequiredResult.withInputRequest("capital_question", samplingInput(
 									"What is the capital of France?", 100))
 							.build();
 				})
-				.mayRequestInput(SAMPLING_INPUT)
+				.addInputRequestDeclarations(SAMPLING_INPUT)
 				.description("Collects a sampling answer about France.")
 				.build();
 	}
@@ -485,16 +477,15 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> listRootsTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_list_roots")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getInputResponses().find("client_roots").isPresent())
 						return McpCompleteResult.fromToolText(
 								"Client root file:///test/root accepted.");
-					return McpInputRequiredResult.builder()
-							.inputRequest("client_roots", rootsInput())
+					return McpInputRequiredResult.withInputRequest("client_roots", rootsInput())
 							.build();
 				})
-				.mayRequestInput(ROOTS_INPUT)
+				.addInputRequestDeclarations(ROOTS_INPUT)
 				.description("Collects the current client roots.")
 				.build();
 	}
@@ -502,18 +493,17 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> requestStateTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_request_state")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "request-state")
 							&& request.getInputResponses().find("confirm").isPresent())
 						return McpCompleteResult.fromToolText("state-ok");
-					return McpInputRequiredResult.builder()
-							.inputRequest("confirm", formInput(
+					return McpInputRequiredResult.withInputRequest("confirm", formInput(
 									"Please confirm", "ok", "boolean"))
 							.frameworkRequestState(McpJsonString.fromValue("request-state"))
 							.build();
 				})
-				.mayRequestInput(FORM_INPUT)
+				.addInputRequestDeclarations(FORM_INPUT)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Verifies protected request-state round trips.")
 				.build();
@@ -522,7 +512,7 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> multipleInputsTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_multiple_inputs")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					boolean complete = hasFrameworkState(request, "multiple-inputs")
 							&& request.getInputResponses().find("user_name").isPresent()
@@ -531,16 +521,15 @@ public final class McpConformanceFixture {
 					if (complete)
 						return McpCompleteResult.fromToolText(
 								"All input responses accepted.");
-					return McpInputRequiredResult.builder()
-							.inputRequest("user_name", formInput(
+					return McpInputRequiredResult.withInputRequest("user_name", formInput(
 									"What is your name?", "name", "string"))
-							.inputRequest("greeting", samplingInput(
+							.addInputRequest("greeting", samplingInput(
 									"Generate a greeting", 50))
-							.inputRequest("client_roots", rootsInput())
+							.addInputRequest("client_roots", rootsInput())
 							.frameworkRequestState(McpJsonString.fromValue("multiple-inputs"))
 							.build();
 				})
-				.mayRequestInput(FORM_INPUT, SAMPLING_INPUT, ROOTS_INPUT)
+				.addInputRequestDeclarations(FORM_INPUT, SAMPLING_INPUT, ROOTS_INPUT)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Collects elicitation, sampling, and roots responses.")
 				.build();
@@ -549,7 +538,7 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> multiRoundTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_multi_round")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "round-2")
 							&& request.getInputResponses().find("step2").isPresent())
@@ -557,19 +546,17 @@ public final class McpConformanceFixture {
 								"Multi-round input complete.");
 					if (hasFrameworkState(request, "round-1")
 							&& request.getInputResponses().find("step1").isPresent())
-						return McpInputRequiredResult.builder()
-								.inputRequest("step2", formInput(
+						return McpInputRequiredResult.withInputRequest("step2", formInput(
 										"Step 2: What is your favorite color?",
 										"color", "string"))
 								.frameworkRequestState(McpJsonString.fromValue("round-2"))
 								.build();
-					return McpInputRequiredResult.builder()
-							.inputRequest("step1", formInput(
+					return McpInputRequiredResult.withInputRequest("step1", formInput(
 									"Step 1: What is your name?", "name", "string"))
 							.frameworkRequestState(McpJsonString.fromValue("round-1"))
 							.build();
 				})
-				.mayRequestInput(FORM_INPUT)
+				.addInputRequestDeclarations(FORM_INPUT)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Collects input over two protected rounds.")
 				.build();
@@ -578,19 +565,18 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> tamperedStateTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_tampered_state")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "tamper-check")
 							&& request.getInputResponses().find("confirm").isPresent())
 						return McpCompleteResult.fromToolText(
 								"Protected state accepted.");
-					return McpInputRequiredResult.builder()
-							.inputRequest("confirm", formInput(
+					return McpInputRequiredResult.withInputRequest("confirm", formInput(
 									"Please confirm", "ok", "boolean"))
 							.frameworkRequestState(McpJsonString.fromValue("tamper-check"))
 							.build();
 				})
-				.mayRequestInput(FORM_INPUT)
+				.addInputRequestDeclarations(FORM_INPUT)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Rejects modified protected request state.")
 				.build();
@@ -599,17 +585,16 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> capabilityTool() {
 		return McpToolRegistration.withName(
 				"test_input_required_result_capabilities")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getInputResponses().find("sampling").isPresent())
 						return McpCompleteResult.fromToolText(
 								"Sampling response accepted.");
-					return McpInputRequiredResult.builder()
-							.inputRequest("sampling", samplingInput(
+					return McpInputRequiredResult.withInputRequest("sampling", samplingInput(
 									"Generate one supported response", 50))
 							.build();
 				})
-				.mayRequestInput(SAMPLING_INPUT)
+				.addInputRequestDeclarations(SAMPLING_INPUT)
 				.description("Requests only the declared sampling capability.")
 				.build();
 	}
@@ -665,7 +650,7 @@ public final class McpConformanceFixture {
 	private static McpToolRegistration<McpJsonObject> rawTool(String name,
 			String description, Supplier<McpCompleteResult> resultSupplier) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> resultSupplier.get())
 				.description(description)
 				.build();
@@ -673,10 +658,10 @@ public final class McpConformanceFixture {
 
 	private static McpCompleteResult mixedContentResult() {
 		return McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-				.content(McpTextContent.fromText("Multiple content types test:"))
-				.content(McpImageContent.withDataAndMimeType(
+				.addContent(McpTextContent.fromText("Multiple content types test:"))
+				.addContent(McpImageContent.withDataAndMimeType(
 						PNG_BYTES, "image/png").build())
-				.content(embeddedTextResource(
+				.addContent(embeddedTextResource(
 						URI.create("test://mixed-content-resource"),
 						"application/json", "{\"test\":\"data\",\"value\":123}"))
 				.build());
@@ -685,7 +670,7 @@ public final class McpConformanceFixture {
 	private static McpCompleteResult completeToolOutput(
 			McpContentBlock content) {
 		return McpCompleteResult.fromToolOutput(
-				McpToolOutput.builder().content(content).build());
+				McpToolOutput.builder().addContent(content).build());
 	}
 
 	private static McpEmbeddedResource embeddedTextResource(URI uri,
@@ -714,9 +699,9 @@ public final class McpConformanceFixture {
 												+ prompt.findArgument("arg2").orElseThrow()
 												+ "'"))))
 						.description("Substitutes two required string arguments.")
-						.argument(requiredPromptArgument("arg1",
+						.addArgument(requiredPromptArgument("arg1",
 								"First test argument"))
-						.argument(requiredPromptArgument("arg2",
+						.addArgument(requiredPromptArgument("arg2",
 								"Second test argument"))
 						.build(),
 				McpPromptRegistration.withName(
@@ -733,7 +718,7 @@ public final class McpConformanceFixture {
 													"Please process the embedded resource above.")));
 						})
 						.description("Embeds the requested text resource.")
-						.argument(requiredPromptArgument("resourceUri",
+						.addArgument(requiredPromptArgument("resourceUri",
 								"URI of the resource to embed"))
 						.build(),
 				McpPromptRegistration.withName("test_prompt_with_image")
@@ -754,21 +739,20 @@ public final class McpConformanceFixture {
 							return completePrompt(McpPromptMessage.fromUserContent(
 									McpTextContent.fromText(
 											"Prompt using test context.")));
-						return McpInputRequiredResult.builder()
-								.inputRequest("user_context", formInput(
+						return McpInputRequiredResult.withInputRequest("user_context", formInput(
 										"What context should the prompt use?",
 										"context", "string"))
 								.build();
 					})
-					.mayRequestInput(FORM_INPUT)
+					.addInputRequestDeclarations(FORM_INPUT)
 					.description("Collects context before rendering a prompt.")
 					.build());
 		return List.copyOf(prompts);
 	}
 
-	private static McpPromptArgumentDefinition requiredPromptArgument(
+	private static McpPromptArgumentDeclaration requiredPromptArgument(
 			String name, String description) {
-		return McpPromptArgumentDefinition.withName(name)
+		return McpPromptArgumentDeclaration.withName(name)
 				.description(description)
 				.required(true)
 				.build();
@@ -827,7 +811,7 @@ public final class McpConformanceFixture {
 	private static McpCompleteResult completeResource(
 			McpResourceContents contents) {
 		return McpCompleteResult.fromResourceOutput(
-				McpResourceOutput.builder().content(contents).build());
+				McpResourceOutput.withContent(contents).build());
 	}
 
 	private static void writeControlLine(String line) throws Exception {
@@ -843,6 +827,6 @@ public final class McpConformanceFixture {
 	 */
 	public record CustomHeaderArguments(
 			@McpToolProperty(description = "Mirrored test value")
-			@McpHeader("Value") String value) {
+			@McpHeader(name = "Value") String value) {
 	}
 }

@@ -24,6 +24,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static com.soklet.McpContentValueSupport.annotationsEqual;
+import static com.soklet.McpContentValueSupport.annotationsHashCode;
 import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
@@ -78,15 +80,40 @@ public final class McpImageContent implements McpContentBlock {
 	}
 
 	/** @return content annotations, if supplied */
+	@Override
 	@NonNull
 	public Optional<@NonNull McpContentAnnotations> getAnnotations() {
 		return Optional.ofNullable(this.annotations);
 	}
 
 	/** @return immutable extension metadata */
+	@Override
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every content property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpImageContent content))
+			return false;
+		return Arrays.equals(this.data, content.data)
+				&& this.mimeType.equals(content.mimeType)
+				&& annotationsEqual(this.annotations, content.annotations)
+				&& this.metadata.equals(content.metadata);
+	}
+
+	/** @return structural content hash code */
+	@Override
+	public int hashCode() {
+		int result = Arrays.hashCode(this.data);
+		result = 31 * result + this.mimeType.hashCode();
+		result = 31 * result + annotationsHashCode(this.annotations);
+		result = 31 * result + this.metadata.hashCode();
+		return result;
 	}
 
 	/**

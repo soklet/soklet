@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Modifier;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +86,102 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
+	public void clientCapabilitiesCanBeConstructedForApplicationTests() {
+		McpJsonObject extension = McpJsonObject.builder()
+				.put("enabled", true)
+				.build();
+		McpJsonObject json = McpJsonObject.builder()
+				.put("roots", McpJsonObject.emptyInstance())
+				.put("sampling", McpJsonObject.builder()
+						.put("context", McpJsonObject.emptyInstance())
+						.build())
+				.put("extensions", McpJsonObject.builder()
+						.put("example.test", extension)
+						.put("ignored", "not-an-object")
+						.build())
+				.build();
+
+		McpClientCapabilities capabilities =
+				McpClientCapabilities.fromJson(json);
+
+		Assertions.assertTrue(capabilities.supports(McpClientCapability.ROOTS));
+		Assertions.assertTrue(
+				capabilities.supports(McpClientCapability.SAMPLING));
+		Assertions.assertTrue(
+				capabilities.supports(McpClientCapability.SAMPLING_CONTEXT));
+		Assertions.assertFalse(
+				capabilities.supports(McpClientCapability.SAMPLING_TOOLS));
+		Assertions.assertSame(extension,
+				capabilities.findExtension("example.test").orElseThrow());
+		Assertions.assertTrue(capabilities.findExtension("ignored").isEmpty());
+		Assertions.assertSame(json, capabilities.toJson());
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> capabilities.getExtensions().clear());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpClientCapabilities.fromJson(null));
+	}
+
+	@Test
+	public void jsonObjectsAndArraysHaveDeepStructuralEquality() {
+		McpJsonObject first = McpJsonObject.builder()
+				.put("name", "catalog")
+				.put("values", McpJsonArray.builder()
+						.add(1)
+						.add(McpJsonObject.builder().put("enabled", true).build())
+						.build())
+				.build();
+		McpJsonObject equalWithDifferentMemberOrder = McpJsonObject.builder()
+				.put("values", McpJsonArray.builder()
+						.add(1)
+						.add(McpJsonObject.builder().put("enabled", true).build())
+						.build())
+				.put("name", "catalog")
+				.build();
+		McpJsonObject unequalArrayOrder = McpJsonObject.builder()
+				.put("name", "catalog")
+				.put("values", McpJsonArray.builder()
+						.add(McpJsonObject.builder().put("enabled", true).build())
+						.add(1)
+						.build())
+				.build();
+
+		Assertions.assertEquals(first, equalWithDifferentMemberOrder);
+		Assertions.assertEquals(first.hashCode(),
+				equalWithDifferentMemberOrder.hashCode());
+		Assertions.assertNotEquals(first, unequalArrayOrder);
+		Assertions.assertNotEquals(first, McpJsonObject.emptyInstance());
+	}
+
+	@Test
+	public void jsonArrayConveniencesMirrorJsonObjectBuilder() {
+		Assertions.assertSame(McpJsonArray.emptyInstance(),
+				McpJsonArray.fromElements(List.of()));
+		Assertions.assertSame(McpJsonArray.emptyInstance(),
+				McpJsonArray.builder().build());
+
+		McpJsonArray values = McpJsonArray.builder()
+				.add(7)
+				.add(8L)
+				.add(9.5D)
+				.build();
+		Assertions.assertEquals(List.of(
+				McpJsonNumber.fromValue(BigDecimal.valueOf(7)),
+				McpJsonNumber.fromValue(BigDecimal.valueOf(8)),
+				McpJsonNumber.fromValue(BigDecimal.valueOf(9.5))),
+				values.getElements());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonArray.builder().add((Integer) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonArray.builder().add((Long) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonArray.builder().add((Double) null));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonArray.builder().add(Double.NaN));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonArray.builder().add(Double.POSITIVE_INFINITY));
+	}
+
+	@Test
 	public void jsonScalarValueObjectsHaveIntentionalValueSemanticsAndRedactedText() {
 		String secret = "secret-application-data";
 		McpJsonString string = McpJsonString.fromValue(secret);
@@ -133,11 +230,6 @@ public class McpBootstrapValueTests {
 				() -> McpJsonObject.builder().put("value", (Boolean) null));
 		Assertions.assertSame(Boolean.TRUE,
 				endpoint("/mcp").isServerInformationIncluded());
-		Assertions.assertThrows(NullPointerException.class, () -> McpEndpoint
-				.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
-						"server", "4.0.0").build())
-				.includeServerInformation(null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonRpcError.fromApplication(null, "failure"));
 		Assertions.assertThrows(NullPointerException.class,
@@ -170,8 +262,7 @@ public class McpBootstrapValueTests {
 		McpImplementation serverInformation = McpImplementation
 				.withNameAndVersion("catalog", "4.0.0")
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ")
-				.serverInformation(serverInformation)
+		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ", serverInformation)
 				.instructions("Use this endpoint for catalog discovery.")
 				.build();
 
@@ -184,29 +275,31 @@ public class McpBootstrapValueTests {
 
 	@Test
 	public void endpointCanOmitServerInformationFromResponseMetadata() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1.0").build())
-				.includeServerInformation(false)
+				.serverInformationIncluded(false)
 				.build();
 
 		Assertions.assertFalse(endpoint.isServerInformationIncluded());
 	}
 
 	@Test
-	public void endpointRequiresServerInformationAndAValidPath() {
-		Assertions.assertThrows(IllegalStateException.class,
-				() -> McpEndpoint.withPath("/mcp").build());
+	public void endpointEntrypointRequiresImplementationAndAValidPath() {
+		McpImplementation implementation = implementation();
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpEndpoint.withPath("/mcp", null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpEndpoint.withPath(null, implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("mcp"));
+				() -> McpEndpoint.withPath("mcp", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/"));
+				() -> McpEndpoint.withPath("/", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp?tenant=1"));
+				() -> McpEndpoint.withPath("/mcp?tenant=1", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp#fragment"));
+				() -> McpEndpoint.withPath("/mcp#fragment", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp")
+				() -> McpEndpoint.withPath("/mcp", implementation)
 						.instructions(" "));
 	}
 
@@ -221,12 +314,13 @@ public class McpBootstrapValueTests {
 				endpoint(percentEncodedBoundary).getPath());
 		Assertions.assertEquals("/caf%C3%A9",
 				endpoint("/caf%C3%A9").getPath());
+		McpImplementation implementation = implementation();
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/café"));
+				() -> McpEndpoint.withPath("/café", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath(asciiBoundary + "a"));
+				() -> McpEndpoint.withPath(asciiBoundary + "a", implementation));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath(percentEncodedBoundary + "a"));
+				() -> McpEndpoint.withPath(percentEncodedBoundary + "a", implementation));
 	}
 
 	@Test
@@ -306,10 +400,12 @@ public class McpBootstrapValueTests {
 	}
 
 	private static McpEndpoint endpoint(String path) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation
-						.withNameAndVersion("server", "4.0.0")
-						.build())
+		return McpEndpoint.withPath(path, implementation())
+				.build();
+	}
+
+	private static McpImplementation implementation() {
+		return McpImplementation.withNameAndVersion("server", "4.0.0")
 				.build();
 	}
 }

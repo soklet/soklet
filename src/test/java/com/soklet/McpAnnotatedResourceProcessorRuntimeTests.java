@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,9 +35,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -71,6 +74,11 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		}
 		Assertions.assertFalse(generatedSource.contains("com.soklet.internal"),
 				generatedSource);
+		Assertions.assertFalse(generatedSource.contains(
+				"com.soklet.InstanceProvider"), generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				"java.util.function.Function<com.soklet.McpRequestContext, example.ResourceEndpoint> instanceResolver"),
+				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
 				"McpResourceRegistration.withUriAndName"), generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
@@ -86,13 +94,13 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				"resource.getUriTemplateVariables().get(\"section\")"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"exactResource(resource, features.require(com.soklet.CancelationToken.class), features.find(com.soklet.McpProgressReporter.class), features)"),
+				"exactResource(resource, features.getCancelationToken(), features.getProgressReporter(), features)"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"templateResource(request, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"identifier\")), resource, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"section\")), features.require(com.soklet.CancelationToken.class), features.find(com.soklet.McpProgressReporter.class), features)"),
+				"templateResource(request, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"identifier\")), resource, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"section\")), features.getCancelationToken(), features.getProgressReporter(), features)"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"resources(features, features.require(com.soklet.CancelationToken.class), list, features.find(com.soklet.McpProgressReporter.class), request)"),
+				"resources(features, features.getCancelationToken(), list, features.getProgressReporter(), request)"),
 				generatedSource);
 
 		try (URLClassLoader classLoader = new URLClassLoader(
@@ -105,6 +113,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				@Override
 				@NonNull
 				public <T> T provide(@NonNull Class<T> instanceClass) {
+					Assertions.assertSame(endpointClass, instanceClass);
 					providedInstances.incrementAndGet();
 					try {
 						return instanceClass.cast(instanceClass.getConstructor()
@@ -116,7 +125,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			};
 
 			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
-					instanceProvider, endpointClass);
+					endpointClass);
 			McpEndpoint endpoint = registry.getEndpoints().get(0);
 			Assertions.assertEquals(0, providedInstances.get());
 			Assertions.assertEquals(Duration.ofMillis(300), endpoint
@@ -137,7 +146,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 					exact.getUri().orElseThrow());
 			Assertions.assertEquals("Static catalog", exact.getTitle().orElseThrow());
 			Assertions.assertEquals("text/plain", exact.getMimeType().orElseThrow());
-			Assertions.assertEquals(7, exact.getSize().orElseThrow());
+			Assertions.assertEquals(7, exact.getSizeInBytes().orElseThrow());
 			Assertions.assertEquals(Duration.ofMillis(125),
 					exact.getCachePolicy().getTimeToLive());
 			Assertions.assertEquals(McpCacheScope.PUBLIC,
@@ -150,56 +159,43 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			Assertions.assertEquals(
 					"test://catalog/item/{identifier}/{section}",
 					template.getUriTemplate().orElseThrow());
-			Assertions.assertTrue(template.getSize().isEmpty());
+			Assertions.assertTrue(template.getSizeInBytes().isEmpty());
 			Assertions.assertEquals(Duration.ofMillis(250),
 					template.getCachePolicy().getTimeToLive());
 
-			CancelationToken cancelationToken = uncanceledToken();
-			McpProgressReporter progressReporter = update -> {};
-			McpInvocationFeatures features = McpInvocationFeatures.fromFeatures(
-					Map.of(CancelationToken.class, cancelationToken,
-							McpProgressReporter.class, progressReporter));
-			McpRequestContext readRequest = requestContext(endpoint,
-					"resources/read");
-			McpOperationResult exactResult = exact.getHandler().handle(readRequest,
-					readContext(URI.create("test://catalog/static"), Map.of()),
-					features);
-			McpResourceOutput exactOutput = Assertions.assertInstanceOf(
-					McpResourceOutput.class, Assertions.assertInstanceOf(
-							McpCompleteResult.class, exactResult).getPayload());
-			McpTextResourceContents exactContents = Assertions.assertInstanceOf(
-					McpTextResourceContents.class, exactOutput.getContents().get(0));
-			Assertions.assertEquals("exact|test://catalog/static|true",
-					exactContents.getText());
-
-			URI templateUri = URI.create("test://catalog/item/42/summary");
-			McpOperationResult templateResult = template.getHandler().handle(
-					readRequest, readContext(templateUri,
-							Map.of("identifier", "42", "section", "summary")),
-					features);
-			McpResourceOutput templateOutput = Assertions.assertInstanceOf(
-					McpResourceOutput.class, Assertions.assertInstanceOf(
-							McpCompleteResult.class, templateResult).getPayload());
-			McpTextResourceContents templateContents = Assertions.assertInstanceOf(
-					McpTextResourceContents.class,
-					templateOutput.getContents().get(0));
-			Assertions.assertEquals(
-					"42|summary|test://catalog/item/42/summary|true|true",
-					templateContents.getText());
-
-			McpResourceDescriptor exactDescriptor = McpResourceDescriptor
-					.withUriAndName(exact.getUri().orElseThrow(), exact.getName())
+			SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+					.mcpServer(0, registry,
+							McpAdmissionController.acceptAllInstance(), builder -> builder
+									.host("127.0.0.1")
+									.corsAuthorizer(
+											CorsAuthorizer.acceptAllInstance())
+									.allowedHosts(Set.of("127.0.0.1")))
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.instanceProvider(instanceProvider)
 					.build();
-			McpResourceListContext listContext = listContext("cursor-1",
-					List.of(exactDescriptor));
-			McpResourcePage page = endpoint.getResourceListHandler().orElseThrow()
-					.handle(requestContext(endpoint, "resources/list"), listContext,
-							features);
-			Assertions.assertEquals(List.of(exactDescriptor), page.getResources());
-			Assertions.assertEquals("cursor-1-next",
-					page.getNextCursor().orElseThrow());
-			Assertions.assertEquals(Duration.ofMillis(25),
-					page.getCacheTimeToLiveOverride().orElseThrow());
+			SokletSimulator.run(simulatorConfig, simulator -> {
+				String exactBody = responseBody(simulator, "resource-exact",
+						"resources/read", "test://catalog/static",
+						",\"uri\":\"test://catalog/static\"");
+				Assertions.assertTrue(exactBody.contains(
+						"\"text\":\"exact|test://catalog/static|true\""),
+						exactBody);
+
+				String templateBody = responseBody(simulator, "resource-template",
+						"resources/read", "test://catalog/item/42/summary",
+						",\"uri\":\"test://catalog/item/42/summary\"");
+				Assertions.assertTrue(templateBody.contains(
+						"\"text\":\"42|summary|test://catalog/item/42/summary|true|true\""),
+						templateBody);
+
+				String listBody = responseBody(simulator, "resource-list",
+						"resources/list", null, ",\"cursor\":\"cursor-1\"");
+				Assertions.assertTrue(listBody.contains(
+						"\"nextCursor\":\"cursor-1-next\""), listBody);
+				Assertions.assertTrue(listBody.contains(
+						"\"uri\":\"test://catalog/static\""), listBody);
+			});
 			Assertions.assertEquals(3, providedInstances.get());
 		}
 	}
@@ -323,8 +319,17 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			@Override public McpJsonObject getRequestMetadata() {
 				return McpJsonObject.emptyInstance();
 			}
+			@Override public McpInputResponses getInputResponses() {
+				return McpInputResponses.emptyInstance();
+			}
+			@Override public Optional<McpJsonValue> getFrameworkRequestState() {
+				return Optional.empty();
+			}
+			@Override public Optional<String> getApplicationRequestState() {
+				return Optional.empty();
+			}
 			@Override
-			public Optional<McpLogLevel> getDeprecatedLogLevel() {
+			public Optional<McpLogLevel> getLogLevel() {
 				return Optional.empty();
 			}
 			@Override public Optional<TraceContext> getTraceContext() {
@@ -337,6 +342,47 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				return McpAdmissionIdentity.anonymousInstance();
 			}
 		};
+	}
+
+	@NonNull
+	private static String responseBody(@NonNull Simulator simulator,
+			@NonNull String requestId, @NonNull String method,
+			@Nullable String operationName, @NonNull String parameters) {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
+				+ "\",\"method\":\"" + method + "\",\"params\":{"
+				+ "\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{},"
+				+ "\"progressToken\":\"" + requestId + "-progress\"}"
+				+ parameters + "}}";
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", Set.of("127.0.0.1:0"));
+		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
+		headers.put("Accept", Set.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", Set.of("2026-07-28"));
+		headers.put("Mcp-Method", Set.of(method));
+		if (operationName != null)
+			headers.put("Mcp-Name", Set.of(operationName));
+		McpSimulation simulation = simulator.startMcpRequest(Request
+				.withPath(HttpMethod.POST, "/resources/mcp")
+				.headers(headers)
+				.body(body.getBytes(StandardCharsets.UTF_8))
+				.build());
+		McpSimulationResponse response;
+		try {
+			response = simulation.awaitResponse(Duration.ofSeconds(5))
+					.orElseThrow(() -> new AssertionError(
+							"Timed out awaiting MCP simulator response."));
+		} catch (InterruptedException exception) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(exception);
+		}
+		byte[] responseBytes = response.getBody().orElseThrow();
+		String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
+		Assertions.assertEquals(200, response.getStatusCode(), responseBody);
+		Assertions.assertEquals(McpSimulationBodyType.JSON,
+				response.getBodyType());
+		return responseBody;
 	}
 
 	@NonNull
@@ -365,9 +411,9 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				    path = "/resources/mcp",
 				    name = "resource-catalog",
 				    version = "4.0.0",
-				    resourceListCacheTtlMs = 300,
+				    resourceListCacheTimeToLiveInMilliseconds = 300,
 				    resourceListCacheScope = McpCacheScope.PUBLIC,
-				    resourceTemplateListCacheTtlMs = 450)
+				    resourceTemplateListCacheTimeToLiveInMilliseconds = 450)
 				public final class ResourceEndpoint {
 				  public ResourceEndpoint() {}
 
@@ -377,16 +423,16 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				      title = "Static catalog",
 				      description = "Static catalog contents",
 				      mimeType = "text/plain",
-				      size = 7,
-				      cacheTtlMs = 125,
+				      sizeInBytes = 7,
+				      cacheTimeToLiveInMilliseconds = 125,
 				      cacheScope = McpCacheScope.PUBLIC)
 				  public McpResourceOutput exactResource(
 				      McpResourceReadContext resource,
 				      CancelationToken cancelationToken,
 				      java.util.Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
-				    return McpResourceOutput.builder()
-				        .content(McpTextResourceContents.withUriAndText(
+				    return McpResourceOutput.withContent(
+				        McpTextResourceContents.withUriAndText(
 				            resource.getUri(), "exact|" + resource.getUri() + "|"
 				                + (features != null
 				                    && cancelationToken
@@ -400,17 +446,17 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				  @McpResource(
 				      uri = "test://catalog/item/{identifier}/{section}",
 				      name = "catalog-item",
-				      cacheTtlMs = 250)
+				      cacheTimeToLiveInMilliseconds = 250)
 				  public McpCompleteResult templateResource(
 				      McpRequestContext request,
 				      @McpResourceUriParameter String identifier,
 				      McpResourceReadContext resource,
-				      @McpResourceUriParameter("section") String part,
+				      @McpResourceUriParameter(name = "section") String part,
 				      CancelationToken cancelationToken,
 				      java.util.Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
-				    McpResourceOutput output = McpResourceOutput.builder()
-				        .content(McpTextResourceContents.withUriAndText(
+				    McpResourceOutput output = McpResourceOutput.withContent(
+				        McpTextResourceContents.withUriAndText(
 				            resource.getUri(), identifier + "|" + part + "|"
 				                + resource.getUri() + "|" + (request != null) + "|"
 				                + (features != null
@@ -436,7 +482,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				            != features.require(McpProgressReporter.class))
 				      throw new IllegalStateException("Missing injected context");
 				    return McpResourcePage.builder()
-				        .resources(list.getRegisteredResourceDescriptors())
+				        .addResources(list.getRegisteredResourceDescriptors())
 				        .nextCursor(list.getCursor().orElse("missing") + "-next")
 				        .cacheTimeToLiveOverride(Duration.ofMillis(25))
 				        .build();

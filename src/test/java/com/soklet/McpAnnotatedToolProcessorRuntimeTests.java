@@ -85,6 +85,13 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			}
 			Assertions.assertFalse(generatedSource.contains("com.soklet.internal"),
 					generatedSource);
+			Assertions.assertFalse(generatedSource.contains(
+					"com.soklet.InstanceProvider"), generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"java.util.function.Function<com.soklet.McpRequestContext, example.CatalogEndpoint> instanceResolver"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"instanceResolver.apply(request).search("), generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
 					"public String[] schemaDigests()"), generatedSource);
 			Assertions.assertFalse(generatedSource.contains("InternalMarker"),
@@ -94,16 +101,16 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			Assertions.assertTrue(generatedSource.contains("promptBuilder0"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"McpPromptArgumentDefinition.withName(\"subject\")"),
+					"McpPromptArgumentDeclaration.withName(\"subject\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"@com.soklet.annotation.McpHeader(\"Tenant\")"),
+					"@com.soklet.annotation.McpHeader(name = \"Tenant\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"search(request, features.require(com.soklet.CancelationToken.class), arguments.getConvertedArguments().argument0(), arguments.getConvertedArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
+					"search(request, features.getCancelationToken(), arguments.getConvertedArguments().argument0(), arguments.getConvertedArguments().argument1(), features.getProgressReporter(), features)"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"compose(request, features.require(com.soklet.CancelationToken.class), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.find(com.soklet.McpProgressReporter.class), features)"),
+					"compose(request, features.getCancelationToken(), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.getProgressReporter(), features)"),
 					generatedSource);
 
 			try (URLClassLoader classLoader = new URLClassLoader(
@@ -116,6 +123,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					@Override
 					@NonNull
 					public <T> T provide(@NonNull Class<T> instanceClass) {
+						Assertions.assertSame(endpointClass, instanceClass);
 						providedInstances.incrementAndGet();
 						try {
 							return instanceClass.cast(instanceClass.getConstructor()
@@ -127,7 +135,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				};
 
 				McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
-						instanceProvider, endpointClass);
+						endpointClass);
 				Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
 				Assertions.assertEquals(0, providedInstances.get());
 				McpEndpoint endpoint = registry.getEndpoints().get(0);
@@ -159,7 +167,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				Assertions.assertEquals("catalog-tool",
 						tool.getRateLimiterName().orElseThrow());
 				Assertions.assertFalse(
-						tool.isStructuredContentTextMirroringEnabled());
+						tool.isStructuredContentMirroredAsText());
 				McpJsonObject properties = Assertions.assertInstanceOf(
 						McpJsonObject.class, tool.getInputSchema().getDocument()
 								.find("properties").orElseThrow());
@@ -186,11 +194,11 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				AtomicInteger handlerInterceptorInvocations = new AtomicInteger();
 					McpRateLimiterRegistry rateLimiterRegistry =
 							McpRateLimiterRegistry.builder()
-						.rateLimiter("catalog-endpoint", context -> {
+						.addRateLimiter("catalog-endpoint", context -> {
 							endpointLimiterInvocations.incrementAndGet();
 							return McpRateLimitDecision.allowed();
 						})
-						.rateLimiter("catalog-tool", context -> {
+						.addRateLimiter("catalog-tool", context -> {
 							toolLimiterInvocations.incrementAndGet();
 							return McpRateLimitDecision.allowed();
 						})
@@ -207,7 +215,11 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							return continuation.proceed();
 						})
 						.build();
-				Soklet soklet = managedSoklet(server);
+				SokletConfig sokletConfig = managedSokletConfig(server,
+						instanceProvider);
+				Assertions.assertSame(instanceProvider,
+						sokletConfig.getInstanceProvider());
+				Soklet soklet = Soklet.fromConfig(sokletConfig);
 				try {
 					soklet.start();
 					int port = server.getDiagnostics().getBoundAddress()
@@ -319,6 +331,47 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				} finally {
 					soklet.close();
 				}
+
+				AtomicInteger failedProviderInvocations = new AtomicInteger();
+				IllegalStateException providerFailure = new IllegalStateException(
+						"Provider failure must remain private");
+				InstanceProvider failingProvider = new InstanceProvider() {
+					@Override
+					@NonNull
+					public <T> T provide(@NonNull Class<T> instanceClass) {
+						Assertions.assertSame(endpointClass, instanceClass);
+						failedProviderInvocations.incrementAndGet();
+						throw providerFailure;
+					}
+				};
+				McpServer failingServer = serverBuilder(registry, allow,
+						McpAdmissionController.acceptAllInstance())
+						.rateLimiterRegistry(rateLimiterRegistry)
+						.build();
+				SokletConfig failingConfig = managedSokletConfig(failingServer,
+						failingProvider);
+				Assertions.assertSame(failingProvider,
+						failingConfig.getInstanceProvider());
+				Soklet failingSoklet = Soklet.fromConfig(failingConfig);
+				try {
+					failingSoklet.start();
+					int failingPort = failingServer.getDiagnostics().getBoundAddress()
+							.orElseThrow().getPort();
+					HttpResponse<String> failureResponse = sendToolCall(failingPort,
+							"needle", toolCallBody("annotated-provider-failure"));
+					Assertions.assertEquals(500, failureResponse.statusCode(),
+							failureResponse.body());
+					Assertions.assertTrue(failureResponse.body().contains(
+							"\"code\":-32603"), failureResponse.body());
+					Assertions.assertTrue(failureResponse.body().contains(
+							"\"message\":\"Internal error\""),
+							failureResponse.body());
+					Assertions.assertFalse(failureResponse.body().contains(
+							providerFailure.getMessage()), failureResponse.body());
+					Assertions.assertEquals(1, failedProviderInvocations.get());
+				} finally {
+					failingSoklet.close();
+				}
 			}
 		} finally {
 			if (previousProperty == null)
@@ -328,11 +381,13 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 		}
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server,
+			InstanceProvider instanceProvider) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.instanceProvider(instanceProvider)
+				.build();
 	}
 
 	private static void compile(@NonNull Path source,
@@ -359,10 +414,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			@NonNull McpEndpointRegistry registry,
 			@NonNull McpRateLimiter fallbackToolLimiter,
 			@NonNull McpAdmissionController admissionController) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, registry, admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(registry)
-				.admissionController(admissionController)
 				.toolRateLimiter(fallbackToolLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
@@ -447,7 +500,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				    description = "Generated endpoint",
 				    websiteUrl = "https://example.com/catalog",
 				    instructions = "Use catalog.search",
-				    toolRateLimiter = "catalog-endpoint")
+				    toolRateLimiterName = "catalog-endpoint")
 				public final class CatalogEndpoint {
 				  @Target(ElementType.TYPE_USE)
 				  private @interface InternalMarker {}
@@ -463,8 +516,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				      name = "catalog.search",
 				      title = "Catalog search",
 				      description = "Searches the catalog",
-				      rateLimiter = "catalog-tool",
-				      mirrorStructuredContentAsText = false)
+				      rateLimiterName = "catalog-tool",
+				      structuredContentMirroredAsText = false)
 				  public SearchResult search(
 				      McpRequestContext request,
 				      CancelationToken cancelationToken,
@@ -472,7 +525,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				          name = "query-text",
 				          title = "Search query",
 				          description = "Text to search for")
-				      @McpHeader("Tenant") @InternalMarker String toString,
+				      @McpHeader(name = "Tenant") @InternalMarker String toString,
 				      @McpToolArgument Optional<Integer> limit,
 				      Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {

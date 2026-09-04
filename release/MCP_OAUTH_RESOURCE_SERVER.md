@@ -201,7 +201,7 @@ public final class OAuthAdmissionController
                 401,
                 McpJsonRpcError.fromApplication(
                     -31901, "Authentication required"))
-            .header("WWW-Authenticate", challenge)
+            .addHeader("WWW-Authenticate", challenge)
             .build());
   }
 
@@ -214,7 +214,7 @@ public final class OAuthAdmissionController
                 403,
                 McpJsonRpcError.fromApplication(
                     -31903, "Operation not permitted"))
-            .header("WWW-Authenticate", challenge)
+            .addHeader("WWW-Authenticate", challenge)
             .build());
   }
 
@@ -254,12 +254,11 @@ Use the controller in place of the quickstart's anonymous admission policy:
 AccessTokenVerifier verifier = applicationTokenVerifier();
 PartitionKeyDeriver partitionKeys = applicationPartitionKeyDeriver();
 
-McpServer mcpServer = McpServer.withPort(8081)
-    .host("127.0.0.1")
-    .endpointRegistry(
-        McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class))
-    .admissionController(
+McpServer mcpServer = McpServer.withPort(
+        8081,
+        McpEndpointRegistry.fromClasses(CatalogMcpEndpoint.class),
         new OAuthAdmissionController(verifier, partitionKeys))
+    .host("127.0.0.1")
     .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
     .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
     .allowedHosts(Set.of("127.0.0.1"))

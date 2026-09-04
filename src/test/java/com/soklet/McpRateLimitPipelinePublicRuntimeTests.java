@@ -363,23 +363,20 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler(handler)
 				.build();
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						serverName, "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint,
 			McpAdmissionController admissionController,
 			McpRateLimiter toolRateLimiter) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
 				.toolRateLimiter(toolRateLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
@@ -511,14 +508,14 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 
 	private static void assertZeroLoad(McpServerDiagnostics diagnostics) {
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
 
 	private static boolean isZeroLoad(McpServerDiagnostics diagnostics) {
 		return diagnostics.getActiveHandlerExecutions() == 0
-				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getRequestHandlerQueueDepth() == 0
 				&& diagnostics.getActiveRequestStreams() == 0
 				&& diagnostics.getActiveSubscriptions() == 0;
 	}

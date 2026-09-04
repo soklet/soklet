@@ -55,7 +55,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public static McpToolOutput fromText(@NonNull String text) {
-		return builder().content(McpTextContent.fromText(text)).build();
+		return builder().addContent(McpTextContent.fromText(text)).build();
 	}
 
 	/**
@@ -78,7 +78,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public static McpToolOutput fromErrorText(@NonNull String text) {
-		return builder().content(McpTextContent.fromText(text))
+		return builder().addContent(McpTextContent.fromText(text))
 				.error(true).build();
 	}
 
@@ -118,7 +118,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public Builder toBuilder() {
-		Builder builder = builder().content(this.content).error(this.error);
+		Builder builder = builder().addContents(this.content).error(this.error);
 		if (this.structuredContent != null)
 			builder.structuredContent(this.structuredContent);
 		return builder;
@@ -147,7 +147,7 @@ public final class McpToolOutput implements McpCompletePayload {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder content(@NonNull McpContentBlock content) {
+		public Builder addContent(@NonNull McpContentBlock content) {
 			this.content.add(requireNonNull(content));
 			return this;
 		}
@@ -155,14 +155,14 @@ public final class McpToolOutput implements McpCompletePayload {
 		/**
 		 * Appends content blocks in iteration order.
 		 *
-		 * @param content content blocks
+		 * @param contents content blocks
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder content(
-				@NonNull Collection<? extends @NonNull McpContentBlock> content) {
-			requireNonNull(content);
-			content.forEach(this::content);
+		public Builder addContents(
+				@NonNull Collection<? extends @NonNull McpContentBlock> contents) {
+			requireNonNull(contents);
+			contents.forEach(this::addContent);
 			return this;
 		}
 

@@ -93,13 +93,13 @@ public class McpHandlerMetricsObservabilityTests {
 				.activeHandlerExecutions(2L)
 				.handlerQueueDepth(3L)
 				.handlerCapacityRejections(5L)
-				.shutdowns(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 7L))
+				.serverStops(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 7L))
 				.build();
 		Assertions.assertEquals(2L, snapshot.getActiveHandlerExecutions());
 		Assertions.assertEquals(3L, snapshot.getHandlerQueueDepth());
 		Assertions.assertEquals(5L, snapshot.getHandlerCapacityRejections());
 		Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 7L),
-				snapshot.getShutdowns());
+				snapshot.getServerStops());
 
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpMetricsSnapshot.builder()
@@ -584,14 +584,14 @@ public class McpHandlerMetricsObservabilityTests {
 					McpServerStatus.RESIDUAL_ACTIVITY,
 					residualDiagnostics.getStatus());
 			assertHandlerDiagnostics(residualDiagnostics, 1, 0);
-			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
+			awaitMetrics(collector, metrics -> metrics.getServerStops().equals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L)));
 			McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 			assertHandlerSnapshot(retained, 1L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-					retained.getShutdowns());
+					retained.getServerStops());
 			Assertions.assertEquals(List.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					observer.stopOutcomes());
@@ -641,7 +641,7 @@ public class McpHandlerMetricsObservabilityTests {
 			assertHandlerSnapshot(afterPhysicalCleanup, 0L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-					afterPhysicalCleanup.getShutdowns());
+					afterPhysicalCleanup.getServerStops());
 			assertHandlerSnapshot(retained, 1L, 0L, 0L);
 			Assertions.assertSame(shutdownResult,
 					lifecycleAdapter(server).result().orElseThrow());
@@ -723,7 +723,7 @@ public class McpHandlerMetricsObservabilityTests {
 					"Managed stop did not interrupt the active handler.");
 			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS),
 					"The cooperative managed-stop handler did not exit.");
-			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
+			awaitMetrics(collector, metrics -> metrics.getServerStops().equals(Map.of(
 					ShutdownComponentDisposition.FORCED_TERMINATION, 1L)));
 			collector.awaitProbeCount(2);
 			Assertions.assertNull(collector.probeFailure(),
@@ -823,7 +823,7 @@ public class McpHandlerMetricsObservabilityTests {
 						diagnostics.getStatus()
 								== McpServerStatus.RESIDUAL_ACTIVITY
 							&& diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getQueuedRequests() == 1);
+							&& diagnostics.getRequestHandlerQueueDepth() == 1);
 			}
 			Assertions.assertTrue(activeInterrupted.await(5, TimeUnit.SECONDS),
 					"Unexpected termination did not interrupt the active handler.");
@@ -833,7 +833,7 @@ public class McpHandlerMetricsObservabilityTests {
 					diagnostics -> diagnostics.getStatus()
 							== McpServerStatus.RESIDUAL_ACTIVITY
 							&& diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getQueuedRequests() == 0);
+							&& diagnostics.getRequestHandlerQueueDepth() == 0);
 			collector.awaitProbeCount(1);
 			Assertions.assertNull(collector.probeFailure(),
 					"A handler callback ran while the runtime lifecycle lock was held.");
@@ -856,14 +856,14 @@ public class McpHandlerMetricsObservabilityTests {
 					lifecycleAdapter.result(terminatedGeneration).orElseThrow());
 			Assertions.assertSame(shutdownResult,
 					soklet.getDirectLifecycle().result().orElseThrow());
-			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
+			awaitMetrics(collector, metrics -> metrics.getServerStops().equals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L)));
 			McpMetricsSnapshot terminalMetrics = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 			assertHandlerSnapshot(terminalMetrics, 1L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-					terminalMetrics.getShutdowns());
+					terminalMetrics.getServerStops());
 
 			emergencyRelease.countDown();
 			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS),
@@ -871,7 +871,7 @@ public class McpHandlerMetricsObservabilityTests {
 			McpServerDiagnostics stoppedDiagnostics = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getStatus() == McpServerStatus.RESIDUAL_ACTIVITY
 							&& diagnostics.getActiveHandlerExecutions() == 0
-							&& diagnostics.getQueuedRequests() == 0);
+							&& diagnostics.getRequestHandlerQueueDepth() == 0);
 			collector.awaitProbeCount(2);
 			Assertions.assertNull(collector.probeFailure());
 			Assertions.assertEquals(List.of(
@@ -890,7 +890,7 @@ public class McpHandlerMetricsObservabilityTests {
 			assertHandlerSnapshot(afterPhysicalCleanup, 0L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
 					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
-					afterPhysicalCleanup.getShutdowns());
+					afterPhysicalCleanup.getServerStops());
 			assertHandlerSnapshot(terminalMetrics, 1L, 0L, 0L);
 			Assertions.assertEquals(1,
 					collector.count(McpMetricsEvent.HandlerExecutionStarted.class));
@@ -1015,7 +1015,7 @@ public class McpHandlerMetricsObservabilityTests {
 		Assertions.assertEquals(Integer.valueOf(activeHandlerExecutions),
 				diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(Integer.valueOf(queuedRequests),
-				diagnostics.getQueuedRequests());
+				diagnostics.getRequestHandlerQueueDepth());
 	}
 
 	private static void assertMetricType(@NonNull String text,
@@ -1260,8 +1260,7 @@ public class McpHandlerMetricsObservabilityTests {
 
 	@NonNull
 	private static McpEndpoint emptyEndpoint(@NonNull String path) {
-		return McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-metrics-test", "4.0.0").build())
 				.build();
 	}
@@ -1272,13 +1271,12 @@ public class McpHandlerMetricsObservabilityTests {
 			@NonNull McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(requireNonNull(toolName))
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler(requireNonNull(handler))
 				.build();
-		return McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-metrics-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
@@ -1287,12 +1285,9 @@ public class McpHandlerMetricsObservabilityTests {
 			@NonNull List<@NonNull McpEndpoint> endpoints,
 			int handlerConcurrency, int handlerQueueCapacity,
 			@NonNull Duration requestTimeout) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.copyOf(requireNonNull(endpoints))), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.copyOf(requireNonNull(endpoints))))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
@@ -1453,7 +1448,7 @@ public class McpHandlerMetricsObservabilityTests {
 			return this.events.stream()
 					.filter(McpMetricsEvent.ServerStopped.class::isInstance)
 					.map(McpMetricsEvent.ServerStopped.class::cast)
-					.map(McpMetricsEvent.ServerStopped::getOutcome)
+					.map(McpMetricsEvent.ServerStopped::getShutdownComponentDisposition)
 					.toList();
 		}
 	}

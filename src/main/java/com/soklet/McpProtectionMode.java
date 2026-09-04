@@ -23,13 +23,13 @@ package com.soklet;
  */
 public enum McpProtectionMode {
 	/** No Soklet-managed protection keys or application protector are configured. */
-	NO_FRAMEWORK_KEYS,
+	NONE,
 
 	/** A custom application-owned {@link McpRequestStateProtector} is configured. */
 	CUSTOM_PROTECTOR,
 
-	/** A stable production {@link McpProtectionKeyRing} is configured. */
-	PRODUCTION_KEY_RING,
+	/** A stable production {@link McpProtectionKeyring} is configured. */
+	PRODUCTION_KEYRING,
 
 	/** Explicit, process-local development protection is configured. */
 	DEVELOPMENT_EPHEMERAL

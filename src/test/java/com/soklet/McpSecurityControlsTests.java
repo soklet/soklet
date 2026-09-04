@@ -121,14 +121,19 @@ public class McpSecurityControlsTests {
 	public void initialRingRejectsDuplicateIdsAndMaterialAndCopiesValues() {
 		McpProtectionKey active = protectionKey("active", 0);
 		McpProtectionKey verification = protectionKey("verification", 32);
-		McpProtectionKeyRing.Builder builder =
-				McpProtectionKeyRing.withActiveKey(active)
-						.verificationKey(verification);
-		McpProtectionKeyRing ring = builder.build();
-		builder.verificationKey(protectionKey("later", 64));
+		McpProtectionKeyring.Builder builder =
+				McpProtectionKeyring.withActiveKey(active)
+						.addVerificationKey(verification);
+		McpProtectionKeyring ring = builder.build();
+		builder.addVerificationKey(protectionKey("later", 64));
+		Assertions.assertEquals("active", ring.getActiveKeyId());
+		Assertions.assertEquals(Set.of("verification"),
+				ring.getVerificationKeyIds());
+		Assertions.assertThrows(UnsupportedOperationException.class, () ->
+				ring.getVerificationKeyIds().add("forbidden"));
 
 		DefaultMcpSecurityControls controls = controls(ring, null);
-		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+		McpProtectionKeyringSnapshot snapshot = controls.getKeyringSnapshot()
 				.orElseThrow();
 		Assertions.assertEquals("active", snapshot.getActiveKeyId());
 		Assertions.assertEquals(Set.of("verification"),
@@ -137,49 +142,49 @@ public class McpSecurityControlsTests {
 				snapshot.getVerificationKeyIds().add("forbidden"));
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpProtectionKeyRing.withActiveKey(active)
-						.verificationKey(protectionKey("active", 64)));
+				McpProtectionKeyring.withActiveKey(active)
+						.addVerificationKey(protectionKey("active", 64)));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpProtectionKeyRing.withActiveKey(active)
-						.verificationKey(protectionKey("alias", 0)));
+				McpProtectionKeyring.withActiveKey(active)
+						.addVerificationKey(protectionKey("alias", 0)));
 	}
 
 	@Test
 	public void bulkInitialRingMutationIsAtomicWhenALateKeyIsInvalid() {
-		McpProtectionKeyRing.Builder duplicateBuilder = McpProtectionKeyRing
+		McpProtectionKeyring.Builder duplicateBuilder = McpProtectionKeyring
 				.withActiveKey(protectionKey("active", 0));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				duplicateBuilder.verificationKeys(List.of(
+				duplicateBuilder.addVerificationKeys(List.of(
 						protectionKey("first", 32),
 						protectionKey("duplicate-material", 32))));
-		duplicateBuilder.verificationKey(protectionKey("first", 32));
+		duplicateBuilder.addVerificationKey(protectionKey("first", 32));
 
-		McpProtectionKeyRing.Builder nullBuilder = McpProtectionKeyRing
+		McpProtectionKeyring.Builder nullBuilder = McpProtectionKeyring
 				.withActiveKey(protectionKey("active", 0));
 		List<McpProtectionKey> keysWithNull = new ArrayList<>();
 		keysWithNull.add(protectionKey("first", 32));
 		keysWithNull.add(null);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> nullBuilder.verificationKeys(keysWithNull));
-		nullBuilder.verificationKey(protectionKey("first", 32));
+				() -> nullBuilder.addVerificationKeys(keysWithNull));
+		nullBuilder.addVerificationKey(protectionKey("first", 32));
 
-		for (McpProtectionKeyRing ring : List.of(duplicateBuilder.build(),
+		for (McpProtectionKeyring ring : List.of(duplicateBuilder.build(),
 				nullBuilder.build()))
 			Assertions.assertEquals(Set.of("first"), controls(ring, null)
-					.getKeyRingSnapshot().orElseThrow()
+					.getKeyringSnapshot().orElseThrow()
 					.getVerificationKeyIds());
 	}
 
 	@Test
 	public void protectionFingerprintMatchesFrozenGoldenConstruction() {
-		McpProtectionKeyRing ring = McpProtectionKeyRing
+		McpProtectionKeyring ring = McpProtectionKeyring
 				.withActiveKey(protectionKey("active", 0))
-				.verificationKeys(List.of(
+				.addVerificationKeys(List.of(
 						protectionKey("verify-b", 64),
 						protectionKey("verify-a", 32)))
 				.build();
-		McpProtectionKeyRingFingerprint fingerprint = controls(ring, null)
-				.getKeyRingSnapshot().orElseThrow().getFingerprint();
+		McpProtectionKeyringFingerprint fingerprint = controls(ring, null)
+				.getKeyringSnapshot().orElseThrow().getFingerprint();
 
 		Assertions.assertEquals("v1", fingerprint.getVersion());
 		Assertions.assertEquals("soklet-mcp-protection-v1",
@@ -189,15 +194,15 @@ public class McpSecurityControlsTests {
 		Assertions.assertEquals(PROTECTION_GOLDEN_FINGERPRINT,
 				fingerprint.toString());
 		Assertions.assertEquals(fingerprint, controls(ring, null)
-				.getKeyRingSnapshot().orElseThrow().getFingerprint());
+				.getKeyringSnapshot().orElseThrow().getFingerprint());
 		Assertions.assertEquals(fingerprint.hashCode(), controls(ring, null)
-				.getKeyRingSnapshot().orElseThrow().getFingerprint().hashCode());
-		Assertions.assertNotEquals(fingerprint, controls(McpProtectionKeyRing
+				.getKeyringSnapshot().orElseThrow().getFingerprint().hashCode());
+		Assertions.assertNotEquals(fingerprint, controls(McpProtectionKeyring
 				.withActiveKey(protectionKey("active", 1))
-				.verificationKeys(List.of(
+				.addVerificationKeys(List.of(
 						protectionKey("verify-a", 32),
 						protectionKey("verify-b", 64)))
-				.build(), null).getKeyRingSnapshot().orElseThrow()
+				.build(), null).getKeyringSnapshot().orElseThrow()
 				.getFingerprint());
 	}
 
@@ -205,15 +210,15 @@ public class McpSecurityControlsTests {
 	public void protectionMutationsAreRetrySafeAndRejectedMutationsAreAtomic() {
 		McpProtectionKey active = protectionKey("active", 0);
 		McpProtectionKey staged = protectionKey("staged", 32);
-		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
-				.withActiveKey(active).verificationKey(staged).build(),
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyring
+				.withActiveKey(active).addVerificationKey(staged).build(),
 				traceKey("trace", 96));
 
-		McpProtectionKeyRingFingerprint initialFingerprint = controls
-				.getKeyRingSnapshot().orElseThrow().getFingerprint();
+		McpProtectionKeyringFingerprint initialFingerprint = controls
+				.getKeyringSnapshot().orElseThrow().getFingerprint();
 		controls.stageVerificationKey(protectionKey("active", 0));
 		controls.stageVerificationKey(protectionKey("staged", 32));
-		Assertions.assertEquals(initialFingerprint, controls.getKeyRingSnapshot()
+		Assertions.assertEquals(initialFingerprint, controls.getKeyringSnapshot()
 				.orElseThrow().getFingerprint());
 		assertRejectedWithoutProtectionChange(controls, () ->
 				controls.stageVerificationKey(protectionKey("active", 64)));
@@ -224,18 +229,18 @@ public class McpSecurityControlsTests {
 
 		controls.activateStagedKey("staged");
 		controls.activateStagedKey("staged");
-		McpProtectionKeyRingSnapshot stagedSnapshot = controls
-				.getKeyRingSnapshot().orElseThrow();
+		McpProtectionKeyringSnapshot stagedSnapshot = controls
+				.getKeyringSnapshot().orElseThrow();
 		Assertions.assertEquals("staged", stagedSnapshot.getActiveKeyId());
 		Assertions.assertEquals(Set.of("active"),
 				stagedSnapshot.getVerificationKeyIds());
 		assertRejectedWithoutProtectionChange(controls,
 				() -> controls.activateStagedKey("unknown"));
 
-		controls.rotateTo(protectionKey("rotated", 64));
-		controls.rotateTo(protectionKey("rotated", 64));
-		McpProtectionKeyRingSnapshot rotatedSnapshot = controls
-				.getKeyRingSnapshot().orElseThrow();
+		controls.rotateActiveKey(protectionKey("rotated", 64));
+		controls.rotateActiveKey(protectionKey("rotated", 64));
+		McpProtectionKeyringSnapshot rotatedSnapshot = controls
+				.getKeyringSnapshot().orElseThrow();
 		Assertions.assertEquals("rotated", rotatedSnapshot.getActiveKeyId());
 		Assertions.assertEquals(Set.of("active", "staged"),
 				rotatedSnapshot.getVerificationKeyIds());
@@ -248,20 +253,20 @@ public class McpSecurityControlsTests {
 
 	@Test
 	public void protectionControlsAreIndependentPerServer() {
-		McpProtectionConfig config = McpProtectionConfig.withKeyRing(
-				McpProtectionKeyRing.withActiveKey(
+		McpProtectionConfig config = McpProtectionConfig.withKeyring(
+				McpProtectionKeyring.withActiveKey(
 						protectionKey("active", 0)).build()).build();
 		DefaultMcpSecurityControls first =
 				new DefaultMcpSecurityControls(config, null);
 		DefaultMcpSecurityControls second =
 				new DefaultMcpSecurityControls(config, null);
 
-		first.rotateTo(protectionKey("rotated", 32));
-		Assertions.assertEquals("rotated", first.getKeyRingSnapshot()
+		first.rotateActiveKey(protectionKey("rotated", 32));
+		Assertions.assertEquals("rotated", first.getKeyringSnapshot()
 				.orElseThrow().getActiveKeyId());
-		Assertions.assertEquals("active", second.getKeyRingSnapshot()
+		Assertions.assertEquals("active", second.getKeyringSnapshot()
 				.orElseThrow().getActiveKeyId());
-		Assertions.assertEquals(Set.of(), second.getKeyRingSnapshot()
+		Assertions.assertEquals(Set.of(), second.getKeyringSnapshot()
 				.orElseThrow().getVerificationKeyIds());
 	}
 
@@ -287,19 +292,19 @@ public class McpSecurityControlsTests {
 				new DefaultMcpSecurityControls(McpProtectionConfig
 						.withRequestStateProtector(protector).build(), null));
 		Assertions.assertEquals(List.of(
-				McpProtectionMode.NO_FRAMEWORK_KEYS,
+				McpProtectionMode.NONE,
 				McpProtectionMode.DEVELOPMENT_EPHEMERAL,
 				McpProtectionMode.CUSTOM_PROTECTOR), controls.stream()
 				.map(DefaultMcpSecurityControls::getProtectionMode).toList());
 
 		for (DefaultMcpSecurityControls control : controls) {
-			Assertions.assertEquals(Optional.empty(), control.getKeyRingSnapshot());
+			Assertions.assertEquals(Optional.empty(), control.getKeyringSnapshot());
 			Assertions.assertThrows(IllegalStateException.class, () ->
 					control.stageVerificationKey(protectionKey("key", 0)));
 			Assertions.assertThrows(IllegalStateException.class, () ->
 					control.activateStagedKey("key"));
 			Assertions.assertThrows(IllegalStateException.class, () ->
-					control.rotateTo(protectionKey("key", 0)));
+					control.rotateActiveKey(protectionKey("key", 0)));
 			Assertions.assertThrows(IllegalStateException.class, () ->
 					control.removeVerificationKey("key"));
 		}
@@ -322,8 +327,8 @@ public class McpSecurityControlsTests {
 		};
 		McpProtectionConfig config = McpProtectionConfig
 				.withRequestStateProtector(protector)
-				.maximumEncodedRequestStateBytes(100)
-				.maximumDecodedRequestStateBytes(75)
+				.maximumEncodedRequestStateSizeInBytes(100)
+				.maximumDecodedRequestStateSizeInBytes(75)
 				.maximumRequestStateLifetime(Duration.ofSeconds(30))
 				.maximumRequestStateRounds(4)
 				.build();
@@ -331,11 +336,11 @@ public class McpSecurityControlsTests {
 				config.getProtectionMode());
 		Assertions.assertSame(protector,
 				config.getRequestStateProtector().orElseThrow());
-		Assertions.assertEquals(Optional.empty(), config.getInitialKeyRing());
+		Assertions.assertEquals(Optional.empty(), config.getInitialKeyring());
 		Assertions.assertEquals(Integer.valueOf(100),
-				config.getMaximumEncodedRequestStateBytes());
+				config.getMaximumEncodedRequestStateSizeInBytes());
 		Assertions.assertEquals(Integer.valueOf(75),
-				config.getMaximumDecodedRequestStateBytes());
+				config.getMaximumDecodedRequestStateSizeInBytes());
 		Assertions.assertEquals(Duration.ofSeconds(30),
 				config.getMaximumRequestStateLifetime());
 		Assertions.assertEquals(Integer.valueOf(4),
@@ -343,10 +348,10 @@ public class McpSecurityControlsTests {
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumEncodedRequestStateBytes(0));
+						.maximumEncodedRequestStateSizeInBytes(0));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumDecodedRequestStateBytes(-1));
+						.maximumDecodedRequestStateSizeInBytes(-1));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
 						.maximumRequestStateRounds(0));
@@ -359,34 +364,44 @@ public class McpSecurityControlsTests {
 								Long.MAX_VALUE)));
 		Assertions.assertThrows(IllegalStateException.class, () ->
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumEncodedRequestStateBytes(50)
-						.maximumDecodedRequestStateBytes(51).build());
-		Assertions.assertThrows(NullPointerException.class, () ->
-				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumEncodedRequestStateBytes(null));
-		Assertions.assertThrows(NullPointerException.class, () ->
-				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumDecodedRequestStateBytes(null));
-		Assertions.assertThrows(NullPointerException.class, () ->
-				McpProtectionConfig.withDevelopmentEphemeralProtection()
-						.maximumRequestStateRounds(null));
+						.maximumEncodedRequestStateSizeInBytes(50)
+						.maximumDecodedRequestStateSizeInBytes(51).build());
+		McpProtectionConfig resetDefaults = McpProtectionConfig
+				.withDevelopmentEphemeralProtection()
+				.maximumEncodedRequestStateSizeInBytes(100)
+				.maximumDecodedRequestStateSizeInBytes(75)
+				.maximumRequestStateLifetime(Duration.ofSeconds(30))
+				.maximumRequestStateRounds(4)
+				.maximumEncodedRequestStateSizeInBytes(null)
+				.maximumDecodedRequestStateSizeInBytes(null)
+				.maximumRequestStateLifetime(null)
+				.maximumRequestStateRounds(null)
+				.build();
+		Assertions.assertEquals(Integer.valueOf(65_536),
+				resetDefaults.getMaximumEncodedRequestStateSizeInBytes());
+		Assertions.assertEquals(Integer.valueOf(49_152),
+				resetDefaults.getMaximumDecodedRequestStateSizeInBytes());
+		Assertions.assertEquals(Duration.ofMinutes(15),
+				resetDefaults.getMaximumRequestStateLifetime());
+		Assertions.assertEquals(Integer.valueOf(10),
+				resetDefaults.getMaximumRequestStateRounds());
 	}
 
 	@Test
 	public void unfrozen_security_scalars_use_reference_types() throws Exception {
 		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
-				.getMethod("getMaximumEncodedRequestStateBytes").getReturnType());
+				.getMethod("getMaximumEncodedRequestStateSizeInBytes").getReturnType());
 		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
-				.getMethod("getMaximumDecodedRequestStateBytes").getReturnType());
+				.getMethod("getMaximumDecodedRequestStateSizeInBytes").getReturnType());
 		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
 				.getMethod("getMaximumRequestStateRounds").getReturnType());
 		Assertions.assertEquals(McpProtectionConfig.Builder.class,
 				McpProtectionConfig.Builder.class.getMethod(
-						"maximumEncodedRequestStateBytes", Integer.class)
+						"maximumEncodedRequestStateSizeInBytes", Integer.class)
 						.getReturnType());
 		Assertions.assertEquals(McpProtectionConfig.Builder.class,
 				McpProtectionConfig.Builder.class.getMethod(
-						"maximumDecodedRequestStateBytes", Integer.class)
+						"maximumDecodedRequestStateSizeInBytes", Integer.class)
 						.getReturnType());
 		Assertions.assertEquals(McpProtectionConfig.Builder.class,
 				McpProtectionConfig.Builder.class.getMethod(
@@ -402,7 +417,8 @@ public class McpSecurityControlsTests {
 	public void protectionContextAndSanitizedFailuresExposeNoMutableState() {
 		byte[] associatedData = bytesFrom(0);
 		McpRequestStateProtectionContext context =
-				new McpRequestStateProtectionContext("/mcp", "2026-07-28",
+				McpRequestStateProtectionContext.fromComponents(
+						"/mcp", "2026-07-28",
 						"tools/call", associatedData);
 		Arrays.fill(associatedData, (byte) 127);
 		byte[] firstCopy = context.getAssociatedData();
@@ -411,7 +427,19 @@ public class McpSecurityControlsTests {
 		Assertions.assertArrayEquals(bytesFrom(0), context.getAssociatedData());
 		Assertions.assertEquals("/mcp", context.getEndpointPath());
 		Assertions.assertEquals("2026-07-28", context.getProtocolVersion());
-		Assertions.assertEquals("tools/call", context.getMethod());
+		Assertions.assertEquals("tools/call", context.getJsonRpcMethod());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestStateProtectionContext.fromComponents(null,
+						"2026-07-28", "tools/call", bytesFrom(0)));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
+						null, "tools/call", bytesFrom(0)));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
+						"2026-07-28", null, bytesFrom(0)));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
+						"2026-07-28", "tools/call", null));
 
 		McpRequestStateProtectionException invalid =
 				McpRequestStateProtectionException.fromInvalidState();
@@ -431,7 +459,7 @@ public class McpSecurityControlsTests {
 				unavailable.getMessage());
 		Assertions.assertNull(unavailable.getCause());
 		Assertions.assertEquals("An MCP protection key is still in use.",
-				new McpKeyInUseException().getMessage());
+				new McpProtectionKeyInUseException().getMessage());
 	}
 
 	@Test
@@ -621,17 +649,17 @@ public class McpSecurityControlsTests {
 
 	@Test
 	public void builtInProtectionEnforcesEnvelopeAndWireSizeLimits() {
-		McpProtectionKeyRing ring = McpProtectionKeyRing.withActiveKey(
+		McpProtectionKeyring ring = McpProtectionKeyring.withActiveKey(
 				protectionKey("active", 0)).build();
 		DefaultMcpSecurityControls decodedLimit = deterministicControls(
-				McpProtectionConfig.withKeyRing(ring)
-						.maximumEncodedRequestStateBytes(200)
-						.maximumDecodedRequestStateBytes(90).build(),
+				McpProtectionConfig.withKeyring(ring)
+						.maximumEncodedRequestStateSizeInBytes(200)
+						.maximumDecodedRequestStateSizeInBytes(90).build(),
 				bytesFromLength(64, 24));
 		DefaultMcpSecurityControls encodedLimit = deterministicControls(
-				McpProtectionConfig.withKeyRing(ring)
-						.maximumEncodedRequestStateBytes(120)
-						.maximumDecodedRequestStateBytes(100).build(),
+				McpProtectionConfig.withKeyring(ring)
+						.maximumEncodedRequestStateSizeInBytes(120)
+						.maximumDecodedRequestStateSizeInBytes(100).build(),
 				bytesFromLength(64, 24));
 
 		for (DefaultMcpSecurityControls controls :
@@ -750,14 +778,14 @@ public class McpSecurityControlsTests {
 			assertLive(formerMasterKey);
 			assertLive(retiredSealerSecrets);
 
-			controls.rotateTo(protectionKey("second", 32));
+			controls.rotateActiveKey(protectionKey("second", 32));
 			assertWiped(retiredSealerSecrets);
 			assertLive(formerMasterKey);
 			String newState = controls.sealRequestState(context, new byte[]{2});
 			Assertions.assertEquals("second", keyId(newState));
 			Assertions.assertArrayEquals(new byte[]{2},
 					controls.openRequestState(context, newState));
-			Assertions.assertThrows(McpKeyInUseException.class,
+			Assertions.assertThrows(McpProtectionKeyInUseException.class,
 					() -> controls.removeVerificationKey("first"));
 			assertLive(formerMasterKey);
 			entropy.releaseNonce.countDown();
@@ -780,8 +808,8 @@ public class McpSecurityControlsTests {
 		McpProtectionKey first = protectionKey("first", 0);
 		McpProtectionKey second = protectionKey("second", 32);
 		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
-				McpProtectionConfig.withKeyRing(McpProtectionKeyRing
-						.withActiveKey(first).verificationKey(second).build())
+				McpProtectionConfig.withKeyring(McpProtectionKeyring
+						.withActiveKey(first).addVerificationKey(second).build())
 						.build(), null, new SequenceEntropy(
 						bytesFromLength(64, 24), bytesFromLength(96, 12),
 						bytesFromLength(108, 24)), 10L, 0L);
@@ -797,7 +825,7 @@ public class McpSecurityControlsTests {
 		assertWiped(retiredSealerSecrets);
 		assertLive(firstMasterKey, secondMasterKey);
 		assertLive(activeSealerSecretReferences(controls));
-		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+		McpProtectionKeyringSnapshot snapshot = controls.getKeyringSnapshot()
 				.orElseThrow();
 		Assertions.assertEquals("second", snapshot.getActiveKeyId());
 		Assertions.assertEquals(Set.of("first"),
@@ -837,13 +865,13 @@ public class McpSecurityControlsTests {
 	}
 
 	@Test
-	public void failedActivationPreservesTheExistingContextAndKeyRing()
+	public void failedActivationPreservesTheExistingContextAndKeyring()
 			throws Exception {
 		AtomicInteger entropyCalls = new AtomicInteger();
 		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
-				McpProtectionConfig.withKeyRing(McpProtectionKeyRing
+				McpProtectionConfig.withKeyring(McpProtectionKeyring
 						.withActiveKey(protectionKey("first", 0))
-						.verificationKey(protectionKey("second", 32)).build())
+						.addVerificationKey(protectionKey("second", 32)).build())
 						.build(), null, destination -> {
 					int call = entropyCalls.getAndIncrement();
 					if (call == 2)
@@ -862,7 +890,7 @@ public class McpSecurityControlsTests {
 		Assertions.assertSame(sealerContext,
 				activeSealerContextReference(controls));
 		assertLive(sealerSecrets);
-		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+		McpProtectionKeyringSnapshot snapshot = controls.getKeyringSnapshot()
 				.orElseThrow();
 		Assertions.assertEquals("first", snapshot.getActiveKeyId());
 		Assertions.assertEquals(Set.of("second"),
@@ -880,8 +908,8 @@ public class McpSecurityControlsTests {
 		McpProtectionKey active = protectionKey("active", 0);
 		McpProtectionKey verification = protectionKey("verification", 32);
 		McpTraceCorrelationKey trace = traceKey("trace", 64);
-		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
-				.withActiveKey(active).verificationKey(verification).build(), trace);
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyring
+				.withActiveKey(active).addVerificationKey(verification).build(), trace);
 		byte[] activeServerCopy = activeProtectionKeyMaterialReference(controls);
 		byte[] verificationServerCopy =
 				verificationProtectionKeyMaterialReference(controls, "verification");
@@ -895,7 +923,7 @@ public class McpSecurityControlsTests {
 		assertWiped(verificationServerCopy);
 		controls.rotateActiveKey(traceKey("rotated-trace", 96));
 		assertWiped(traceServerCopy);
-		controls.rotateTo(protectionKey("rotated-protection", 128));
+		controls.rotateActiveKey(protectionKey("rotated-protection", 128));
 		assertLive(activeServerCopy);
 		Assertions.assertTrue(controls.removeVerificationKey("active"));
 		assertWiped(activeServerCopy);
@@ -935,8 +963,8 @@ public class McpSecurityControlsTests {
 		};
 		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
 				McpProtectionConfig.withRequestStateProtector(protector)
-						.maximumEncodedRequestStateBytes(16)
-						.maximumDecodedRequestStateBytes(8).build(), null);
+						.maximumEncodedRequestStateSizeInBytes(16)
+						.maximumDecodedRequestStateSizeInBytes(8).build(), null);
 
 		Assertions.assertEquals("custom-state",
 				controls.sealRequestState(context, original));
@@ -972,7 +1000,7 @@ public class McpSecurityControlsTests {
 		};
 		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
 				McpProtectionConfig.withRequestStateProtector(protector)
-						.maximumDecodedRequestStateBytes(8).build(), null);
+						.maximumDecodedRequestStateSizeInBytes(8).build(), null);
 		McpRequestStateProtectionContext context = protectionContext(32);
 
 		assertInvalidState(() -> controls.openRequestState(context,
@@ -996,7 +1024,7 @@ public class McpSecurityControlsTests {
 
 		Assertions.assertEquals(McpProtectionMode.DEVELOPMENT_EPHEMERAL,
 				first.getProtectionMode());
-		Assertions.assertTrue(first.getKeyRingSnapshot().isEmpty());
+		Assertions.assertTrue(first.getKeyringSnapshot().isEmpty());
 		Assertions.assertArrayEquals(new byte[]{1},
 				first.openRequestState(context, state));
 		assertInvalidState(() -> second.openRequestState(context, state));
@@ -1006,26 +1034,26 @@ public class McpSecurityControlsTests {
 	public void traceFingerprintMatchesFrozenGoldenConstructionAndValidation() {
 		DefaultMcpSecurityControls controls =
 				new DefaultMcpSecurityControls(null, traceKey("trace", 96));
-		McpTraceCorrelationConfigurationFingerprint fingerprint = controls
-				.getConfigurationFingerprint().orElseThrow();
+		McpTraceCorrelationFingerprint fingerprint = controls
+				.getFingerprint().orElseThrow();
 		Assertions.assertTrue(controls.isEnabled());
 		Assertions.assertEquals(Optional.of("trace"),
 				controls.getActiveKeyId());
-		Assertions.assertEquals("v1",
-				McpTraceCorrelationConfigurationFingerprint.VERSION);
+		Assertions.assertThrows(NoSuchFieldException.class, () ->
+				McpTraceCorrelationFingerprint.class.getField("VERSION"));
 		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.getValue());
-		McpTraceCorrelationConfigurationFingerprint equalFingerprint =
-				McpTraceCorrelationConfigurationFingerprint.fromValue(
+		McpTraceCorrelationFingerprint equalFingerprint =
+				McpTraceCorrelationFingerprint.fromValue(
 						TRACE_GOLDEN_FINGERPRINT);
 		Assertions.assertEquals(fingerprint, equalFingerprint);
 		Assertions.assertEquals(fingerprint.hashCode(), equalFingerprint.hashCode());
 		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.toString());
 		Assertions.assertThrows(NullPointerException.class, () ->
-				McpTraceCorrelationConfigurationFingerprint.fromValue(null));
+				McpTraceCorrelationFingerprint.fromValue(null));
 		for (String invalid : List.of("", "A".repeat(42), "A".repeat(44),
 				"!" + "A".repeat(42), "A".repeat(42) + "B"))
 			Assertions.assertThrows(IllegalArgumentException.class, () ->
-					McpTraceCorrelationConfigurationFingerprint.fromValue(invalid));
+					McpTraceCorrelationFingerprint.fromValue(invalid));
 	}
 
 	@Test
@@ -1173,47 +1201,47 @@ public class McpSecurityControlsTests {
 		Assertions.assertFalse(disabled.isEnabled());
 		Assertions.assertEquals(Optional.empty(), disabled.getActiveKeyId());
 		Assertions.assertEquals(Optional.empty(),
-				disabled.getConfigurationFingerprint());
+				disabled.getFingerprint());
 		Assertions.assertThrows(IllegalStateException.class, () ->
 				disabled.rotateActiveKey(traceKey("trace", 0)));
 
-		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyring
 				.withActiveKey(protectionKey("protection", 0)).build(),
 				traceKey("trace", 32));
-		McpTraceCorrelationConfigurationFingerprint initialFingerprint = controls
-				.getConfigurationFingerprint().orElseThrow();
+		McpTraceCorrelationFingerprint initialFingerprint = controls
+				.getFingerprint().orElseThrow();
 		controls.rotateActiveKey(traceKey("trace", 32));
 		Assertions.assertEquals(initialFingerprint,
-				controls.getConfigurationFingerprint().orElseThrow());
+				controls.getFingerprint().orElseThrow());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				controls.rotateActiveKey(traceKey("trace", 64)));
 		Assertions.assertEquals(Optional.of("trace"),
 				controls.getActiveKeyId());
 		Assertions.assertEquals(initialFingerprint,
-				controls.getConfigurationFingerprint().orElseThrow());
+				controls.getFingerprint().orElseThrow());
 		controls.rotateActiveKey(traceKey("rotated", 64));
 		Assertions.assertEquals(Optional.of("rotated"),
 				controls.getActiveKeyId());
 		Assertions.assertNotEquals(initialFingerprint,
-				controls.getConfigurationFingerprint().orElseThrow());
-		McpTraceCorrelationConfigurationFingerprint beforeRejected = controls
-				.getConfigurationFingerprint().orElseThrow();
+				controls.getFingerprint().orElseThrow());
+		McpTraceCorrelationFingerprint beforeRejected = controls
+				.getFingerprint().orElseThrow();
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				controls.rotateActiveKey(traceKey("protection-alias", 0)));
 		Assertions.assertEquals(Optional.of("rotated"),
 				controls.getActiveKeyId());
 		Assertions.assertEquals(beforeRejected,
-				controls.getConfigurationFingerprint().orElseThrow());
+				controls.getFingerprint().orElseThrow());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				controls.stageVerificationKey(
 						protectionKey("trace-alias", 64)));
 
-		for (McpProtectionKeyRing aliasedRing : List.of(
-				McpProtectionKeyRing.withActiveKey(
+		for (McpProtectionKeyring aliasedRing : List.of(
+				McpProtectionKeyring.withActiveKey(
 						protectionKey("active-alias", 96)).build(),
-				McpProtectionKeyRing.withActiveKey(
+				McpProtectionKeyring.withActiveKey(
 						protectionKey("active", 0))
-						.verificationKey(
+						.addVerificationKey(
 								protectionKey("verification-alias", 96))
 						.build())) {
 			IllegalArgumentException exception = Assertions.assertThrows(
@@ -1230,14 +1258,14 @@ public class McpSecurityControlsTests {
 			throws Exception {
 		McpProtectionKey first = protectionKey("first", 0);
 		McpProtectionKey second = protectionKey("second", 32);
-		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
-				.withActiveKey(first).verificationKey(second).build(), null);
-		String firstFingerprint = controls(McpProtectionKeyRing
-				.withActiveKey(first).verificationKey(second).build(), null)
-				.getKeyRingSnapshot().orElseThrow().getFingerprint().getValue();
-		String secondFingerprint = controls(McpProtectionKeyRing
-				.withActiveKey(second).verificationKey(first).build(), null)
-				.getKeyRingSnapshot().orElseThrow().getFingerprint().getValue();
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyring
+				.withActiveKey(first).addVerificationKey(second).build(), null);
+		String firstFingerprint = controls(McpProtectionKeyring
+				.withActiveKey(first).addVerificationKey(second).build(), null)
+				.getKeyringSnapshot().orElseThrow().getFingerprint().getValue();
+		String secondFingerprint = controls(McpProtectionKeyring
+				.withActiveKey(second).addVerificationKey(first).build(), null)
+				.getKeyringSnapshot().orElseThrow().getFingerprint().getValue();
 		CountDownLatch start = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(8);
 		try {
@@ -1247,7 +1275,7 @@ public class McpSecurityControlsTests {
 				futures.add(executor.submit(() -> {
 					start.await();
 					for (int iteration = 0; iteration < 1_000; ++iteration)
-						controls.rotateTo((iteration + writerIndex) % 2 == 0
+						controls.rotateActiveKey((iteration + writerIndex) % 2 == 0
 								? first : second);
 					return null;
 				}));
@@ -1256,8 +1284,8 @@ public class McpSecurityControlsTests {
 				futures.add(executor.submit(() -> {
 					start.await();
 					for (int iteration = 0; iteration < 2_000; ++iteration) {
-						McpProtectionKeyRingSnapshot snapshot = controls
-								.getKeyRingSnapshot().orElseThrow();
+						McpProtectionKeyringSnapshot snapshot = controls
+								.getKeyringSnapshot().orElseThrow();
 						if (snapshot.getActiveKeyId().equals("first")) {
 							Assertions.assertEquals(Set.of("second"),
 									snapshot.getVerificationKeyIds());
@@ -1285,7 +1313,7 @@ public class McpSecurityControlsTests {
 	@Test
 	public void concurrentCrossPurposeAliasAttemptsHaveOneWinner()
 			throws Exception {
-		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyring
 				.withActiveKey(protectionKey("protection", 0)).build(),
 				traceKey("trace", 32));
 		McpProtectionKey protectionCandidate =
@@ -1300,7 +1328,7 @@ public class McpSecurityControlsTests {
 			Future<?> protectionFuture = executor.submit(() -> {
 				start.await();
 				try {
-					controls.rotateTo(protectionCandidate);
+					controls.rotateActiveKey(protectionCandidate);
 					successes.incrementAndGet();
 				} catch (IllegalArgumentException exception) {
 					rejections.incrementAndGet();
@@ -1326,7 +1354,7 @@ public class McpSecurityControlsTests {
 
 		Assertions.assertEquals(1, successes.get());
 		Assertions.assertEquals(1, rejections.get());
-		String activeProtectionId = controls.getKeyRingSnapshot().orElseThrow()
+		String activeProtectionId = controls.getKeyringSnapshot().orElseThrow()
 				.getActiveKeyId();
 		String activeTraceId = controls.getActiveKeyId().orElseThrow();
 		Assertions.assertTrue(
@@ -1402,10 +1430,10 @@ public class McpSecurityControlsTests {
 
 	private static void assertRejectedWithoutProtectionChange(
 			DefaultMcpSecurityControls controls, Runnable mutation) {
-		McpProtectionKeyRingSnapshot before = controls.getKeyRingSnapshot()
+		McpProtectionKeyringSnapshot before = controls.getKeyringSnapshot()
 				.orElseThrow();
 		Assertions.assertThrows(IllegalArgumentException.class, mutation::run);
-		McpProtectionKeyRingSnapshot after = controls.getKeyRingSnapshot()
+		McpProtectionKeyringSnapshot after = controls.getKeyringSnapshot()
 				.orElseThrow();
 		Assertions.assertEquals(before.getActiveKeyId(), after.getActiveKeyId());
 		Assertions.assertEquals(before.getVerificationKeyIds(),
@@ -1415,14 +1443,15 @@ public class McpSecurityControlsTests {
 
 	private static McpProtectionConfig protectionConfig(String keyId,
 			int firstByte) {
-		return McpProtectionConfig.withKeyRing(McpProtectionKeyRing
+		return McpProtectionConfig.withKeyring(McpProtectionKeyring
 				.withActiveKey(protectionKey(keyId, firstByte)).build()).build();
 	}
 
 	private static McpRequestStateProtectionContext protectionContext(
 			int firstBindingByte) {
-		return new McpRequestStateProtectionContext("/mcp", "2026-07-28",
-				"tools/call", bytesFrom(firstBindingByte));
+		return McpRequestStateProtectionContext.fromComponents(
+				"/mcp", "2026-07-28", "tools/call",
+				bytesFrom(firstBindingByte));
 	}
 
 	private static TraceContext traceContext(String traceId) {
@@ -1531,10 +1560,10 @@ public class McpSecurityControlsTests {
 	}
 
 	private static DefaultMcpSecurityControls controls(
-			McpProtectionKeyRing ring,
+			McpProtectionKeyring ring,
 			McpTraceCorrelationKey traceCorrelationKey) {
 		McpProtectionConfig config = ring == null ? null
-				: McpProtectionConfig.withKeyRing(ring).build();
+				: McpProtectionConfig.withKeyring(ring).build();
 		return new DefaultMcpSecurityControls(config, traceCorrelationKey);
 	}
 

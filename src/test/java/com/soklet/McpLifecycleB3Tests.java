@@ -187,7 +187,7 @@ class McpLifecycleB3Tests {
 			assertParticipant(server,
 					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
-			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPED),
+			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPING),
 					fixture.metrics().streamCloseReasons);
 		} finally {
 			releaseHandler.countDown();
@@ -241,7 +241,7 @@ class McpLifecycleB3Tests {
 					InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
 			assertLegacyParity(fixture,
 					ShutdownComponentDisposition.FORCED_TERMINATION);
-			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPED),
+			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPING),
 					fixture.metrics().streamCloseReasons);
 			Assertions.assertEquals(address, boundAddress(server));
 			assertRuntimeEvidenceReleased(fixture.bridge());
@@ -625,13 +625,13 @@ class McpLifecycleB3Tests {
 					public void publish(@NonNull McpSubscriptionEvent event) {
 					}
 				};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-pre-ready-self-join"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-pre-ready-self-join"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
@@ -699,13 +699,13 @@ class McpLifecycleB3Tests {
 					public void publish(@NonNull McpSubscriptionEvent event) {
 					}
 				};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-startup-primary-election"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-startup-primary-election"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
@@ -785,13 +785,13 @@ class McpLifecycleB3Tests {
 					public void publish(@NonNull McpSubscriptionEvent event) {
 					}
 				};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-synchronous-startup-election"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-synchronous-startup-election"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
@@ -870,13 +870,13 @@ class McpLifecycleB3Tests {
 					public void publish(@NonNull McpSubscriptionEvent event) {
 					}
 				};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-registration-close-self-join"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-registration-close-self-join"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
@@ -927,11 +927,9 @@ class McpLifecycleB3Tests {
 				}
 			}
 		};
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(endpoint(PATH))), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(endpoint(PATH))))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.allowedHosts(Set.of(HOST))
 				.requestHandlerConcurrency(1)
@@ -1629,13 +1627,13 @@ class McpLifecycleB3Tests {
 				// No application events are needed for startup identity evidence.
 			}
 		};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-post-bind-failure"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-post-bind-failure"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
 		McpServer failedServer = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
@@ -2031,19 +2029,18 @@ class McpLifecycleB3Tests {
 			}
 		};
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+				.withEventPublisher(publisher, Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("b3-subscription"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("b3-subscription"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(subscriptions)
+				.subscriptionConfig(subscriptions)
 				.build();
 		Duration gracefulTimeout = Duration.ofSeconds(10);
 		McpServer server = serverBuilder(endpoint, gracefulTimeout)
-				.maximumSubscriptionsPerPrincipal(subscriptionCount + 1)
+				.maximumSubscriptionsPerPartition(subscriptionCount + 1)
 				.maximumSubscriptionDuration(Duration.ofDays(3_650))
 				.build();
 		Fixture fixture = fixture(server, withGracefulShutdownTimeout(
@@ -2079,7 +2076,7 @@ class McpLifecycleB3Tests {
 					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertEquals(java.util.Collections.nCopies(subscriptionCount,
-					McpStreamTerminationReason.SERVER_STOPPED),
+					McpStreamTerminationReason.SERVER_STOPPING),
 					fixture.metrics().subscriptionCloseReasons);
 			Assertions.assertEquals(1, sourceRegistrationCloses.get());
 		} finally {
@@ -2225,10 +2222,10 @@ class McpLifecycleB3Tests {
 			@NonNull McpEndpoint endpoint,
 			@NonNull Duration shutdownTimeout) {
 		requireNonNull(shutdownTimeout);
-		return McpServer.withPort(port)
+		return McpServer.withPort(port,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
@@ -2254,17 +2251,15 @@ class McpLifecycleB3Tests {
 
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String path) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(implementation("b3-lifecycle"))
+		return McpEndpoint.withPath(path, implementation("b3-lifecycle"))
 				.build();
 	}
 
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String path,
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(implementation("b3-lifecycle"))
-				.tool(tool)
+		return McpEndpoint.withPath(path, implementation("b3-lifecycle"))
+				.addTool(tool)
 				.build();
 	}
 
@@ -2276,7 +2271,7 @@ class McpLifecycleB3Tests {
 	@NonNull
 	private static McpToolRegistration<McpJsonObject> tool(@NonNull String name,
 			@NonNull McpToolHandler<McpJsonObject> handler) {
-		return McpToolRegistration.withName(name).jsonArguments()
+		return McpToolRegistration.withName(name).jsonObjectArguments()
 				.handler(handler).build();
 	}
 
@@ -2833,7 +2828,8 @@ class McpLifecycleB3Tests {
 			else if (event instanceof McpMetricsEvent.SubscriptionClosed closed)
 				this.subscriptionCloseReasons.add(closed.getReason());
 			else if (event instanceof McpMetricsEvent.ServerStopped stopped)
-				this.shutdownOutcomes.add(stopped.getOutcome());
+				this.shutdownOutcomes.add(
+						stopped.getShutdownComponentDisposition());
 		}
 	}
 }

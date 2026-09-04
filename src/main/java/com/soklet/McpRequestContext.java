@@ -102,29 +102,19 @@ public interface McpRequestContext {
 	/**
 	 * Returns client responses supplied with a multi-round-trip retry.
 	 *
-	 * <p>The default preserves compatibility for request-context
-	 * implementations that do not yet supply multi-round-trip data.
-	 *
 	 * @return immutable input responses, empty for an initial request
 	 */
 	@NonNull
-	default McpInputResponses getInputResponses() {
-		return McpInputResponses.emptyInstance();
-	}
+	McpInputResponses getInputResponses();
 
 	/**
 	 * Returns verified framework-protected JSON state supplied with a
 	 * multi-round-trip retry.
 	 *
-	 * <p>The default preserves compatibility for request-context
-	 * implementations that do not yet supply multi-round-trip data.
-	 *
 	 * @return verified framework-protected state, or empty when absent
 	 */
 	@NonNull
-	default Optional<@NonNull McpJsonValue> getFrameworkRequestState() {
-		return Optional.empty();
-	}
+	Optional<@NonNull McpJsonValue> getFrameworkRequestState();
 
 	/**
 	 * Returns application-protected opaque state supplied with a
@@ -136,31 +126,25 @@ public interface McpRequestContext {
 	 * admission identity and authorization context. The same requirements
 	 * apply when the retry arrives over a new connection or server instance.
 	 *
-	 * <p>The default preserves compatibility for request-context
-	 * implementations that do not yet supply multi-round-trip data.
-	 *
 	 * @return application-protected state, or empty when absent
 	 */
 	@NonNull
-	default Optional<@NonNull String> getApplicationRequestState() {
-		return Optional.empty();
-	}
+	Optional<@NonNull String> getApplicationRequestState();
 
 	/**
-	 * Returns the protocol's deprecated per-request log-level metadata.
+	 * Returns the protocol's per-request log-level metadata.
 	 *
 	 * <p>SEP-2577 marks MCP Logging deprecated in the 2026-07-28 profile, with
 	 * earliest specification removal eligibility on or after 2027-07-28. Both
-	 * this accessor and its returned type remain supported Soklet API for every
+	 * This accessor and its returned type remain supported Soklet API for every
 	 * supported profile containing the wire feature; Soklet has made no Java
-	 * API-removal decision. The frozen accessor name describes the upstream
-	 * wire lifecycle. Exposing the value neither advertises nor implements MCP
-	 * Logging; applications use Soklet's existing observability path.
+	 * API-removal decision. Exposing the value neither advertises nor implements
+	 * MCP Logging; applications use Soklet's existing observability path.
 	 *
 	 * @return deprecated log level, if supplied
 	 */
 	@NonNull
-	Optional<@NonNull McpLogLevel> getDeprecatedLogLevel();
+	Optional<@NonNull McpLogLevel> getLogLevel();
 
 	/**
 	 * Returns the validated distributed trace context supplied through MCP

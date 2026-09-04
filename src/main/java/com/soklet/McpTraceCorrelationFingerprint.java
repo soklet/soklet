@@ -33,20 +33,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpTraceCorrelationConfigurationFingerprint {
-	/** Fingerprint encoding version. */
-	@NonNull
-	public static final String VERSION = "v1";
+public final class McpTraceCorrelationFingerprint {
 	@NonNull
 	private final String value;
 
 	@NonNull
-	static McpTraceCorrelationConfigurationFingerprint fromValue(
+	static McpTraceCorrelationFingerprint fromValue(
 			@NonNull String value) {
-		return new McpTraceCorrelationConfigurationFingerprint(value);
+		return new McpTraceCorrelationFingerprint(value);
 	}
 
-	private McpTraceCorrelationConfigurationFingerprint(@NonNull String value) {
+	private McpTraceCorrelationFingerprint(@NonNull String value) {
 		requireNonNull(value);
 		if (!isCanonicalSha256Base64Url(value))
 			throw new IllegalArgumentException(
@@ -65,7 +62,7 @@ public final class McpTraceCorrelationConfigurationFingerprint {
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
 			return true;
-		if (!(other instanceof McpTraceCorrelationConfigurationFingerprint fingerprint))
+		if (!(other instanceof McpTraceCorrelationFingerprint fingerprint))
 			return false;
 		return this.value.equals(fingerprint.value);
 	}

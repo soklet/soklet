@@ -342,12 +342,11 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			@NonNull McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler(handler)
 				.build();
-		return McpEndpoint.withPath(TOOL_PATH)
-				.serverInformation(serverInformation())
-				.tool(tool)
+		return McpEndpoint.withPath(TOOL_PATH, serverInformation())
+				.addTool(tool)
 				.build();
 	}
 
@@ -366,24 +365,21 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			}
 		};
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationType(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+				.withEventPublisher(publisher, Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "diagnostics-subscription")
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
-								McpResourceOutput.builder()
-										.content(McpTextResourceContents
+								McpResourceOutput.withContent(McpTextResourceContents
 												.withUriAndText(read.getUri(), "test")
 												.build())
 										.build()))
 				.build();
-		return McpEndpoint.withPath(SUBSCRIPTION_PATH)
-				.serverInformation(serverInformation())
-				.resource(resource)
-				.subscriptions(subscriptions)
+		return McpEndpoint.withPath(SUBSCRIPTION_PATH, serverInformation())
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
 	}
 
@@ -396,11 +392,8 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	@NonNull
 	private static McpServer server(@NonNull List<@NonNull McpEndpoint> endpoints,
 			@NonNull Duration shutdownTimeout) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(endpoints), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

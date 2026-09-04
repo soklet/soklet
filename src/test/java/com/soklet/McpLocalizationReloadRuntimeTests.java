@@ -52,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Off-network reload-control evidence: {@code catalogsChanged()} delivers
+ * Off-network reload-control evidence: {@code invalidateCatalogs()} delivers
  * coarse per-family invalidations through the existing subscription machinery,
  * advertisement and filters stay truthful per localized surface, stale
  * pre-rendered terminal state is released, generations fence delivery, and two
@@ -76,7 +76,7 @@ class McpLocalizationReloadRuntimeTests {
 					.build();
 
 	@Test
-	void catalogsChangedDeliversOneCoarseInvalidationPerLocalizedFamily() {
+	void invalidateCatalogsDeliversOneCoarseInvalidationPerLocalizedFamily() {
 		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		List<String> frames = new ArrayList<>();
 		SokletSimulator.run(simulatorConfig(true, localizer(
@@ -95,7 +95,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertTrue(acknowledgment.contains("\"resourcesListChanged\":true"),
 					acknowledgment);
 
-			scopedServer.get().getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().invalidateCatalogs();
 
 			for (int index = 0; index < 3; ++index)
 				frames.add(nextFrame(simulation));
@@ -116,24 +116,24 @@ class McpLocalizationReloadRuntimeTests {
 	void familiesWithoutALocalizedCatalogAreNeitherAcknowledgedNorDelivered() {
 		// Only the prompt carries localizable text: no tools, and the resource
 		// has no title or description.
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("reload-prompts-only", "1.0").build())
-				.prompt(McpPromptRegistration.withName("reload.prompt")
+				.addPrompt(McpPromptRegistration.withName("reload.prompt")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
 						.build())
-				.resource(bareResource())
+				.addResource(bareResource())
 				// RESOURCE_UPDATED-only support: the application does not offer
 				// the resources list-change family, and neither does the
 				// localizer for this endpoint, so the flag must not be accepted.
-				.subscriptions(McpSubscriptionConfig
+				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
-								McpLocalSubscriptionEventPublisher.fromDefaults())
-						.notificationTypes(EnumSet.of(
-								McpSubscriptionNotificationType.RESOURCE_UPDATED))
+								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+								EnumSet.of(
+										McpSubscriptionNotificationType
+												.RESOURCE_UPDATED))
 						.build())
 				.build();
 		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
@@ -153,7 +153,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertFalse(acknowledgment.contains("resourcesListChanged"),
 					acknowledgment);
 
-			scopedServer.get().getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().invalidateCatalogs();
 
 			String frame = nextFrame(simulation);
 			assertTrue(frame.contains("notifications/prompts/list_changed"),
@@ -204,7 +204,7 @@ class McpLocalizationReloadRuntimeTests {
 			// The invalidation clears the pre-rendered localized terminal, so
 			// the close that follows publishes canonical text instead of
 			// retaining the obsolete translation graph.
-			scopedServer.get().getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().invalidateCatalogs();
 			nextFrame(simulation);
 
 			try {
@@ -228,13 +228,14 @@ class McpLocalizationReloadRuntimeTests {
 		AtomicReference<String> snapshot = new AtomicReference<>("OLD:");
 		CountDownLatch contextCaptured = new CountDownLatch(1);
 		CountDownLatch releaseContext = new CountDownLatch(1);
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> {
 					String captured = snapshot.get();
 					contextCaptured.countDown();
 					await(releaseContext);
-					return McpLocalizationContext.withLocale(Locale.CANADA_FRENCH)
-							.localizer(text -> McpLocalizationResult.localized(
+					return McpLocalizationContext.withLocale(
+							Locale.CANADA_FRENCH,
+							text -> McpLocalizationResult.localized(
 									captured + text.getDefaultText()))
 							.build();
 				})
@@ -251,7 +252,7 @@ class McpLocalizationReloadRuntimeTests {
 			try {
 				await(contextCaptured);
 				snapshot.set("NEW:");
-				scopedServer.get().getLocalizationControl().catalogsChanged();
+				scopedServer.get().getLocalizationControl().invalidateCatalogs();
 			} finally {
 				releaseContext.countDown();
 			}
@@ -280,14 +281,14 @@ class McpLocalizationReloadRuntimeTests {
 		CountDownLatch contextResumed = new CountDownLatch(1);
 		BlockingShutdownExecutorService handlerExecutor =
 				new BlockingShutdownExecutorService();
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> {
 					contextCaptured.countDown();
 					await(releaseContext);
 					contextResumed.countDown();
-					return McpLocalizationContext.withLocale(Locale.CANADA_FRENCH)
-							.localizer(text ->
-									McpLocalizationResult.useDefaultText())
+					return McpLocalizationContext.withLocale(
+							Locale.CANADA_FRENCH,
+							text -> McpLocalizationResult.useDefaultText())
 							.build();
 				})
 				.build();
@@ -443,7 +444,7 @@ class McpLocalizationReloadRuntimeTests {
 		assertTrue(lifecycleAdapter(server).retentionSummary().isEmpty());
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		assertEquals(0, diagnostics.getActiveRequestStreams());
 		assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
@@ -454,12 +455,12 @@ class McpLocalizationReloadRuntimeTests {
 				text -> McpLocalizationResult.useDefaultText()));
 
 		// No active listener or simulator generation: accepted as a no-op.
-		localized.getLocalizationControl().catalogsChanged();
+		localized.getLocalizationControl().invalidateCatalogs();
 
 		McpServer unlocalized = server(true, null);
 		assertFalse(unlocalized.getLocalizationControl().isEnabled());
 		assertThrows(IllegalStateException.class,
-				() -> unlocalized.getLocalizationControl().catalogsChanged());
+				() -> unlocalized.getLocalizationControl().invalidateCatalogs());
 	}
 
 	@Test
@@ -484,14 +485,14 @@ class McpLocalizationReloadRuntimeTests {
 
 				// The control is a local-server operation: each node's call
 				// reaches only its own streams.
-				first.get().getLocalizationControl().catalogsChanged();
+				first.get().getLocalizationControl().invalidateCatalogs();
 				assertTrue(nextFrame(firstSubscription)
 						.contains("notifications/tools/list_changed"));
 				assertTrue(pollFrame(secondSubscription,
 						Duration.ofMillis(150)).isEmpty(),
 						"Node one's invalidation must not reach node two.");
 
-				second.get().getLocalizationControl().catalogsChanged();
+				second.get().getLocalizationControl().invalidateCatalogs();
 				assertTrue(nextFrame(secondSubscription)
 						.contains("notifications/tools/list_changed"));
 			});
@@ -502,8 +503,7 @@ class McpLocalizationReloadRuntimeTests {
 	void mixedLocalizedEndpointsShareOnePublisherAndFanOutToEveryEndpoint() {
 		CountingPublisher publisher = new CountingPublisher();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(EnumSet.of(
+				.withEventPublisher(publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		List<McpEndpoint> endpoints = List.of(
@@ -546,20 +546,18 @@ class McpLocalizationReloadRuntimeTests {
 				.withNameAndVersion(path.substring(path.lastIndexOf('/') + 1), "1.0");
 		if (title != null)
 			information.title(title);
-		return McpEndpoint.withPath(path)
-				.serverInformation(information.build())
-				.resource(McpResourceRegistration.withUriAndName(
+		return McpEndpoint.withPath(path, information.build())
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("shared:" + path), "shared")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(resource.getUri(),
 																"unused")
 														.build())
 												.build()))
 						.build())
-				.subscriptions(subscriptions)
+				.subscriptionConfig(subscriptions)
 				.build();
 	}
 
@@ -668,13 +666,10 @@ class McpLocalizationReloadRuntimeTests {
 	}
 
 	private static McpLocalizer localizer(
-			java.util.function.Function<McpLocalizableText,
-					McpLocalizationResult> provider) {
-		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> McpLocalizationContext
-						.withLocale(Locale.CANADA_FRENCH)
-						.localizer(provider)
-						.build())
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> McpLocalizationContext.withLocale(
+						Locale.CANADA_FRENCH, localizationLookup).build())
 				.build();
 	}
 
@@ -686,35 +681,33 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(boolean subscriptions,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
-		return server(reloadEndpoint(subscriptions), localizer, handlerExecutor,
-				McpServer.withPort(0));
+		return server(reloadEndpoint(subscriptions), localizer, handlerExecutor);
 	}
 
 	private static McpEndpoint reloadEndpoint(boolean subscriptions) {
-		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation
 						.withNameAndVersion("localization-reload", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
 						.build())
-				.tool(McpToolRegistration.withName("reload.tool")
-						.jsonArguments()
+				.addTool(McpToolRegistration.withName("reload.tool")
+						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build())
-				.prompt(McpPromptRegistration.withName("reload.prompt")
+				.addPrompt(McpPromptRegistration.withName("reload.prompt")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("reload://text"), "text")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(McpTextResourceContents
+										McpResourceOutput.withContent(McpTextResourceContents
 														.withUriAndText(URI.create(
 																"reload://text"),
 																"unused")
@@ -724,7 +717,7 @@ class McpLocalizationReloadRuntimeTests {
 						.build());
 
 		if (subscriptions)
-			builder.subscriptions(subscriptions());
+			builder.subscriptionConfig(subscriptions());
 
 		return builder.build();
 	}
@@ -737,16 +730,16 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(McpEndpoint endpoint,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
-		return server(endpoint, localizer, handlerExecutor,
-				McpServer.withPort(0));
+		McpEndpointRegistry endpointRegistry =
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+		return server(localizer, handlerExecutor,
+				McpServer.withPort(0, endpointRegistry,
+						McpAdmissionController.acceptAllInstance()));
 	}
 
-	private static McpServer server(McpEndpoint endpoint,
-			McpLocalizer localizer,
+	private static McpServer server(McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
 			McpServer.Builder builder) {
-		builder.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance());
 		configureServer(builder, localizer, handlerExecutor);
 		return builder.build();
 	}
@@ -770,9 +763,10 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static McpSubscriptionConfig subscriptions() {
 		return McpSubscriptionConfig
-				.withEventPublisher(McpLocalSubscriptionEventPublisher.fromDefaults())
-				.notificationTypes(EnumSet.of(
-						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
+				.withEventPublisher(
+						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+						EnumSet.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED))
 				.build();
 	}
 
@@ -781,8 +775,7 @@ class McpLocalizationReloadRuntimeTests {
 				URI.create("reload://bare"), "bare")
 				.handler((request, resource, features) ->
 						McpCompleteResult.fromResourceOutput(
-								McpResourceOutput.builder()
-										.content(McpTextResourceContents
+								McpResourceOutput.withContent(McpTextResourceContents
 												.withUriAndText(URI.create(
 														"reload://bare"),
 														"unused")

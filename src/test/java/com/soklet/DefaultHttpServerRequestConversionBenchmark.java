@@ -103,7 +103,8 @@ public final class DefaultHttpServerRequestConversionBenchmark {
 	private static void rawHeaderRoundTrip(int operations) {
 		for (int i = 0; i < operations; i++) {
 			List<String> rawHeaderLines = REQUEST.headers().stream()
-					.map(header -> format("%s: %s", header.name(), header.value() == null ? "" : header.value()))
+					.map(header -> format("%s: %s", header.name(),
+							header.value() == null ? "" : header.value()))
 					.collect(Collectors.toList());
 			consume(Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines));
 		}

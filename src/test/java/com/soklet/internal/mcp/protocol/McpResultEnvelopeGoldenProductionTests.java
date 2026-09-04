@@ -29,7 +29,7 @@ import com.soklet.McpInputRequiredResult;
 import com.soklet.McpInputRequirement;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
-import com.soklet.McpLocalSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpLocalizationContext;
 import com.soklet.McpLocalizationResult;
 import com.soklet.McpLocalizer;
@@ -276,7 +276,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolHandlerInvocations.incrementAndGet();
 					return completeTool("handler tool complete", "handler-tool");
@@ -298,9 +298,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-complete")
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -365,11 +365,11 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint customListEndpoint = endpointBuilder(
 				"result-envelope-custom-list")
-				.resource(listedResource)
+				.addResource(listedResource)
 				.resourceListHandler((request, list, features) -> {
 					listHandlerInvocations.incrementAndGet();
 					return McpResourcePage.builder()
-							.resources(list.getRegisteredResourceDescriptors())
+							.addResources(list.getRegisteredResourceDescriptors())
 							.metadata(metadata("custom-resource-list"))
 							.build();
 				})
@@ -422,7 +422,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger resourceInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(INPUT_TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
 					if (request.getInputResponses().find("roots").isEmpty())
@@ -431,15 +431,14 @@ public class McpResultEnvelopeGoldenProductionTests {
 					return completeTool("tool input retry complete",
 							"tool-input-retry");
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(INPUT_PROMPT_NAME)
 				.handler((request, promptGet, features) -> {
 					promptInvocations.incrementAndGet();
 					if (request.getApplicationRequestState().isEmpty())
-						return McpInputRequiredResult.builder()
-								.applicationRequestState("prompt-state-v1")
+						return McpInputRequiredResult.withApplicationRequestState("prompt-state-v1")
 								.metadata(metadata("requestState-only"))
 								.build();
 					Assertions.assertEquals("prompt-state-v1",
@@ -454,8 +453,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.handler((request, read, features) -> {
 					resourceInvocations.incrementAndGet();
 					if (request.getFrameworkRequestState().isEmpty())
-						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots, McpJsonObject.emptyInstance()))
 								.frameworkRequestState(McpJsonObject.builder()
 										.put("phase", "combined")
@@ -473,13 +471,13 @@ public class McpResultEnvelopeGoldenProductionTests {
 							"resource combined retry complete",
 							"resource-combined-retry");
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-input")
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		DeterministicProtector protector = new DeterministicProtector();
 		McpServer server = serverBuilder(endpoint)
@@ -542,7 +540,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger inputInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> complete = McpToolRegistration
 				.withName("result.sse.complete")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					completeInvocations.incrementAndGet();
 					features.require(McpProgressReporter.class).report(
@@ -552,18 +550,18 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpToolRegistration<McpJsonObject> input = McpToolRegistration
 				.withName("result.sse.input")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					inputInvocations.incrementAndGet();
 					features.require(McpProgressReporter.class).report(
 							McpProgressUpdate.withProgress(1.0d).build());
 					return inputRequiredRoots(roots, "request-sse-input", false);
 				})
-				.mayRequestInput(roots)
+				.addInputRequestDeclarations(roots)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-sse")
-				.tool(complete)
-				.tool(input)
+				.addTool(complete)
+				.addTool(input)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
@@ -593,11 +591,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 			owner.close();
 		}
 
-		McpLocalSubscriptionEventPublisher publisher =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(Set.of(
+				.withEventPublisher(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
@@ -607,8 +604,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint subscriptionEndpoint = endpointBuilder(
 				"result-envelope-subscription")
-				.resource(resource)
-				.subscriptions(subscriptions)
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer subscriptionServer = serverBuilder(subscriptionEndpoint).build();
 		assertSubscriptionTerminalGolden(subscriptionServer, "303",
@@ -616,11 +613,11 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 		McpEndpoint localizedSubscriptionEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-subscription")
-				.resource(resource)
-				.subscriptions(McpSubscriptionConfig
+				.addResource(resource)
+				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
-								McpLocalSubscriptionEventPublisher.fromDefaults())
-						.notificationTypes(Set.of(
+								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+								Set.of(
 								McpSubscriptionNotificationType
 										.RESOURCES_LIST_CHANGED))
 						.build())
@@ -641,7 +638,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<TypedArguments> tool = McpToolRegistration
 				.withName("result.typed")
-				.types(TypedArguments.class, TypedResult.class)
+				.argumentAndOutputTypes(TypedArguments.class, TypedResult.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if ("handler-fail".equals(
@@ -652,7 +649,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-typed")
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
@@ -958,8 +955,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	private static McpCompleteResult completeResource(URI uri, String text,
 			String authority) {
 		return McpCompleteResult.fromResourceOutput(
-				McpResourceOutput.builder()
-						.content(McpTextResourceContents
+				McpResourceOutput.withContent(McpTextResourceContents
 								.withUriAndText(uri, text)
 								.mimeType("text/plain")
 								.build())
@@ -970,8 +966,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	private static McpInputRequiredResult inputRequiredRoots(
 			McpInputRequestDeclaration roots, String authority,
 			boolean includeFrameworkState) {
-		McpInputRequiredResult.Builder builder = McpInputRequiredResult.builder()
-				.inputRequest("roots", McpInputRequest.fromDeclaration(
+		McpInputRequiredResult.Builder builder = McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 						roots, McpJsonObject.emptyInstance()))
 				.metadata(metadata(authority));
 		if (includeFrameworkState)
@@ -988,14 +983,12 @@ public class McpResultEnvelopeGoldenProductionTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder(String name) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						name, "4.0.0").build());
 	}
 
 	private static McpEndpoint.Builder localizedEndpointBuilder(String name) {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						name, "4.0.0")
 						.title("Canonical result title")
 						.description("Canonical result description")
@@ -1003,20 +996,17 @@ public class McpResultEnvelopeGoldenProductionTests {
 	}
 
 	private static McpLocalizer frenchLocalizer() {
-		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> McpLocalizationContext
-						.withLocale(Locale.FRENCH)
-						.localizer(text -> McpLocalizationResult.localized(
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> McpLocalizationContext
+						.withLocale(Locale.FRENCH,
+								text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText()))
 						.build())
 				.build();
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

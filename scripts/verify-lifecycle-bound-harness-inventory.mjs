@@ -352,7 +352,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["cacheableResultsAreClampedToPrivateZeroExactlyWhenLocalized","32ef05135a745decafde402ebb331d54b75a65bf4686c9c702398ef863713a35",{"generation":{"count":5,"mode":"SEQUENTIAL","complete":5,"prior":4,"incomplete":1},"controlJoinMillis":50000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpLocalizationReloadRuntimeTests.java", "5718bafcd559fe4ab1d5a3c5542a667027db948261a2b07a34e4896889af71fa", [
-    ["catalogsChangedDeliversOneCoarseInvalidationPerLocalizedFamily","971b327747c8fae868ad1e2c7a846f8433dfb062078bf19bffc5f5ca5f6c6744",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":20000}],
+    ["invalidateCatalogsDeliversOneCoarseInvalidationPerLocalizedFamily","971b327747c8fae868ad1e2c7a846f8433dfb062078bf19bffc5f5ca5f6c6744",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":20000}],
     ["familiesWithoutALocalizedCatalogAreNeitherAcknowledgedNorDelivered","51fcdfdb8cee2fc1ae58fc6a49b4ec8b63b7337b866bf4990990b5752cae5a37",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":10150}],
     ["discoveryAdvertisesListChangedOnlyForLocalizedCatalogsWithSubscriptions","e4d211e014f2602245e293926882399dec9a8f53661d44c8a4958233ab8d3cd6",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1}}],
     ["aStaleLocalizedTerminalIsReleasedByInvalidation","559d95bfb19ec744718d579a03663fdc0a59e4fdb98420a9a26dd9dea8eec983",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":15000}],

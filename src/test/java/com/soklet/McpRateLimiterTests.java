@@ -49,7 +49,7 @@ public class McpRateLimiterTests {
 		McpRateLimiter limiter = McpRateLimiter.fromInMemoryTokenBucket(
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ofDays(1))
+						.refillInterval(Duration.ofDays(1))
 						.build());
 
 		McpRateLimitContext request = context(
@@ -77,38 +77,51 @@ public class McpRateLimiterTests {
 		McpTokenBucketConfig defaults = McpTokenBucketConfig.fromDefaults();
 		Assertions.assertEquals(Long.valueOf(20), defaults.getCapacity());
 		Assertions.assertEquals(Long.valueOf(60), defaults.getRefillTokens());
-		Assertions.assertEquals(Duration.ofMinutes(1), defaults.getRefillPeriod());
+		Assertions.assertEquals(Duration.ofMinutes(1), defaults.getRefillInterval());
+		McpTokenBucketConfig completedEntryPoint =
+				McpTokenBucketConfig.withCapacity(100L).build();
+		Assertions.assertEquals(Long.valueOf(100),
+				completedEntryPoint.getCapacity());
+		Assertions.assertEquals(Long.valueOf(60),
+				completedEntryPoint.getRefillTokens());
+		Assertions.assertEquals(Duration.ofMinutes(1),
+				completedEntryPoint.getRefillInterval());
+		McpTokenBucketConfig resetDefaults = McpTokenBucketConfig
+				.withCapacity(100L)
+				.refillTokens(2L)
+				.refillInterval(Duration.ofSeconds(3))
+				.refillTokens(null)
+				.refillInterval(null)
+				.build();
+		Assertions.assertEquals(Long.valueOf(60),
+				resetDefaults.getRefillTokens());
+		Assertions.assertEquals(Duration.ofMinutes(1),
+				resetDefaults.getRefillInterval());
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpTokenBucketConfig.withCapacity(0L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ofSeconds(1))
+						.refillInterval(Duration.ofSeconds(1))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(0L)
-						.refillPeriod(Duration.ofSeconds(1))
+						.refillInterval(Duration.ofSeconds(1))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ZERO)
-						.build());
-		Assertions.assertThrows(NullPointerException.class, () ->
-				McpTokenBucketConfig.withCapacity(1L)
-						.refillTokens(1L)
+						.refillInterval(Duration.ZERO)
 						.build());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpTokenBucketConfig.withCapacity(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpTokenBucketConfig.withCapacity(1L).refillTokens(null));
 	}
 
 	@Test
 	public void rateLimiterRegistryIsImmutableAndRejectsBadNames() {
 		McpRateLimiter limiter = context -> McpRateLimitDecision.allowed();
 		McpRateLimiterRegistry registry = McpRateLimiterRegistry.builder()
-				.rateLimiter("shared", limiter)
+				.addRateLimiter("shared", limiter)
 				.build();
 
 		Assertions.assertSame(limiter, registry.find("shared").orElseThrow());
@@ -116,11 +129,11 @@ public class McpRateLimiterTests {
 		Assertions.assertThrows(UnsupportedOperationException.class, () ->
 				registry.getRateLimiters().put("another", limiter));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpRateLimiterRegistry.builder().rateLimiter(" ", limiter));
+				McpRateLimiterRegistry.builder().addRateLimiter(" ", limiter));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpRateLimiterRegistry.builder()
-						.rateLimiter("shared", limiter)
-						.rateLimiter("shared", limiter));
+						.addRateLimiter("shared", limiter)
+						.addRateLimiter("shared", limiter));
 	}
 
 	@Test
@@ -138,7 +151,7 @@ public class McpRateLimiterTests {
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(3L)
-						.refillPeriod(Duration.ofNanos(10))
+						.refillInterval(Duration.ofNanos(10))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
 				"/one", "principal", McpRateLimitTarget.REQUEST);
@@ -163,7 +176,7 @@ public class McpRateLimiterTests {
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ofNanos(10))
+						.refillInterval(Duration.ofNanos(10))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
 				"/one", "principal", McpRateLimitTarget.REQUEST);
@@ -184,7 +197,7 @@ public class McpRateLimiterTests {
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
 				McpTokenBucketConfig.withCapacity(1L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ofNanos(10))
+						.refillInterval(Duration.ofNanos(10))
 						.build(), clock, 2);
 
 		Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
@@ -219,7 +232,7 @@ public class McpRateLimiterTests {
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
 				McpTokenBucketConfig.withCapacity(100L)
 						.refillTokens(1L)
-						.refillPeriod(Duration.ofDays(1))
+						.refillInterval(Duration.ofDays(1))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
 				"/one", "principal", McpRateLimitTarget.REQUEST);
@@ -252,7 +265,7 @@ public class McpRateLimiterTests {
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
 				McpTokenBucketConfig.withCapacity(Long.MAX_VALUE)
 						.refillTokens(Long.MAX_VALUE)
-						.refillPeriod(Duration.ofNanos(Long.MAX_VALUE))
+						.refillInterval(Duration.ofNanos(Long.MAX_VALUE))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
 				"/one", "principal", McpRateLimitTarget.REQUEST);
@@ -266,8 +279,7 @@ public class McpRateLimiterTests {
 
 	private static McpRateLimitContext context(String endpointPath,
 			String partitionKey, McpRateLimitTarget target) {
-		McpEndpoint endpoint = McpEndpoint.withPath(endpointPath)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(endpointPath, McpImplementation.withNameAndVersion(
 						"test", "1").build())
 				.build();
 		McpAdmissionIdentity identity = McpAdmissionIdentity

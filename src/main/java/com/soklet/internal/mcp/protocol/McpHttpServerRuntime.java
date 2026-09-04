@@ -871,7 +871,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							profile.revision(), "resources/templates/list",
 							responses.resourceTemplatesList());
 				}
-				if (endpoint.subscriptions().isPresent()
+				if (endpoint.subscriptionConfig().isPresent()
 						&& endpointRuntime.binding().subscriptionEventSource().isPresent())
 					preflightFrameworkOwnedResponse(endpointRuntime.path(),
 							profile.revision(), "subscriptions/listen terminal",
@@ -3638,7 +3638,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			int active = activeSubscriptionCountsByPartition.getOrDefault(
 					authorizationPartition, 0);
 			if (active >= subscriptionRuntimeConfiguration
-					.maximumSubscriptionsPerPrincipal())
+					.maximumSubscriptionsPerPartition())
 				return new SubscriptionRegistrationAttempt(
 						SubscriptionRegistrationResult.CAPACITY_REJECTED, null);
 			SubscriptionRegistration registration = new SubscriptionRegistration(
@@ -4049,13 +4049,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (!mappedRequest.params().fields().members().isEmpty())
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		} else if (subscriptionListenRequest) {
-			if (endpoint.subscriptions().isEmpty()
+			if (endpoint.subscriptionConfig().isEmpty()
 					|| endpointBinding.subscriptionEventSource().isEmpty())
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 			try {
 				acceptedSubscriptionFilter = Optional.of(
 						parseAcceptedSubscriptionFilter(mappedRequest,
-								endpoint.subscriptions().orElseThrow(),
+								endpoint.subscriptionConfig().orElseThrow(),
 								endpointPolicy.catalogLocalizer()
 										.map(McpRuntimeCatalogLocalizer
 												::localizedResponseKinds)
@@ -4641,7 +4641,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpJsonRpcId subscriptionId,
 			@NonNull McpNormalizedEndpoint endpoint) {
 		Optional<McpImplementationMetadata> serverInformation =
-				endpoint.includeServerInformation()
+				endpoint.serverInformationIncluded()
 						? Optional.of(endpoint.serverInformation()) : Optional.empty();
 		McpResultMetadata metadata = McpResultMetadata.withSubscriptionId(
 				subscriptionId, serverInformation);

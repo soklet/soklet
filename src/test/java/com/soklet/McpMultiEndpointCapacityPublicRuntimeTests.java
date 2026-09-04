@@ -70,12 +70,9 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 				"multi-endpoint-first-capacity", firstTool);
 		McpEndpoint secondEndpoint = endpoint(SECOND_PATH,
 				"multi-endpoint-second-capacity", secondTool);
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.of(firstEndpoint, secondEndpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(firstEndpoint, secondEndpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -154,10 +151,9 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 	private static McpEndpoint endpoint(@NonNull String path,
 			@NonNull String implementationName,
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
-		return McpEndpoint.withPath(path)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						implementationName, "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
@@ -169,7 +165,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 			@NonNull AtomicInteger activeHandlers,
 			@NonNull AtomicInteger maximumActiveHandlers) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();
 					int active = activeHandlers.incrementAndGet();

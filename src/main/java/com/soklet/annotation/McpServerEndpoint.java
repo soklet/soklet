@@ -108,14 +108,14 @@ public @interface McpServerEndpoint {
 	 * @return the rate-limiter name, or an empty string to inherit
 	 */
 	@Nullable
-	String toolRateLimiter() default "";
+	String toolRateLimiterName() default "";
 
 	/**
 	 * The default cache time to live for {@code resources/list} pages.
 	 *
 	 * @return nonnegative whole-millisecond time to live
 	 */
-	long resourceListCacheTtlMs() default 0;
+	long resourceListCacheTimeToLiveInMilliseconds() default 0;
 
 	/**
 	 * The fixed cache scope for every {@code resources/list} page.
@@ -131,7 +131,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return nonnegative whole-millisecond time to live
 	 */
-	long resourceTemplateListCacheTtlMs() default 0;
+	long resourceTemplateListCacheTimeToLiveInMilliseconds() default 0;
 
 	/**
 	 * The fixed cache scope for {@code resources/templates/list}.

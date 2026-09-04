@@ -73,14 +73,11 @@ public class McpDeprecatedCapabilityNegotiationTests {
 				logEvents.add(logEvent);
 			}
 		};
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"deprecated-capability-test", "4.0.0").build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -128,12 +125,12 @@ public class McpDeprecatedCapabilityNegotiationTests {
 				Assertions.assertTrue(context.getClientCapabilities().supports(capability));
 			Assertions.assertEquals("roots/list",
 					McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED)
-							.getMethod());
+							.getJsonRpcMethod());
 			Assertions.assertEquals("sampling/createMessage",
 					McpInputRequestDeclaration.fromSampling(
 							Set.of(McpClientCapability.SAMPLING_CONTEXT,
 									McpClientCapability.SAMPLING_TOOLS),
-							McpInputRequirement.REQUIRED).getMethod());
+							McpInputRequirement.REQUIRED).getJsonRpcMethod());
 			Assertions.assertTrue(logEvents.isEmpty(),
 					() -> "Deprecated capability negotiation emitted LogEvent(s): "
 							+ logEvents);

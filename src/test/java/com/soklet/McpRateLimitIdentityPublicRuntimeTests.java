@@ -225,7 +225,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 		return McpRateLimiter.fromInMemoryTokenBucket(McpTokenBucketConfig
 				.withCapacity(1L)
 				.refillTokens(1L)
-				.refillPeriod(Duration.ofDays(1))
+				.refillInterval(Duration.ofDays(1))
 				.build());
 	}
 
@@ -257,20 +257,17 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			McpRateLimiter limiter) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("allowed"))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"rate-limit-identity-public-runtime-test",
 						"4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
 				.requestRateLimiter(limiter)
 				.toolRateLimiter(limiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

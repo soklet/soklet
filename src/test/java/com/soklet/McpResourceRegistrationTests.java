@@ -59,9 +59,9 @@ class McpResourceRegistrationTests {
 				.title("Catalog item")
 				.description("One catalog item")
 				.mimeType("application/json")
-				.icon(icon)
+				.addIcon(icon)
 				.annotations(annotations)
-				.size(42L)
+				.sizeInBytes(42L)
 				.cachePolicy(cachePolicy)
 				.metadata(metadata)
 				.build();
@@ -75,7 +75,7 @@ class McpResourceRegistrationTests {
 		assertEquals("application/json", resource.getMimeType().orElseThrow());
 		assertEquals(List.of(icon), resource.getIcons());
 		assertSame(annotations, resource.getAnnotations().orElseThrow());
-		assertEquals(Long.valueOf(42), resource.getSize().orElseThrow());
+		assertEquals(Long.valueOf(42), resource.getSizeInBytes().orElseThrow());
 		assertSame(cachePolicy, resource.getCachePolicy());
 		assertSame(metadata, resource.getMetadata());
 		assertSame(handler, resource.getHandler());
@@ -103,18 +103,57 @@ class McpResourceRegistrationTests {
 				.build();
 
 		assertTrue(Arrays.stream(exactBuilder.getClass().getMethods())
-				.anyMatch(method -> method.getName().equals("size")));
+				.anyMatch(method -> method.getName().equals("sizeInBytes")));
 		assertFalse(Arrays.stream(templateBuilder.getClass().getMethods())
-				.anyMatch(method -> method.getName().equals("size")));
+				.anyMatch(method -> method.getName().equals("sizeInBytes")));
 		assertEquals(McpResourceAddressType.URI_TEMPLATE,
 				resource.getAddressType());
 		assertTrue(resource.getUri().isEmpty());
 		assertEquals("catalog://items/{itemId}",
 				resource.getUriTemplate().orElseThrow());
-		assertTrue(resource.getSize().isEmpty());
+		assertTrue(resource.getSizeInBytes().isEmpty());
 		assertEquals("Catalog template", resource.getTitle().orElseThrow());
 		assertEquals(McpCacheScope.PRIVATE,
 				resource.getCachePolicy().getScope());
+	}
+
+	@Test
+	void resourceLinkCopiesEveryDescriptorPropertyWithoutRevalidation() {
+		McpIcon icon = McpIcon.withSource(
+				URI.create("https://example.com/resource.svg"))
+				.mimeType("image/svg+xml")
+				.build();
+		McpContentAnnotations annotations = McpContentAnnotations.builder()
+				.audience(McpRole.ASSISTANT)
+				.build();
+		McpJsonObject metadata = McpJsonObject.builder()
+				.put("example.mcp/existing", "preserved")
+				.build();
+		McpResourceDescriptor descriptor = McpResourceDescriptor
+				.withUriAndName(URI.create("catalog://manual"), "manual")
+				.title("Manual")
+				.description("Catalog manual")
+				.mimeType("text/markdown")
+				.addIcon(icon)
+				.annotations(annotations)
+				.sizeInBytes(512L)
+				.metadata(metadata)
+				.build();
+
+		McpResourceLink link =
+				McpResourceLink.fromResourceDescriptor(descriptor);
+
+		assertEquals(descriptor.getUri(), link.getUri());
+		assertEquals(descriptor.getName(), link.getName());
+		assertEquals(descriptor.getTitle(), link.getTitle());
+		assertEquals(descriptor.getDescription(), link.getDescription());
+		assertEquals(descriptor.getMimeType(), link.getMimeType());
+		assertEquals(descriptor.getIcons(), link.getIcons());
+		assertSame(annotations, link.getAnnotations().orElseThrow());
+		assertEquals(descriptor.getSizeInBytes(), link.getSizeInBytes());
+		assertSame(metadata, link.getMetadata());
+		assertThrows(NullPointerException.class,
+				() -> McpResourceLink.fromResourceDescriptor(null));
 	}
 
 	@Test
@@ -124,7 +163,7 @@ class McpResourceRegistrationTests {
 				.title("Catalog README")
 				.description("Catalog usage guide")
 				.mimeType("text/plain")
-				.size(128L)
+				.sizeInBytes(128L)
 				.metadata(McpJsonObject.builder().put("revision", 1).build())
 				.build();
 		List<McpResourceDescriptor> mutable = new ArrayList<>(List.of(descriptor));
@@ -132,7 +171,7 @@ class McpResourceRegistrationTests {
 				.put("catalogRevision", "one")
 				.build();
 		McpResourcePage page = McpResourcePage.builder()
-				.resources(mutable)
+				.addResources(mutable)
 				.nextCursor("")
 				.cacheTimeToLiveOverride(Duration.ofMillis(250))
 				.metadata(pageMetadata)
@@ -145,7 +184,7 @@ class McpResourceRegistrationTests {
 		assertEquals("Catalog usage guide",
 				descriptor.getDescription().orElseThrow());
 		assertEquals("text/plain", descriptor.getMimeType().orElseThrow());
-		assertEquals(Long.valueOf(128), descriptor.getSize().orElseThrow());
+		assertEquals(Long.valueOf(128), descriptor.getSizeInBytes().orElseThrow());
 		assertEquals(List.of(descriptor), page.getResources());
 		assertEquals("", page.getNextCursor().orElseThrow());
 		assertEquals(Duration.ofMillis(250),
@@ -172,19 +211,19 @@ class McpResourceRegistrationTests {
 				.handler(handler).mimeType(" "));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
 				.withUriAndName(URI.create("catalog://item"), "resource")
-				.handler(handler).size(-1L));
+				.handler(handler).sizeInBytes(-1L));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://item"), "resource")
-				.size(-1L));
+				.sizeInBytes(-1L));
 		assertThrows(NullPointerException.class, () -> McpResourceRegistration
 				.withUriAndName(URI.create("catalog://item"), "resource")
-				.handler(handler).size(null));
+				.handler(handler).sizeInBytes(null));
 		assertThrows(NullPointerException.class, () -> McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://item"), "resource")
-				.size(null));
+				.sizeInBytes(null));
 		assertThrows(NullPointerException.class, () -> McpResourceLink
 				.withUriAndName(URI.create("catalog://item"), "resource")
-				.size(null));
+				.sizeInBytes(null));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpCachePolicy.fromPrivateTimeToLive(Duration.ofMillis(-1)));
 		assertThrows(IllegalArgumentException.class,
@@ -196,8 +235,11 @@ class McpResourceRegistrationTests {
 				.cacheTimeToLiveOverride(Duration.ofNanos(1)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourcePage.builder()
 				.cacheTimeToLiveOverride(Duration.ofSeconds(Long.MAX_VALUE)));
-		assertThrows(IllegalArgumentException.class, () -> McpResourceOutput.builder()
-				.cacheTimeToLiveOverride(Duration.ofSeconds(Long.MAX_VALUE)));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpResourceOutput.withContent(McpTextResourceContents
+							.withUriAndText(URI.create("catalog://output"), "value")
+							.build())
+						.cacheTimeToLiveOverride(Duration.ofSeconds(Long.MAX_VALUE)));
 
 		McpJsonRpcError error = McpJsonRpcError.fromInvalidParameters(
 				"The resource-list cursor is invalid.");
@@ -217,15 +259,17 @@ class McpResourceRegistrationTests {
 				.build();
 		McpResourceListHandler listHandler = (request, list, features) ->
 				McpResourcePage.builder()
-						.resources(list.getRegisteredResourceDescriptors())
+						.addResources(list.getRegisteredResourceDescriptors())
 						.build();
+		McpResourceListHandler replacementListHandler =
+				(request, list, features) -> McpResourcePage.builder().build();
 		McpCachePolicy listPolicy = McpCachePolicy.fromPrivateTimeToLive(
 				Duration.ofSeconds(15));
 		McpCachePolicy templatePolicy = McpCachePolicy.fromPublicTimeToLive(
 				Duration.ofMinutes(1));
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(exact)
-				.resources(List.of(template))
+				.addResource(exact)
+				.addResources(List.of(template))
 				.resourceListHandler(listHandler)
 				.resourceListCachePolicy(listPolicy)
 				.resourceTemplateListCachePolicy(templatePolicy)
@@ -238,9 +282,17 @@ class McpResourceRegistrationTests {
 				endpoint.getResourceTemplateListCachePolicy());
 		assertThrows(UnsupportedOperationException.class,
 				() -> endpoint.getResources().clear());
-		assertThrows(IllegalStateException.class, () -> endpointBuilder()
+		McpEndpoint replaced = endpointBuilder()
 				.resourceListHandler(listHandler)
-				.resourceListHandler(listHandler));
+				.resourceListHandler(replacementListHandler)
+				.build();
+		assertSame(replacementListHandler,
+				replaced.getResourceListHandler().orElseThrow());
+		McpEndpoint staticFallback = endpointBuilder()
+				.resourceListHandler(listHandler)
+				.resourceListHandler(null)
+				.build();
+		assertTrue(staticFallback.getResourceListHandler().isEmpty());
 
 		McpEndpoint defaults = endpointBuilder().build();
 		assertSame(McpCachePolicy.privateNoCacheInstance(),
@@ -265,31 +317,22 @@ class McpResourceRegistrationTests {
 				.handler(resourceHandler()).build();
 
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.resource(firstExact).resource(secondExact).build());
+				.addResource(firstExact).addResource(secondExact).build());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.resource(firstTemplate).resource(secondTemplate).build());
+				.addResource(firstTemplate).addResource(secondTemplate).build());
 	}
 
 	@Test
 	void serverCursorLimitUsesTheReviewedJsonWireRange() {
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpointBuilder().build()));
-		McpServer defaultServer = McpServer.withPort(0)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
+		McpServer defaultServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
 				.build();
-		McpServer customServer = McpServer.withPort(0)
+		McpServer customServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
 				.maximumCursorSizeInBytes(17)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.build();
-		McpServer maximumServer = McpServer.withPort(0)
+		McpServer maximumServer = McpServer.withPort(0, registry, McpAdmissionController.acceptAllInstance())
 				.maximumCursorSizeInBytes(174_762)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.build();
 
 		assertEquals(Integer.valueOf(4_096),
@@ -299,34 +342,43 @@ class McpResourceRegistrationTests {
 		assertEquals(Integer.valueOf(174_762),
 				maximumServer.getMaximumCursorSizeInBytes());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0).maximumCursorSizeInBytes(0));
+				() -> McpServer.withPort(0, registry,
+						McpAdmissionController.acceptAllInstance())
+						.maximumCursorSizeInBytes(0));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0).maximumCursorSizeInBytes(-1));
+				() -> McpServer.withPort(0, registry,
+						McpAdmissionController.acceptAllInstance())
+						.maximumCursorSizeInBytes(-1));
 		IllegalArgumentException excessive = assertThrows(
 				IllegalArgumentException.class,
-				() -> McpServer.withPort(0)
+				() -> McpServer.withPort(0, registry,
+						McpAdmissionController.acceptAllInstance())
 						.maximumCursorSizeInBytes(174_763));
 		assertEquals("MCP maximum cursor size must not exceed 174762 bytes.",
 				excessive.getMessage());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpServer.withPort(0)
+				() -> McpServer.withPort(0, registry,
+						McpAdmissionController.acceptAllInstance())
 						.maximumCursorSizeInBytes(Integer.MAX_VALUE));
-		assertThrows(NullPointerException.class,
-				() -> McpServer.withPort(0).maximumCursorSizeInBytes(null));
+		McpServer resetServer = McpServer.withPort(0, registry,
+						McpAdmissionController.acceptAllInstance())
+				.maximumCursorSizeInBytes(17)
+				.maximumCursorSizeInBytes(null)
+				.build();
+		assertEquals(Integer.valueOf(4_096),
+				resetServer.getMaximumCursorSizeInBytes());
 	}
 
 	private static McpResourceReadHandler resourceHandler() {
 		return (request, resource, features) ->
-				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-						.content(McpTextResourceContents
+				McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents
 								.withUriAndText(resource.getUri(), "value")
 								.build())
 						.build());
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"resource-tests", "4.0.0").build());
 	}
 }

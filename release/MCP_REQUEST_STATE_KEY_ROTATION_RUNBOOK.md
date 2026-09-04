@@ -1,8 +1,8 @@
 # MCP request-state key-rotation runbook
 
 This runbook covers live rotation of Soklet's built-in production MCP request-
-state key ring. It applies only to servers built with
-`McpProtectionConfig.withKeyRing(...)`. Development-ephemeral protection has
+state keyring. It applies only to servers built with
+`McpProtectionConfig.withKeyring(...)`. Development-ephemeral protection has
 no durable key to rotate, and a custom protector owns its own rotation
 procedure.
 
@@ -16,7 +16,7 @@ generate -> persist staged configuration -> stage everywhere
 -> verify and release the start freeze
 ```
 
-Do not begin with `rotateTo(...)` in a fleet. It can make a node seal under a
+Do not begin with `rotateActiveKey(...)` in a fleet. It can make a node seal under a
 key that peers do not yet possess. Stage the key on every node first.
 
 ## Guarantees and boundaries
@@ -65,7 +65,7 @@ Before changing any node:
    Prefer deploying durable configuration with the new key verification-only
    before live activation.
 6. Capture a baseline from every node with
-   `McpServer.getProtectionControl().getKeyRingSnapshot()`. The optional must
+   `McpServer.getProtectionControl().getKeyringSnapshot()`. The optional must
    be present and every node must agree on active ID, sorted verification IDs,
    fingerprint version/profile, and fingerprint value.
 
@@ -167,7 +167,7 @@ Interpret the result exactly:
 - `true`: the verification-only key was removed and Soklet cleared its owned
   live key bytes;
 - `false`: the ID was already absent, so the retry is complete on that node;
-- `McpKeyInUseException`: a sealing reservation under that key remains; leave
+- `McpProtectionKeyInUseException`: a sealing reservation under that key remains; leave
   the key installed, let the seal complete or fail (or retire a stuck process),
   and retry; or
 - `IllegalArgumentException`: the ID is active, indicating unexpected role
@@ -245,12 +245,12 @@ removed directly; a trusted key must become active first.
 | Activation rejects unknown ID | Staging did not complete on that node | Stage and recompare before retrying |
 | Activation initialization fails | New sealer context was not published; old state remains active | Correct entropy/provider health, then retry or roll back fleet |
 | Snapshots or fingerprints differ | Nodes have different roles, IDs, or material | Stop progression; reconcile the complete ring |
-| Removal throws `McpKeyInUseException` | A seal under the target key is still reserved | Keep the key; let the seal finish/fail or retire a stuck process, then retry |
+| Removal throws `McpProtectionKeyInUseException` | A seal under the target key is still reserved | Keep the key; let the seal finish/fail or retire a stuck process, then retry |
 | Removal says key is active | Node missed activation or reverted after restart | Reconcile live and durable role state |
 | Old state fails before planned removal | Key missing, wrong material, binding mismatch, expiry, or tampering | Treat as invalid state; inspect secret-free rollout evidence, not client bytes |
 | A restarted node shows old roles | Durable configuration lagged live rotation | Remove it from traffic, update configuration, and repeat convergence checks |
 
-`rotateTo(...)` is retry-safe for a byte-identical already-active key and can
+`rotateActiveKey(...)` is retry-safe for a byte-identical already-active key and can
 atomically stage/activate on one server. It is a convenience for a controlled
 single instance, not a substitute for the fleet stage barrier.
 
@@ -284,7 +284,7 @@ The three primary rotation contracts required by the 4.0 closure plan are:
 Supplemental contracts are:
 
 - `McpSecurityControlsTests#stagedActivationWipesRetiredSealerContextButKeepsOldKey`;
-- `McpSecurityControlsTests#failedActivationPreservesTheExistingContextAndKeyRing`;
+- `McpSecurityControlsTests#failedActivationPreservesTheExistingContextAndKeyring`;
 - `McpSecurityControlsTests#retiredServerOwnedKeysAreWipedWithoutMutatingCallers`;
 - `McpSecurityControlsTests#protectionControlsAreIndependentPerServer`; and
 - `McpProtectionTraceDiagnosticsPublicRuntimeTests#liveRotationsChangeOnlyFreshSnapshotsAcrossStopAndRestart`.

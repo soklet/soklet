@@ -17,6 +17,10 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpLocalizer;
+import com.soklet.McpAdmissionController;
+import com.soklet.McpEndpoint;
+import com.soklet.McpEndpointRegistry;
+import com.soklet.McpImplementation;
 import com.soklet.McpServer;
 import com.soklet.McpSimulationOptions;
 import org.junit.jupiter.api.Assertions;
@@ -154,7 +158,7 @@ public class McpLimitsAndAccountingTests {
 				McpHttpTransportConfiguration.productionDefaults(0);
 		McpSubscriptionRuntimeConfiguration subscription =
 				McpSubscriptionRuntimeConfiguration.productionDefaults();
-		Object publicBuilder = McpServer.withPort(0);
+		Object publicBuilder = publicServerBuilder();
 		Assertions.assertEquals(subscription.streamQueueCapacity(),
 				fieldValue(publicBuilder, "streamQueueCapacity"));
 		Assertions.assertEquals(subscription.writeTimeout(),
@@ -423,6 +427,16 @@ public class McpLimitsAndAccountingTests {
 		Field field = target.getClass().getDeclaredField(fieldName);
 		field.setAccessible(true);
 		return field.get(target);
+	}
+
+	private static McpServer.Builder publicServerBuilder() {
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+				McpImplementation.withNameAndVersion(
+						"limits-and-accounting-tests", "4.0.0").build())
+				.build();
+		return McpServer.withPort(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance());
 	}
 
 	private static void putPair(Map<String, Bound> values, String key,

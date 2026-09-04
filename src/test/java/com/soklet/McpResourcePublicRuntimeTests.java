@@ -72,7 +72,7 @@ public class McpResourcePublicRuntimeTests {
 				.title("Static text resource")
 				.description("A deterministic text resource")
 				.mimeType("text/plain")
-				.size(11L)
+				.sizeInBytes(11L)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofMillis(50)))
 				.metadata(McpJsonObject.builder().put("kind", "text").build())
@@ -82,15 +82,14 @@ public class McpResourcePublicRuntimeTests {
 				.handler((request, resource, features) -> {
 					stages.add("handler:" + resource.getUri());
 					handlerInvocations.incrementAndGet();
-					return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-							.content(McpBlobResourceContents.withUriAndData(
+					return McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpBlobResourceContents.withUriAndData(
 									resource.getUri(), new byte[] { 1, 2, 3 })
 									.mimeType("application/octet-stream")
 									.build())
 							.build());
 				})
 				.mimeType("application/octet-stream")
-				.size(3L)
+				.sizeInBytes(3L)
 				.cachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(60)))
 				.build();
@@ -123,23 +122,21 @@ public class McpResourcePublicRuntimeTests {
 						Duration.ofMillis(80)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(text)
-				.resource(binary)
-				.resource(exactSpecial)
-				.resource(template)
+				.addResource(text)
+				.addResource(binary)
+				.addResource(exactSpecial)
+				.addResource(template)
 				.resourceListCachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofMillis(100)))
 				.resourceTemplateListCachePolicy(
 						McpCachePolicy.fromPrivateTimeToLive(Duration.ofMillis(200)))
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 							context.getTarget());
@@ -317,7 +314,7 @@ public class McpResourcePublicRuntimeTests {
 
 			McpResourcePage.Builder page = McpResourcePage.builder();
 			if (list.getCursor().isEmpty())
-				return page.resources(list.getRegisteredResourceDescriptors())
+				return page.addResources(list.getRegisteredResourceDescriptors())
 						.metadata(McpJsonObject.builder().put("page", 1).build())
 						.cacheTimeToLiveOverride(Duration.ofMillis(125))
 						.nextCursor("世界")
@@ -335,20 +332,18 @@ public class McpResourcePublicRuntimeTests {
 			};
 		};
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(exact)
-				.resource(template)
+				.addResource(exact)
+				.addResource(template)
 				.resourceListHandler(listHandler)
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(500)))
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.maximumCursorSizeInBytes(8)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					admissions.incrementAndGet();
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
+				.maximumCursorSizeInBytes(8)
 				.requestRateLimiter(context -> {
 					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 							context.getTarget());
@@ -455,8 +450,8 @@ public class McpResourcePublicRuntimeTests {
 				.handler(resourceHandler())
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(alpha)
-				.resource(beta)
+				.addResource(alpha)
+				.addResource(beta)
 				.resourceListHandler((request, list, features) -> {
 					String tenant = (String) request.getAdmissionIdentity()
 							.getPrincipal().orElseThrow();
@@ -464,7 +459,7 @@ public class McpResourcePublicRuntimeTests {
 							request.getAdmissionIdentity()
 									.getAuthorizationPartitionKey().orElseThrow());
 					return McpResourcePage.builder()
-							.resources(list.getRegisteredResourceDescriptors().stream()
+							.addResources(list.getRegisteredResourceDescriptors().stream()
 									.filter(resource -> resource.getUri().toString()
 											.endsWith("/" + tenant))
 									.toList())
@@ -473,10 +468,7 @@ public class McpResourcePublicRuntimeTests {
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(250)))
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					String authorization = context.getRequest()
 							.getHeader("Authorization").orElseThrow();
 					String tenant = authorization.substring("Bearer ".length());
@@ -487,6 +479,7 @@ public class McpResourcePublicRuntimeTests {
 									.principal(tenant)
 									.build());
 				})
+				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -536,8 +529,7 @@ public class McpResourcePublicRuntimeTests {
 				.withUriAndName(URI.create("test://invalid-content-metadata"),
 						"Invalid content metadata")
 				.handler((request, resource, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents
 										.withUriAndText(resource.getUri(), "secret")
 										.metadata(McpJsonObject.builder()
 												.put("dev.mcp/secret", "must-not-leak")
@@ -552,21 +544,21 @@ public class McpResourcePublicRuntimeTests {
 			String cursor = list.getCursor().orElseThrow();
 			return switch (cursor) {
 				case "template" -> McpResourcePage.builder()
-						.resource(McpResourceDescriptor.withUriAndName(
+						.addResource(McpResourceDescriptor.withUriAndName(
 								URI.create("test://dynamic/visible"), "Visible")
 								.build())
 						.build();
 				case "duplicate" -> McpResourcePage.builder()
-						.resource(exactDescriptor)
-						.resource(exactDescriptor)
+						.addResource(exactDescriptor)
+						.addResource(exactDescriptor)
 						.build();
 				case "unreadable" -> McpResourcePage.builder()
-						.resource(McpResourceDescriptor.withUriAndName(
+						.addResource(McpResourceDescriptor.withUriAndName(
 								URI.create("secret://not-registered"), "Secret")
 								.build())
 						.build();
 				case "reserved-metadata" -> McpResourcePage.builder()
-						.resource(McpResourceDescriptor.withUriAndName(
+						.addResource(McpResourceDescriptor.withUriAndName(
 								URI.create("test://registered"), "Registered")
 								.metadata(McpJsonObject.builder()
 										.put("dev.mcp/secret", "must-not-leak")
@@ -577,15 +569,13 @@ public class McpResourcePublicRuntimeTests {
 			};
 		};
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(exact)
-				.resource(template)
-				.resource(invalidContentMetadata)
+				.addResource(exact)
+				.addResource(template)
+				.addResource(invalidContentMetadata)
 				.resourceListHandler(listHandler)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -631,24 +621,24 @@ public class McpResourcePublicRuntimeTests {
 				"test://items/{id}/{id}",
 				"test://items/{first}{second}")) {
 			McpEndpoint endpoint = endpointBuilder()
-					.resource(templateRegistration(invalidTemplate))
+					.addResource(templateRegistration(invalidTemplate))
 					.build();
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> serverBuilder(endpoint).build(), invalidTemplate);
 		}
 
 		McpEndpoint overlapping = endpointBuilder()
-				.resource(templateRegistration("test://items/{id}"))
-				.resource(templateRegistration("test://items/{slug}"))
+				.addResource(templateRegistration("test://items/{id}"))
+				.addResource(templateRegistration("test://items/{slug}"))
 				.build();
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> serverBuilder(overlapping).build());
 
 		McpEndpoint exactPrecedence = endpointBuilder()
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("test://items/special"), "Special")
 						.handler(resourceHandler()).build())
-				.resource(templateRegistration("test://items/{id}"))
+				.addResource(templateRegistration("test://items/{id}"))
 				.build();
 		McpServer server = Assertions.assertDoesNotThrow(
 				() -> serverBuilder(exactPrecedence).build());
@@ -679,12 +669,12 @@ public class McpResourcePublicRuntimeTests {
 		String boundaryTemplate = prefix + "a".repeat(
 				8_192 - prefix.length() - expression.length()) + expression;
 		McpEndpoint acceptedTemplate = endpointBuilder()
-				.resource(templateRegistration(boundaryTemplate)).build();
+				.addResource(templateRegistration(boundaryTemplate)).build();
 		Assertions.assertDoesNotThrow(
 				() -> serverBuilder(acceptedTemplate).build());
 
 		McpEndpoint oversizedTemplate = endpointBuilder()
-				.resource(templateRegistration(boundaryTemplate + "a")).build();
+				.addResource(templateRegistration(boundaryTemplate + "a")).build();
 		IllegalArgumentException templateFailure = Assertions.assertThrows(
 				IllegalArgumentException.class,
 				() -> serverBuilder(oversizedTemplate).build());
@@ -693,14 +683,14 @@ public class McpResourcePublicRuntimeTests {
 
 		String boundaryUri = prefix + "a".repeat(1_048_576 - prefix.length());
 		McpEndpoint acceptedUri = endpointBuilder()
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create(boundaryUri), "Boundary URI")
 						.handler(resourceHandler()).build())
 				.build();
 		Assertions.assertDoesNotThrow(() -> serverBuilder(acceptedUri).build());
 
 		McpEndpoint oversizedUri = endpointBuilder()
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create(boundaryUri + "a"), "Oversized URI")
 						.handler(resourceHandler()).build())
 				.build();
@@ -734,17 +724,17 @@ public class McpResourcePublicRuntimeTests {
 			listHandlerInvocations.incrementAndGet();
 			return switch (list.getCursor().orElseThrow()) {
 				case "oversized" -> McpResourcePage.builder()
-						.resource(first)
-						.resource(second)
+						.addResource(first)
+						.addResource(second)
 						.build();
 				case "legal" -> McpResourcePage.builder()
-						.resource(first)
+						.addResource(first)
 						.build();
 				default -> throw new AssertionError("Unexpected cursor");
 			};
 		};
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(McpResourceRegistration.withUriTemplateAndName(
+				.addResource(McpResourceRegistration.withUriTemplateAndName(
 						"test://aggregate-page/{id}", "Aggregate page resource")
 						.handler(resourceHandler())
 						.build())
@@ -798,29 +788,29 @@ public class McpResourcePublicRuntimeTests {
 				.withUriAndData(oversizedUri, new byte[786_433])
 				.mimeType("application/octet-stream")
 					.build();
-		McpResourceOutput.Builder aggregateOutput = McpResourceOutput.builder();
-		for (int index = 0; index < 5; ++index)
-			aggregateOutput.content(McpBlobResourceContents.withUriAndData(
+		McpResourceOutput.Builder aggregateOutput = McpResourceOutput.withContent(
+				McpBlobResourceContents.withUriAndData(
+						aggregateUri, new byte[700_000]).build());
+		for (int index = 1; index < 5; ++index)
+			aggregateOutput.addContent(McpBlobResourceContents.withUriAndData(
 					aggregateUri, new byte[700_000]).build());
 		McpResourceOutput aggregateContents = aggregateOutput.build();
 		McpEndpoint endpoint = endpointBuilder()
-					.resource(McpResourceRegistration
+					.addResource(McpResourceRegistration
 						.withUriAndName(boundaryUri, "Boundary blob")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(boundaryContents)
+										McpResourceOutput.withContent(boundaryContents)
 												.build()))
 						.build())
-				.resource(McpResourceRegistration
+				.addResource(McpResourceRegistration
 						.withUriAndName(oversizedUri, "Oversized blob")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
-										McpResourceOutput.builder()
-												.content(oversizedContents)
+										McpResourceOutput.withContent(oversizedContents)
 												.build()))
 							.build())
-					.resource(McpResourceRegistration
+					.addResource(McpResourceRegistration
 							.withUriAndName(aggregateUri, "Aggregate oversized blobs")
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(aggregateContents))
@@ -863,7 +853,7 @@ public class McpResourcePublicRuntimeTests {
 		McpEndpoint.Builder endpoint = endpointBuilder();
 		for (int index = 0; index < 5; ++index) {
 			URI uri = URI.create("test://large-static-resource/" + index);
-			endpoint.resource(McpResourceRegistration.withUriAndName(
+			endpoint.addResource(McpResourceRegistration.withUriAndName(
 						uri, "Large resource " + index)
 					.handler(resourceHandler())
 					.description(largeDescription)
@@ -887,21 +877,21 @@ public class McpResourcePublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> first = McpToolRegistration
 				.withName("aggregate-catalog-first")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("first"))
 				.metadata(metadata)
 				.build();
 		McpToolRegistration<McpJsonObject> second = McpToolRegistration
 				.withName("aggregate-catalog-second")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("second"))
 				.metadata(metadata)
 				.build();
 		McpEndpoint oversized = endpointBuilder()
-				.tool(first)
-				.tool(second)
+				.addTool(first)
+				.addTool(second)
 				.build();
 
 		IllegalArgumentException exception = Assertions.assertThrows(
@@ -916,7 +906,7 @@ public class McpResourcePublicRuntimeTests {
 				exception.getMessage());
 
 		McpEndpoint individuallyLegal = endpointBuilder()
-				.tool(first)
+				.addTool(first)
 				.build();
 		McpServer recovered = Assertions.assertDoesNotThrow(
 				() -> serverBuilder(individuallyLegal)
@@ -944,8 +934,8 @@ public class McpResourcePublicRuntimeTests {
 				.metadata(metadata)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.resource(first)
-				.resource(second)
+				.addResource(first)
+				.addResource(second)
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
 				.build();
@@ -957,25 +947,21 @@ public class McpResourcePublicRuntimeTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"resource-public-runtime-test", "4.0.0").build());
 	}
 
 	private static McpEndpoint endpointWithTemplateRegistrations(int count) {
 		McpEndpoint.Builder endpoint = endpointBuilder();
 		for (int index = 0; index < count; ++index)
-			endpoint.resource(templateRegistration(
+			endpoint.addResource(templateRegistration(
 					"test:///bounded/route-" + index + "/{value}"));
 		return endpoint.build();
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -1001,8 +987,7 @@ public class McpResourcePublicRuntimeTests {
 
 	private static McpCompleteResult completeText(URI uri, String text,
 			String mimeType) {
-		return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-				.content(McpTextResourceContents.withUriAndText(uri, text)
+		return McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(uri, text)
 						.mimeType(mimeType)
 						.build())
 				.build());

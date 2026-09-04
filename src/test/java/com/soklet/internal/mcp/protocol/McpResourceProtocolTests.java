@@ -305,8 +305,7 @@ public class McpResourceProtocolTests {
 	@Test
 	public void erased_bridge_maps_intentional_resource_errors_without_internal_failure()
 			throws Exception {
-		com.soklet.McpEndpoint publicEndpoint = com.soklet.McpEndpoint.withPath("/mcp")
-				.serverInformation(com.soklet.McpImplementation.withNameAndVersion(
+		com.soklet.McpEndpoint publicEndpoint = com.soklet.McpEndpoint.withPath("/mcp", com.soklet.McpImplementation.withNameAndVersion(
 						"resource-bridge-test", "4.0.0").build())
 				.build();
 		McpServerRuntimeBridge.CachePlan cache =

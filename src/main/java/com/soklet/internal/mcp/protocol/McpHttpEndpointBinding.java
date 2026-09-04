@@ -56,7 +56,7 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		requireNonNull(applicationRouter);
 		requireNonNull(observationSink);
 		requireNonNull(subscriptionEventSource);
-		if (subscriptionEventSource.isPresent() != endpoint.subscriptions().isPresent())
+		if (subscriptionEventSource.isPresent() != endpoint.subscriptionConfig().isPresent())
 			throw new IllegalArgumentException(
 					"An MCP subscription source and normalized configuration must be present together.");
 	}

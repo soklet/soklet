@@ -369,8 +369,7 @@ public class McpDurableHandlePromptApplicationPatternsTests {
 		}
 
 		private static DurableStep fromHandle(String handle, int revision) {
-			return new DurableStep(McpInputRequiredResult.builder()
-					.applicationRequestState(requireNonNull(handle))
+			return new DurableStep(McpInputRequiredResult.withApplicationRequestState(requireNonNull(handle))
 					.build(), revision);
 		}
 
@@ -603,7 +602,7 @@ public class McpDurableHandlePromptApplicationPatternsTests {
 			validateOutput(rendered);
 			return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 					.description(PROMPT_DESCRIPTION)
-					.message(McpPromptMessage.fromUserContent(
+					.addMessage(McpPromptMessage.fromUserContent(
 							McpTextContent.fromText(renderedPromptText(
 									rendered.userData(),
 									rendered.referenceData()))))

@@ -189,6 +189,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			65_536;
 	private static final int MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES =
 			1_048_576;
+	private static final String MCP_ABSENT_OUTPUT_SCHEMA_DIGEST =
+			"NO_OUTPUT_SCHEMA";
 
 	// ---- Index paths ---------------------------------------------------------
 
@@ -910,13 +912,13 @@ public final class SokletProcessor extends AbstractProcessor {
 		String description = annotationString(annotation, "description");
 		String websiteUrl = annotationString(annotation, "websiteUrl");
 		String instructions = annotationString(annotation, "instructions");
-		String toolRateLimiter = annotationString(annotation, "toolRateLimiter");
-		long resourceListCacheTtlMs = annotationLong(annotation,
-				"resourceListCacheTtlMs");
+		String toolRateLimiterName = annotationString(annotation, "toolRateLimiterName");
+		long resourceListCacheTimeToLiveInMilliseconds = annotationLong(annotation,
+				"resourceListCacheTimeToLiveInMilliseconds");
 		String resourceListCacheScope = annotationEnumConstantName(annotation,
 				"resourceListCacheScope");
-		long resourceTemplateListCacheTtlMs = annotationLong(annotation,
-				"resourceTemplateListCacheTtlMs");
+		long resourceTemplateListCacheTimeToLiveInMilliseconds = annotationLong(annotation,
+				"resourceTemplateListCacheTimeToLiveInMilliseconds");
 		String resourceTemplateListCacheScope = annotationEnumConstantName(
 				annotation, "resourceTemplateListCacheScope");
 		if (name.isBlank())
@@ -925,13 +927,13 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (version.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP implementation version must not be blank.");
-		if (!toolRateLimiter.isEmpty() && toolRateLimiter.isBlank())
+		if (!toolRateLimiterName.isEmpty() && toolRateLimiterName.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP endpoint tool rate-limiter name must not be blank.");
-		if (resourceListCacheTtlMs < 0)
+		if (resourceListCacheTimeToLiveInMilliseconds < 0)
 			mcpError(endpointType,
 					"Soklet: MCP resources-list cache TTL must not be negative.");
-		if (resourceTemplateListCacheTtlMs < 0)
+		if (resourceTemplateListCacheTimeToLiveInMilliseconds < 0)
 			mcpError(endpointType,
 					"Soklet: MCP resource-template-list cache TTL must not be negative.");
 		if (!websiteUrl.isBlank()) {
@@ -1087,9 +1089,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		return new McpEndpointModel(packageName,
 				endpointType.getQualifiedName().toString(), endpointBinaryName,
 				providerSimpleName, providerBinaryName, path, name, version,
-				title, description, websiteUrl, instructions, toolRateLimiter,
-				resourceListCacheTtlMs, resourceListCacheScope,
-				resourceTemplateListCacheTtlMs,
+				title, description, websiteUrl, instructions, toolRateLimiterName,
+				resourceListCacheTimeToLiveInMilliseconds, resourceListCacheScope,
+				resourceTemplateListCacheTimeToLiveInMilliseconds,
 				resourceTemplateListCacheScope, List.copyOf(tools),
 				List.copyOf(prompts), List.copyOf(resources), resourceList);
 	}
@@ -1122,7 +1124,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		if (method.getReturnType().getKind() == TypeKind.VOID)
 			mcpError(method,
-					"Soklet: @McpTool method must declare a typed completion return value.");
+					"Soklet: @McpTool method must declare a supported non-void return type.");
 		String providerPackage = elements.getPackageOf(method)
 				.getQualifiedName().toString();
 		if (method.getReturnType().getKind() != TypeKind.VOID
@@ -1134,14 +1136,26 @@ public final class SokletProcessor extends AbstractProcessor {
 		String name = annotationString(annotation, "name");
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
-		String rateLimiter = annotationString(annotation, "rateLimiter");
-		boolean mirrorStructuredContentAsText =
-				annotationBoolean(annotation, "mirrorStructuredContentAsText");
+		String rateLimiterName = annotationString(annotation, "rateLimiterName");
+		boolean structuredContentMirroredAsText =
+				annotationBoolean(annotation, "structuredContentMirroredAsText");
+		List<McpInputRequestModel> inputRequestDeclarations =
+				validateMcpInputRequestDeclarations(method, annotation);
+		String requestStateMode = annotationEnumConstantName(annotation,
+				"requestStateMode");
+		boolean operationResultReturn = isSubtypeOf(method.getReturnType(),
+				mcpOperationResultType);
+		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
+				|| !"NONE".equals(requestStateMode);
+		boolean advancedOperation = operationResultReturn;
+		if (multiRoundTripMetadata && !operationResultReturn)
+			mcpError(method,
+					"Soklet: An @McpTool method that declares input requests or request state must return McpOperationResult or a subtype.");
 		if (name.length() < 1 || name.length() > 128
 				|| !name.matches("[A-Za-z0-9_.-]+"))
 			mcpError(method,
 					"Soklet: MCP tool names must contain 1-128 characters from [A-Za-z0-9_.-].");
-		if (!rateLimiter.isEmpty() && rateLimiter.isBlank())
+		if (!rateLimiterName.isEmpty() && rateLimiterName.isBlank())
 			mcpError(method,
 					"Soklet: MCP tool rate-limiter name must not be blank.");
 
@@ -1245,7 +1259,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			String argumentDescription = annotationString(argument,
 					"description");
 			String headerName = header == null ? null
-					: annotationString(header, "value");
+					: annotationString(header, "name");
 
 			bindings.add(new McpParameterBinding(
 					McpParameterBindingKind.TOOL_ARGUMENT, publishedName,
@@ -1257,12 +1271,16 @@ public final class SokletProcessor extends AbstractProcessor {
 					argumentDescription, Optional.ofNullable(headerName)));
 		}
 
-		McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiledSchemas = null;
+		byte[] inputSchemaBytes = null;
+		byte[] outputSchemaBytes = null;
 		if (mcpProcessingErrorCount == errorsBefore) {
 			McpTypeMirrorTypedSchemaBridge.Result result;
 			try {
-				result = McpTypeMirrorTypedSchemaBridge.compileToolSchemas(types,
-						elements, schemaArguments, method.getReturnType());
+				result = advancedOperation
+						? McpTypeMirrorTypedSchemaBridge.compileToolInputSchema(
+								types, elements, schemaArguments)
+						: McpTypeMirrorTypedSchemaBridge.compileToolSchemas(types,
+								elements, schemaArguments, method.getReturnType());
 			} catch (RuntimeException exception) {
 				mcpError(method,
 						"Soklet: Unable to derive deterministic typed schemas for MCP tool '%s'.",
@@ -1279,16 +1297,23 @@ public final class SokletProcessor extends AbstractProcessor {
 								? "input" : "output",
 						diagnostic.path(), diagnostic.reason());
 			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiled) {
-				compiledSchemas = compiled;
+				inputSchemaBytes = compiled.getInputSchemaBytes();
+				outputSchemaBytes = compiled.getOutputSchemaBytes();
+			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledInputSchema compiled) {
+				inputSchemaBytes = compiled.getInputSchemaBytes();
 			}
 		}
 
-		if (mcpProcessingErrorCount != errorsBefore || compiledSchemas == null)
+		if (mcpProcessingErrorCount != errorsBefore || inputSchemaBytes == null
+				|| (!advancedOperation && outputSchemaBytes == null))
 			return null;
-		return new McpToolModel(method, name, title, description, rateLimiter,
-				mirrorStructuredContentAsText, List.copyOf(bindings),
-				sha256Hex(compiledSchemas.getInputSchemaBytes()),
-				sha256Hex(compiledSchemas.getOutputSchemaBytes()));
+		return new McpToolModel(method, name, title, description, rateLimiterName,
+				structuredContentMirroredAsText, advancedOperation,
+				List.copyOf(inputRequestDeclarations), requestStateMode,
+				List.copyOf(bindings),
+				sha256Hex(inputSchemaBytes), advancedOperation
+						? MCP_ABSENT_OUTPUT_SCHEMA_DIGEST
+						: sha256Hex(outputSchemaBytes));
 	}
 
 	private McpPromptModel validateMcpPrompt(
@@ -1337,6 +1362,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		String name = annotationString(annotation, "name");
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
+		List<McpInputRequestModel> inputRequestDeclarations =
+				validateMcpInputRequestDeclarations(method, annotation);
+		String requestStateMode = annotationEnumConstantName(annotation,
+				"requestStateMode");
+		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
+				|| !"NONE".equals(requestStateMode);
+		if (multiRoundTripMetadata && !operationResultReturn)
+			mcpError(method,
+					"Soklet: An @McpPrompt method that declares input requests or request state must return McpOperationResult or a subtype.");
 		if (name.isBlank())
 			mcpError(method, "Soklet: MCP prompt name must not be blank.");
 
@@ -1444,7 +1478,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
 		return new McpPromptModel(method, name, title, description,
-				promptOutputReturn, List.copyOf(bindings));
+				promptOutputReturn, List.copyOf(inputRequestDeclarations),
+				requestStateMode, List.copyOf(bindings));
 	}
 
 	private McpResourceModel validateMcpResource(
@@ -1478,9 +1513,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
 		String mimeType = annotationString(annotation, "mimeType");
-		long size = annotationLong(annotation, "size");
-		long cacheTtlMs = annotationLong(annotation, "cacheTtlMs");
+		long sizeInBytes = annotationLong(annotation, "sizeInBytes");
+		long cacheTimeToLiveInMilliseconds = annotationLong(annotation, "cacheTimeToLiveInMilliseconds");
 		String cacheScope = annotationEnumConstantName(annotation, "cacheScope");
+		List<McpInputRequestModel> inputRequestDeclarations =
+				validateMcpInputRequestDeclarations(method, annotation);
+		String requestStateMode = annotationEnumConstantName(annotation,
+				"requestStateMode");
+		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
+				|| !"NONE".equals(requestStateMode);
+		if (multiRoundTripMetadata && !operationResultReturn)
+			mcpError(method,
+					"Soklet: An @McpResource method that declares input requests or request state must return McpOperationResult or a subtype.");
 		if (address.isBlank())
 			mcpError(method,
 					"Soklet: MCP resource URI or URI template must not be blank.");
@@ -1489,10 +1533,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!mimeType.isEmpty() && mimeType.isBlank())
 			mcpError(method,
 					"Soklet: MCP resource MIME type must not be blank.");
-		if (size < -1)
+		if (sizeInBytes < -1)
 			mcpError(method,
 					"Soklet: MCP exact-resource size must be nonnegative or -1 when absent.");
-		if (cacheTtlMs < 0)
+		if (cacheTimeToLiveInMilliseconds < 0)
 			mcpError(method,
 					"Soklet: MCP resource cache TTL must not be negative.");
 
@@ -1545,7 +1589,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				mcpError(method,
 						"Soklet: @McpResource uri must be an absolute normalized URI in ASCII RFC 3986 wire form with valid percent triplets.");
 			}
-		} else if (size >= 0) {
+		} else if (sizeInBytes >= 0) {
 			mcpError(method,
 					"Soklet: An MCP resource URI template must not declare size.");
 		}
@@ -1644,7 +1688,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						"Soklet: @McpResourceUriParameter parameters must be String.");
 				continue;
 			}
-			String explicitName = annotationString(uriParameter, "value");
+			String explicitName = annotationString(uriParameter, "name");
 			String variableName = explicitName.isBlank()
 					? parameter.getSimpleName().toString() : explicitName;
 			if (!boundVariables.add(variableName))
@@ -1667,8 +1711,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
 		return new McpResourceModel(method, address, template, name, title,
-				description, mimeType, size, cacheTtlMs, cacheScope,
-				resourceOutputReturn, List.copyOf(bindings));
+				description, mimeType, sizeInBytes,
+				cacheTimeToLiveInMilliseconds, cacheScope,
+				resourceOutputReturn, List.copyOf(inputRequestDeclarations),
+				requestStateMode, List.copyOf(bindings));
 	}
 
 	private McpResourceListModel validateMcpResourceList(
@@ -2299,8 +2345,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		source.append("};\n\t}\n\n")
 				.append("\tpublic com.soklet.McpEndpoint endpoint(\n")
-				.append("\t\t\tcom.soklet.InstanceProvider instanceProvider) {\n")
-				.append("\t\tjava.util.Objects.requireNonNull(instanceProvider);\n")
+				.append("\t\t\tjava.util.function.Function<com.soklet.McpRequestContext, ")
+				.append(endpoint.endpointQualifiedName())
+				.append("> instanceResolver) {\n")
+				.append("\t\tjava.util.Objects.requireNonNull(instanceResolver);\n")
 				.append("\t\tvar implementationBuilder = ")
 				.append("com.soklet.McpImplementation.withNameAndVersion(")
 				.append(javaStringLiteral(endpoint.name())).append(", ")
@@ -2315,24 +2363,24 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append("));\n");
 		source.append("\t\tvar endpointBuilder = com.soklet.McpEndpoint.withPath(")
 				.append(javaStringLiteral(endpoint.path()))
-				.append(").serverInformation(implementationBuilder.build());\n");
+				.append(", implementationBuilder.build());\n");
 		appendOptionalBuilderCall(source, "endpointBuilder", "instructions",
 				endpoint.instructions());
 		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiterName",
-				endpoint.toolRateLimiter());
-		if (endpoint.resourceListCacheTtlMs() != 0
+				endpoint.toolRateLimiterName());
+		if (endpoint.resourceListCacheTimeToLiveInMilliseconds() != 0
 				|| !"PRIVATE".equals(endpoint.resourceListCacheScope()))
 			source.append("\t\tendpointBuilder.resourceListCachePolicy(")
 					.append(cachePolicyExpression(
-							endpoint.resourceListCacheTtlMs(),
+							endpoint.resourceListCacheTimeToLiveInMilliseconds(),
 							endpoint.resourceListCacheScope()))
 					.append(");\n");
-		if (endpoint.resourceTemplateListCacheTtlMs() != 0
+		if (endpoint.resourceTemplateListCacheTimeToLiveInMilliseconds() != 0
 				|| !"PRIVATE".equals(
 						endpoint.resourceTemplateListCacheScope()))
 			source.append("\t\tendpointBuilder.resourceTemplateListCachePolicy(")
 					.append(cachePolicyExpression(
-							endpoint.resourceTemplateListCacheTtlMs(),
+							endpoint.resourceTemplateListCacheTimeToLiveInMilliseconds(),
 							endpoint.resourceTemplateListCacheScope()))
 					.append(");\n");
 
@@ -2341,14 +2389,17 @@ public final class SokletProcessor extends AbstractProcessor {
 			String carrierName = "Tool" + index + "Arguments";
 			source.append("\t\tvar toolBuilder").append(index)
 					.append(" = com.soklet.McpToolRegistration.withName(")
-					.append(javaStringLiteral(tool.name())).append(")\n")
-					.append("\t\t\t\t.types(").append(carrierName)
-					.append(".class, ")
-					.append(resultTypeExpression(tool.method().getReturnType()))
-					.append(")\n")
-					.append("\t\t\t\t.handler((request, arguments, features) -> ")
-					.append("instanceProvider.provide(")
-					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append(javaStringLiteral(tool.name())).append(")\n");
+			if (tool.advancedOperation())
+				source.append("\t\t\t\t.argumentType(").append(carrierName)
+						.append(".class)\n");
+			else
+				source.append("\t\t\t\t.argumentAndOutputTypes(").append(carrierName)
+						.append(".class, ")
+						.append(resultTypeExpression(tool.method().getReturnType()))
+						.append(")\n");
+			source.append("\t\t\t\t.handler((request, arguments, features) -> ")
+					.append("instanceResolver.apply(request).")
 					.append(tool.method().getSimpleName()).append('(')
 					.append(invocationArguments(tool.bindings()))
 					.append("));\n");
@@ -2357,11 +2408,15 @@ public final class SokletProcessor extends AbstractProcessor {
 			appendOptionalBuilderCall(source, "toolBuilder" + index,
 					"description", tool.description());
 			appendOptionalBuilderCall(source, "toolBuilder" + index,
-					"rateLimiterName", tool.rateLimiter());
+					"rateLimiterName", tool.rateLimiterName());
 			source.append("\t\ttoolBuilder").append(index)
-					.append(".mirrorStructuredContentAsText(")
-					.append(tool.mirrorStructuredContentAsText()).append(");\n")
-					.append("\t\tendpointBuilder.tool(toolBuilder")
+					.append(".structuredContentMirroredAsText(")
+					.append(tool.structuredContentMirroredAsText()).append(");\n");
+			appendInputRequestDeclarations(source, "toolBuilder" + index,
+					tool.inputRequestDeclarations());
+			appendRequestStateMode(source, "toolBuilder" + index,
+					tool.requestStateMode());
+			source.append("\t\tendpointBuilder.addTool(toolBuilder")
 					.append(index).append(".build());\n");
 		}
 
@@ -2373,8 +2428,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append("\t\t\t\t.handler((request, prompt, features) -> ");
 			if (prompt.promptOutputReturn())
 				source.append("com.soklet.McpCompleteResult.fromPromptOutput(");
-			source.append("instanceProvider.provide(")
-					.append(endpoint.endpointQualifiedName()).append(".class).")
+			source.append("instanceResolver.apply(request).")
 					.append(prompt.method().getSimpleName()).append('(')
 					.append(promptInvocationArguments(prompt.bindings()))
 					.append(')');
@@ -2393,7 +2447,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				String argumentBuilder = "promptArgumentBuilder" + index + "_"
 						+ argumentIndex++;
 				source.append("\t\tvar ").append(argumentBuilder)
-						.append(" = com.soklet.McpPromptArgumentDefinition.withName(")
+						.append(" = com.soklet.McpPromptArgumentDeclaration.withName(")
 						.append(javaStringLiteral(binding.publishedName()))
 						.append(");\n");
 				appendOptionalBuilderCall(source, argumentBuilder, "title",
@@ -2403,10 +2457,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				source.append("\t\t").append(argumentBuilder).append(".required(")
 						.append(binding.required()).append(");\n")
 						.append("\t\tpromptBuilder").append(index)
-						.append(".argument(").append(argumentBuilder)
+						.append(".addArgument(").append(argumentBuilder)
 						.append(".build());\n");
 			}
-			source.append("\t\tendpointBuilder.prompt(promptBuilder")
+			appendInputRequestDeclarations(source, "promptBuilder" + index,
+					prompt.inputRequestDeclarations());
+			appendRequestStateMode(source, "promptBuilder" + index,
+					prompt.requestStateMode());
+			source.append("\t\tendpointBuilder.addPrompt(promptBuilder")
 					.append(index).append(".build());\n");
 		}
 
@@ -2426,8 +2484,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append("\t\t\t\t.handler((request, resource, features) -> ");
 			if (resource.resourceOutputReturn())
 				source.append("com.soklet.McpCompleteResult.fromResourceOutput(");
-			source.append("instanceProvider.provide(")
-					.append(endpoint.endpointQualifiedName()).append(".class).")
+			source.append("instanceResolver.apply(request).")
 					.append(resource.method().getSimpleName()).append('(')
 					.append(resourceInvocationArguments(resource.bindings()))
 					.append(')');
@@ -2440,25 +2497,29 @@ public final class SokletProcessor extends AbstractProcessor {
 					"description", resource.description());
 			appendOptionalBuilderCall(source, "resourceBuilder" + index,
 					"mimeType", resource.mimeType());
-			if (!resource.template() && resource.size() >= 0)
+			if (!resource.template() && resource.sizeInBytes() >= 0)
 				source.append("\t\tresourceBuilder").append(index)
-						.append(".size(").append(resource.size()).append("L);\n");
-			if (resource.cacheTtlMs() != 0
+						.append(".sizeInBytes(")
+						.append(resource.sizeInBytes()).append("L);\n");
+			if (resource.cacheTimeToLiveInMilliseconds() != 0
 					|| !"PRIVATE".equals(resource.cacheScope()))
 				source.append("\t\tresourceBuilder").append(index)
 						.append(".cachePolicy(")
-						.append(cachePolicyExpression(resource.cacheTtlMs(),
+						.append(cachePolicyExpression(resource.cacheTimeToLiveInMilliseconds(),
 								resource.cacheScope()))
 						.append(");\n");
-			source.append("\t\tendpointBuilder.resource(resourceBuilder")
+			appendInputRequestDeclarations(source, "resourceBuilder" + index,
+					resource.inputRequestDeclarations());
+			appendRequestStateMode(source, "resourceBuilder" + index,
+					resource.requestStateMode());
+			source.append("\t\tendpointBuilder.addResource(resourceBuilder")
 					.append(index).append(".build());\n");
 		}
 
 		if (endpoint.resourceList() != null) {
 			McpResourceListModel resourceList = endpoint.resourceList();
 			source.append("\t\tendpointBuilder.resourceListHandler(")
-					.append("(request, list, features) -> instanceProvider.provide(")
-					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append("(request, list, features) -> instanceResolver.apply(request).")
 					.append(resourceList.method().getSimpleName()).append('(')
 					.append(resourceListInvocationArguments(
 							resourceList.bindings()))
@@ -2485,7 +2546,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(javaStringLiteral(binding.description()))
 						.append(") ");
 				if (binding.headerName() != null)
-					source.append("@com.soklet.annotation.McpHeader(")
+					source.append("@com.soklet.annotation.McpHeader(name = ")
 							.append(javaStringLiteral(binding.headerName()))
 							.append(") ");
 				source
@@ -2521,6 +2582,52 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(");\n");
 	}
 
+	private static void appendInputRequestDeclarations(
+			@NonNull StringBuilder source, @NonNull String builder,
+			@NonNull List<@NonNull McpInputRequestModel> declarations) {
+		for (McpInputRequestModel declaration : declarations)
+			source.append("\t\t").append(builder)
+					.append(".addInputRequestDeclaration(")
+					.append(inputRequestDeclarationExpression(declaration))
+					.append(");\n");
+	}
+
+	private static void appendRequestStateMode(@NonNull StringBuilder source,
+			@NonNull String builder, @NonNull String requestStateMode) {
+		if (!"NONE".equals(requestStateMode))
+			source.append("\t\t").append(builder)
+					.append(".requestStateMode(com.soklet.McpRequestStateMode.")
+					.append(requestStateMode).append(");\n");
+	}
+
+	@NonNull
+	private static String inputRequestDeclarationExpression(
+			@NonNull McpInputRequestModel declaration) {
+		String requirement = "com.soklet.McpInputRequirement."
+				+ declaration.requirement();
+		return switch (declaration.type()) {
+			case "ELICITATION_FORM" ->
+					"com.soklet.McpInputRequestDeclaration.fromElicitationForm("
+							+ requirement + ")";
+			case "ELICITATION_URL" ->
+					"com.soklet.McpInputRequestDeclaration.fromElicitationUrl("
+							+ requirement + ")";
+			case "SAMPLING" -> {
+				String capabilities = declaration.samplingCapabilities().stream()
+						.map(capability -> "com.soklet.McpClientCapability."
+								+ capability)
+						.collect(Collectors.joining(", "));
+				yield "com.soklet.McpInputRequestDeclaration.fromSampling(java.util.Set.of("
+						+ capabilities + "), " + requirement + ")";
+			}
+			case "ROOTS" ->
+					"com.soklet.McpInputRequestDeclaration.fromRoots("
+							+ requirement + ")";
+			default -> throw new IllegalStateException(
+					"Unsupported generated MCP input-request type.");
+		};
+	}
+
 	@NonNull
 	private static String invocationArguments(
 			@NonNull List<McpParameterBinding> bindings) {
@@ -2530,9 +2637,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
 				case CANCELATION_TOKEN ->
-						"features.require(com.soklet.CancelationToken.class)";
+						"features.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.find(com.soklet.McpProgressReporter.class)";
+						"features.getProgressReporter()";
 				case TOOL_ARGUMENT -> "arguments.getConvertedArguments()."
 						+ binding.carrierName() + "()";
 			});
@@ -2549,9 +2656,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
 				case CANCELATION_TOKEN ->
-						"features.require(com.soklet.CancelationToken.class)";
+						"features.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.find(com.soklet.McpProgressReporter.class)";
+						"features.getProgressReporter()";
 				case PROMPT_ARGUMENT -> binding.required()
 						? "prompt.findArgument("
 								+ javaStringLiteral(binding.publishedName())
@@ -2572,9 +2679,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
 				case CANCELATION_TOKEN ->
-						"features.require(com.soklet.CancelationToken.class)";
+						"features.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.find(com.soklet.McpProgressReporter.class)";
+						"features.getProgressReporter()";
 				case RESOURCE_READ_CONTEXT -> "resource";
 				case URI_PARAMETER -> "java.util.Objects.requireNonNull("
 						+ "resource.getUriTemplateVariables().get("
@@ -2593,9 +2700,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
 				case CANCELATION_TOKEN ->
-						"features.require(com.soklet.CancelationToken.class)";
+						"features.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.find(com.soklet.McpProgressReporter.class)";
+						"features.getProgressReporter()";
 				case RESOURCE_LIST_CONTEXT -> "list";
 			});
 		}
@@ -2698,6 +2805,74 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (isAnnotationType(annotation, annotationType))
 				return annotation;
 		return null;
+	}
+
+	@NonNull
+	private List<@NonNull McpInputRequestModel>
+			validateMcpInputRequestDeclarations(@NonNull Element operation,
+					@NonNull AnnotationMirror operationAnnotation) {
+		List<McpInputRequestModel> declarations = new ArrayList<>();
+		for (AnnotationMirror declaration : annotationMirrors(
+				operationAnnotation, "mayRequestInput")) {
+			String type = annotationEnumConstantName(declaration, "type");
+			String requirement = annotationEnumConstantName(declaration,
+					"requirement");
+			List<String> declaredSamplingCapabilities =
+					annotationEnumConstantNames(declaration,
+							"samplingCapabilities");
+			LinkedHashSet<String> samplingCapabilities = new LinkedHashSet<>(
+					declaredSamplingCapabilities);
+			if (samplingCapabilities.size()
+					!= declaredSamplingCapabilities.size())
+				mcpError(operation,
+						"Soklet: @McpMayRequestInput samplingCapabilities must not contain duplicates.");
+			boolean knownType = Set.of("ELICITATION_FORM", "ELICITATION_URL",
+					"SAMPLING", "ROOTS").contains(type);
+			if (!knownType)
+				mcpError(operation,
+						"Soklet: @McpMayRequestInput must select a supported input-request type.");
+			if (!"SAMPLING".equals(type) && !samplingCapabilities.isEmpty())
+				mcpError(operation,
+						"Soklet: @McpMayRequestInput samplingCapabilities may be declared only for SAMPLING.");
+			for (String capability : samplingCapabilities)
+				if (!Set.of("SAMPLING_CONTEXT", "SAMPLING_TOOLS")
+						.contains(capability))
+					mcpError(operation,
+							"Soklet: @McpMayRequestInput samplingCapabilities accepts only SAMPLING_CONTEXT and SAMPLING_TOOLS.");
+			declarations.add(new McpInputRequestModel(type,
+					List.copyOf(samplingCapabilities), requirement));
+		}
+		return List.copyOf(declarations);
+	}
+
+	@NonNull
+	private List<@NonNull AnnotationMirror> annotationMirrors(
+			@NonNull AnnotationMirror annotation, @NonNull String member) {
+		Object rawValues = annotationMemberWithDefaults(annotation, member);
+		if (!(rawValues instanceof List<?> values))
+			return List.of();
+		List<AnnotationMirror> annotations = new ArrayList<>(values.size());
+		for (Object value : values)
+			if (value instanceof AnnotationValue annotationValue
+					&& annotationValue.getValue()
+					instanceof AnnotationMirror nestedAnnotation)
+				annotations.add(nestedAnnotation);
+		return List.copyOf(annotations);
+	}
+
+	@NonNull
+	private List<@NonNull String> annotationEnumConstantNames(
+			@NonNull AnnotationMirror annotation, @NonNull String member) {
+		Object rawValues = annotationMemberWithDefaults(annotation, member);
+		if (!(rawValues instanceof List<?> values))
+			return List.of();
+		List<String> names = new ArrayList<>(values.size());
+		for (Object value : values)
+			if (value instanceof AnnotationValue annotationValue
+					&& annotationValue.getValue()
+					instanceof VariableElement constant)
+				names.add(constant.getSimpleName().toString());
+		return List.copyOf(names);
 	}
 
 	@NonNull
@@ -3419,7 +3594,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull String line) {
 		try {
 			String[] fields = line.split("\\|", -1);
-			if (fields.length != 5 || !"3".equals(fields[0]))
+			if (fields.length != 5 || !"4".equals(fields[0]))
 				return null;
 			Base64.Decoder decoder = Base64.getDecoder();
 			String endpoint = new String(decoder.decode(fields[1]),
@@ -3976,23 +4151,30 @@ public final class SokletProcessor extends AbstractProcessor {
 			String endpointQualifiedName, String endpointBinaryName,
 			String providerSimpleName, String providerBinaryName, String path,
 			String name, String version, String title, String description,
-			String websiteUrl, String instructions, String toolRateLimiter,
-			long resourceListCacheTtlMs, String resourceListCacheScope,
-			long resourceTemplateListCacheTtlMs,
+			String websiteUrl, String instructions, String toolRateLimiterName,
+			long resourceListCacheTimeToLiveInMilliseconds, String resourceListCacheScope,
+			long resourceTemplateListCacheTimeToLiveInMilliseconds,
 			String resourceTemplateListCacheScope,
 			List<McpToolModel> tools, List<McpPromptModel> prompts,
 			List<McpResourceModel> resources,
 			@Nullable McpResourceListModel resourceList) {}
 
 	private record McpToolModel(ExecutableElement method, String name,
-			String title, String description, String rateLimiter,
-			boolean mirrorStructuredContentAsText,
+			String title, String description, String rateLimiterName,
+			boolean structuredContentMirroredAsText, boolean advancedOperation,
+			List<McpInputRequestModel> inputRequestDeclarations,
+			String requestStateMode,
 			List<McpParameterBinding> bindings, String inputSchemaDigest,
 			String outputSchemaDigest) {}
 
 	private record McpPromptModel(ExecutableElement method, String name,
 			String title, String description, boolean promptOutputReturn,
+			List<McpInputRequestModel> inputRequestDeclarations,
+			String requestStateMode,
 			List<McpPromptParameterBinding> bindings) {}
+
+	private record McpInputRequestModel(String type,
+			List<String> samplingCapabilities, String requirement) {}
 
 	private record McpParameterBinding(McpParameterBindingKind kind,
 			String publishedName, String carrierName, TypeMirror type, String title,
@@ -4020,8 +4202,11 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private record McpResourceModel(ExecutableElement method, String address,
 			boolean template, String name, String title, String description,
-			String mimeType, long size, long cacheTtlMs, String cacheScope,
+			String mimeType, long sizeInBytes,
+			long cacheTimeToLiveInMilliseconds, String cacheScope,
 			boolean resourceOutputReturn,
+			List<McpInputRequestModel> inputRequestDeclarations,
+			String requestStateMode,
 			List<McpResourceParameterBinding> bindings) {}
 
 	private record McpResourceParameterBinding(

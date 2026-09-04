@@ -23,6 +23,10 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
+import static com.soklet.McpContentValueSupport.annotationsEqual;
+import static com.soklet.McpContentValueSupport.annotationsHashCode;
+import static com.soklet.McpContentValueSupport.resourceContentsEqual;
+import static com.soklet.McpContentValueSupport.resourceContentsHashCode;
 import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
@@ -64,15 +68,38 @@ public final class McpEmbeddedResource implements McpContentBlock {
 	}
 
 	/** @return content annotations, if supplied */
+	@Override
 	@NonNull
 	public Optional<@NonNull McpContentAnnotations> getAnnotations() {
 		return Optional.ofNullable(this.annotations);
 	}
 
 	/** @return immutable extension metadata */
+	@Override
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every content property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpEmbeddedResource content))
+			return false;
+		return resourceContentsEqual(this.resource, content.resource)
+				&& annotationsEqual(this.annotations, content.annotations)
+				&& this.metadata.equals(content.metadata);
+	}
+
+	/** @return structural content hash code */
+	@Override
+	public int hashCode() {
+		int result = resourceContentsHashCode(this.resource);
+		result = 31 * result + annotationsHashCode(this.annotations);
+		result = 31 * result + this.metadata.hashCode();
+		return result;
 	}
 
 	/**

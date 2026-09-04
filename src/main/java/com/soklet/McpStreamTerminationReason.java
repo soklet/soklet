@@ -34,8 +34,8 @@ public enum McpStreamTerminationReason {
 	WRITE_FAILED,
 	/** A bounded server transport or protocol-output queue was exhausted. */
 	BACKPRESSURE,
-	/** The MCP server stopped. */
-	SERVER_STOPPED,
+	/** The MCP server is stopping. */
+	SERVER_STOPPING,
 	/** The simulator's pending stream-item capacity was exhausted. */
 	SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 	/** The simulator's cumulative captured-byte capacity was exhausted. */

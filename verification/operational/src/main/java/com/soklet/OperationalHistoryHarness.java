@@ -231,7 +231,7 @@ public final class OperationalHistoryHarness {
         .concurrentConnectionLimit(Math.max(64, policy.clientsPerScenario() * 4))
         .build();
     McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(MCP_TOOL)
-        .jsonArguments()
+        .jsonObjectArguments()
         .handler((context, arguments, features) -> {
           McpJsonValue value = arguments.getRawArguments().find("canary")
               .orElseThrow(() -> new IllegalArgumentException("Missing canary"));
@@ -242,15 +242,12 @@ public final class OperationalHistoryHarness {
           return McpCompleteResult.fromToolText(canary);
         })
         .build();
-    McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-        .serverInformation(McpImplementation.withNameAndVersion(
+    McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
             "soklet-operational-history", "4.0.0").build())
-        .tool(tool)
+        .addTool(tool)
         .build();
-    McpServer mcpServer = McpServer.withPort(0)
+    McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
         .host(HOST)
-        .endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-        .admissionController(McpAdmissionController.acceptAllInstance())
         .toolRateLimiter(context -> McpRateLimitDecision.allowed())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
         .allowedHosts(Set.of(HOST))
@@ -404,7 +401,7 @@ public final class OperationalHistoryHarness {
         .writeTimeout(Duration.ofSeconds(5))
         .build();
     McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(MCP_TOOL)
-        .jsonArguments()
+        .jsonObjectArguments()
         .handler((context, arguments, features) -> {
           McpJsonValue value = arguments.getRawArguments().find("canary").orElseThrow();
           if (!(value instanceof McpJsonString string))
@@ -413,20 +410,17 @@ public final class OperationalHistoryHarness {
           return McpCompleteResult.fromToolText(string.getValue());
         })
         .build();
-    McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-        .serverInformation(McpImplementation.withNameAndVersion(
+    McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
             "soklet-operational-self-test", "4.0.0").build())
-        .tool(tool)
+        .addTool(tool)
         .build();
     byte[] traceKeyBytes = new byte[32];
     for (int index = 0; index < traceKeyBytes.length; ++index)
       traceKeyBytes[index] = (byte) (0x21 + index);
     TelemetryAudit telemetry = new TelemetryAudit(
         "operational-self-test", traceKeyBytes, 1L, 1L);
-    McpServer mcpServer = McpServer.withPort(0)
+    McpServer mcpServer = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
         .host(HOST)
-        .endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-        .admissionController(McpAdmissionController.acceptAllInstance())
         .toolRateLimiter(context -> McpRateLimitDecision.allowed())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
         .allowedHosts(Set.of(HOST))

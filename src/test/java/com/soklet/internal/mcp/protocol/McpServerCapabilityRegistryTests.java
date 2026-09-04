@@ -120,19 +120,19 @@ public class McpServerCapabilityRegistryTests {
 		McpServerCapabilityRegistry listChanged =
 				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()
 						.exactResource("catalog://items/1")
-						.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+						.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 								McpResourceNotificationType.RESOURCES_LIST_CHANGED))
 						.build());
 		McpServerCapabilityRegistry updated =
 				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()
 						.exactResource("catalog://items/1")
-						.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+						.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 								McpResourceNotificationType.RESOURCE_UPDATED))
 						.build());
 		McpServerCapabilityRegistry both =
 				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()
 						.exactResource("catalog://items/1")
-						.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+						.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 								McpResourceNotificationType.RESOURCES_LIST_CHANGED,
 								McpResourceNotificationType.RESOURCE_UPDATED))
 						.build());
@@ -154,7 +154,7 @@ public class McpServerCapabilityRegistryTests {
 	public void resource_notification_configuration_cannot_invent_a_resource_surface() {
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> endpointBuilder()
-						.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
+						.subscriptionConfig(McpNormalizedSubscriptionConfiguration.supporting(
 								McpResourceNotificationType.RESOURCE_UPDATED))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class,
@@ -217,7 +217,7 @@ public class McpServerCapabilityRegistryTests {
 	@Test
 	public void server_information_can_be_disabled_without_affecting_capabilities() {
 		McpNormalizedEndpoint endpoint = endpointBuilder()
-				.includeServerInformation(false)
+				.serverInformationIncluded(false)
 				.tool(McpNormalizedOperation.named("lookup"))
 				.build();
 		McpWireResult discovery =

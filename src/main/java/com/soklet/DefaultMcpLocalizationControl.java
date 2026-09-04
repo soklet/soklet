@@ -45,7 +45,7 @@ final class DefaultMcpLocalizationControl implements McpLocalizationControl {
 	}
 
 	@Override
-	public void catalogsChanged() {
+	public void invalidateCatalogs() {
 		if (!this.enabled)
 			throw new IllegalStateException("MCP localization is disabled.");
 

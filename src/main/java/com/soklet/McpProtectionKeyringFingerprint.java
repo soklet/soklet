@@ -26,7 +26,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Secret-free deployment-comparison fingerprint for one complete live MCP
- * protection key-ring configuration.
+ * protection keyring configuration.
  * <p>
  * This value is operational metadata only, not an authentication input. It
  * exposes neither raw key material nor per-key fingerprint tags.
@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpProtectionKeyRingFingerprint {
+public final class McpProtectionKeyringFingerprint {
 	/** Fingerprint encoding version. */
 	@NonNull
 	public static final String VERSION = "v1";
@@ -46,7 +46,7 @@ public final class McpProtectionKeyRingFingerprint {
 	@NonNull
 	private final String value;
 
-	McpProtectionKeyRingFingerprint(@NonNull String value) {
+	McpProtectionKeyringFingerprint(@NonNull String value) {
 		this.value = requireNonNull(value);
 	}
 
@@ -83,7 +83,7 @@ public final class McpProtectionKeyRingFingerprint {
 	 */
 	@Override
 	public boolean equals(@Nullable Object object) {
-		return object instanceof McpProtectionKeyRingFingerprint other
+		return object instanceof McpProtectionKeyringFingerprint other
 				&& this.value.equals(other.value);
 	}
 

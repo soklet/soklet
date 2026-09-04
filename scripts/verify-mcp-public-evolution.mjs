@@ -1094,7 +1094,7 @@ function verifyExternal(root, inventory, externalRoot) {
   if (!existsSync(path)) fail(`External sketch declaration source is missing: ${row.path}`);
   const text = readFileSync(path, 'utf8');
   const resolutionCount = declarationResolutionCount(text, row.declaration);
-  if (resolutionCount !== 1) fail('External sketch getDeprecatedLogLevel declaration must resolve exactly once.');
+  if (resolutionCount !== 1) fail('External sketch getLogLevel declaration must resolve exactly once.');
   if (DEPRECATION_TOKEN.test(text)) fail('External sketch deprecation suppression survives.');
 }
 

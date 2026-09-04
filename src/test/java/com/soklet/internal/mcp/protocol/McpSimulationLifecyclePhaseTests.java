@@ -48,8 +48,7 @@ public class McpSimulationLifecyclePhaseTests {
 	@Test
 	public void bridge_quiesce_is_idempotent_fences_starts_and_releases_proof()
 			throws Exception {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"simulation-phase-test", "4.0.0").build())
 				.build();
 		McpServerRuntimeBridge bridge = new McpServerRuntimeBridge(

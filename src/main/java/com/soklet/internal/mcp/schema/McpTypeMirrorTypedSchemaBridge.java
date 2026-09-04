@@ -113,6 +113,51 @@ public final class McpTypeMirrorTypedSchemaBridge {
 				outputSchema.serializedDocument());
 	}
 
+	/**
+	 * Compiles only the synthetic object input schema for an advanced annotated
+	 * tool whose handler returns {@code McpOperationResult}.
+	 *
+	 * @param types the annotation-processing type utilities
+	 * @param elements the annotation-processing element utilities
+	 * @param arguments published tool arguments in their wire order
+	 * @return compiled input schema or a safe rejection diagnostic
+	 * @throws NullPointerException if an argument is {@code null}
+	 */
+	@NonNull
+	public static Result compileToolInputSchema(@NonNull Types types,
+			@NonNull Elements elements,
+			@NonNull List<@NonNull ToolArgument> arguments) {
+		requireNonNull(types);
+		requireNonNull(elements);
+		requireNonNull(arguments);
+
+		McpSchemaCompilationLimits limits =
+				McpSchemaCompilationLimits.productionDefaults();
+		McpTypedSchemaCompiler<TypeMirror> compiler =
+				new McpTypedSchemaCompiler<>(
+						new McpTypeMirrorTypedTypeModel(types, elements, limits),
+						limits, new McpJsonCodec(McpJsonLimits.productionDefaults()));
+		List<McpTypedTypeDescriptor.RecordComponent<TypeMirror>> components =
+				new ArrayList<>(arguments.size());
+		for (ToolArgument argument : arguments) {
+			requireNonNull(argument);
+			components.add(McpTypedTypeDescriptor.RecordComponent
+					.fromNameAndType(argument.publishedName(), argument.type(),
+							argument.title(), argument.description(),
+							argument.headerName()));
+		}
+
+		try {
+			McpCompiledTypedSchema inputSchema =
+					compiler.compileToolInputProperties(components);
+			return new CompiledInputSchema(inputSchema.document(),
+					inputSchema.serializedDocument());
+		} catch (McpTypedSchemaException exception) {
+			return new RejectedSchemas(diagnostic(Direction.TOOL_INPUT,
+					exception));
+		}
+	}
+
 	@NonNull
 	private static Diagnostic diagnostic(@NonNull Direction direction,
 			@NonNull McpTypedSchemaException exception) {
@@ -195,10 +240,39 @@ public final class McpTypeMirrorTypedSchemaBridge {
 	}
 
 	/**
-	 * Result of compiling one tool's input and output schemas.
+	 * Result of compiling one tool's input schema and, for typed-completion
+	 * tools, its output schema.
 	 */
 	@ThreadSafe
-	public sealed interface Result permits CompiledSchemas, RejectedSchemas {
+	public sealed interface Result permits CompiledInputSchema, CompiledSchemas,
+			RejectedSchemas {
+	}
+
+	/**
+	 * Successfully compiled, immutable input schema for an advanced tool.
+	 */
+	@ThreadSafe
+	public static final class CompiledInputSchema implements Result {
+		@NonNull
+		private final McpJsonObject inputSchemaDocument;
+		private final byte @NonNull [] inputSchemaBytes;
+
+		private CompiledInputSchema(@NonNull McpJsonObject inputSchemaDocument,
+				byte @NonNull [] inputSchemaBytes) {
+			this.inputSchemaDocument = requireNonNull(inputSchemaDocument);
+			this.inputSchemaBytes = requireNonNull(inputSchemaBytes).clone();
+		}
+
+		/** @return the validated canonical input schema document */
+		@NonNull
+		public McpJsonObject getInputSchemaDocument() {
+			return this.inputSchemaDocument;
+		}
+
+		/** @return a copy of the canonical UTF-8 input schema */
+		public byte @NonNull [] getInputSchemaBytes() {
+			return this.inputSchemaBytes.clone();
+		}
 	}
 
 	/**

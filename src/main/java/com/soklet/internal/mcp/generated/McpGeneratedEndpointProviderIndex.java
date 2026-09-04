@@ -42,7 +42,7 @@ public final class McpGeneratedEndpointProviderIndex {
 	public static final String RESOURCE_PATH =
 			"META-INF/soklet/mcp-endpoint-descriptor-providers";
 	@NonNull
-	private static final String FORMAT_VERSION = "3";
+	private static final String FORMAT_VERSION = "4";
 
 	private McpGeneratedEndpointProviderIndex() {
 	}

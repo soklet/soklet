@@ -64,7 +64,7 @@ final class McpFrameworkRequestStateRuntime {
 			if (requireNonNull(protectedState).isEmpty())
 				throw new IllegalArgumentException();
 			McpRequestStateCanonicalJson.strictUtf8(protectedState,
-					plan.maximumEncodedRequestStateBytes(),
+					plan.maximumEncodedRequestStateSizeInBytes(),
 					"Protected MCP request state");
 		} catch (IllegalArgumentException exception) {
 			throw new McpInvalidRequestStateException();
@@ -106,7 +106,7 @@ final class McpFrameworkRequestStateRuntime {
 			try {
 				continuation = McpRequestStatePlaintextCodec.decode(
 						plaintext, binding,
-						plan.maximumDecodedRequestStateBytes(),
+						plan.maximumDecodedRequestStateSizeInBytes(),
 						plan.maximumRequestStateLifetime(),
 						plan.maximumRequestStateRounds(), clock.instant(),
 						currentRequestId);
@@ -158,7 +158,7 @@ final class McpFrameworkRequestStateRuntime {
 
 		byte[] plaintext = McpRequestStatePlaintextCodec.encode(
 				continuation, binding,
-				plan.maximumDecodedRequestStateBytes(),
+				plan.maximumDecodedRequestStateSizeInBytes(),
 				plan.maximumRequestStateLifetime(),
 				plan.maximumRequestStateRounds());
 		try {
@@ -172,7 +172,7 @@ final class McpFrameworkRequestStateRuntime {
 					throw new IllegalStateException(
 							"The MCP request-state protection adapter returned empty state.");
 				McpRequestStateCanonicalJson.strictUtf8(protectedState,
-						plan.maximumEncodedRequestStateBytes(),
+						plan.maximumEncodedRequestStateSizeInBytes(),
 						"Protected MCP request state");
 				return protectedState;
 			} catch (McpRequestStateProtectionException exception) {

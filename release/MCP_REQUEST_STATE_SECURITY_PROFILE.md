@@ -6,7 +6,7 @@ cryptographic inputs implemented by the production code and frozen by the
 executable vectors named below.
 
 The sole built-in profile identifier is the case-sensitive ASCII string
-`soklet-mcp-protection-v1`. Production key-ring and development-ephemeral
+`soklet-mcp-protection-v1`. Production keyring and development-ephemeral
 modes use this same profile. Development-ephemeral keys are process-local and
 are not suitable for production, restarts, or a fleet.
 

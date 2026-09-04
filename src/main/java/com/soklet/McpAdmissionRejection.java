@@ -136,6 +136,7 @@ public final class McpAdmissionRejection {
 		/**
 		 * Replaces the application response headers. Headers remain subject to
 		 * Soklet's fail-closed response-header safety validation when transported.
+		 * Passing an empty map clears all application response headers.
 		 *
 		 * @param headers application response headers
 		 * @return this builder
@@ -159,7 +160,7 @@ public final class McpAdmissionRejection {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder header(@NonNull String name, @NonNull String value) {
+		public Builder addHeader(@NonNull String name, @NonNull String value) {
 			this.headers.computeIfAbsent(requireNonNull(name), ignored -> new LinkedHashSet<>())
 					.add(requireNonNull(value));
 			return this;

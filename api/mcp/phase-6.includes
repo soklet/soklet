@@ -5,6 +5,7 @@ com.soklet.McpLocalizationContext$Builder
 com.soklet.McpLocalizationContextProvider
 com.soklet.McpLocalizationControl
 com.soklet.McpLocalizationFailurePolicy
+com.soklet.McpLocalizationLookup
 com.soklet.McpLocalizationRequest
 com.soklet.McpLocalizationResult
 com.soklet.McpLocalizationResult$Failure
@@ -13,7 +14,6 @@ com.soklet.McpLocalizationResult$UseDefaultText
 com.soklet.McpLocalizationRevision
 com.soklet.McpLocalizer
 com.soklet.McpLocalizer$Builder
-com.soklet.McpLocalizer$ContextProviderStage
 com.soklet.McpMetricsEvent
 com.soklet.McpMetricsEvent$CancelationSignaled
 com.soklet.McpMetricsEvent$ConnectionAccepted
@@ -58,7 +58,7 @@ com.soklet.McpSimulationStreamItemType
 com.soklet.McpStreamTerminationReason
 com.soklet.McpTextCoordinate
 com.soklet.McpTextOwnerType
-com.soklet.McpTraceCorrelationConfigurationFingerprint
 com.soklet.McpTraceCorrelationControl
+com.soklet.McpTraceCorrelationFingerprint
 com.soklet.McpTraceCorrelationKey
 com.soklet.Simulator

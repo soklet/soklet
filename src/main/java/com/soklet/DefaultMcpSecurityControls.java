@@ -59,22 +59,22 @@ final class DefaultMcpSecurityControls
 	record SecurityDiagnosticsState(
 			@NonNull McpProtectionMode protectionMode,
 			boolean applicationRequestStateProtectorConfigured,
-			@NonNull Optional<@NonNull McpProtectionKeyRingFingerprint>
-					protectionKeyRingFingerprint,
-			@NonNull Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
-					traceCorrelationConfigurationFingerprint) {
+			@NonNull Optional<@NonNull McpProtectionKeyringFingerprint>
+					protectionKeyringFingerprint,
+			@NonNull Optional<@NonNull McpTraceCorrelationFingerprint>
+					traceCorrelationFingerprint) {
 		SecurityDiagnosticsState {
 			requireNonNull(protectionMode);
-			requireNonNull(protectionKeyRingFingerprint);
-			requireNonNull(traceCorrelationConfigurationFingerprint);
+			requireNonNull(protectionKeyringFingerprint);
+			requireNonNull(traceCorrelationFingerprint);
 			if (applicationRequestStateProtectorConfigured
 					!= (protectionMode == McpProtectionMode.CUSTOM_PROTECTOR))
 				throw new IllegalArgumentException(
 						"Application request-state protector presence must match custom-protector mode.");
-			if (protectionKeyRingFingerprint.isPresent()
-					!= (protectionMode == McpProtectionMode.PRODUCTION_KEY_RING))
+			if (protectionKeyringFingerprint.isPresent()
+					!= (protectionMode == McpProtectionMode.PRODUCTION_KEYRING))
 				throw new IllegalArgumentException(
-						"Production protection mode must have exactly one key-ring fingerprint.");
+						"Production protection mode must have exactly one keyring fingerprint.");
 		}
 	}
 
@@ -158,8 +158,8 @@ final class DefaultMcpSecurityControls
 	private final McpProtectionMode protectionMode;
 	@Nullable
 	private final McpRequestStateProtector requestStateProtector;
-	private final int maximumEncodedRequestStateBytes;
-	private final int maximumDecodedRequestStateBytes;
+	private final int maximumEncodedRequestStateSizeInBytes;
+	private final int maximumDecodedRequestStateSizeInBytes;
 	@Nullable
 	private OwnedSecretKey activeProtectionKey;
 	@NonNull
@@ -193,27 +193,27 @@ final class DefaultMcpSecurityControls
 		this.maximumInvocationsPerEpoch = maximumInvocationsPerEpoch;
 		this.initialEpochNumber = initialEpochNumber;
 		this.protectionMode = protectionConfig == null
-				? McpProtectionMode.NO_FRAMEWORK_KEYS
+				? McpProtectionMode.NONE
 				: protectionConfig.getProtectionMode();
 		this.requestStateProtector = protectionConfig == null ? null
 				: protectionConfig.getRequestStateProtector().orElse(null);
-		this.maximumEncodedRequestStateBytes = protectionConfig == null ? 0
-				: protectionConfig.getMaximumEncodedRequestStateBytes();
-		this.maximumDecodedRequestStateBytes = protectionConfig == null ? 0
-				: protectionConfig.getMaximumDecodedRequestStateBytes();
+		this.maximumEncodedRequestStateSizeInBytes = protectionConfig == null ? 0
+				: protectionConfig.getMaximumEncodedRequestStateSizeInBytes();
+		this.maximumDecodedRequestStateSizeInBytes = protectionConfig == null ? 0
+				: protectionConfig.getMaximumDecodedRequestStateSizeInBytes();
 		this.verificationProtectionKeys = new LinkedHashMap<>();
 		this.outstandingSealingReservations = new LinkedHashMap<>();
 
 		try {
-			if (this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING) {
-				McpProtectionKeyRing keyRing = requireNonNull(protectionConfig)
-						.getInitialKeyRing().orElseThrow(() ->
+			if (this.protectionMode == McpProtectionMode.PRODUCTION_KEYRING) {
+				McpProtectionKeyring keyring = requireNonNull(protectionConfig)
+						.getInitialKeyring().orElseThrow(() ->
 								new IllegalArgumentException(
-										"Production protection requires an initial key ring."));
+										"Production protection requires an initial keyring."));
 				this.activeProtectionKey = OwnedSecretKey.fromProtectionKey(
-						keyRing.initialActiveKey());
+						keyring.initialActiveKey());
 				for (McpProtectionKey verificationKey
-						: keyRing.initialVerificationKeys()) {
+						: keyring.initialVerificationKeys()) {
 					OwnedSecretKey ownedVerificationKey =
 							OwnedSecretKey.fromProtectionKey(verificationKey);
 					try {
@@ -277,32 +277,32 @@ final class DefaultMcpSecurityControls
 	@NonNull
 	SecurityDiagnosticsState getDiagnosticsState() {
 		synchronized (this.lock) {
-			Optional<@NonNull McpProtectionKeyRingFingerprint>
-					protectionKeyRingFingerprint =
-					this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING
+			Optional<@NonNull McpProtectionKeyringFingerprint>
+					protectionKeyringFingerprint =
+					this.protectionMode == McpProtectionMode.PRODUCTION_KEYRING
 							? Optional.of(protectionFingerprint(
 									requireNonNull(this.activeProtectionKey),
 									this.verificationProtectionKeys.values()))
 							: Optional.empty();
-			Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
-					traceCorrelationConfigurationFingerprint =
+			Optional<@NonNull McpTraceCorrelationFingerprint>
+					traceCorrelationFingerprint =
 					Optional.ofNullable(this.activeTraceCorrelationKey)
 							.map(DefaultMcpSecurityControls::traceFingerprint);
 			return new SecurityDiagnosticsState(this.protectionMode,
 					this.requestStateProtector != null,
-					protectionKeyRingFingerprint,
-					traceCorrelationConfigurationFingerprint);
+					protectionKeyringFingerprint,
+					traceCorrelationFingerprint);
 		}
 	}
 
 	@Override
 	@NonNull
-	public Optional<@NonNull McpProtectionKeyRingSnapshot> getKeyRingSnapshot() {
+	public Optional<@NonNull McpProtectionKeyringSnapshot> getKeyringSnapshot() {
 		synchronized (this.lock) {
 			if (this.protectionMode
-					!= McpProtectionMode.PRODUCTION_KEY_RING)
+					!= McpProtectionMode.PRODUCTION_KEYRING)
 				return Optional.empty();
-			return Optional.of(new McpProtectionKeyRingSnapshot(
+			return Optional.of(new McpProtectionKeyringSnapshot(
 					requireNonNull(this.activeProtectionKey).keyId(),
 					Set.copyOf(this.verificationProtectionKeys.keySet()),
 					protectionFingerprint(this.activeProtectionKey,
@@ -377,7 +377,7 @@ final class DefaultMcpSecurityControls
 	}
 
 	@Override
-	public void rotateTo(@NonNull McpProtectionKey activeKey) {
+	public void rotateActiveKey(@NonNull McpProtectionKey activeKey) {
 		requireNonNull(activeKey);
 		synchronized (this.lock) {
 			requireProductionRing();
@@ -439,7 +439,7 @@ final class DefaultMcpSecurityControls
 						"The active MCP protection key cannot be removed.");
 			if (this.outstandingSealingReservations.getOrDefault(keyId, 0L)
 					> 0L)
-				throw new McpKeyInUseException();
+				throw new McpProtectionKeyInUseException();
 			OwnedSecretKey removed =
 					this.verificationProtectionKeys.remove(keyId);
 			if (removed == null)
@@ -468,7 +468,7 @@ final class DefaultMcpSecurityControls
 		requireNonNull(context);
 		requireNonNull(plaintext);
 		if (plaintext.length == 0
-				|| plaintext.length > this.maximumDecodedRequestStateBytes)
+				|| plaintext.length > this.maximumDecodedRequestStateSizeInBytes)
 			throw new IllegalStateException(
 					"Canonical MCP request state exceeds its configured size limit.");
 
@@ -518,13 +518,13 @@ final class DefaultMcpSecurityControls
 				System.arraycopy(ciphertext, 0, envelopeBytes, header.length,
 						ciphertext.length);
 				if (envelopeBytes.length
-						> this.maximumDecodedRequestStateBytes)
+						> this.maximumDecodedRequestStateSizeInBytes)
 					throw new IllegalStateException(
 							"Protected MCP request state exceeds its configured decoded-size limit.");
 				String protectedState = REQUEST_STATE_PREFIX
 						+ base64Url(envelopeBytes);
 				if (protectedState.length()
-						> this.maximumEncodedRequestStateBytes)
+						> this.maximumEncodedRequestStateSizeInBytes)
 					throw new IllegalStateException(
 							"Protected MCP request state exceeds its configured encoded-size limit.");
 				return protectedState;
@@ -560,7 +560,7 @@ final class DefaultMcpSecurityControls
 				throw new IllegalStateException(
 						"The custom MCP request-state protector returned null.");
 			if (plaintext.length == 0
-					|| plaintext.length > this.maximumDecodedRequestStateBytes)
+					|| plaintext.length > this.maximumDecodedRequestStateSizeInBytes)
 				throw McpRequestStateProtectionException.fromInvalidState();
 			return plaintext;
 		}
@@ -588,7 +588,7 @@ final class DefaultMcpSecurityControls
 						.fromProtectorUnavailable();
 			}
 			if (plaintext.length == 0
-					|| plaintext.length > this.maximumDecodedRequestStateBytes) {
+					|| plaintext.length > this.maximumDecodedRequestStateSizeInBytes) {
 				Arrays.fill(plaintext, (byte) 0);
 				throw McpRequestStateProtectionException.fromInvalidState();
 			}
@@ -625,8 +625,8 @@ final class DefaultMcpSecurityControls
 
 	@Override
 	@NonNull
-	public Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
-			getConfigurationFingerprint() {
+	public Optional<@NonNull McpTraceCorrelationFingerprint>
+			getFingerprint() {
 		synchronized (this.lock) {
 			return Optional.ofNullable(this.activeTraceCorrelationKey)
 					.map(DefaultMcpSecurityControls::traceFingerprint);
@@ -723,13 +723,13 @@ final class DefaultMcpSecurityControls
 	}
 
 	private void requireConfiguredProtection() {
-		if (this.protectionMode == McpProtectionMode.NO_FRAMEWORK_KEYS)
+		if (this.protectionMode == McpProtectionMode.NONE)
 			throw new IllegalStateException(
 					"Framework-managed MCP request-state protection is not configured.");
 	}
 
 	private boolean isBuiltInProtection() {
-		return this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING
+		return this.protectionMode == McpProtectionMode.PRODUCTION_KEYRING
 				|| this.protectionMode
 				== McpProtectionMode.DEVELOPMENT_EPHEMERAL;
 	}
@@ -748,7 +748,7 @@ final class DefaultMcpSecurityControls
 		requireNonNull(protectedState);
 		int encodedBytes = utf8Length(protectedState);
 		if (protectedState.isEmpty() || encodedBytes < 0
-				|| encodedBytes > this.maximumEncodedRequestStateBytes)
+				|| encodedBytes > this.maximumEncodedRequestStateSizeInBytes)
 			throw McpRequestStateProtectionException.fromInvalidState();
 	}
 
@@ -778,9 +778,9 @@ final class DefaultMcpSecurityControls
 
 				int decodedBytes = builtInHeaderLength(context.keyId())
 						+ plaintextBytes + GCM_TAG_BYTES;
-				if (decodedBytes > this.maximumDecodedRequestStateBytes
+				if (decodedBytes > this.maximumDecodedRequestStateSizeInBytes
 						|| encodedWireLength(decodedBytes)
-						> this.maximumEncodedRequestStateBytes)
+						> this.maximumEncodedRequestStateSizeInBytes)
 					throw new IllegalStateException(
 							"Protected MCP request state exceeds its configured size limit.");
 
@@ -921,7 +921,7 @@ final class DefaultMcpSecurityControls
 		}
 		try {
 			if (!base64Url(decoded).equals(suffix)
-					|| decoded.length > this.maximumDecodedRequestStateBytes)
+					|| decoded.length > this.maximumDecodedRequestStateSizeInBytes)
 				throw McpRequestStateProtectionException.fromInvalidState();
 			int offset = 0;
 			if (decoded.length < builtInHeaderLength("a") + 1
@@ -1109,9 +1109,9 @@ final class DefaultMcpSecurityControls
 	}
 
 	private void requireProductionRing() {
-		if (this.protectionMode != McpProtectionMode.PRODUCTION_KEY_RING)
+		if (this.protectionMode != McpProtectionMode.PRODUCTION_KEYRING)
 			throw new IllegalStateException(
-					"MCP protection key control requires a production key ring.");
+					"MCP protection key control requires a production keyring.");
 	}
 
 	@Nullable
@@ -1141,16 +1141,16 @@ final class DefaultMcpSecurityControls
 	}
 
 	@NonNull
-	private static McpProtectionKeyRingFingerprint protectionFingerprint(
+	private static McpProtectionKeyringFingerprint protectionFingerprint(
 			@NonNull OwnedSecretKey activeKey,
 			@NonNull Iterable<@NonNull OwnedSecretKey> verificationKeys) {
 		List<FingerprintRecord> records = new ArrayList<>();
 		records.add(fingerprintRecord(activeKey.keyId(),
-				McpProtectionKeyRingFingerprint.PROFILE, ACTIVE_ROLE,
+				McpProtectionKeyringFingerprint.PROFILE, ACTIVE_ROLE,
 				activeKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
 		for (OwnedSecretKey verificationKey : verificationKeys)
 			records.add(fingerprintRecord(verificationKey.keyId(),
-					McpProtectionKeyRingFingerprint.PROFILE, VERIFICATION_ROLE,
+					McpProtectionKeyringFingerprint.PROFILE, VERIFICATION_ROLE,
 					verificationKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
 		records.sort(Comparator.comparing(FingerprintRecord::metadata,
 				DefaultMcpSecurityControls::compareUnsigned));
@@ -1158,12 +1158,12 @@ final class DefaultMcpSecurityControls
 		aggregate.writeBytes(PROTECTION_RING_DOMAIN);
 		writeUnsignedInt(aggregate, records.size());
 		records.forEach(record -> aggregate.writeBytes(record.encoded()));
-		return new McpProtectionKeyRingFingerprint(base64Url(sha256(
+		return new McpProtectionKeyringFingerprint(base64Url(sha256(
 				aggregate.toByteArray())));
 	}
 
 	@NonNull
-	private static McpTraceCorrelationConfigurationFingerprint traceFingerprint(
+	private static McpTraceCorrelationFingerprint traceFingerprint(
 			@NonNull OwnedSecretKey key) {
 		FingerprintRecord record = fingerprintRecord(key.keyId(), TRACE_ALGORITHM,
 				ACTIVE_ROLE, key.copyKeyMaterial(), TRACE_ENTRY_DOMAIN);
@@ -1171,7 +1171,7 @@ final class DefaultMcpSecurityControls
 		aggregate.writeBytes(TRACE_CONFIGURATION_DOMAIN);
 		writeUnsignedInt(aggregate, 1);
 		aggregate.writeBytes(record.encoded());
-		return McpTraceCorrelationConfigurationFingerprint.fromValue(
+		return McpTraceCorrelationFingerprint.fromValue(
 				base64Url(sha256(aggregate.toByteArray())));
 	}
 

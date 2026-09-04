@@ -249,13 +249,13 @@ final class SokletDirectMcpLifecycleTests {
 		ThrowingShutdownExecutorService applicationExecutor =
 				new ThrowingShutdownExecutorService(cleanupFailure);
 		this.executors.add(applicationExecutor);
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("direct-cleanup-evidence"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("direct-cleanup-evidence"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED).build())
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED)).build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.requestHandlerExecutorServiceSupplier(() -> applicationExecutor)
@@ -310,13 +310,13 @@ final class SokletDirectMcpLifecycleTests {
 				transportFailureObserved.countDown();
 			}
 		};
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("direct-frozen-mcp-primary"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("direct-frozen-mcp-primary"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED).build())
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED)).build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.requestHandlerExecutorServiceSupplier(() -> applicationExecutor)
@@ -414,7 +414,7 @@ final class SokletDirectMcpLifecycleTests {
 		AtomicReference<ShutdownComponentDisposition> stopOutcome = new AtomicReference<>();
 		String toolName = "direct.self-stop";
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName).jsonArguments()
+				.withName(toolName).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Soklet owner = ownerReference.get();
 					CompletionStage<ShutdownResult> stage = owner.shutdown();
@@ -430,9 +430,8 @@ final class SokletDirectMcpLifecycleTests {
 						handlerExited.countDown();
 					}
 				}).build();
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("direct-handler-self-stop"))
-				.tool(tool).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH, implementation("direct-handler-self-stop"))
+				.addTool(tool).build();
 		McpServer server = serverBuilder(endpoint).build();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
@@ -520,7 +519,7 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertEquals(0,
 					server.getDiagnostics().getActiveHandlerExecutions());
 			Assertions.assertEquals(0,
-					server.getDiagnostics().getQueuedRequests());
+					server.getDiagnostics().getRequestHandlerQueueDepth());
 			Assertions.assertEquals(0,
 					server.getDiagnostics().getActiveRequestStreams());
 			Assertions.assertEquals(0,
@@ -621,13 +620,13 @@ final class SokletDirectMcpLifecycleTests {
 	@NonNull
 	private static McpFixture blockingFixture(@NonNull BlockingPublisher publisher,
 			@NonNull LifecyclePolicy policy) {
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("direct-blocked-publisher"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				implementation("direct-blocked-publisher"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED).build())
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+						Set.of(McpSubscriptionNotificationType
+								.RESOURCES_LIST_CHANGED)).build())
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
@@ -638,9 +637,10 @@ final class SokletDirectMcpLifecycleTests {
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0).host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		return McpServer.withPort(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance())
+				.host(HOST)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))

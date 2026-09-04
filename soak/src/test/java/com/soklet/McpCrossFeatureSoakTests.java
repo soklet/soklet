@@ -439,9 +439,9 @@ public class McpCrossFeatureSoakTests {
 	private static McpServer mcpServer(@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
 		McpEndpoint endpoint = mcpEndpoint(state, publisher);
-		return configureMcpServer(McpServer.withPort(0))
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
+		return configureMcpServer(McpServer.withPort(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance()))
 				.build();
 	}
 
@@ -465,7 +465,7 @@ public class McpCrossFeatureSoakTests {
 				.build();
 		McpToolRegistration<McpJsonObject> progressTool = McpToolRegistration
 				.withName(PROGRESS_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.progressInvocations.incrementAndGet();
 					McpProgressReporter reporter =
@@ -488,15 +488,14 @@ public class McpCrossFeatureSoakTests {
 				.build();
 		McpToolRegistration<McpJsonObject> protectedTool = McpToolRegistration
 				.withName(PROTECTED_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getFrameworkRequestState().isEmpty()) {
 						if (!request.getInputResponses().asMap().isEmpty())
 							throw new IllegalStateException(
 									"Initial protected request carried input responses.");
 						state.protectedInitialInvocations.incrementAndGet();
-						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
 										form, McpJsonObject.builder()
 												.put("message",
 														"Approve the soak protected-state exchange")
@@ -524,12 +523,12 @@ public class McpCrossFeatureSoakTests {
 					return McpCompleteResult.fromToolText(
 							"protected request state accepted");
 				})
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpToolRegistration<McpJsonObject> blockingTool = McpToolRegistration
 				.withName(BLOCKING_TOOL)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					String invocation = requireJsonString(
 							arguments.getConvertedArguments(),
@@ -565,14 +564,14 @@ public class McpCrossFeatureSoakTests {
 				.build();
 		McpToolRegistration<McpJsonObject> simulatorJsonTool =
 				McpToolRegistration.withName(SIMULATOR_JSON_TOOL)
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
 										"off-network simulator JSON complete"))
 						.build();
 		McpToolRegistration<McpJsonObject> simulatorCaptureTool =
 				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL)
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							String mode = requireJsonString(
 									arguments.getConvertedArguments(), "mode");
@@ -598,7 +597,7 @@ public class McpCrossFeatureSoakTests {
 						.build();
 		McpToolRegistration<McpJsonObject> simulatorResidualTool =
 				McpToolRegistration.withName(SIMULATOR_RESIDUAL_TOOL)
-						.jsonArguments()
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							state.runResidualHandler();
 							return McpCompleteResult.fromToolText(
@@ -608,29 +607,26 @@ public class McpCrossFeatureSoakTests {
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "MCP soak resource")
 				.handler((request, read, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										read.getUri(), "MCP soak resource contents")
 										.build())
 								.build()))
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(Set.of(
+				.withEventPublisher(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-mcp-soak", "4.0.0").build())
-				.tool(progressTool)
-				.tool(protectedTool)
-				.tool(blockingTool)
-				.tool(simulatorJsonTool)
-				.tool(simulatorCaptureTool)
-				.tool(simulatorResidualTool)
-				.resource(resource)
-				.subscriptions(subscriptions)
+				.addTool(progressTool)
+				.addTool(protectedTool)
+				.addTool(blockingTool)
+				.addTool(simulatorJsonTool)
+				.addTool(simulatorCaptureTool)
+				.addTool(simulatorResidualTool)
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
 	}
 
@@ -640,8 +636,8 @@ public class McpCrossFeatureSoakTests {
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-				.protectionConfig(McpProtectionConfig.withKeyRing(
-						McpProtectionKeyRing.withActiveKey(
+				.protectionConfig(McpProtectionConfig.withKeyring(
+						McpProtectionKeyring.withActiveKey(
 								McpProtectionKey.fromIdAndBytes("soak-v1",
 										"0123456789abcdef0123456789abcdef"
 												.getBytes(StandardCharsets.US_ASCII)))
@@ -653,8 +649,8 @@ public class McpCrossFeatureSoakTests {
 				.requestTimeout(PROFILE.requestTimeout())
 				.writeTimeout(PROFILE.writeTimeout())
 				.keepAliveInterval(PROFILE.keepAliveInterval())
-				.maximumSubscriptionsPerPrincipal(
-						PROFILE.maximumSubscriptionsPerPrincipal())
+				.maximumSubscriptionsPerPartition(
+						PROFILE.maximumSubscriptionsPerPartition())
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -1132,7 +1128,7 @@ public class McpCrossFeatureSoakTests {
 		assertNeverBound(mcpServer, McpServerStatus.TERMINATED);
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 		Assertions.assertEquals(0, state.activeBlockingHandlers.get());
@@ -1539,7 +1535,7 @@ public class McpCrossFeatureSoakTests {
 				>= blockingInvocations,
 				"Every blocking invocation must signal cooperative cancelation.");
 		Assertions.assertTrue(metricsCollector.subscriptionCloseReasons().stream()
-				.filter(reason -> reason == McpStreamTerminationReason.SERVER_STOPPED)
+				.filter(reason -> reason == McpStreamTerminationReason.SERVER_STOPPING)
 				.count() >= PROFILE.shutdownCycles(),
 				"Every shutdown boundary must close its subscription as server-stopped.");
 	}
@@ -1614,7 +1610,7 @@ public class McpCrossFeatureSoakTests {
 		McpServerDiagnostics diagnostics = requireNonNull(mcpServer)
 				.getDiagnostics();
 		return diagnostics.getActiveHandlerExecutions() == 0
-				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getRequestHandlerQueueDepth() == 0
 				&& diagnostics.getActiveRequestStreams() == 0
 				&& diagnostics.getActiveSubscriptions() == 0
 				&& requireNonNull(state).activeBlockingHandlers.get() == 0
@@ -1630,7 +1626,7 @@ public class McpCrossFeatureSoakTests {
 		return "status=%s handlers=%d queued=%d streams=%d subscriptions=%d"
 				.formatted(diagnostics.getStatus(),
 						diagnostics.getActiveHandlerExecutions(),
-						diagnostics.getQueuedRequests(),
+						diagnostics.getRequestHandlerQueueDepth(),
 						diagnostics.getActiveRequestStreams(),
 						diagnostics.getActiveSubscriptions());
 	}
@@ -2040,8 +2036,8 @@ public class McpCrossFeatureSoakTests {
 	private static final class CountingSubscriptionPublisher
 			implements McpSubscriptionEventPublisher {
 		@NonNull
-		private final McpLocalSubscriptionEventPublisher delegate =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		private final McpSubscriptionEventPublisher delegate =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		@NonNull
 		private final AtomicInteger subscribes = new AtomicInteger();
 		@NonNull
@@ -2652,7 +2648,7 @@ public class McpCrossFeatureSoakTests {
 			int cyclesPerClient,
 			@NonNull Duration keepAliveInterval,
 			@NonNull Duration maximumSubscriptionDuration,
-			int maximumSubscriptionsPerPrincipal,
+			int maximumSubscriptionsPerPartition,
 			int requestHandlerConcurrency,
 			int requestHandlerQueueCapacity,
 			@NonNull Duration requestTimeout,
@@ -2675,7 +2671,7 @@ public class McpCrossFeatureSoakTests {
 					profile.durationMillis("mcp.keepAliveIntervalMillis"),
 					profile.durationMillis(
 							"mcp.maximumSubscriptionDurationMillis"),
-					profile.integer("mcp.maximumSubscriptionsPerPrincipal"),
+					profile.integer("mcp.maximumSubscriptionsPerPartition"),
 					profile.integer("mcp.requestHandlerConcurrency"),
 					profile.integer("mcp.requestHandlerQueueCapacity"),
 					profile.durationMillis("mcp.requestTimeoutMillis"),

@@ -26,6 +26,9 @@ import static java.util.Objects.requireNonNull;
  * Contract for concrete instance generation given type information.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
+ * An implementation configured on {@link SokletConfig} may be called
+ * concurrently to create HTTP, SSE, and MCP handler instances as well as
+ * application parameter values, so it must support concurrent invocation.
  * <p>
  * See <a href="https://www.soklet.com/docs/instance-creation">https://www.soklet.com/docs/instance-creation</a> for detailed documentation.
  *
@@ -37,6 +40,7 @@ public interface InstanceProvider {
 	 * Vends an instance of the given class.
 	 * <p>
 	 * The instance does not necessarily have to be new for every invocation (for example, implementors might return cached instances).
+	 * This method may be called concurrently.
 	 *
 	 * @param instanceClass type token which represents the class to instantiate
 	 * @param <T>           the type of class to instantiate

@@ -402,8 +402,7 @@ public class McpResourceCursorApplicationPatternsTests {
 					throw invalidResource();
 				String text = this.reader.read(canonical);
 				return McpCompleteResult.fromResourceOutput(
-						McpResourceOutput.builder()
-								.content(McpTextResourceContents
+						McpResourceOutput.withContent(McpTextResourceContents
 										.withUriAndText(canonical.toUri(), text)
 										.mimeType("text/plain; charset=utf-8")
 										.build())
@@ -516,7 +515,7 @@ public class McpResourceCursorApplicationPatternsTests {
 			McpResourcePage.Builder page = McpResourcePage.builder();
 			for (ResourceRecord record
 					: snapshot.records().subList(claims.offset(), end))
-				page.resource(McpResourceDescriptor
+				page.addResource(McpResourceDescriptor
 						.withUriAndName(record.uri(), record.name())
 						.build());
 			if (end < snapshot.records().size())

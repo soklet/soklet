@@ -70,47 +70,44 @@ public class McpPromptPublicRuntimeTests {
 							.build();
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 							.description("Rendered prompt")
-							.message(McpPromptMessage.fromUserContent(
+							.addMessage(McpPromptMessage.fromUserContent(
 									McpTextContent.fromText("subject="
 											+ promptGet.findArgument("subject")
 													.orElseThrow()
 											+ ";tone="
 											+ promptGet.findArgument("tone")
 													.orElse("<absent>"))))
-							.message(McpPromptMessage.fromAssistantContent(
+							.addMessage(McpPromptMessage.fromAssistantContent(
 									McpImageContent.withDataAndMimeType(
 											new byte[] { 1, 2, 3 }, "image/png")
 											.build()))
-							.message(McpPromptMessage.fromAssistantContent(
+							.addMessage(McpPromptMessage.fromAssistantContent(
 									McpEmbeddedResource.withResource(resource).build()))
 							.build()).withMetadata(McpJsonObject.builder()
 							.put("renderedBy", "test").build());
 				})
 				.title("Compose catalog prompt")
 				.description("Builds a deterministic catalog prompt")
-				.argument(McpPromptArgumentDefinition.withName("subject")
+				.addArgument(McpPromptArgumentDeclaration.withName("subject")
 						.title("Subject")
 						.description("Subject to discuss")
 						.required(true)
 						.build())
-				.argument(McpPromptArgumentDefinition.withName("tone")
+				.addArgument(McpPromptArgumentDeclaration.withName("tone")
 						.description("Optional tone")
 						.build())
 				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"prompt-public-runtime-test", "4.0.0").build())
-				.prompt(prompt)
+				.addPrompt(prompt)
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 							context.getTarget());

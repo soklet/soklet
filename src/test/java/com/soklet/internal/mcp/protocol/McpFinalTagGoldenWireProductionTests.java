@@ -31,8 +31,8 @@ import com.soklet.McpJsonArray;
 import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
-import com.soklet.McpLocalSubscriptionEventPublisher;
-import com.soklet.McpPromptArgumentDefinition;
+import com.soklet.McpSubscriptionEventPublisher;
+import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
@@ -82,7 +82,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0"))
-				.includeServerInformation(true)
+				.serverInformationIncluded(true)
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -147,28 +147,25 @@ public class McpFinalTagGoldenWireProductionTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.rate-limited")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText(
 							"unexpected rate-limited handler execution");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted(
 							com.soklet.McpAdmissionIdentity
 									.withRateLimitPartitionKey(rateLimitPartitionSecret)
 									.build());
 				})
+				.host("127.0.0.1")
 				.requestRateLimiter(context -> {
 					int invocation = requestLimiterInvocations.incrementAndGet();
 					Assertions.assertEquals(com.soklet.McpRateLimitTarget.REQUEST,
@@ -244,39 +241,36 @@ public class McpFinalTagGoldenWireProductionTests {
 				.handler((request, promptGet, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 								.description("Canonical rendered prompt")
-								.message(McpPromptMessage.fromUserContent(
+								.addMessage(McpPromptMessage.fromUserContent(
 										McpTextContent.fromText("subject="
 												+ promptGet.findArgument("subject")
 														.orElseThrow()
 												+ ";tone="
 												+ promptGet.findArgument("tone")
 														.orElse("<absent>"))))
-								.message(McpPromptMessage.fromAssistantContent(
+								.addMessage(McpPromptMessage.fromAssistantContent(
 										McpTextContent.fromText("ready")))
 								.build()).withMetadata(com.soklet.McpJsonObject.builder()
 									.put("fixture", "phase-4-result").build()))
 				.title("Golden composition")
 				.description("Renders a canonical prompt")
-				.argument(McpPromptArgumentDefinition.withName("subject")
+				.addArgument(McpPromptArgumentDeclaration.withName("subject")
 						.title("Subject")
 						.description("Subject to render")
 						.required(true)
 						.build())
-				.argument(McpPromptArgumentDefinition.withName("tone")
+				.addArgument(McpPromptArgumentDeclaration.withName("tone")
 						.description("Optional tone")
 						.build())
 				.metadata(com.soklet.McpJsonObject.builder()
 						.put("fixture", "phase-4").build())
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.prompt(prompt)
+				.addPrompt(prompt)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -310,37 +304,34 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpResourceRegistration textResource = McpResourceRegistration
 				.withUriAndName(textResourceUri, "Golden README")
 				.handler((request, resource, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										resource.getUri(), "Soklet golden resource")
 										.mimeType("text/plain")
 										.build())
 								.build()))
 				.mimeType("text/plain")
-				.size(22L)
+				.sizeInBytes(22L)
 				.build();
 
 		URI blobResourceUri = URI.create("golden://assets/logo.bin");
 		McpResourceRegistration blobResource = McpResourceRegistration
 				.withUriAndName(blobResourceUri, "Golden bytes")
 				.handler((request, resource, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpBlobResourceContents.withUriAndData(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpBlobResourceContents.withUriAndData(
 										resource.getUri(),
 										new byte[]{0x00, 0x01, 0x02, (byte) 0xFF})
 										.mimeType("application/octet-stream")
 										.build())
 								.build()))
 				.mimeType("application/octet-stream")
-				.size(4L)
+				.sizeInBytes(4L)
 				.build();
 
 		McpResourceRegistration recordTemplate = McpResourceRegistration
 				.withUriTemplateAndName(
 						"golden://records/{recordId}", "Golden record")
 				.handler((request, resource, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										resource.getUri(), "recordId="
 												+ resource.getUriTemplateVariables()
 														.get("recordId"))
@@ -350,17 +341,14 @@ public class McpFinalTagGoldenWireProductionTests {
 				.mimeType("text/plain")
 				.build();
 
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.resource(textResource)
-				.resource(blobResource)
-				.resource(recordTemplate)
+				.addResource(textResource)
+				.addResource(blobResource)
+				.addResource(recordTemplate)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -406,25 +394,22 @@ public class McpFinalTagGoldenWireProductionTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.strict-unknown")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText(
 							"unexpected strict-unknown handler execution");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted();
 				})
+				.host("127.0.0.1")
 				.requestRateLimiter(context -> {
 					requestLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
@@ -533,27 +518,26 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.input-required")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
-						McpInputRequiredResult.builder()
-								.inputRequest("form", McpInputRequest.fromDeclaration(
+						McpInputRequiredResult.withInputRequest("form", McpInputRequest.fromDeclaration(
 										form, formParams))
-								.inputRequest("url", McpInputRequest.fromDeclaration(
+								.addInputRequest("url", McpInputRequest.fromDeclaration(
 										url, urlParams))
-								.inputRequest("sampling", McpInputRequest.fromDeclaration(
+								.addInputRequest("sampling", McpInputRequest.fromDeclaration(
 										sampling, samplingParams))
-								.inputRequest("roots", McpInputRequest.fromDeclaration(
+								.addInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("fixture", "phase-5-input-required")
 										.build())
 								.build())
-				.mayRequestInput(form, url, sampling, roots)
+				.addInputRequestDeclarations(form, url, sampling, roots)
 				.build();
 		McpToolRegistration<McpJsonObject> inputResponsesTool = McpToolRegistration
 				.withName("golden.input-responses")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpJsonObject response = Assertions.assertInstanceOf(
 							McpJsonObject.class, request.getInputResponses()
@@ -571,18 +555,15 @@ public class McpFinalTagGoldenWireProductionTests {
 					return McpCompleteResult.fromToolText(
 							"input responses accepted");
 				})
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
-				.tool(inputResponsesTool)
+				.addTool(tool)
+				.addTool(inputResponsesTool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
@@ -635,25 +616,22 @@ public class McpFinalTagGoldenWireProductionTests {
 				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.missing-capability")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("unexpected handler execution");
 				})
-				.mayRequestInput(form, url, sampling, roots)
+				.addInputRequestDeclarations(form, url, sampling, roots)
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					admissionInvocations.incrementAndGet();
 					return com.soklet.McpAdmissionDecision.accepted();
 				})
+				.host("127.0.0.1")
 				.requestRateLimiter(context -> {
 					requestLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
@@ -695,7 +673,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.progress")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpProgressReporter reporter =
 							features.require(McpProgressReporter.class);
@@ -708,15 +686,12 @@ public class McpFinalTagGoldenWireProductionTests {
 					return McpCompleteResult.fromToolText("progress complete");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
@@ -765,33 +740,28 @@ public class McpFinalTagGoldenWireProductionTests {
 	public void checked_in_phase_5_subscription_messages_match_the_production_listener()
 			throws Exception {
 		URI resourceUri = URI.create("golden://subscriptions/resource");
-		McpLocalSubscriptionEventPublisher publisher =
-				McpLocalSubscriptionEventPublisher.fromDefaults();
+		McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher)
-				.notificationTypes(Set.of(
+				.withEventPublisher(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(resourceUri, "Golden subscription resource")
 				.handler((request, read, features) ->
-						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-								.content(McpTextResourceContents.withUriAndText(
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										read.getUri(), "subscription golden")
 										.build())
 								.build()))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.resource(resource)
-				.subscriptions(subscriptions)
+				.addResource(resource)
+				.subscriptionConfig(subscriptions)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
@@ -872,13 +842,12 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.protected-state")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getFrameworkRequestState().isEmpty()) {
 						Assertions.assertTrue(
 								request.getInputResponses().asMap().isEmpty());
-						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
 										form,
 												McpJsonObject.builder()
 														.put("message",
@@ -917,18 +886,15 @@ public class McpFinalTagGoldenWireProductionTests {
 					return McpCompleteResult.fromToolText(
 							"protected request state accepted");
 				})
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.protectionConfig(McpProtectionConfig.withRequestStateProtector(
 						new DeterministicGoldenRequestStateProtector()).build())

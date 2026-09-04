@@ -162,7 +162,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					handlerContext.set(request);
@@ -181,10 +181,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 									.build());
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"extension-compatibility-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			interceptorInvocations.incrementAndGet();
@@ -266,7 +265,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					McpJsonObject taskSettings = request.getClientCapabilities()
@@ -275,10 +274,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("ordinary-completion");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"tasks-compatibility-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 		McpServer server = server(endpoint, context -> {
 			admissions.add(context);
@@ -336,8 +334,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	}
 
 	private static McpServer server(McpAdmissionController admissionController) {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"extension-compatibility-test", "4.0.0").build())
 				.build();
 		return server(endpoint, admissionController,
@@ -347,10 +344,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	private static McpServer server(McpEndpoint endpoint,
 			McpAdmissionController admissionController,
 			McpHandlerInterceptor handlerInterceptor) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), admissionController)
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(handlerInterceptor)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

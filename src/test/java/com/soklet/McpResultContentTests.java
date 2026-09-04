@@ -28,6 +28,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,8 +49,8 @@ class McpResultContentTests {
 				McpJsonObject.builder().put("ok", true).build();
 
 		McpToolOutput output = McpToolOutput.builder()
-				.content(mutable)
-				.content(second)
+				.addContents(mutable)
+				.addContent(second)
 				.structuredContent(structured)
 				.error(true)
 				.build();
@@ -113,6 +114,105 @@ class McpResultContentTests {
 	}
 
 	@Test
+	void contentBlocksExposeAnnotationsAndMetadataThroughCommonContract() {
+		McpContentAnnotations annotations = annotations(0.75);
+		McpJsonObject metadata = metadata("shared");
+		List<McpContentBlock> blocks = List.of(
+				McpTextContent.withText("text")
+						.annotations(annotations).metadata(metadata).build(),
+				McpImageContent.withDataAndMimeType(
+						new byte[]{1}, "image/png")
+						.annotations(annotations).metadata(metadata).build(),
+				McpAudioContent.withDataAndMimeType(
+						new byte[]{2}, "audio/mpeg")
+						.annotations(annotations).metadata(metadata).build(),
+				McpEmbeddedResource.withResource(
+						McpTextResourceContents.withUriAndText(
+								URI.create("catalog://embedded"), "body").build())
+						.annotations(annotations).metadata(metadata).build(),
+				McpResourceLink.withUriAndName(
+						URI.create("catalog://linked"), "linked")
+						.annotations(annotations).metadata(metadata).build());
+
+		for (McpContentBlock block : blocks) {
+			assertSame(annotations, block.getAnnotations().orElseThrow());
+			assertSame(metadata, block.getMetadata());
+		}
+	}
+
+	@Test
+	void contentBlocksHaveDeepStructuralEqualityAndMatchingHashes() {
+		McpContentAnnotations firstAnnotations = annotations(0.75);
+		McpContentAnnotations secondAnnotations = annotations(0.75);
+		McpJsonObject firstMetadata = McpJsonObject.builder()
+				.put("owner", "catalog").put("revision", 4).build();
+		McpJsonObject secondMetadata = McpJsonObject.builder()
+				.put("revision", 4).put("owner", "catalog").build();
+
+		assertStructurallyEqual(
+				McpTextContent.withText("text").annotations(firstAnnotations)
+						.metadata(firstMetadata).build(),
+				McpTextContent.withText("text").annotations(secondAnnotations)
+						.metadata(secondMetadata).build());
+		assertStructurallyEqual(
+				McpImageContent.withDataAndMimeType(
+						new byte[]{1, 2, 3}, "image/png")
+						.annotations(firstAnnotations).metadata(firstMetadata).build(),
+				McpImageContent.withDataAndMimeType(
+						new byte[]{1, 2, 3}, "image/png")
+						.annotations(secondAnnotations).metadata(secondMetadata).build());
+		assertStructurallyEqual(
+				McpAudioContent.withDataAndMimeType(
+						new byte[]{4, 5, 6}, "audio/mpeg")
+						.annotations(firstAnnotations).metadata(firstMetadata).build(),
+				McpAudioContent.withDataAndMimeType(
+						new byte[]{4, 5, 6}, "audio/mpeg")
+						.annotations(secondAnnotations).metadata(secondMetadata).build());
+
+		McpTextResourceContents firstResource = McpTextResourceContents
+				.withUriAndText(URI.create("catalog://embedded"), "body")
+				.mimeType("text/plain").metadata(firstMetadata).build();
+		McpTextResourceContents secondResource = McpTextResourceContents
+				.withUriAndText(URI.create("catalog://embedded"), "body")
+				.mimeType("text/plain").metadata(secondMetadata).build();
+		assertStructurallyEqual(
+				McpEmbeddedResource.withResource(firstResource)
+						.annotations(firstAnnotations).metadata(firstMetadata).build(),
+				McpEmbeddedResource.withResource(secondResource)
+						.annotations(secondAnnotations).metadata(secondMetadata).build());
+
+		McpIcon firstIcon = McpIcon.withSource(
+				URI.create("https://catalog.example/icon.png"))
+				.mimeType("image/png").sizes("32x32", "64x64")
+				.theme(McpIconTheme.DARK).build();
+		McpIcon secondIcon = McpIcon.withSource(
+				URI.create("https://catalog.example/icon.png"))
+				.mimeType("image/png").sizes("32x32", "64x64")
+				.theme(McpIconTheme.DARK).build();
+		McpResourceLink firstLink = McpResourceLink.withUriAndName(
+				URI.create("catalog://linked"), "linked")
+				.title("Linked").description("Description")
+				.mimeType("text/plain").addIcon(firstIcon)
+				.annotations(firstAnnotations).sizeInBytes(12L)
+				.metadata(firstMetadata).build();
+		McpResourceLink secondLink = McpResourceLink.withUriAndName(
+				URI.create("catalog://linked"), "linked")
+				.title("Linked").description("Description")
+				.mimeType("text/plain").addIcon(secondIcon)
+				.annotations(secondAnnotations).sizeInBytes(12L)
+				.metadata(secondMetadata).build();
+		assertStructurallyEqual(firstLink, secondLink);
+
+		assertNotEquals(
+				McpImageContent.withDataAndMimeType(
+						new byte[]{1, 2, 3}, "image/png").build(),
+				McpImageContent.withDataAndMimeType(
+						new byte[]{1, 2, 4}, "image/png").build());
+		assertNotEquals(firstLink, McpResourceLink.withUriAndName(
+				URI.create("catalog://linked"), "linked").sizeInBytes(13L).build());
+	}
+
+	@Test
 	void toolAnnotationBooleansPreserveAbsentAndExplicitFalse() {
 		McpToolAnnotations annotations = McpToolAnnotations.builder()
 				.readOnlyHint(false)
@@ -151,19 +251,18 @@ class McpResultContentTests {
 	}
 
 	@Test
-	void resourceOutputRequiresContentAndWholeMillisecondTtl() {
-		assertThrows(IllegalStateException.class,
-				() -> McpResourceOutput.builder().build());
-		assertThrows(IllegalArgumentException.class, () ->
-				McpResourceOutput.builder()
-						.cacheTimeToLiveOverride(Duration.ofNanos(1)));
-
+	void resourceOutputEntrypointRequiresContentAndWholeMillisecondTtl() {
 		McpTextResourceContents contents = McpTextResourceContents
 				.withUriAndText(URI.create("catalog://readme"), "hello")
 				.mimeType("text/plain")
 				.build();
-		McpResourceOutput output = McpResourceOutput.builder()
-				.content(contents)
+		assertThrows(NullPointerException.class,
+				() -> McpResourceOutput.withContent(null));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpResourceOutput.withContent(contents)
+						.cacheTimeToLiveOverride(Duration.ofNanos(1)));
+
+		McpResourceOutput output = McpResourceOutput.withContent(contents)
 				.cacheTimeToLiveOverride(Duration.ofMillis(250))
 				.build();
 
@@ -202,5 +301,23 @@ class McpResultContentTests {
 				McpResourceLink.withUriAndName(
 						URI.create("catalog://linked"), "linked")
 						.mimeType(" "));
+	}
+
+	private static McpContentAnnotations annotations(Double priority) {
+		return McpContentAnnotations.builder()
+				.audience(McpRole.USER, McpRole.ASSISTANT)
+				.priority(priority)
+				.lastModified(Instant.parse("2026-08-05T12:00:00Z"))
+				.build();
+	}
+
+	private static McpJsonObject metadata(String owner) {
+		return McpJsonObject.builder().put("owner", owner).build();
+	}
+
+	private static void assertStructurallyEqual(Object first, Object second) {
+		assertEquals(first, second);
+		assertEquals(second, first);
+		assertEquals(first.hashCode(), second.hashCode());
 	}
 }

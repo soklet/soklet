@@ -88,14 +88,14 @@ public @interface McpResource {
 	 *
 	 * @return nonnegative exact-resource size, or {@code -1} when absent
 	 */
-	long size() default -1;
+	long sizeInBytes() default -1;
 
 	/**
 	 * The default cache time to live for reads through this registration.
 	 *
 	 * @return nonnegative whole-millisecond time to live
 	 */
-	long cacheTtlMs() default 0;
+	long cacheTimeToLiveInMilliseconds() default 0;
 
 	/**
 	 * The fixed cache scope for reads through this registration.
@@ -109,6 +109,9 @@ public @interface McpResource {
 	 * Client requests this resource-read operation may emit during
 	 * multi-round-trip handling.
 	 *
+	 * <p>A nonempty declaration requires the method to return
+	 * {@code McpOperationResult} or a subtype.
+	 *
 	 * @return input-request declarations
 	 */
 	@NonNull
@@ -116,6 +119,9 @@ public @interface McpResource {
 
 	/**
 	 * The request-state contract for this resource-read operation.
+	 *
+	 * <p>A mode other than {@link McpRequestStateMode#NONE} requires the method
+	 * to return {@code McpOperationResult} or a subtype.
 	 *
 	 * @return request-state mode
 	 */

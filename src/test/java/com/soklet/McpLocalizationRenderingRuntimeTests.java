@@ -96,8 +96,7 @@ class McpLocalizationRenderingRuntimeTests {
 
 	@Test
 	void aThrowingProviderContextIsContainedAndNeverReachesTheWire() {
-		String body = discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		String body = discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					throw new IllegalStateException("secret-provider-detail");
 				}).build(), Set.of());
 
@@ -107,8 +106,7 @@ class McpLocalizationRenderingRuntimeTests {
 
 	@Test
 	void failRequestPolicyReturnsTheFixedSanitizedInternalError() {
-		String body = discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		String body = discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					throw new IllegalStateException("secret-provider-detail");
 				})
 				.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
@@ -126,8 +124,7 @@ class McpLocalizationRenderingRuntimeTests {
 				new AtomicReference<>();
 		AtomicReference<Locale> fallback = new AtomicReference<>();
 
-		discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observed.set(request.getLanguageRanges());
 					fallback.set(request.getFallbackLocale());
 					assertTrue(request.getResourceListCursor().isEmpty(),
@@ -146,8 +143,7 @@ class McpLocalizationRenderingRuntimeTests {
 		AtomicReference<List<Locale.LanguageRange>> observed =
 				new AtomicReference<>();
 
-		discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		discover(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observed.set(request.getLanguageRanges());
 					return context(Locale.FRENCH,
 							text -> McpLocalizationResult.useDefaultText());
@@ -158,28 +154,24 @@ class McpLocalizationRenderingRuntimeTests {
 	}
 
 	private static McpLocalizer localizer(AtomicInteger contexts, Locale locale,
-			java.util.function.Function<McpLocalizableText,
-					McpLocalizationResult> provider) {
-		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					contexts.incrementAndGet();
-					return context(locale, provider);
+					return context(locale, localizationLookup);
 				}).build();
 	}
 
 	private static McpLocalizationContext context(Locale locale,
-			java.util.function.Function<McpLocalizableText,
-					McpLocalizationResult> provider) {
-		return McpLocalizationContext.withLocale(locale)
-				.localizer(provider)
+			McpLocalizationLookup localizationLookup) {
+		return McpLocalizationContext.withLocale(locale, localizationLookup)
 				.build();
 	}
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void everyNonDiscoveryCatalogRendersItsPlannedSlotsLocalized() {
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.FRENCH,
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.FRENCH,
 						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
@@ -217,8 +209,8 @@ class McpLocalizationRenderingRuntimeTests {
 
 	@Test
 	void aLocalizedResponseKeepsTheCanonicalStatusAndHeaders() {
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.FRENCH,
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.FRENCH,
 						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
@@ -237,8 +229,7 @@ class McpLocalizationRenderingRuntimeTests {
 	@Test
 	void failRequestPublishesStatus500WithTheJsonRpcInternalErrorCode() {
 		Capture capture = capture(richEndpoint(),
-				McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(request -> {
+				McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 							throw new IllegalStateException("secret-provider-detail");
 						})
 						.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
@@ -259,8 +250,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void aProviderThrownErrorIsContainedAndNeverReachesObservationSurfaces() {
 		List<Throwable> observedThrowables = new CopyOnWriteArrayList<>();
 		Capture capture = capture(richEndpoint(),
-				McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(request -> context(Locale.FRENCH, text -> {
+				McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> context(Locale.FRENCH, text -> {
 							throw new AssertionError("secret-error-detail");
 						}))
 						.build(),
@@ -281,8 +271,7 @@ class McpLocalizationRenderingRuntimeTests {
 		String threeMegabytes = "\u4E2D".repeat(1_000_000);
 		AtomicInteger localizeCalls = new AtomicInteger();
 		Capture capture = capture(richEndpoint(),
-				McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(request -> context(Locale.FRENCH, text -> {
+				McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> context(Locale.FRENCH, text -> {
 							localizeCalls.incrementAndGet();
 							return McpLocalizationResult.localized(
 									threeMegabytes);
@@ -305,8 +294,7 @@ class McpLocalizationRenderingRuntimeTests {
 		values.add("en;q=0");
 		values.add("en;q=0.9");
 
-		capture(richEndpoint(), McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		capture(richEndpoint(), McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					observed.set(request.getLanguageRanges());
 					return context(Locale.FRENCH,
 							text -> McpLocalizationResult.useDefaultText());
@@ -323,13 +311,11 @@ class McpLocalizationRenderingRuntimeTests {
 	@Test
 	void anEndpointWithNoLocalizableTextNeverCreatesAContext() {
 		AtomicInteger contexts = new AtomicInteger();
-		McpEndpoint bare = McpEndpoint.withPath(WIRE_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint bare = McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("bare", "1.0").build())
 				.build();
 		Capture capture = capture(bare,
-				McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(request -> {
+				McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 							contexts.incrementAndGet();
 							return context(Locale.FRENCH,
 									text -> McpLocalizationResult.useDefaultText());
@@ -345,8 +331,8 @@ class McpLocalizationRenderingRuntimeTests {
 	@Test
 	void localizedRenderingLeavesLaterCanonicalRequestsByteIdentical() {
 		AtomicReference<String> mode = new AtomicReference<>("localize");
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.FRENCH,
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.FRENCH,
 						text -> "localize".equals(mode.get())
 								? McpLocalizationResult.localized(
 										"FR:" + text.getDefaultText())
@@ -383,8 +369,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void concurrentLocalizedRequestsGetIndependentContexts() throws Exception {
 		Set<McpLocalizationContext> contexts = ConcurrentHashMap.newKeySet();
 		CountDownLatch bothInside = new CountDownLatch(2);
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					McpLocalizationContext context = context(Locale.FRENCH, text -> {
 						bothInside.countDown();
 						try {
@@ -509,18 +494,19 @@ class McpLocalizationRenderingRuntimeTests {
 						.build())
 				.build();
 		McpResourceReadHandler resourceHandler = (request, resource, features) ->
-				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-						.content(McpTextResourceContents.withUriAndText(
-								URI.create("render://unused"), "unused").build())
-						.build());
-		return McpEndpoint.withPath(WIRE_PATH)
-				.serverInformation(McpImplementation
+				McpCompleteResult.fromResourceOutput(
+						McpResourceOutput.withContent(
+								McpTextResourceContents.withUriAndText(
+										URI.create("render://unused"), "unused")
+										.build())
+								.build());
+		return McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("localization-render", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
 						.build())
 				.instructions("Endpoint instructions")
-				.tool(McpToolRegistration.withName("render.search")
+				.addTool(McpToolRegistration.withName("render.search")
 						.conformanceInputSchema(inputSchema)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
@@ -529,24 +515,24 @@ class McpLocalizationRenderingRuntimeTests {
 						.annotations(McpToolAnnotations.builder()
 								.title("Annotation title").build())
 						.build())
-				.prompt(McpPromptRegistration.withName("render.summary")
+				.addPrompt(McpPromptRegistration.withName("render.summary")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
 						.description("Prompt description")
-						.argument(McpPromptArgumentDefinition.withName("topic")
+						.addArgument(McpPromptArgumentDeclaration.withName("topic")
 								.title("Topic title")
 								.description("Topic description")
 								.build())
 						.build())
-				.resource(McpResourceRegistration.withUriAndName(
+				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("render://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
 						.build())
-				.resource(McpResourceRegistration.withUriTemplateAndName(
+				.addResource(McpResourceRegistration.withUriTemplateAndName(
 						"render://item/{id}", "item")
 						.handler(resourceHandler)
 						.title("Template title")
@@ -603,8 +589,7 @@ class McpLocalizationRenderingRuntimeTests {
 
 	private static String discover(McpLocalizer localizer,
 			Set<String> acceptLanguageValues) {
-		McpEndpoint endpoint = McpEndpoint.withPath(WIRE_PATH)
-				.serverInformation(McpImplementation
+		McpEndpoint endpoint = McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("localization-render", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")

@@ -16,23 +16,29 @@
 
 package com.soklet;
 
-import javax.annotation.concurrent.NotThreadSafe;
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Indicates that a verification key cannot yet be removed because a sealing
- * reservation still uses it.
+ * Thread-safe request-local lookup against one captured immutable translation
+ * snapshot.
  * <p>
- * This is the transient protection-control failure: wait for reservations to
- * drain and retry removal. Other protection-control failures use
- * {@link IllegalArgumentException} or {@link IllegalStateException}.
+ * Lookups must be bounded, in-memory, nonblocking, and deterministic. An
+ * operational lookup failure is represented by
+ * {@link McpLocalizationResult#failure()} rather than thrown.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@NotThreadSafe
-public final class McpKeyInUseException extends RuntimeException {
-	private static final long serialVersionUID = 1L;
-
-	McpKeyInUseException() {
-		super("An MCP protection key is still in use.");
-	}
+@ThreadSafe
+@FunctionalInterface
+public interface McpLocalizationLookup {
+	/**
+	 * Localizes one framework-owned source-text field.
+	 *
+	 * @param text structured coordinate and canonical source text
+	 * @return non-null localization result
+	 */
+	@NonNull
+	McpLocalizationResult localize(@NonNull McpLocalizableText text);
 }

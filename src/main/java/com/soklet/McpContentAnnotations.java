@@ -98,6 +98,7 @@ public final class McpContentAnnotations {
 
 		/**
 		 * Replaces the intended audience.
+		 * Passing no roles clears the intended audience.
 		 *
 		 * @param audience audience roles
 		 * @return this builder

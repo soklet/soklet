@@ -72,7 +72,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			"getRequestHandlerConcurrency",
 			"getRequestHandlerQueueCapacity",
 			"getActiveHandlerExecutions",
-			"getQueuedRequests",
+			"getRequestHandlerQueueDepth",
 			"getActiveRequestStreams",
 			"getActiveSubscriptions");
 
@@ -97,12 +97,12 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				"getStatus", "getBoundAddress",
 					"getRequestHandlerConcurrency",
 					"getRequestHandlerQueueCapacity",
-					"getActiveHandlerExecutions", "getQueuedRequests",
+					"getActiveHandlerExecutions", "getRequestHandlerQueueDepth",
 					"getActiveRequestStreams", "getActiveSubscriptions",
 					"getProtectionMode",
 					"isApplicationRequestStateProtectorConfigured",
-					"getProtectionKeyRingFingerprint",
-					"getTraceCorrelationConfigurationFingerprint"),
+					"getProtectionKeyringFingerprint",
+					"getTraceCorrelationFingerprint"),
 					declaredMethods);
 
 		for (String getterName : INTEGER_DIAGNOSTIC_GETTERS) {
@@ -120,11 +120,11 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				McpProtectionMode.class);
 		assertNonNullReferenceGetter(
 				"isApplicationRequestStateProtectorConfigured", Boolean.class);
-		assertNonNullOptionalGetter("getProtectionKeyRingFingerprint",
-				McpProtectionKeyRingFingerprint.class);
+		assertNonNullOptionalGetter("getProtectionKeyringFingerprint",
+				McpProtectionKeyringFingerprint.class);
 		assertNonNullOptionalGetter(
-				"getTraceCorrelationConfigurationFingerprint",
-				McpTraceCorrelationConfigurationFingerprint.class);
+				"getTraceCorrelationFingerprint",
+				McpTraceCorrelationFingerprint.class);
 		assertNonNullReferenceGetter("getStatus", McpServerStatus.class);
 		assertNonNullOptionalGetter("getBoundAddress", InetSocketAddress.class);
 
@@ -137,7 +137,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				"stable across the owner lifecycle");
 		assertDocumented(source, "getActiveHandlerExecutions",
 				"includes residual handlers");
-		assertDocumented(source, "getQueuedRequests",
+		assertDocumented(source, "getRequestHandlerQueueDepth",
 				"completed server stop transition");
 		assertDocumented(source, "getActiveRequestStreams",
 				"open request-scoped SSE streams");
@@ -148,10 +148,10 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		assertDocumented(source,
 				"isApplicationRequestStateProtectorConfigured",
 				"application-owned");
-		assertDocumented(source, "getProtectionKeyRingFingerprint",
-				"PRODUCTION_KEY_RING");
+		assertDocumented(source, "getProtectionKeyringFingerprint",
+				"PRODUCTION_KEYRING");
 		assertDocumented(source,
-				"getTraceCorrelationConfigurationFingerprint",
+				"getTraceCorrelationFingerprint",
 				"trace correlation");
 	}
 
@@ -272,7 +272,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					"diagnostics.second");
 			McpServerDiagnostics saturated = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getQueuedRequests() == 1);
+							&& diagnostics.getRequestHandlerQueueDepth() == 1);
 			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
 			Assertions.assertEquals(1, firstInvocations.get());
@@ -301,7 +301,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			Assertions.assertTrue(secondEntered.await(5, TimeUnit.SECONDS));
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getQueuedRequests() == 0),
+							&& diagnostics.getRequestHandlerQueueDepth() == 0),
 					McpServerStatus.RUNNING, true, 1, 1, 1, 0);
 			releaseSecond.countDown();
 			Assertions.assertEquals(200,
@@ -310,7 +310,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					requireNonNull(second).get(5, TimeUnit.SECONDS).statusCode());
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 0
-							&& diagnostics.getQueuedRequests() == 0),
+							&& diagnostics.getRequestHandlerQueueDepth() == 0),
 					McpServerStatus.RUNNING, true, 1, 1, 0, 0);
 
 			readSnapshots.set(false);
@@ -371,7 +371,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					"diagnostics.residual");
 			McpServerDiagnostics saturated = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getQueuedRequests() == 1);
+							&& diagnostics.getRequestHandlerQueueDepth() == 1);
 
 			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
 					SokletShutdownIncompleteException.class, owner::close);
@@ -396,7 +396,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getStatus() == McpServerStatus.RESIDUAL_ACTIVITY
 							&& diagnostics.getActiveHandlerExecutions() == 0
-							&& diagnostics.getQueuedRequests() == 0),
+							&& diagnostics.getRequestHandlerQueueDepth() == 0),
 					McpServerStatus.RESIDUAL_ACTIVITY, true, 1, 1, 0, 0);
 			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
@@ -483,19 +483,19 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		Assertions.assertEquals(Integer.valueOf(active),
 				diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(Integer.valueOf(queued),
-				diagnostics.getQueuedRequests());
+				diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(Integer.valueOf(0),
 				diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(Integer.valueOf(0),
 				diagnostics.getActiveSubscriptions());
-		Assertions.assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+		Assertions.assertEquals(McpProtectionMode.NONE,
 				diagnostics.getProtectionMode());
 		Assertions.assertEquals(Boolean.FALSE,
 				diagnostics.isApplicationRequestStateProtectorConfigured());
 		Assertions.assertTrue(
-				diagnostics.getProtectionKeyRingFingerprint().isEmpty());
+				diagnostics.getProtectionKeyringFingerprint().isEmpty());
 		Assertions.assertTrue(diagnostics
-				.getTraceCorrelationConfigurationFingerprint().isEmpty());
+				.getTraceCorrelationFingerprint().isEmpty());
 		Assertions.assertTrue(active >= 0 && active <= concurrency);
 		Assertions.assertTrue(queued >= 0 && queued <= queueCapacity);
 		if (queued > 0)
@@ -513,7 +513,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		Assertions.assertEquals(Integer.valueOf(queueCapacity),
 				diagnostics.getRequestHandlerQueueCapacity());
 		int active = diagnostics.getActiveHandlerExecutions();
-		int queued = diagnostics.getQueuedRequests();
+		int queued = diagnostics.getRequestHandlerQueueDepth();
 		int activeRequestStreams = diagnostics.getActiveRequestStreams();
 		int activeSubscriptions = diagnostics.getActiveSubscriptions();
 		Assertions.assertTrue(active >= 0 && active <= concurrency);
@@ -598,8 +598,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 
 	@NonNull
 	private static McpEndpoint emptyEndpoint(@NonNull String path) {
-		return McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-diagnostics-test", "4.0.0").build())
 				.build();
 	}
@@ -610,13 +609,12 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			@NonNull McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(requireNonNull(toolName))
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler(requireNonNull(handler))
 				.build();
-		return McpEndpoint.withPath(requireNonNull(path))
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-diagnostics-test", "4.0.0").build())
-				.tool(tool)
+				.addTool(tool)
 				.build();
 	}
 
@@ -625,12 +623,9 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			@NonNull List<@NonNull McpEndpoint> endpoints,
 			int concurrency, int queueCapacity,
 			@NonNull Duration requestTimeout) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(
+						List.copyOf(requireNonNull(endpoints))), McpAdmissionController.acceptAllInstance())
 				.host(HOST)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.copyOf(requireNonNull(endpoints))))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))

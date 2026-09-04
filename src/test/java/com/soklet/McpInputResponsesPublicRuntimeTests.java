@@ -83,7 +83,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				.fromRoots(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					assertExactInputResponses(request);
 					Assertions.assertSame(interceptorContexts.get(TOOL_NAME),
@@ -91,7 +91,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					handlerContexts.put(TOOL_NAME, request);
 					return McpCompleteResult.fromToolText("tool retry complete");
 				})
-				.mayRequestInput(form, sampling, roots)
+				.addInputRequestDeclarations(form, sampling, roots)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(PROMPT_NAME)
@@ -106,7 +106,7 @@ public class McpInputResponsesPublicRuntimeTests {
 											McpTextContent.fromText(
 													"prompt retry complete"))));
 				})
-				.mayRequestInput(form, sampling, roots)
+				.addInputRequestDeclarations(form, sampling, roots)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "retry resource")
@@ -116,20 +116,19 @@ public class McpInputResponsesPublicRuntimeTests {
 							RESOURCE_URI.toString()), request);
 					handlerContexts.put(RESOURCE_URI.toString(), request);
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents.withUriAndText(
+							McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 											RESOURCE_URI, "resource retry complete")
 											.build())
 									.build());
 				})
-				.mayRequestInput(form, sampling, roots)
+				.addInputRequestDeclarations(form, sampling, roots)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -207,7 +206,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		AtomicInteger resourceInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("none.tool")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
 					Assertions.assertTrue(
@@ -233,8 +232,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					Assertions.assertTrue(
 							request.getApplicationRequestState().isEmpty());
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents.withUriAndText(
+							McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 											RESOURCE_URI, "empty retry complete")
 											.build())
 									.build());
@@ -247,8 +245,8 @@ public class McpInputResponsesPublicRuntimeTests {
 		Assertions.assertEquals(McpRequestStateMode.NONE,
 				resource.getRequestStateMode());
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.resource(resource)
+				.addTool(tool)
+				.addResource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
@@ -300,14 +298,13 @@ public class McpInputResponsesPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("retry.missing")
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getInputResponses().find("approval").isEmpty()) {
 						Assertions.assertTrue(request.getInputResponses()
 								.find("wrong-key").isPresent());
-						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest.fromDeclaration(
+						return McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
 										form, params))
 								.build();
 					}
@@ -315,9 +312,9 @@ public class McpInputResponsesPublicRuntimeTests {
 							.find("ignored-extra").isPresent());
 					return McpCompleteResult.fromToolText("accepted");
 				})
-				.mayRequestInput(form)
+				.addInputRequestDeclarations(form)
 				.build();
-		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
 
@@ -363,12 +360,12 @@ public class McpInputResponsesPublicRuntimeTests {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.mayRequestInput(McpInputRequestDeclaration.fromRoots(
+				.addInputRequestDeclarations(McpInputRequestDeclaration.fromRoots(
 						McpInputRequirement.REQUIRED))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
@@ -384,16 +381,15 @@ public class McpInputResponsesPublicRuntimeTests {
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromResourceOutput(
-							McpResourceOutput.builder()
-									.content(McpTextResourceContents.withUriAndText(
+							McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 											RESOURCE_URI, "must not run").build())
 									.build());
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {
@@ -512,19 +508,15 @@ public class McpInputResponsesPublicRuntimeTests {
 	}
 
 	private static McpEndpoint.@NonNull Builder endpointBuilder() {
-		return McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"input-responses-public-runtime-test",
 						"4.0.0").build());
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

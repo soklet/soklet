@@ -112,7 +112,8 @@ final class McpChunkedHttpClient implements AutoCloseable {
 				.append("Content-Type: application/json; charset=UTF-8\r\n")
 				.append("Accept: application/json, text/event-stream\r\n");
 		for (RequestHeader header : headers)
-			headText.append(header.name()).append(": ").append(header.value()).append("\r\n");
+			headText.append(header.name()).append(": ").append(header.value())
+					.append("\r\n");
 		headText.append("Content-Length: ").append(bodyBytes.length).append("\r\n\r\n");
 		byte[] head = headText.toString().getBytes(StandardCharsets.ISO_8859_1);
 		socket.getOutputStream().write(head);

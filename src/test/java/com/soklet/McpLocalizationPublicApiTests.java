@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -47,15 +48,15 @@ public class McpLocalizationPublicApiTests {
 						"getFailurePolicy()",
 						"getFallbackLocale()",
 						"getMaximumLocalizableTextCountPerResponse()",
-						"withFallbackLocale(java.util.Locale)")),
+						"withFallbackLocale(java.util.Locale,com.soklet.McpLocalizationContextProvider)")),
 				Map.entry(McpLocalizer.Builder.class, Set.of(
 						"build()",
 						"failurePolicy(com.soklet.McpLocalizationFailurePolicy)",
 						"maximumLocalizableTextCountPerResponse(java.lang.Integer)")),
-				Map.entry(McpLocalizer.ContextProviderStage.class, Set.of(
-						"contextProvider(com.soklet.McpLocalizationContextProvider)")),
 				Map.entry(McpLocalizationContextProvider.class, Set.of(
-						"createContext(com.soklet.McpLocalizationRequest)")),
+						"provideContext(com.soklet.McpLocalizationRequest)")),
+				Map.entry(McpLocalizationLookup.class, Set.of(
+						"localize(com.soklet.McpLocalizableText)")),
 				Map.entry(McpLocalizationRequest.class, Set.of(
 						"getContinuationLocale()",
 						"getFallbackLocale()",
@@ -67,10 +68,9 @@ public class McpLocalizationPublicApiTests {
 						"getRevision()",
 						"localize(com.soklet.McpLocalizableText)",
 						"toString()",
-						"withLocale(java.util.Locale)")),
+						"withLocale(java.util.Locale,com.soklet.McpLocalizationLookup)")),
 				Map.entry(McpLocalizationContext.Builder.class, Set.of(
 						"build()",
-						"localizer(java.util.function.Function)",
 						"revision(com.soklet.McpLocalizationRevision)")),
 				Map.entry(McpLocalizationResult.class, Set.of(
 						"useDefaultText()",
@@ -99,19 +99,21 @@ public class McpLocalizationPublicApiTests {
 						"fromEndpointRegistry(com.soklet.McpEndpointRegistry)",
 						"getTexts()")),
 				Map.entry(McpLocalizationControl.class, Set.of(
-						"catalogsChanged()", "isEnabled()")),
+						"invalidateCatalogs()", "isEnabled()")),
 				Map.entry(McpLocalizableText.class, Set.of(
 						"equals(java.lang.Object)",
+						"fromCoordinateAndDefaultText(com.soklet.McpTextCoordinate,java.lang.String)",
 						"getCoordinate()",
 						"getDefaultText()",
 						"hashCode()",
 						"toString()")),
 				Map.entry(McpTextCoordinate.class, Set.of(
 						"equals(java.lang.Object)",
+						"fromComponents(java.lang.String,com.soklet.McpTextOwnerType,java.lang.String,java.lang.String)",
 						"getEndpointPath()",
 						"getMemberPath()",
-						"getMcpTextOwnerType()",
-						"getSubjectIdentifier()",
+						"getOwnerType()",
+						"getSubjectId()",
 						"hashCode()",
 						"toExternalKey()",
 						"toString()")));
@@ -155,8 +157,8 @@ public class McpLocalizationPublicApiTests {
 		List<Class<?>> types = List.of(
 				McpLocalizer.class,
 				McpLocalizer.Builder.class,
-				McpLocalizer.ContextProviderStage.class,
 				McpLocalizationContextProvider.class,
+				McpLocalizationLookup.class,
 				McpLocalizationRequest.class,
 				McpLocalizationContext.class,
 				McpLocalizationContext.Builder.class,
@@ -179,9 +181,12 @@ public class McpLocalizationPublicApiTests {
 						&& !method.getReturnType().isPrimitive())
 					Assertions.assertTrue(method.getAnnotatedReturnType()
 							.isAnnotationPresent(NonNull.class), method.toString());
-				for (AnnotatedType parameter : method.getAnnotatedParameterTypes())
-					Assertions.assertTrue(parameter.isAnnotationPresent(
-							NonNull.class), method.toString());
+				for (AnnotatedType parameter : method.getAnnotatedParameterTypes()) {
+					Assertions.assertTrue(isNullableResetMethod(method)
+							? parameter.isAnnotationPresent(Nullable.class)
+							: parameter.isAnnotationPresent(NonNull.class),
+							method.toString());
+				}
 			}
 			for (Constructor<?> constructor : type.getDeclaredConstructors()) {
 				if (!Modifier.isPublic(constructor.getModifiers()))
@@ -193,19 +198,21 @@ public class McpLocalizationPublicApiTests {
 			}
 		}
 
-		Method createContext = McpLocalizationContextProvider.class.getMethod(
-				"createContext", McpLocalizationRequest.class);
+		Method provideContext = McpLocalizationContextProvider.class.getMethod(
+				"provideContext", McpLocalizationRequest.class);
 		Method localize = McpLocalizationContext.class.getMethod("localize",
 				McpLocalizableText.class);
-		Method contextLocalizer = McpLocalizationContext.Builder.class.getMethod(
-				"localizer", java.util.function.Function.class);
+		Method localizationLookup = McpLocalizationLookup.class.getMethod(
+				"localize", McpLocalizableText.class);
 		Assertions.assertArrayEquals(new Class<?>[]{Exception.class},
-				createContext.getExceptionTypes());
+				provideContext.getExceptionTypes());
 		Assertions.assertArrayEquals(new Class<?>[0],
 				localize.getExceptionTypes());
+		Assertions.assertArrayEquals(new Class<?>[0],
+				localizationLookup.getExceptionTypes());
 		Assertions.assertNotNull(McpLocalizationContextProvider.class
 				.getAnnotation(FunctionalInterface.class));
-		Assertions.assertNotNull(McpLocalizer.ContextProviderStage.class
+		Assertions.assertNotNull(McpLocalizationLookup.class
 				.getAnnotation(FunctionalInterface.class));
 
 		assertParameterizedPayload(McpLocalizationRequest.class.getMethod(
@@ -216,17 +223,6 @@ public class McpLocalizationPublicApiTests {
 				"getResourceListCursor"), String.class);
 		assertParameterizedPayload(McpLocalizationContext.class.getMethod(
 				"getRevision"), McpLocalizationRevision.class);
-		AnnotatedParameterizedType localizerType = Assertions.assertInstanceOf(
-				AnnotatedParameterizedType.class,
-				contextLocalizer.getAnnotatedParameterTypes()[0]);
-		AnnotatedType[] localizerArguments =
-				localizerType.getAnnotatedActualTypeArguments();
-		Assertions.assertArrayEquals(new Object[]{McpLocalizableText.class,
-				McpLocalizationResult.class}, Arrays.stream(localizerArguments)
-				.map(AnnotatedType::getType).toArray());
-		for (AnnotatedType argument : localizerArguments)
-			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
-					contextLocalizer.toString());
 		assertParameterizedPayload(McpLocalizationCatalog.class.getMethod(
 				"getTexts"), McpLocalizableText.class);
 	}
@@ -238,15 +234,27 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationContext.class.getModifiers()));
 		McpLocalizationRevision revision =
 				McpLocalizationRevision.fromValue("catalog-secret-17");
-		McpLocalizableText text = new McpLocalizableText(
-				new McpTextCoordinate("/mcp", McpTextOwnerType.ENDPOINT,
-						"endpoint", "/instructions"),
-				"Canonical instructions");
+		McpLocalizableText text = McpLocalizableText
+				.fromCoordinateAndDefaultText(McpTextCoordinate.fromComponents(
+						"/mcp", McpTextOwnerType.ENDPOINT, "endpoint",
+						"/instructions"), "Canonical instructions");
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpTextCoordinate.fromComponents(null,
+						McpTextOwnerType.ENDPOINT, "endpoint", "/instructions"));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpTextCoordinate.fromComponents("/mcp", null,
+						"endpoint", "/instructions"));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpLocalizableText.fromCoordinateAndDefaultText(null,
+						"Canonical instructions"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpLocalizableText.fromCoordinateAndDefaultText(
+						text.getCoordinate(), " "));
 		McpLocalizationContext context = McpLocalizationContext
-				.withLocale(Locale.CANADA_FRENCH)
+				.withLocale(Locale.CANADA_FRENCH,
+						localizableText -> McpLocalizationResult.localized(
+								"FR:" + localizableText.getDefaultText()))
 				.revision(revision)
-				.localizer(localizableText -> McpLocalizationResult.localized(
-						"FR:" + localizableText.getDefaultText()))
 				.build();
 
 		Assertions.assertEquals(Locale.CANADA_FRENCH, context.getLocale());
@@ -259,31 +267,32 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertFalse(context.toString().contains("Canonical instructions"));
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationContext.withLocale(null));
+				() -> McpLocalizationContext.withLocale(null,
+						textValue -> McpLocalizationResult.useDefaultText()));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationContext.withLocale(Locale.ENGLISH)
-						.revision(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationContext.withLocale(Locale.ENGLISH)
-						.localizer(null));
-		Assertions.assertThrows(IllegalStateException.class,
-				() -> McpLocalizationContext.withLocale(Locale.ENGLISH).build());
+				() -> McpLocalizationContext.withLocale(Locale.ENGLISH, null));
+		McpLocalizationContext revisionCleared = McpLocalizationContext
+				.withLocale(Locale.ENGLISH,
+						textValue -> McpLocalizationResult.useDefaultText())
+				.revision(revision)
+				.revision(null)
+				.build();
+		Assertions.assertTrue(revisionCleared.getRevision().isEmpty());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> context.localize(null));
 		McpLocalizationContext nullReturning = McpLocalizationContext
-				.withLocale(Locale.ENGLISH)
-				.localizer(localizableText -> null)
+				.withLocale(Locale.ENGLISH, localizableText -> null)
 				.build();
 		Assertions.assertThrows(NullPointerException.class,
 				() -> nullReturning.localize(text));
 	}
 
 	@Test
-	public void localizerUsesStagedConstructionAndReviewedBounds() {
+	public void localizerUsesDirectConstructionAndNullableDefaultResets() {
 		McpLocalizationContextProvider provider = request -> context(
 				request.getFallbackLocale());
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(provider)
+		McpLocalizer localizer = McpLocalizer
+				.withFallbackLocale(Locale.ENGLISH, provider)
 				.build();
 
 		Assertions.assertEquals(Locale.ENGLISH, localizer.getFallbackLocale());
@@ -293,8 +302,8 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertEquals(32_768,
 				localizer.getMaximumLocalizableTextCountPerResponse());
 
-		McpLocalizer configured = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(provider)
+		McpLocalizer configured = McpLocalizer
+				.withFallbackLocale(Locale.ENGLISH, provider)
 				.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
 				.maximumLocalizableTextCountPerResponse(100_000)
 				.build();
@@ -304,21 +313,24 @@ public class McpLocalizationPublicApiTests {
 				configured.getMaximumLocalizableTextCountPerResponse());
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizer.withFallbackLocale(null));
+				() -> McpLocalizer.withFallbackLocale(null, provider));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(provider).failurePolicy(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(provider)
-						.maximumLocalizableTextCountPerResponse(null));
+				() -> McpLocalizer.withFallbackLocale(Locale.ENGLISH, null));
+		McpLocalizer reset = McpLocalizer
+				.withFallbackLocale(Locale.ENGLISH, provider)
+				.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
+				.maximumLocalizableTextCountPerResponse(1)
+				.failurePolicy(null)
+				.maximumLocalizableTextCountPerResponse(null)
+				.build();
+		Assertions.assertEquals(McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
+				reset.getFailurePolicy());
+		Assertions.assertEquals(32_768,
+				reset.getMaximumLocalizableTextCountPerResponse());
 		for (Integer invalid : List.of(-1, 0, 100_001, Integer.MAX_VALUE))
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-							.contextProvider(provider)
+					() -> McpLocalizer
+							.withFallbackLocale(Locale.ENGLISH, provider)
 							.maximumLocalizableTextCountPerResponse(invalid));
 	}
 
@@ -328,16 +340,17 @@ public class McpLocalizationPublicApiTests {
 				request.getFallbackLocale());
 		Locale privateUse = Locale.forLanguageTag("x-private");
 		Assertions.assertEquals(privateUse,
-				McpLocalizer.withFallbackLocale(privateUse)
-						.contextProvider(provider).build().getFallbackLocale());
+				McpLocalizer.withFallbackLocale(privateUse, provider).build()
+						.getFallbackLocale());
 
 		for (Locale invalid : List.of(Locale.ROOT,
 				Locale.forLanguageTag("und"),
 				Locale.forLanguageTag("und-Latn"))) {
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizer.withFallbackLocale(invalid));
+					() -> McpLocalizer.withFallbackLocale(invalid, provider));
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizationContext.withLocale(invalid));
+					() -> McpLocalizationContext.withLocale(invalid,
+							text -> McpLocalizationResult.useDefaultText()));
 		}
 	}
 
@@ -404,19 +417,21 @@ public class McpLocalizationPublicApiTests {
 				"soklet-mcp-text-v1.resource-template.53OUiPBZEoVAvTyjImyIb3F_KEXAlQSbp_7C-x7QC8M");
 		for (Map.Entry<McpTextOwnerType, String> entry
 				: expectedExternalKeys.entrySet()) {
-			McpTextCoordinate keyedCoordinate = new McpTextCoordinate(
+			McpTextCoordinate keyedCoordinate = McpTextCoordinate.fromComponents(
 					"/catalog/mcp", entry.getKey(), "catalog.search",
 					"/description");
 			Assertions.assertEquals(entry.getValue(),
 					keyedCoordinate.toExternalKey(), entry.getKey().name());
 		}
 
-		McpTextCoordinate coordinate = new McpTextCoordinate("/catalog/mcp",
-				McpTextOwnerType.TOOL, "catalog.search", "/description");
-		McpTextCoordinate equal = new McpTextCoordinate("/catalog/mcp",
-				McpTextOwnerType.TOOL, "catalog.search", "/description");
-		McpTextCoordinate unequal = new McpTextCoordinate("/catalog/mcp",
-				McpTextOwnerType.TOOL, "catalog.search", "/title");
+		McpTextCoordinate coordinate = McpTextCoordinate.fromComponents(
+				"/catalog/mcp", McpTextOwnerType.TOOL, "catalog.search",
+				"/description");
+		McpTextCoordinate equal = McpTextCoordinate.fromComponents(
+				"/catalog/mcp", McpTextOwnerType.TOOL, "catalog.search",
+				"/description");
+		McpTextCoordinate unequal = McpTextCoordinate.fromComponents(
+				"/catalog/mcp", McpTextOwnerType.TOOL, "catalog.search", "/title");
 
 		Assertions.assertEquals(coordinate, equal);
 		Assertions.assertEquals(coordinate.hashCode(), equal.hashCode());
@@ -427,7 +442,7 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertFalse(coordinate.toString().contains("/catalog/mcp"));
 		Assertions.assertFalse(coordinate.toString().contains("catalog.search"));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpTextCoordinate("/catalog/mcp",
+				() -> McpTextCoordinate.fromComponents("/catalog/mcp",
 						McpTextOwnerType.TOOL, "bad\uD800", "/title"));
 	}
 
@@ -450,10 +465,10 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertFalse(disabledControl.isEnabled());
 		Assertions.assertTrue(((DefaultMcpServer) disabled).localizer().isEmpty());
 		Assertions.assertThrows(IllegalStateException.class,
-				disabledControl::catalogsChanged);
+				disabledControl::invalidateCatalogs);
 
-		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> context(Locale.ENGLISH))
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.ENGLISH))
 				.build();
 		McpServer enabled = serverBuilder(registry).localizer(localizer).build();
 		Soklet enabledSoklet = managedSoklet(enabled);
@@ -464,10 +479,10 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertSame(localizer,
 				((DefaultMcpServer) enabled).localizer().orElseThrow());
 		Assertions.assertDoesNotThrow(
-				enabledControl::catalogsChanged);
+				enabledControl::invalidateCatalogs);
 		enabledSoklet.close();
 		Assertions.assertDoesNotThrow(
-				enabledControl::catalogsChanged);
+				enabledControl::invalidateCatalogs);
 
 		McpServer anotherEnabled = serverBuilder(registry)
 				.localizer(localizer).build();
@@ -475,29 +490,31 @@ public class McpLocalizationPublicApiTests {
 				anotherEnabled.getLocalizationControl());
 		Assertions.assertTrue(anotherEnabled.getLocalizationControl().isEnabled());
 
-		Assertions.assertThrows(NullPointerException.class,
-				() -> serverBuilder(registry).localizer(null));
+		McpServer cleared = serverBuilder(registry)
+				.localizer(localizer)
+				.localizer(null)
+				.build();
+		Assertions.assertFalse(cleared.getLocalizationControl().isEnabled());
+		Assertions.assertTrue(((DefaultMcpServer) cleared).localizer().isEmpty());
 	}
 
 	private static McpLocalizationContext context(Locale locale) {
-		return McpLocalizationContext.withLocale(locale)
-				.localizer(text -> McpLocalizationResult.useDefaultText())
+		return McpLocalizationContext.withLocale(locale,
+				text -> McpLocalizationResult.useDefaultText())
 				.build();
 	}
 
 	private static McpEndpointRegistry endpointRegistry() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+				McpImplementation.withNameAndVersion(
 						"localization-api-test", "4.0.0").build())
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpointRegistry registry) {
-		return McpServer.withPort(0)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance());
+		return McpServer.withPort(0, registry,
+				McpAdmissionController.acceptAllInstance());
 	}
 
 	private static Soklet managedSoklet(McpServer server) {
@@ -534,5 +551,15 @@ public class McpLocalizationPublicApiTests {
 		return method.getName().equals("equals")
 				|| method.getName().equals("hashCode")
 				|| method.getName().equals("toString");
+	}
+
+	private static boolean isNullableResetMethod(Method method) {
+		if (method.getDeclaringClass() == McpLocalizer.Builder.class)
+			return method.getName().equals("failurePolicy")
+					|| method.getName().equals(
+					"maximumLocalizableTextCountPerResponse");
+		return method.getDeclaringClass()
+				== McpLocalizationContext.Builder.class
+				&& method.getName().equals("revision");
 	}
 }

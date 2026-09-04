@@ -30,7 +30,8 @@ import static java.util.Objects.requireNonNull;
  *
  * <p>The declaration connects the emitted request to the capability and
  * registration metadata that permits it. Applications should reuse a
- * declaration registered through the operation's {@code mayRequestInput}
+ * declaration registered through the operation's
+ * {@code addInputRequestDeclaration}
  * configuration. Soklet validates that relationship when it emits the
  * containing result.
  *
@@ -83,7 +84,7 @@ public final class McpInputRequest {
 	 */
 	@NonNull
 	public String getMethod() {
-		return this.declaration.getMethod();
+		return this.declaration.getJsonRpcMethod();
 	}
 
 	/** @return whether this value has the same declaration and parameters */

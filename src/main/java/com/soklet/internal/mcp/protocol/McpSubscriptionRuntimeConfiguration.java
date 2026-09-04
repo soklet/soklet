@@ -33,14 +33,14 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 record McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
 		@NonNull Duration writeTimeout, @NonNull Duration keepAliveInterval,
-		@NonNull Duration shutdownTimeout, int maximumSubscriptionsPerPrincipal,
+		@NonNull Duration shutdownTimeout, int maximumSubscriptionsPerPartition,
 		@NonNull Duration maximumSubscriptionDuration) {
 	McpSubscriptionRuntimeConfiguration {
 		if (streamQueueCapacity < 1)
 			throw new IllegalArgumentException("Stream queue capacity must be positive.");
-		if (maximumSubscriptionsPerPrincipal < 1)
+		if (maximumSubscriptionsPerPartition < 1)
 			throw new IllegalArgumentException(
-					"Maximum subscriptions per principal must be positive.");
+					"Maximum subscriptions per partition must be positive.");
 		writeTimeout = requirePositive(writeTimeout, "Write timeout");
 		keepAliveInterval = requirePositive(keepAliveInterval,
 				"Keep-alive interval");

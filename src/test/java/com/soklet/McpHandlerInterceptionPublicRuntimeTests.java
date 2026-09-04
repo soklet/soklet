@@ -66,7 +66,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Assertions.assertSame(interceptorContexts.get("tools/call"),
 							request);
@@ -101,13 +101,12 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					return completeText(read.getUri(), "resource-original");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-runtime-test", "4.0.0")
 						.build())
-				.tool(tool)
-				.prompt(prompt)
-				.resource(resource)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
 				.resourceListHandler((request, list, features) -> {
 					Assertions.assertSame(interceptorContexts.get("resources/list"),
 							request);
@@ -115,7 +114,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							features);
 					stages.add("handler:resources/list");
 					return McpResourcePage.builder()
-							.resources(list.getRegisteredResourceDescriptors())
+							.addResources(list.getRegisteredResourceDescriptors())
 							.build();
 				})
 				.build();
@@ -227,20 +226,19 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	public void interceptorMayShortCircuitBeforeBindingAndFailuresFailClosed()
 			throws Exception {
 		AtomicInteger shortCircuitHandlerInvocations = new AtomicInteger();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-failure-test", "4.0.0")
 						.build())
-				.tool(McpToolRegistration.withName("short-circuit")
+				.addTool(McpToolRegistration.withName("short-circuit")
 						.argumentType(RequiredArguments.class)
 						.handler((request, arguments, features) -> {
 							shortCircuitHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("must-not-run");
 						})
 						.build())
-				.tool(rawTool("wrong-result"))
-				.tool(rawTool("null-result"))
-				.tool(rawTool("throwing"))
+				.addTool(rawTool("wrong-result"))
+				.addTool(rawTool("null-result"))
+				.addTool(rawTool("throwing"))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> switch (
@@ -286,11 +284,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	public void staticResourceListHasNoApplicationHandlerToIntercept()
 			throws Exception {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"static-resource-list-interception-test",
 						"4.0.0").build())
-				.resource(McpResourceRegistration
+				.addResource(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI, "Static resource")
 						.handler((request, read, features) ->
 								completeText(read.getUri(), "not-read"))
@@ -324,11 +321,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	@Test
 	public void interceptorJsonRpcExceptionsFailClosedForResourceOperations()
 			throws Exception {
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"resource-interceptor-error-test",
 						"4.0.0").build())
-				.resource(McpResourceRegistration
+				.addResource(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI, "Resource")
 						.handler((request, read, features) ->
 								completeText(read.getUri(), "must-not-run"))
@@ -377,13 +373,12 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicReference<Throwable> wrongThreadInvocationFailure =
 				new AtomicReference<>();
 
-		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-continuation-runtime-test", "4.0.0")
 						.build());
 		for (String toolName : handlerInvocations.keySet()) {
-			endpointBuilder.tool(McpToolRegistration.withName(toolName)
-					.jsonArguments()
+			endpointBuilder.addTool(McpToolRegistration.withName(toolName)
+					.jsonObjectArguments()
 					.handler((request, arguments, features) -> {
 						handlerInvocations.get(toolName).incrementAndGet();
 						return McpCompleteResult.fromToolText(toolName + "-handled");
@@ -455,12 +450,11 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicReference<Exception> lateContinuationFailure =
 				new AtomicReference<>();
 		CountDownLatch lateContinuationCompleted = new CountDownLatch(1);
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-deadline-test", "4.0.0")
 						.build())
-				.tool(McpToolRegistration.withName("late")
-						.jsonArguments()
+				.addTool(McpToolRegistration.withName("late")
+						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							handlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("too-late");
@@ -521,26 +515,22 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name) {
 		return McpToolRegistration.withName(name)
-				.jsonArguments()
+				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText(name + "-handled"))
 				.build();
 	}
 
 	private static McpCompleteResult completeText(URI uri, String text) {
-		return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
-				.content(McpTextResourceContents.withUriAndText(uri, text)
+		return McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(uri, text)
 						.mimeType("text/plain")
 						.build())
 				.build());
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

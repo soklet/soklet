@@ -26,9 +26,9 @@ import java.lang.annotation.Target;
 /**
  * Binds a {@link McpResource} method parameter to a URI-template variable.
  * <p>
- * Resource URI parameters are strings. A blank {@link #value()} uses the
+ * Resource URI parameters are strings. A blank {@link #name()} uses the
  * source-level Java parameter name captured by Soklet's annotation processor;
- * an explicit value keeps the public template contract stable across Java
+ * an explicit name keeps the public template contract stable across Java
  * refactoring.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -42,5 +42,5 @@ public @interface McpResourceUriParameter {
 	 * @return variable name, or an empty string to use the Java parameter name
 	 */
 	@Nullable
-	String value() default "";
+	String name() default "";
 }

@@ -328,7 +328,7 @@ public class McpHttpContractGoldenProductionTests {
 					"The active contract handler did not enter.");
 			Future<WireResponse> queued = clients.submit(() -> exchange(port,
 					validToolPost("queued", TOOL_NAME, "queued", false)));
-			awaitCondition(() -> server.getDiagnostics().getQueuedRequests() == 1);
+			awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
 
 			WireResponse overload = exchange(port,
 					validToolPost("overload", TOOL_NAME, "overload", false));
@@ -434,22 +434,18 @@ public class McpHttpContractGoldenProductionTests {
 				.build();
 		McpToolRegistration<ContractArguments> typedTool = McpToolRegistration
 				.withName(TYPED_TOOL_NAME)
-				.types(ContractArguments.class, ContractResult.class)
+				.argumentAndOutputTypes(ContractArguments.class, ContractResult.class)
 				.handler((request, arguments, features) -> {
 					state.record(state.caseName(request.getRequest()), "handler");
 					return new ContractResult("contract-ok");
 				})
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"http-contract-golden", "4.0.0").build())
-				.tool(tool)
-				.tool(typedTool)
+				.addTool(tool)
+				.addTool(typedTool)
 				.build();
-		return McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(context -> {
+		return McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), context -> {
 					String caseName = state.caseName(context.getRequest());
 					state.record(caseName, "admission");
 					if (Set.of("metadata", "version", "structural", "admission-denied",
@@ -460,17 +456,18 @@ public class McpHttpContractGoldenProductionTests {
 								.withStatusCodeAndError(401,
 										McpJsonRpcError.fromApplication(
 												4_101, "Contract denied"))
-								.header("X-Contract-Policy", "denied")
+								.addHeader("X-Contract-Policy", "denied")
 								.build());
 					if ("policy-cache-control".equals(caseName))
 						return McpAdmissionDecision.rejected(McpAdmissionRejection
 								.withStatusCodeAndError(401,
 										McpJsonRpcError.fromApplication(
 												4_102, "Must fail closed"))
-								.header("Cache-Control", "public, max-age=3600")
+								.addHeader("Cache-Control", "public, max-age=3600")
 								.build());
 					return McpAdmissionDecision.accepted();
 				})
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> {
 					String caseName = state.caseName(context.getRequest());
 					state.record(caseName, "request-limiter");
@@ -766,14 +763,14 @@ public class McpHttpContractGoldenProductionTests {
 
 	private static boolean zeroLoad(McpServerDiagnostics diagnostics) {
 		return diagnostics.getActiveHandlerExecutions() == 0
-				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getRequestHandlerQueueDepth() == 0
 				&& diagnostics.getActiveRequestStreams() == 0
 				&& diagnostics.getActiveSubscriptions() == 0;
 	}
 
 	private static void assertZeroLoad(McpServerDiagnostics diagnostics) {
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
-		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 	}

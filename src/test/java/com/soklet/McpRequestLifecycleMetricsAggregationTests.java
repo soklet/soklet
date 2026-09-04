@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -180,10 +181,12 @@ public class McpRequestLifecycleMetricsAggregationTests {
 				() -> McpMetricsSnapshot.builder().activeRequests(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpMetricsSnapshot.builder().activeRequests(-1L));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().requests(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpMetricsSnapshot.builder().requestDurations(null));
+		McpMetricsSnapshot resetMaps = McpMetricsSnapshot.builder()
+				.requests(null)
+				.requestDurations(null)
+				.build();
+		Assertions.assertTrue(resetMaps.getRequests().isEmpty());
+		Assertions.assertTrue(resetMaps.getRequestDurations().isEmpty());
 
 		Map<McpMetricsSnapshot.RequestOutcomeKey, Long> nullCountKey =
 				new HashMap<>();
@@ -495,6 +498,8 @@ public class McpRequestLifecycleMetricsAggregationTests {
 		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
 		Assertions.assertEquals(0, getter.getParameterCount());
 		Assertions.assertEquals(Map.class, getter.getReturnType());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 		assertRequestMapType(getter.getGenericReturnType(),
 				getter.getAnnotatedReturnType(), valueType);
 		Method builder = McpMetricsSnapshot.Builder.class.getMethod(
@@ -504,6 +509,8 @@ public class McpRequestLifecycleMetricsAggregationTests {
 				builder.getReturnType());
 		Assertions.assertTrue(builder.getAnnotatedReturnType()
 				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(builder.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
 		assertRequestMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0], valueType);
 	}
@@ -529,10 +536,8 @@ public class McpRequestLifecycleMetricsAggregationTests {
 				McpMetricsSnapshot.RequestOutcomeKey.class,
 				requireNonNull(valueType)
 		}, parameterized.getActualTypeArguments());
-		Assertions.assertTrue(requireNonNull(annotatedType)
-				.isAnnotationPresent(NonNull.class));
 		AnnotatedParameterizedType annotated = Assertions.assertInstanceOf(
-				AnnotatedParameterizedType.class, annotatedType);
+				AnnotatedParameterizedType.class, requireNonNull(annotatedType));
 		for (AnnotatedType argument : annotated.getAnnotatedActualTypeArguments())
 			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
 					argument.toString());
@@ -637,16 +642,12 @@ public class McpRequestLifecycleMetricsAggregationTests {
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
-		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
-				.serverInformation(McpImplementation.withNameAndVersion(
+		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH, McpImplementation.withNameAndVersion(
 						"request-lifecycle-metrics-test", "4.0.0")
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = McpServer.withPort(0, McpEndpointRegistry.fromEndpoints(List.of(endpoint)), McpAdmissionController.acceptAllInstance())
 				.host("127.0.0.1")
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
