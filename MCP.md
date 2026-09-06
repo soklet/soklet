@@ -776,11 +776,14 @@ active-request deadline behavior. These transitions produce one queue-depth
 removal and one observable request outcome even when a reserved deadline
 response becomes unwritable before transport handoff.
 
-A timeout, disconnect, server shutdown, or response-stream backpressure
-failure cancels the invocation's `CancelationToken`. Soklet also interrupts
-the dispatch thread where applicable, but Java cannot forcibly stop a
-non-cooperative handler. Such a handler retains its execution slot until it
-actually exits even if the client request has already completed.
+An absolute request timeout, disconnect, forced shutdown after the graceful
+budget, or response-stream backpressure failure cancels the invocation's
+`CancelationToken`. Graceful shutdown itself fences new work but preserves the
+response path for already-admitted finite unary and request-scoped progress
+requests. Soklet interrupts the dispatch thread where applicable after
+cancelation, but Java cannot forcibly stop a non-cooperative handler. Such a
+handler retains its execution slot until it actually exits even if the client
+request has already completed.
 
 The same non-forcible rule applies to application-supplied request-pipeline
 callbacks such as admission, rate limiting, and custom request-state
@@ -856,11 +859,12 @@ requests.
 
 The cancelation token is always present after an application handler is
 selected. It is signaled by client disconnect, the absolute request deadline,
-server shutdown, or a response-stream write/backpressure failure. Cancelation
-is cooperative: handlers should check between expensive operations, register a
-short nonblocking callback with `onCancel(...)`, or call
-`throwIfCanceled()`. Reports made after cancelation or terminal completion have
-no effect.
+forced shutdown after graceful drain expires, or a response-stream
+write/backpressure failure. Beginning graceful drain does not signal it for an
+already-admitted finite request. Cancelation is cooperative: handlers should
+check between expensive operations, register a short nonblocking callback with
+`onCancel(...)`, or call `throwIfCanceled()`. Reports made after cancelation or
+terminal completion have no effect.
 
 For framework-supplied MCP tokens, `getCancelationReason()` exposes one fixed
 `StreamTerminationReason`, while `getCancelationCause()` is always empty.
@@ -957,9 +961,12 @@ Keep-alive comments prevent an otherwise idle writable stream from reaching
 its write-idle timeout; `keepAliveInterval` must therefore be strictly shorter
 than `writeTimeout`, and `McpServer.Builder.build()` rejects an invalid pair.
 A slow or disconnected subscriber is cleaned up without blocking unrelated
-subscribers. Graceful HTTP server shutdown sends only the tagged empty terminal
-`complete` result when writable; Soklet never emits the stdio-only server
-`notifications/cancelled` message on HTTP.
+subscribers. Because a subscription is intentionally indefinite, graceful HTTP
+server shutdown completes it promptly with only the tagged empty terminal
+`complete` result when writable. This differs from finite request-scoped
+progress SSE, which retains its response path through the graceful-drain
+budget. Soklet never emits the stdio-only server `notifications/cancelled`
+message on HTTP.
 
 ## Off-network simulation
 
@@ -1063,9 +1070,10 @@ them.
 An identifiable HTTP `notifications/cancelled` message still traverses version
 validation, admission, and request limiting, then returns an empty HTTP 202.
 Its payload is ignored and it never cancels active work, including when the
-supplied ID names an active request. Stream-level disconnect, deadline,
-shutdown, and backpressure signals drive cooperative cancelation for this
-transport instead. Other notifications never receive a JSON-RPC response body.
+supplied ID names an active request. Stream-level disconnect, deadline, forced
+shutdown after graceful drain, and backpressure signals drive cooperative
+cancelation for this transport instead. Other notifications never receive a
+JSON-RPC response body.
 
 ## Validation precedence
 
@@ -1201,7 +1209,7 @@ The bounded handler-capacity vertical records server-wide
 `HandlerExecutionStarted`, `HandlerExecutionFinished`, `HandlerQueued`,
 `HandlerDequeued`, and `HandlerCapacityRejected` events. Only a full admitted
 handler queue is a capacity rejection; queued deadline, disconnect,
-cancelation, and shutdown removal produce a matching dequeue instead. Compound
+cancelation, and forced-shutdown removal produce a matching dequeue instead. Compound
 promotion order is globally `HandlerExecutionFinished`, `HandlerDequeued`, then
 `HandlerExecutionStarted`.
 
@@ -2408,6 +2416,12 @@ work. Phase 6 remained provisional and unfrozen at that fifth checkpoint.
 MCP lifecycle is owned by the one `Soklet` configured with the server;
 `McpServer` has no independent start, stop, close, or timeout surface. The
 owner's `LifecyclePolicy` supplies the graceful and forced phase boundaries.
+Graceful shutdown fences new admission and closes intentionally indefinite
+subscriptions, but retains every already-admitted finite unary or
+request-scoped progress response path while active and queued work drains.
+Existing request deadlines and client disconnects can still win during that
+phase. At the force boundary, Soklet closes remaining transports, cancels
+queued and active work, and interrupts application dispatch where applicable.
 `LifecycleObserver.didStopMcpServer(...)` receives the exact immutable
 `ShutdownComponentResult` once, including its
 `ShutdownComponentDisposition`, failures, and residual evidence. Diagnostics

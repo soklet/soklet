@@ -806,8 +806,11 @@ underlying cause is empty, including through
 [`StreamingResponseCanceledException`](https://javadoc.soklet.com/com/soklet/StreamingResponseCanceledException.html).
 On HTTP, an incoming
 `notifications/cancelled` message is accepted and ignored for compatibility;
-disconnect, deadline, shutdown, and response-stream failure are the signals
-that cancel work. Soklet validates the open `inputResponses` wire union, but
+disconnect, deadline, forced shutdown after the graceful-drain budget, and
+response-stream failure are the signals that cancel work. Graceful shutdown
+fences new MCP work while preserving already-admitted finite unary and
+request-scoped progress responses; indefinite subscriptions complete promptly.
+Soklet validates the open `inputResponses` wire union, but
 applications still own response-key correlation, action handling, accepted
 content policy, user binding, sampling limits, and filesystem containment. See
 the compile-checked
@@ -1718,7 +1721,7 @@ values:
 - `soklet_mcp_handler_capacity_rejections_total` (counter).
 
 Only a full admitted handler queue increments the rejection counter. Deadline,
-disconnect, cancelation, and shutdown removal of queued work decrement queue
+disconnect, cancelation, and forced-shutdown removal of queued work decrement queue
 depth without counting a rejection. Reset preserves the two live gauges while
 clearing cumulative rejections. A non-cooperative residual handler remains
 active after bounded shutdown until it actually exits, at which point the

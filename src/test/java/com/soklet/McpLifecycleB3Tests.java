@@ -127,7 +127,7 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void cooperativeHandlerOutlivesPromptStreamClosureAndDrainsGracefully()
+	void cooperativeHandlerAndRequestStreamDrainGracefully()
 			throws Exception {
 		CountDownLatch handlerEntered = new CountDownLatch(1);
 		CountDownLatch releaseHandler = new CountDownLatch(1);
@@ -167,27 +167,33 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, admittedWork(generation));
 
 			Future<?> stop = stopper.submit(fixture.soklet()::close);
-			awaitCondition(() -> server.getDiagnostics().getActiveRequestStreams() == 0,
-					"Graceful quiesce did not close the public request stream.");
+			awaitCondition(() -> server.getDiagnostics().getStatus()
+					== McpServerStatus.SHUTTING_DOWN,
+					"Graceful quiesce did not publish stopping state.");
+			Assertions.assertEquals(1,
+					server.getDiagnostics().getActiveRequestStreams(),
+					"Graceful quiesce must preserve an admitted finite request stream.");
 			Assertions.assertFalse(stop.isDone(),
-					"Public stream closure is not affirmative handler proof.");
+					"Shutdown completed before admitted request work drained.");
 			Assertions.assertEquals(0, interruptions.get(),
 					"Cooperative work was interrupted during the grace phase.");
 			Assertions.assertEquals(1, admittedWork(generation),
 					"The exact lifecycle admission must span handler exit.");
 			Assertions.assertTrue(fixture.bridge().getLifecycleEvidence().callback());
-			request.cancel(true);
-			request = null;
-
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
+			HttpResponse<String> response = request.get(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS);
+			Assertions.assertEquals(200, response.statusCode(), response.body());
+			Assertions.assertTrue(response.body().contains("cooperative"),
+					response.body());
 			stop.get(WAIT.toNanos(), TimeUnit.NANOSECONDS);
 			Assertions.assertEquals(0, admittedWork(generation));
 			assertParticipant(server,
 					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
-			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPING),
+			Assertions.assertEquals(List.of(McpStreamTerminationReason.COMPLETED),
 					fixture.metrics().streamCloseReasons);
 		} finally {
 			releaseHandler.countDown();
@@ -1008,7 +1014,8 @@ class McpLifecycleB3Tests {
 			});
 		McpServer server = serverBuilder(endpoint(PATH, tool), Duration.ofSeconds(3))
 				.build();
-		Fixture fixture = fixture(server);
+		Fixture fixture = fixture(server, withGracefulShutdownTimeout(
+				TEST_LIFECYCLE_POLICY, Duration.ofSeconds(10)));
 		CompletableFuture<HttpResponse<String>> request = null;
 
 		try {
@@ -1020,11 +1027,14 @@ class McpLifecycleB3Tests {
 					TimeUnit.NANOSECONDS));
 			Assertions.assertEquals(1, admittedWork(generation));
 
-			terminateUnexpectedly(eventLoop(fixture.bridge()));
+			EventLoop loop = eventLoop(fixture.bridge());
+			closeSelector(loop);
+			awaitCondition(generation::shutdownRequested,
+					"Unexpected event-loop failure did not request shutdown.");
+			awaitCondition(() -> !terminationEvents(server, generation).isEmpty(),
+					"Unexpected event-loop failure was not published.");
 
-			Assertions.assertTrue(generation.shutdownRequested());
 			Assertions.assertTrue(generation.tryAdmit().isEmpty());
-			Assertions.assertFalse(terminationEvents(server, generation).isEmpty());
 			Assertions.assertEquals(InternalTerminationEvent.Type.FAILURE,
 					terminationEvents(server, generation).get(0).type());
 			Assertions.assertEquals(0, interruptions.get(),
@@ -1034,6 +1044,8 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, admittedWork(generation));
 
 			releaseHandler.countDown();
+			Assertions.assertTrue(loop.join(WAIT),
+					"The MCP event loop did not terminate after admitted work drained.");
 			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
 							SokletUnexpectedTerminationException.class,

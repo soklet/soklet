@@ -397,7 +397,7 @@ final class SokletDirectMcpLifecycleTests {
 	}
 
 	@Test
-	void admittedMcpHandlerSelfStopPublishesIntentAndFailsFastWithoutSelfJoin()
+	void admittedMcpHandlerSelfStopPublishesIntentAndDrainsResponseWithoutSelfJoin()
 			throws Exception {
 		CountDownLatch handlerReachedGate = new CountDownLatch(1);
 		CountDownLatch releaseHandler = new CountDownLatch(1);
@@ -469,10 +469,8 @@ final class SokletDirectMcpLifecycleTests {
 					soklet.getStatus());
 			Assertions.assertTrue(repeatedHandlerStageIdentity.get());
 
-			HttpResponse<String> quiescedResponse = request.get(3,
-					TimeUnit.SECONDS);
-			Assertions.assertEquals(503, quiescedResponse.statusCode());
-			Assertions.assertTrue(quiescedResponse.body().isEmpty());
+			Assertions.assertFalse(request.isDone(),
+					"Graceful quiesce must preserve the admitted request's response path");
 			awaitCondition(() -> server.getDiagnostics().getStatus()
 					== McpServerStatus.SHUTTING_DOWN
 					&& server.getDiagnostics().getActiveHandlerExecutions() == 1,
@@ -486,6 +484,11 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertFalse(externalStop.isDone());
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(3, TimeUnit.SECONDS));
+			HttpResponse<String> drainedResponse = request.get(3,
+					TimeUnit.SECONDS);
+			Assertions.assertEquals(200, drainedResponse.statusCode());
+			Assertions.assertTrue(drainedResponse.body().contains("released"),
+					drainedResponse.body());
 			Assertions.assertNull(externalStop.get(3, TimeUnit.SECONDS));
 
 			InternalShutdownResult result = soklet.getDirectLifecycle()

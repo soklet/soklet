@@ -21,7 +21,10 @@ import com.soklet.HttpMethod;
 import com.soklet.McpEndpoint;
 import com.soklet.McpImplementation;
 import com.soklet.McpSimulation;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationOptions;
+import com.soklet.McpSimulationStreamItem;
+import com.soklet.McpSimulationStreamItemType;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.Request;
 import org.junit.jupiter.api.Assertions;
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -113,11 +117,86 @@ public class McpSimulationLifecyclePhaseTests {
 			Assertions.assertTrue(session.awaitTermination(
 					System.nanoTime() + Duration.ofSeconds(5).toNanos(),
 					System::nanoTime));
-			Assertions.assertEquals(200, simulation.awaitResponse(
-					Duration.ofSeconds(5)).orElseThrow().getStatusCode());
+			var response = simulation.awaitResponse(
+					Duration.ofSeconds(5)).orElseThrow();
+			Assertions.assertEquals(200, response.getStatusCode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					simulation.awaitCompletion(Duration.ofSeconds(5))
 							.orElseThrow().getReason());
+			Assertions.assertEquals(0, interrupts.get());
+			assertEmpty(session.lifecycleEvidence());
+			session.releaseLifecycleEvidence();
+		} finally {
+			release.countDown();
+		}
+	}
+
+	@Test
+	@Timeout(120)
+	public void graceful_simulation_drain_preserves_committed_progress_stream()
+			throws Exception {
+		CountDownLatch progressSent = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		AtomicInteger interrupts = new AtomicInteger();
+		McpHttpServerRuntime runtime = runtime(invocation -> {
+			Assertions.assertTrue(invocation.sendNotification(
+					progressNotification()));
+			progressSent.countDown();
+			try {
+				release.await();
+			} catch (InterruptedException exception) {
+				interrupts.incrementAndGet();
+				Thread.currentThread().interrupt();
+			}
+			return McpWireResult.complete(new McpJsonObject(
+					Map.of("value", new McpJsonString("drained"))));
+		});
+
+		try (runtime;
+				McpHttpServerRuntime.SimulationSession session =
+						runtime.openSimulationSession();
+				McpSimulation simulation = session.start(progressToolRequest(),
+						McpSimulationOptions.defaultInstance())) {
+			Assertions.assertTrue(progressSent.await(5, TimeUnit.SECONDS));
+			var response = simulation.awaitResponse(
+					Duration.ofSeconds(5)).orElseThrow();
+			Assertions.assertEquals(200, response.getStatusCode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					response.getBodyType());
+			McpSimulationStreamItem progress = simulation.awaitStreamItem(
+					Duration.ofSeconds(5)).orElseThrow();
+			Assertions.assertEquals(McpSimulationStreamItemType.JSON_MESSAGE,
+					progress.getType());
+			Assertions.assertTrue(new String(progress.getEncodedBytes(),
+					StandardCharsets.UTF_8).contains("notifications/progress"));
+
+			session.quiesce();
+			Assertions.assertFalse(simulation.isComplete(),
+					"Graceful quiesce closed an admitted finite progress stream.");
+			Assertions.assertEquals(0, interrupts.get());
+			McpLifecycleEvidence drainingEvidence = session.lifecycleEvidence();
+			Assertions.assertTrue(drainingEvidence.stream(),
+					drainingEvidence.toString());
+			Assertions.assertTrue(drainingEvidence.callback(),
+					drainingEvidence.toString());
+			Assertions.assertTrue(drainingEvidence.executorTask(),
+					drainingEvidence.toString());
+
+			release.countDown();
+			McpSimulationStreamItem terminal = simulation.awaitStreamItem(
+					Duration.ofSeconds(5)).orElseThrow();
+			Assertions.assertEquals(McpSimulationStreamItemType.JSON_MESSAGE,
+					terminal.getType());
+			Assertions.assertTrue(new String(terminal.getEncodedBytes(),
+					StandardCharsets.UTF_8).contains("drained"));
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					simulation.awaitCompletion(Duration.ofSeconds(5))
+							.orElseThrow().getReason());
+			Assertions.assertTrue(session.awaitTermination(
+					System.nanoTime() + Duration.ofSeconds(5).toNanos(),
+					System::nanoTime));
 			Assertions.assertEquals(0, interrupts.get());
 			assertEmpty(session.lifecycleEvidence());
 			session.releaseLifecycleEvidence();
@@ -199,13 +278,32 @@ public class McpSimulationLifecyclePhaseTests {
 	}
 
 	private static Request toolRequest() {
+		return toolRequest(false);
+	}
+
+	private static Request progressToolRequest() {
+		return toolRequest(true);
+	}
+
+	private static Request toolRequest(boolean progress) {
+		String progressMetadata = progress
+				? ",\"progressToken\":\"phase-progress\"" : "";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"phase\","
 				+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}"
+				+ progressMetadata + "},"
 				+ "\"name\":\"phase\",\"arguments\":{}}}";
 		return request(body, "tools/call", "phase");
+	}
+
+	private static McpJsonRpcMessage.Notification progressNotification() {
+		return new McpJsonRpcMessage.Notification("notifications/progress",
+				Optional.of(new McpJsonObject(Map.of(
+						"progressToken", new McpJsonString("phase-progress"),
+						"progress", new McpJsonNumber(BigDecimal.ONE)))),
+				McpJsonObject.empty());
 	}
 
 	private static Request request(String body, String method, String name) {

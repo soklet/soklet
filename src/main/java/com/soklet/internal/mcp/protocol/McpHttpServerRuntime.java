@@ -6724,7 +6724,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private int lifecycleWorkOwners;
 		private boolean lifecycleTransportStarted;
 		private boolean lifecycleTransportTerminated;
-		private boolean gracefulTransportClosed;
 
 		private RequestControl(@NonNull MicrohttpRequest request,
 				long deadlineNanos, @NonNull ThreadPoolExecutor processor,
@@ -7287,65 +7286,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
-		/** Closes public transport state without canceling admitted handler work. */
+		/**
+		 * Begins graceful transport drain for this request. Indefinite
+		 * subscriptions receive their terminal result promptly; already-admitted
+		 * finite requests retain their response path until normal completion or the
+		 * force boundary.
+		 */
 		private void quiesceTransport() {
-			if (hasSubscriptionRegistration()) {
+			if (hasSubscriptionRegistration())
 				completeSubscription(StreamTerminationReason.SERVER_STOPPING);
-				return;
-			}
-			McpRequestSseStream stream;
-			Consumer<MicrohttpResponse> callback = null;
-			boolean preserveApplication;
-			synchronized (lock) {
-				if (terminal || canceled)
-					return;
-				stream = responseStream;
-				preserveApplication = applicationOwned;
-				if (preserveApplication)
-					gracefulTransportClosed = true;
-				if (stream == null && preserveApplication) {
-					canceled = true;
-					cancellationReason = StreamTerminationReason.SERVER_STOPPING;
-					callback = takeResponseCallback();
-					markTerminalWhileLocked();
-					releaseIdentifiedRequestExchange();
-				}
-			}
-			if (stream != null) {
-				stream.close(StreamTerminationReason.SERVER_STOPPING, null);
-				return;
-			}
-			if (callback != null) {
-				MicrohttpResponse response = withLifecycleResponseTermination(
-						decorateResponse(emptyResponse(
-								503, "Service Unavailable", List.of())));
-				Throwable deliveryFailure = deliverResponse(callback, response);
-				if (deliveryFailure != null)
-					finishTransportLifecycle();
-				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
-				// The common admission joins this response body's termination with the
-				// admitted application handler's terminal cleanup.
-			}
 		}
 
 		/**
-		 * Gracefully drains one off-network request. Bounded application work keeps
-		 * its response channel through the grace phase; only already-open streams
-		 * and subscriptions receive the immediate server-stopping terminal.
+		 * Gracefully drains one off-network request with the same finite-request
+		 * semantics as the network runtime.
 		 */
 		private void quiesceSimulationTransport() {
-			if (hasSubscriptionRegistration()) {
+			if (hasSubscriptionRegistration())
 				completeSubscription(StreamTerminationReason.SERVER_STOPPING);
-				return;
-			}
-			McpRequestSseStream stream;
-			synchronized (lock) {
-				if (terminal || canceled)
-					return;
-				stream = responseStream;
-			}
-			if (stream != null)
-				stream.close(StreamTerminationReason.SERVER_STOPPING, null);
 		}
 
 		private boolean applicationEntryAllowed() {
@@ -8337,22 +8295,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@Nullable Throwable cause) {
 			requireNonNull(reason);
 			boolean cancelApplication;
-			boolean preserveApplication;
 			SubscriptionRegistration subscription;
 			StreamTerminationReason observedStreamReason;
 			synchronized (lock) {
 				if (terminal)
 					return;
 
-				preserveApplication = gracefulTransportClosed && applicationOwned
-						&& reason == StreamTerminationReason.SERVER_STOPPING;
 				cancelApplication = applicationOwned
-						&& reason != StreamTerminationReason.COMPLETED
-						&& !preserveApplication;
+						&& reason != StreamTerminationReason.COMPLETED;
 				if (reason != StreamTerminationReason.COMPLETED)
 					canceled = true;
-				if (!preserveApplication)
-					applicationOwned = false;
+				applicationOwned = false;
 				subscriptionOwned = false;
 				subscription = subscriptionRegistration;
 				subscriptionRegistration = null;
@@ -8500,18 +8453,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (trackBody)
 				markLifecycleTransportStarted();
 			return observedResponse;
-		}
-
-		@NonNull
-		private MicrohttpResponse withLifecycleResponseTermination(
-				@NonNull MicrohttpResponse response) {
-			requireNonNull(response);
-			if (!tracksLifecycleResponseBody())
-				return response;
-			MicrohttpResponse trackedResponse = response.withBodyTerminationListener(
-					(reason, cause) -> finishTransportLifecycle());
-			markLifecycleTransportStarted();
-			return trackedResponse;
 		}
 
 		private boolean tracksLifecycleResponseBody() {

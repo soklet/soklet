@@ -30,9 +30,11 @@ import java.util.Optional;
  * streaming response contexts and through
  * {@link McpInvocationFeatures#getCancelationToken()} for selected MCP
  * application handlers. Soklet cancels the token when the associated response
- * can no longer continue, such as when the client disconnects, the server shuts
- * down, the request HTTP version cannot support streaming, or a response
- * deadline or streaming timeout is reached.
+ * can no longer continue, such as when the client disconnects, forced shutdown
+ * begins after the graceful-drain budget, the request HTTP version cannot
+ * support streaming, or a response deadline or streaming timeout is reached.
+ * Graceful shutdown by itself does not cancel already-admitted finite MCP work;
+ * its unary or request-scoped progress response may finish within that budget.
  *
  * <p>Normal completion does not mark the token canceled. MCP invocation
  * tokens release registered callbacks when the invocation completes normally,
