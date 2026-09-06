@@ -317,10 +317,14 @@ class McpLocalizationSoakTests {
 			@NonNull LocalizationState state) {
 		requireNonNull(state);
 		return () -> SimulatorConfig.builder()
-					.mcpServer(0,
-							McpEndpointRegistry.fromEndpoints(List.of(endpoint())),
-							McpAdmissionController.acceptAllInstance(),
-							builder -> configureMcpServer(builder, state))
+					.configureMcpServer(builder -> {
+						builder.port(0);
+						builder.endpointRegistry(
+								McpEndpointRegistry.fromEndpoints(List.of(endpoint())))
+								.admissionController(
+										McpAdmissionController.acceptAllInstance());
+						configureMcpServer(builder, state);
+					})
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecyclePolicy(LifecyclePolicy.builder()

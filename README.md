@@ -646,12 +646,7 @@ import org.junit.Test;
 public void sseTest() {
   List<SseEvent> events = new ArrayList<>();
 
-  SokletSimulator.run(SimulatorConfig.builder()
-      .httpServer()
-      .sseServer()
-      .resourceMethodResolver(
-          ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
-      .build(), simulator -> {
+  SokletSimulator.run(config, simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
     SseRequestResult result = simulator.performSseRequest(request);
 
@@ -757,8 +752,18 @@ classes, named factories or builders, private constructors, and conventional
 `get...` accessors. Sealed decision, localization, subscription, and metric
 families keep public nested variants for typed pattern matching, but creation
 is owned by factories on the sealed root.
-Omitting a localizer leaves wire output byte-identical. See
-[MCP localization](https://www.soklet.com/docs/mcp-localization).
+Omitting a localizer leaves wire output byte-identical. When a localizer is
+configured, Soklet clamps every emitted MCP cache hint to private scope with a
+zero TTL. MCP cache hints have no locale key comparable to HTTP `Vary`, so a
+client otherwise could treat, for example, English and French representations
+as the same cache entry. This is a final safety rule, not merely a default:
+positive per-result TTL overrides on
+[`McpResourceOutput`](https://javadoc.soklet.com/com/soklet/McpResourceOutput.html)
+and
+[`McpResourcePage`](https://javadoc.soklet.com/com/soklet/McpResourcePage.html)
+cannot weaken it. See
+[MCP localization](https://www.soklet.com/docs/mcp-localization) for the full
+MCP and HTTP behavior.
 
 Every selected application handler receives one cooperative
 [`CancelationToken`](https://javadoc.soklet.com/com/soklet/CancelationToken.html).
@@ -1473,7 +1478,7 @@ public class HelloResource {
 Perform tests:
 
 [`SokletSimulator`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html)
-creates one fresh off-network transport graph and supplies a
+creates one fresh, transport-isolated off-network graph and supplies a
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) to exercise
 full request/response flows without binding a port. Its
 [`Simulator::startMcpRequest`](<https://javadoc.soklet.com/com/soklet/Simulator.html#startMcpRequest(com.soklet.Request)>)
@@ -1482,21 +1487,66 @@ processor and lifecycle while retaining bounded JSON or exact SSE capture
 off-network; they do not start a configured network listener or change public
 server diagnostics.
 
+The usual entry point is
+[`SokletSimulator::run(SokletConfig, Simulation)`](<https://javadoc.soklet.com/com/soklet/SokletSimulator.html#run(com.soklet.SokletConfig,com.soklet.SokletSimulator.Simulation)>).
+It derives fresh simulated counterparts for the HTTP, SSE, and MCP transports
+present in the application configuration. The simulator call never starts,
+claims, or changes the source transport objects. Explicitly configured
+application collaborators such as resolvers, interceptors, and metrics
+collectors are reused by identity; configuration-dependent defaults are derived
+again for the simulated graph. Tests remain responsible for isolating any
+mutable state held by those application-owned collaborators.
+
+This is transport isolation, not a deep copy of the application object graph.
+Soklet does not inspect or rebind an
+[`InstanceProvider`](https://javadoc.soklet.com/com/soklet/InstanceProvider.html),
+service, or other collaborator that captured a source transport; that object
+continues to reference the source transport. Supply a test-scoped collaborator
+when necessary. Derivation also preserves every transport type present in the
+source configuration. Use the standalone
+[`SimulatorConfig::builder`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#builder()>)
+form when a test must omit one.
+
+Use
+[`SimulatorConfig::fromSokletConfig`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#fromSokletConfig(com.soklet.SokletConfig)>)
+when a completed single-use simulator configuration is useful, or
+[`SimulatorConfig::withSokletConfig`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#withSokletConfig(com.soklet.SokletConfig)>)
+when a test needs overrides before building. An imported MCP server is rebuilt
+from its construction settings with fresh framework-owned listener and runtime
+state. Application-supplied MCP collaborators, including rate limiters, are
+reused by identity; replace them through
+[`SimulatorConfig.Builder::configureMcpServer`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#configureMcpServer(java.util.function.Consumer)>)
+when a test needs isolated collaborator state. For a standalone test without
+an application configuration, the same `configureMcpServer` method supplies a
+fresh MCP builder. Set its logical port and any test-specific settings in that
+callback. The builder uses the same classpath-discovery and accept-all defaults
+as
+[`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>),
+including its requirement to configure a fallback tool rate limiter when any
+discovered endpoint has a tool. Supply an explicit endpoint registry or
+admission controller through the MCP builder when a test must override either
+default:
+
+```java
+SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+    .configureMcpServer(mcpServerBuilder -> mcpServerBuilder
+        .port(8082)
+        .endpointRegistry(testEndpointRegistry)
+        .admissionController(testAdmissionController)
+        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+    .build();
+```
+
+The application-level integration test remains direct:
+
 ```java
 @Test
 public void basicIntegrationTest() {
   SokletConfig applicationConfig = obtainMySokletConfig();
-  ResourceMethodResolver resourceMethods =
-      applicationConfig.getResourceMethodResolver();
-  InstanceProvider instances = applicationConfig.getInstanceProvider();
 
-  // Configure this scope with its fresh simulated HTTP server instead of
-  // reusing a live configuration or transport.
-  SokletSimulator.run(SimulatorConfig.builder()
-          .httpServer()
-          .resourceMethodResolver(resourceMethods)
-          .instanceProvider(instances)
-          .build(), simulator -> {
+  // Soklet derives a fresh simulated transport graph from the application
+  // configuration; none of its live transport instances are reused.
+  SokletSimulator.run(applicationConfig, simulator -> {
     // Construct a request
     Request request = Request.withPath(HttpMethod.GET, "/hello")
       .queryParameters(Map.of("name", Set.of("Mark")))

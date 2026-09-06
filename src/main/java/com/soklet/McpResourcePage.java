@@ -35,6 +35,8 @@ import static java.util.Objects.requireNonNull;
  * <p>The endpoint's resources-list cache policy owns the fixed cache scope and
  * default time to live. A page may override only the time to live. The page is
  * returned directly and does not require a {@link McpCompleteResult} wrapper.
+ * A localization-enabled server conservatively publishes a private,
+ * zero-time-to-live policy regardless of a page override.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

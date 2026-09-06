@@ -297,6 +297,58 @@ public sealed interface McpServer permits DefaultMcpServer {
 					McpToolOutputSanitizer.passThroughInstance();
 		}
 
+		private Builder(@NonNull Builder source,
+				@NonNull McpEndpointRegistry endpointRegistry) {
+			Builder exactSource = requireNonNull(source);
+			this.port = exactSource.port;
+			this.maximumCursorSizeInBytes = exactSource.maximumCursorSizeInBytes;
+			this.maximumSubscriptionsPerPartition =
+					exactSource.maximumSubscriptionsPerPartition;
+			this.requestHandlerConcurrency =
+					exactSource.requestHandlerConcurrency;
+			this.requestHandlerQueueCapacity =
+					exactSource.requestHandlerQueueCapacity;
+			this.streamQueueCapacity = exactSource.streamQueueCapacity;
+			this.host = exactSource.host;
+			this.keepAliveInterval = exactSource.keepAliveInterval;
+			this.maximumSubscriptionDuration =
+					exactSource.maximumSubscriptionDuration;
+			this.requestTimeout = exactSource.requestTimeout;
+			this.writeTimeout = exactSource.writeTimeout;
+			this.requestHandlerExecutorServiceSupplier =
+					exactSource.requestHandlerExecutorServiceSupplier;
+			this.endpointRegistry = requireNonNull(endpointRegistry);
+			this.admissionController = exactSource.admissionController;
+			this.handlerInterceptor = exactSource.handlerInterceptor;
+			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
+			this.corsAuthorizer = exactSource.corsAuthorizer;
+			this.requestRateLimiter = exactSource.requestRateLimiter;
+			this.toolRateLimiter = exactSource.toolRateLimiter;
+			this.rateLimiterRegistry = exactSource.rateLimiterRegistry;
+			this.absentOriginPolicy = exactSource.absentOriginPolicy;
+			this.unknownMirroredHeaderPolicy =
+					exactSource.unknownMirroredHeaderPolicy;
+			this.logRawValidatedTraceIds = exactSource.logRawValidatedTraceIds;
+			this.unknownMirroredHeaderNameDiagnostics =
+					exactSource.unknownMirroredHeaderNameDiagnostics;
+			this.protectionConfig = exactSource.protectionConfig;
+			this.traceCorrelationKey = exactSource.traceCorrelationKey;
+			this.localizer = exactSource.localizer;
+			this.allowedHosts = exactSource.allowedHosts;
+			this.simulatorBuildRegistrar = null;
+		}
+
+		@NonNull
+		Builder copyForSimulator(
+				@NonNull SimulatorMcpBuildRegistrar simulatorBuildRegistrar) {
+			McpEndpointRegistry exactEndpointRegistry = requireNonNull(
+					this.endpointRegistry,
+					"The MCP server construction template has no endpoint registry");
+			return new Builder(this, exactEndpointRegistry)
+					.simulatorBuildRegistrar(requireNonNull(
+							simulatorBuildRegistrar));
+		}
+
 		@NonNull
 		Builder simulatorBuildRegistrar(
 				@NonNull SimulatorMcpBuildRegistrar simulatorBuildRegistrar) {
@@ -916,6 +968,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 							requireRegisteredLimiter(name,
 									"tool " + tool.getName()));
 			}
+			Builder simulatorTemplate = new Builder(this, endpointRegistry);
 			DefaultMcpServer server = new DefaultMcpServer(this.port, this.host,
 					this.maximumCursorSizeInBytes,
 					this.requestHandlerConcurrency,
@@ -934,7 +987,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry, this.protectionConfig,
-					this.traceCorrelationKey, this.localizer);
+					this.traceCorrelationKey, this.localizer,
+					simulatorTemplate);
 			if (exactSimulatorBuildRegistrar != null)
 				exactSimulatorBuildRegistrar.register(server);
 			return server;

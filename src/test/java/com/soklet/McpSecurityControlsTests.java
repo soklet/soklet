@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class McpSecurityControlsTests {
 	private static final String PROTECTION_GOLDEN_FINGERPRINT =
-			"K9oRkAG6QKeHW5rCTMNcocxoaQVySSJLmnvXbD4AV90";
+			"OWPmy_Ur2pTh8YYC4DR3dErezwsBfW_g7WdC0DbZnm0";
 	private static final String TRACE_GOLDEN_FINGERPRINT =
 			"q6lgRnXgzPRK0yoi_va7Qcax0EjCUuFum3A38-Vp4J4";
 	private static final String TRACE_TOKEN_PRIMARY_FULL_HMAC =

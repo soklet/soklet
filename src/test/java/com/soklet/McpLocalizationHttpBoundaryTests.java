@@ -58,20 +58,20 @@ class McpLocalizationHttpBoundaryTests {
 	@Test
 	@Timeout(120)
 	void cacheableResultsAreClampedToPrivateZeroExactlyWhenLocalized() {
-		// Without a localizer the configured positive public policies publish.
+		// Without a localizer, positive handler TTL overrides publish unchanged.
 		String plainList = capture(null, CorsAuthorizer.rejectAllInstance(),
 				request("resources/list", "plain-list", null, "", Set.of(), null))
 				.body();
-		assertTrue(plainList.contains("\"ttlMs\":60000"), plainList);
+		assertTrue(plainList.contains("\"ttlMs\":75000"), plainList);
 		assertTrue(plainList.contains("\"cacheScope\":\"public\""), plainList);
 
 		String plainRead = capture(null, CorsAuthorizer.rejectAllInstance(),
 				request("resources/read", "plain-read", "http://cache/text",
 						",\"uri\":\"http://cache/text\"", Set.of(), null)).body();
-		assertTrue(plainRead.contains("\"ttlMs\":45000"), plainRead);
+		assertTrue(plainRead.contains("\"ttlMs\":90000"), plainRead);
 		assertTrue(plainRead.contains("\"cacheScope\":\"public\""), plainRead);
 
-		// With one, every cacheable localized-capable result is private/zero.
+		// With one, configured policies and handler overrides are both clamped.
 		for (String[] operation : new String[][]{
 				{"resources/list", "clamped-list", null, ""},
 				{"resources/templates/list", "clamped-templates", null, ""},
@@ -83,8 +83,8 @@ class McpLocalizationHttpBoundaryTests {
 			assertTrue(body.contains("\"ttlMs\":0"), operation[0] + ": " + body);
 			assertTrue(body.contains("\"cacheScope\":\"private\""),
 					operation[0] + ": " + body);
-			assertFalse(body.contains("60000"), operation[0] + ": " + body);
-			assertFalse(body.contains("45000"), operation[0] + ": " + body);
+			assertFalse(body.contains("75000"), operation[0] + ": " + body);
+			assertFalse(body.contains("90000"), operation[0] + ": " + body);
 		}
 	}
 
@@ -239,14 +239,20 @@ class McpLocalizationHttpBoundaryTests {
 						Duration.ofSeconds(60)))
 				.resourceTemplateListCachePolicy(McpCachePolicy
 						.fromPublicTimeToLive(Duration.ofSeconds(60)))
+				.resourceListHandler((listRequest, list, features) ->
+						McpResourcePage.builder()
+								.addResources(list.getRegisteredResourceDescriptors())
+								.cacheTimeToLiveOverride(Duration.ofSeconds(75))
+								.build())
 				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/text"), "text")
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
-														.withUriAndText(resource.getUri(),
-																"cacheable text")
-														.build())
+													.withUriAndText(resource.getUri(),
+															"cacheable text")
+													.build())
+												.cacheTimeToLiveOverride(Duration.ofSeconds(90))
 												.build()))
 						.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 								Duration.ofSeconds(45)))
@@ -289,10 +295,12 @@ class McpLocalizationHttpBoundaryTests {
 				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
-				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-				admissionController, builder -> {
-			builder.host(LOOPBACK)
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.endpointRegistry(
+					McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.port(0)
+					.admissionController(admissionController)
+					.host(LOOPBACK)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(corsAuthorizer)

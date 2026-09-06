@@ -271,8 +271,11 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			@NonNull McpEndpointRegistry registry,
 			@NonNull InstanceProvider instanceProvider) {
 		return SimulatorConfig.builder()
-				.mcpServer(0, registry,
-						McpAdmissionController.acceptAllInstance(), builder -> builder
+				.configureMcpServer(builder -> builder
+								.port(0)
+								.endpointRegistry(registry)
+								.admissionController(
+										McpAdmissionController.acceptAllInstance())
 								.host("127.0.0.1")
 								.corsAuthorizer(
 										CorsAuthorizer.acceptAllInstance())

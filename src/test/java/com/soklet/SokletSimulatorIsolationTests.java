@@ -70,9 +70,11 @@ public class SokletSimulatorIsolationTests {
 			SimulatorConfig simulatorConfig = SimulatorConfig.builder()
 					.httpServer(httpServers::add)
 					.sseServer(sseServers::add)
-					.mcpServer(0, mcpEndpointRegistry(List.of()),
-							McpAdmissionController.acceptAllInstance(),
-							SokletSimulatorIsolationTests::configureMcpBuilder)
+					.configureMcpServer(builder -> configureMcpBuilder(builder
+							.port(0)
+							.endpointRegistry(mcpEndpointRegistry(List.of()))
+							.admissionController(
+									McpAdmissionController.acceptAllInstance())))
 					.resourceMethodResolver(resourceMethods())
 					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
@@ -426,10 +428,13 @@ public class SokletSimulatorIsolationTests {
 	public void rejectsManualMcpBuildInsideConfigurer() {
 		SimulatorConfig.Builder config = SimulatorConfig.builder();
 		IllegalStateException failure = Assertions.assertThrows(
-				IllegalStateException.class, () -> config.mcpServer(0,
-						mcpEndpointRegistry(List.of()),
-						McpAdmissionController.acceptAllInstance(),
-						builder -> configureMcpBuilder(builder).build()));
+				IllegalStateException.class, () -> config.configureMcpServer(
+						builder -> configureMcpBuilder(builder
+								.port(0)
+								.endpointRegistry(mcpEndpointRegistry(List.of()))
+								.admissionController(
+										McpAdmissionController.acceptAllInstance()))
+								.build()));
 
 		Assertions.assertEquals(
 				"Only SimulatorConfig.Builder may build the simulator MCP server",
@@ -437,39 +442,26 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
-	public void mcpRequiredInputsRemainAuthoritativeAfterCustomization()
+	public void mcpConfigurationUsesConfiguredPort()
 			throws Exception {
 		int configuredPort = 43123;
-		AtomicInteger authoritativeAdmissions = new AtomicInteger();
-		AtomicInteger overridingAdmissions = new AtomicInteger();
-		AtomicInteger authoritativeCalls = new AtomicInteger();
-		McpToolRegistration<McpJsonObject> authoritativeTool = McpToolRegistration
-				.withName("authoritative").jsonObjectArguments()
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger calls = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("complete").jsonObjectArguments()
 				.handler((request, arguments, features) -> {
-					authoritativeCalls.incrementAndGet();
-					return McpCompleteResult.fromToolText("authoritative");
+					calls.incrementAndGet();
+					return McpCompleteResult.fromToolText("complete");
 				}).build();
-		McpToolRegistration<McpJsonObject> overridingTool = McpToolRegistration
-				.withName("overriding").jsonObjectArguments()
-				.handler((request, arguments, features) ->
-						McpCompleteResult.fromToolText("overriding"))
-				.build();
-		McpAdmissionController authoritativeAdmission = context -> {
-			authoritativeAdmissions.incrementAndGet();
+		McpAdmissionController admissionController = context -> {
+			admissions.incrementAndGet();
 			return McpAdmissionDecision.accepted();
 		};
 		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-				.mcpServer(configuredPort,
-						mcpEndpointRegistry(List.of(authoritativeTool)),
-						authoritativeAdmission,
-						mcp -> configureMcpBuilder(mcp)
-								.port(configuredPort + 1)
-								.endpointRegistry(mcpEndpointRegistry(
-										List.of(overridingTool)))
-								.admissionController(context -> {
-									overridingAdmissions.incrementAndGet();
-									return McpAdmissionDecision.accepted();
-								}))
+				.configureMcpServer(mcp -> configureMcpBuilder(mcp)
+						.port(configuredPort)
+						.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+						.admissionController(admissionController))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
@@ -477,16 +469,15 @@ public class SokletSimulatorIsolationTests {
 
 		SokletSimulator.run(simulatorConfig, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(mcpRequest(
-					"authoritative-inputs", "authoritative", configuredPort,
+					"authoritative-port", "complete", configuredPort,
 					Optional.empty()));
 			Assertions.assertEquals(200,
 					simulation.awaitResponse(WAIT).orElseThrow().getStatusCode());
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					simulation.awaitCompletion(WAIT).orElseThrow().getReason());
 		});
-		Assertions.assertEquals(1, authoritativeAdmissions.get());
-		Assertions.assertEquals(0, overridingAdmissions.get());
-		Assertions.assertEquals(1, authoritativeCalls.get());
+		Assertions.assertEquals(1, admissions.get());
+		Assertions.assertEquals(1, calls.get());
 	}
 
 	@Test
@@ -920,11 +911,14 @@ public class SokletSimulatorIsolationTests {
 		try {
 			SokletStartupException thrown = Assertions.assertThrows(
 					SokletStartupException.class, () -> SokletSimulator.run(
-							SimulatorConfig.builder().mcpServer(0,
-									McpEndpointRegistry.fromEndpoints(List.of(
-											subscriptionEndpoint("/blocking", publisher))),
-									McpAdmissionController.acceptAllInstance(),
-									SokletSimulatorIsolationTests::configureSubscriptionBuilder)
+							SimulatorConfig.builder().configureMcpServer(builder ->
+									configureSubscriptionBuilder(builder
+											.port(0)
+											.endpointRegistry(McpEndpointRegistry
+													.fromEndpoints(List.of(subscriptionEndpoint(
+															"/blocking", publisher))))
+											.admissionController(McpAdmissionController
+													.acceptAllInstance())))
 										.resourceMethodResolver(ResourceMethodResolver
 												.fromMethods(Set.of()))
 										.internalLifecyclePolicy(policy)
@@ -1206,22 +1200,28 @@ public class SokletSimulatorIsolationTests {
 		SimulatorConfig.Builder multipleBuilder = SimulatorConfig.builder();
 		IllegalStateException manualBuildFailure = Assertions.assertThrows(
 				IllegalStateException.class,
-				() -> multipleBuilder.mcpServer(0,
-						mcpEndpointRegistry(List.of(tool)),
-						McpAdmissionController.acceptAllInstance(),
-						mcp -> configureMcpBuilder(mcp).build()));
+				() -> multipleBuilder.configureMcpServer(
+						mcp -> configureMcpBuilder(mcp
+								.port(0)
+								.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+								.admissionController(
+										McpAdmissionController.acceptAllInstance()))
+								.build()));
 		Assertions.assertEquals(
 				"Only SimulatorConfig.Builder may build the simulator MCP server",
 				manualBuildFailure.getMessage());
 
-		multipleBuilder.mcpServer(0, mcpEndpointRegistry(List.of(tool)),
-				McpAdmissionController.acceptAllInstance(),
-				SokletSimulatorIsolationTests::configureMcpBuilder);
+		multipleBuilder.configureMcpServer(builder -> configureMcpBuilder(builder
+				.port(0)
+				.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+				.admissionController(McpAdmissionController.acceptAllInstance())));
 		IllegalStateException secondServerFailure = Assertions.assertThrows(
 				IllegalStateException.class,
-				() -> multipleBuilder.mcpServer(0,
-						mcpEndpointRegistry(List.of(tool)),
-						McpAdmissionController.acceptAllInstance()));
+				() -> multipleBuilder.configureMcpServer(builder -> builder
+						.port(0)
+						.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+						.admissionController(
+								McpAdmissionController.acceptAllInstance())));
 		Assertions.assertEquals(
 				"A simulator configuration may build at most one MCP server",
 				secondServerFailure.getMessage());
@@ -1237,11 +1237,13 @@ public class SokletSimulatorIsolationTests {
 		LifecycleLaunchCanary configurerFailure = new LifecycleLaunchCanary();
 		SimulatorConfig.Builder failedBuilder = SimulatorConfig.builder();
 		LifecycleLaunchCanary thrown = Assertions.assertThrows(
-				LifecycleLaunchCanary.class, () -> failedBuilder.mcpServer(0,
-						mcpEndpointRegistry(List.of(tool)),
-						McpAdmissionController.acceptAllInstance(), mcp -> {
-						escapedBuilder.set(configureMcpBuilder(mcp));
-						throw configurerFailure;
+				LifecycleLaunchCanary.class, () -> failedBuilder.configureMcpServer(mcp -> {
+					escapedBuilder.set(configureMcpBuilder(mcp
+							.port(0)
+							.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+							.admissionController(
+									McpAdmissionController.acceptAllInstance())));
+					throw configurerFailure;
 					}));
 		Assertions.assertSame(configurerFailure, thrown);
 		IllegalStateException staleBuilderFailure = Assertions.assertThrows(
@@ -1257,18 +1259,22 @@ public class SokletSimulatorIsolationTests {
 		SimulatorConfig.Builder builder = SimulatorConfig.builder();
 
 		LifecycleLaunchCanary thrown = Assertions.assertThrows(
-				LifecycleLaunchCanary.class, () -> builder.mcpServer(0,
-						mcpEndpointRegistry(List.of()),
-						McpAdmissionController.acceptAllInstance(), mcp -> {
-					configureMcpBuilder(mcp);
+				LifecycleLaunchCanary.class, () -> builder.configureMcpServer(mcp -> {
+					configureMcpBuilder(mcp
+							.port(0)
+							.endpointRegistry(mcpEndpointRegistry(List.of()))
+							.admissionController(
+									McpAdmissionController.acceptAllInstance()));
 					throw configurerFailure;
 				}));
 
 		Assertions.assertSame(configurerFailure, thrown);
-		SimulatorConfig simulatorConfig = builder.mcpServer(0,
-				mcpEndpointRegistry(List.of()),
-				McpAdmissionController.acceptAllInstance(),
-				SokletSimulatorIsolationTests::configureMcpBuilder)
+		SimulatorConfig simulatorConfig = builder.configureMcpServer(
+				mcp -> configureMcpBuilder(mcp
+						.port(0)
+						.endpointRegistry(mcpEndpointRegistry(List.of()))
+						.admissionController(
+								McpAdmissionController.acceptAllInstance())))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
@@ -1303,11 +1309,13 @@ public class SokletSimulatorIsolationTests {
 				Duration.ofSeconds(2), Duration.ofSeconds(2));
 
 		ShutdownResult result = ShutdownResult.fromInternal(SokletSimulator.run(
-				SimulatorConfig.builder().mcpServer(0,
-						McpEndpointRegistry.fromEndpoints(List.of(
-								subscriptionEndpoint("/ready", publisher))),
-						McpAdmissionController.acceptAllInstance(),
-						SokletSimulatorIsolationTests::configureSubscriptionBuilder)
+				SimulatorConfig.builder().configureMcpServer(builder ->
+						configureSubscriptionBuilder(builder
+								.port(0)
+								.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+										List.of(subscriptionEndpoint("/ready", publisher))))
+								.admissionController(
+										McpAdmissionController.acceptAllInstance())))
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.internalLifecyclePolicy(policy)
@@ -1353,12 +1361,14 @@ public class SokletSimulatorIsolationTests {
 
 		SokletStartupException thrown = Assertions.assertThrows(
 				SokletStartupException.class, () -> SokletSimulator.run(
-						SimulatorConfig.builder().mcpServer(0,
-								McpEndpointRegistry.fromEndpoints(List.of(
-										subscriptionEndpoint("/first", first),
-										subscriptionEndpoint("/failing", failing))),
-								McpAdmissionController.acceptAllInstance(),
-								SokletSimulatorIsolationTests::configureSubscriptionBuilder)
+						SimulatorConfig.builder().configureMcpServer(builder ->
+								configureSubscriptionBuilder(builder
+										.port(0)
+										.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+												List.of(subscriptionEndpoint("/first", first),
+														subscriptionEndpoint("/failing", failing))))
+										.admissionController(
+												McpAdmissionController.acceptAllInstance())))
 								.resourceMethodResolver(
 										ResourceMethodResolver.fromMethods(Set.of()))
 								.build(),
@@ -1584,9 +1594,10 @@ public class SokletSimulatorIsolationTests {
 	private static SimulatorConfig mcpConfig(
 			SimulatorConfig.@NonNull Builder config, @NonNull Integer port,
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
-		return config.mcpServer(port, mcpEndpointRegistry(tools),
-				McpAdmissionController.acceptAllInstance(),
-				SokletSimulatorIsolationTests::configureMcpBuilder)
+		return config.configureMcpServer(builder -> configureMcpBuilder(builder
+				.port(port)
+				.endpointRegistry(mcpEndpointRegistry(tools))
+				.admissionController(McpAdmissionController.acceptAllInstance())))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 	}

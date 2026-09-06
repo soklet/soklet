@@ -150,6 +150,7 @@ final class DefaultMcpServer implements McpServer {
 	private final McpServerRuntimeBridge runtimeBridge;
 	@NonNull
 	private final McpTransportLifecycleAdapter lifecycleAdapter;
+	private final McpServer.@NonNull Builder simulatorBuilderTemplate;
 	@NonNull
 	private volatile LifecycleObserver lifecycleObserver;
 	@NonNull
@@ -193,7 +194,8 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpRateLimiterRegistry rateLimiterRegistry,
 			@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey,
-			@Nullable McpLocalizer localizer) {
+			@Nullable McpLocalizer localizer,
+			McpServer.@NonNull Builder simulatorBuilderTemplate) {
 		this.lifecycleLock = new Object();
 		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 		this.maximumSubscriptionsPerPartition =
@@ -213,6 +215,8 @@ final class DefaultMcpServer implements McpServer {
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
 		this.protectionConfig = protectionConfig;
 		this.localizer = localizer;
+		this.simulatorBuilderTemplate = requireNonNull(
+				simulatorBuilderTemplate);
 		this.localizationPlan = localizer == null ? null
 				: DefaultMcpLocalizationCatalogExtractor.plan(
 						endpointRegistry,
@@ -267,6 +271,12 @@ final class DefaultMcpServer implements McpServer {
 				this.maximumSubscriptionDuration,
 				applicationExecutionObserver(), this.lifecycleAdapter);
 		this.lifecycleAdapter.bindRuntime(this.runtimeBridge);
+	}
+
+	McpServer.@NonNull Builder copyBuilderForSimulator(
+			@NonNull SimulatorMcpBuildRegistrar simulatorBuildRegistrar) {
+		return this.simulatorBuilderTemplate.copyForSimulator(
+				requireNonNull(simulatorBuildRegistrar));
 	}
 
 	@NonNull
@@ -1068,9 +1078,9 @@ final class DefaultMcpServer implements McpServer {
 	 * <p>
 	 * With a configured localizer there is no in-protocol locale cache
 	 * dimension, so every cacheable localized-capable result is conservatively
-	 * private with a zero TTL. The downgrade is monotonic: an application
-	 * result cannot widen it, because the clamped plan is what every later
-	 * validation compares against.
+	 * private with a zero TTL. The final transport boundary applies the same
+	 * clamp to an application-supplied result TTL override, so an application
+	 * result cannot widen the policy.
 	 */
 	@NonNull
 	private CachePlan effectiveCachePlan(@NonNull McpCachePolicy cachePolicy) {

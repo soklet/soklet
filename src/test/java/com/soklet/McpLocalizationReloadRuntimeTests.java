@@ -795,10 +795,13 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static SimulatorConfig simulatorConfig(List<McpEndpoint> endpoints,
 			McpLocalizer localizer) {
-		return SimulatorConfig.builder().mcpServer(0,
-				McpEndpointRegistry.fromEndpoints(endpoints),
-				McpAdmissionController.acceptAllInstance(), builder ->
-						configureServer(builder, localizer, Optional.empty()))
+		return SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.port(0);
+			builder.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+					.admissionController(
+							McpAdmissionController.acceptAllInstance());
+			configureServer(builder, localizer, Optional.empty());
+		})
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();

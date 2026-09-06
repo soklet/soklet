@@ -34,8 +34,9 @@ import static java.util.Objects.requireNonNull;
  * Opaque, single-use execution configuration consumed by one
  * {@link SokletSimulator} run attempt.
  * <p>
- * Each {@link #builder()} owns a fresh set of off-network transports. A
- * successful {@link Builder#build()} seals that transport graph, and
+ * Each {@link #builder()} and
+ * {@link #withSokletConfig(SokletConfig)} owns a fresh set of off-network
+ * transports. A successful {@link Builder#build()} seals that transport graph, and
  * {@link SokletSimulator#run(SimulatorConfig, SokletSimulator.Simulation)}
  * atomically claims the completed configuration before lifecycle work begins.
  * Sequential or concurrent reuse is rejected. Create a new configuration for
@@ -75,6 +76,62 @@ public final class SimulatorConfig {
 	@NonNull
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * Creates a builder by importing the application settings and transport
+	 * shape of an existing Soklet configuration.
+	 * <p>
+	 * The returned builder owns a fresh off-network counterpart for each HTTP,
+	 * SSE, or MCP transport present in the source; it never reuses or changes the
+	 * source configuration's transport instances.
+	 * Every transport present in the source remains present in the imported
+	 * shape. Use {@link #builder()} instead when a test must omit one.
+	 * Explicitly configured application collaborators are reused by identity,
+	 * while unset defaults that depend on the completed configuration are
+	 * derived again for the simulator configuration. MCP collaborators such as
+	 * admission controllers, interceptors, localizers, and rate limiters are also
+	 * reused by identity; stateful ones can be replaced through
+	 * {@link Builder#configureMcpServer(Consumer)}. Later calls on the returned
+	 * builder override imported settings.
+	 * <p>
+	 * Derivation is transport-isolated, not a deep copy of the application object
+	 * graph. A dependency-injection provider or other collaborator that captured
+	 * a source transport is not inspected or rebound and continues to reference
+	 * that source object. Supply test-scoped collaborators explicitly when that
+	 * distinction matters.
+	 * <p>
+	 * An imported MCP server is reconstructed from its original build settings.
+	 * Runtime control-plane changes made after that server was built, such as key
+	 * rotation or localization invalidation, are deliberately not copied.
+	 *
+	 * @param sokletConfig source application configuration
+	 * @return a fresh, transport-isolated simulator-configuration builder
+	 */
+	@NonNull
+	public static Builder withSokletConfig(
+			@NonNull SokletConfig sokletConfig) {
+		return new Builder(requireNonNull(sokletConfig));
+	}
+
+	/**
+	 * Creates a completed, single-use simulator configuration from an existing
+	 * Soklet configuration.
+	 * <p>
+	 * This is equivalent to {@code withSokletConfig(sokletConfig).build()}.
+	 * Each invocation creates a fresh off-network transport graph, so the source
+	 * configuration may be used to derive any number of transport-isolated
+	 * simulator configurations. Application and MCP collaborators are still
+	 * shared by identity as described by
+	 * {@link #withSokletConfig(SokletConfig)}.
+	 *
+	 * @param sokletConfig source application configuration
+	 * @return a fresh, completed, transport-isolated simulator configuration
+	 */
+	@NonNull
+	public static SimulatorConfig fromSokletConfig(
+			@NonNull SokletConfig sokletConfig) {
+		return withSokletConfig(sokletConfig).build();
 	}
 
 	@NonNull
@@ -131,12 +188,27 @@ public final class SimulatorConfig {
 		private final SokletConfig.@NonNull Builder sokletConfigBuilder;
 		@Nullable
 		private SimulatorOptions simulatorOptions;
+		@Nullable
+		private DefaultMcpServer importedMcpServer;
 		private boolean built;
 		private int activeTransportConfigurers;
 
 		private Builder() {
 			this.configurationGraph = new ConfigurationGraph();
 			this.sokletConfigBuilder = new SokletConfig.Builder();
+		}
+
+		private Builder(@NonNull SokletConfig sokletConfig) {
+			this();
+			SokletConfig exactConfig = requireNonNull(sokletConfig);
+			exactConfig.applyApplicationSettingsTo(this.sokletConfigBuilder);
+			if (exactConfig.getHttpServer().isPresent())
+				httpServer();
+			if (exactConfig.getSseServer().isPresent())
+				sseServer();
+			this.importedMcpServer = exactConfig.getMcpServer()
+					.map(server -> (DefaultMcpServer) server)
+					.orElse(null);
 		}
 
 		/**
@@ -222,75 +294,61 @@ public final class SimulatorConfig {
 		}
 
 		/**
-		 * Builds and adds one fresh simulated MCP server owned by this
-		 * configuration.
-		 *
-		 * @param port logical port in the range 0 through 65535
-		 * @param endpointRegistry endpoint registry
-		 * @param admissionController admission controller
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder mcpServer(@NonNull Integer port,
-				@NonNull McpEndpointRegistry endpointRegistry,
-				@NonNull McpAdmissionController admissionController) {
-			return mcpServer(port, endpointRegistry, admissionController,
-					ignored -> {
-					});
-		}
-
-		/**
-		 * Builds and adds one fresh simulated MCP server owned by this
-		 * configuration after applying optional server customizations.
+		 * Configures, builds, and adds one fresh simulated MCP server.
+		 * If this builder was created by
+		 * {@link SimulatorConfig#withSokletConfig(SokletConfig)} and the source
+		 * configuration contains an MCP server, configuration begins with that
+		 * server's construction settings. Otherwise, configuration begins with
+		 * {@link McpServer#withPort(Integer)} defaults and logical port {@code 0}.
+		 * The logical port may be changed with
+		 * {@link McpServer.Builder#port(Integer)}.
 		 * <p>
 		 * The consumer runs synchronously and must only customize the supplied
 		 * builder. This outer builder owns the call to
 		 * {@link McpServer.Builder#build()}; calling it from the consumer or
 		 * retaining the builder for later use is rejected.
 		 *
-		 * @param port logical port in the range 0 through 65535
-		 * @param endpointRegistry endpoint registry
-		 * @param admissionController admission controller
 		 * @param mcpServerConfigurer customizes this configuration's MCP builder
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder mcpServer(@NonNull Integer port,
-				@NonNull McpEndpointRegistry endpointRegistry,
-				@NonNull McpAdmissionController admissionController,
+		public Builder configureMcpServer(
 				@NonNull Consumer<McpServer.@NonNull Builder>
 						mcpServerConfigurer) {
-			Integer exactPort = requireNonNull(port);
-			McpEndpointRegistry exactEndpointRegistry =
-					requireNonNull(endpointRegistry);
-			McpAdmissionController exactAdmissionController =
-					requireNonNull(admissionController);
 			Consumer<McpServer.@NonNull Builder> exactConfigurer =
 					requireNonNull(mcpServerConfigurer);
 			requireMutable();
-			McpBuilderLease lease = this.configurationGraph
-					.openMcpBuilder(exactPort, exactEndpointRegistry,
-							exactAdmissionController);
+			DefaultMcpServer exactImportedMcpServer = this.importedMcpServer;
+			McpBuilderLease lease = exactImportedMcpServer == null
+					? this.configurationGraph.openMcpBuilder(0)
+					: this.configurationGraph.openMcpBuilder(
+							exactImportedMcpServer);
+			return configureAndBuildMcpServer(lease, exactConfigurer);
+		}
+
+		@NonNull
+		private Builder configureAndBuildMcpServer(
+				@NonNull McpBuilderLease lease,
+				@NonNull Consumer<McpServer.@NonNull Builder> configurer) {
+			requireMutable();
 			try {
 				McpServer.Builder mcpServerBuilder = lease.builder();
 				beginTransportConfigurer();
 				try {
-					exactConfigurer.accept(mcpServerBuilder);
+					requireNonNull(configurer).accept(mcpServerBuilder);
 				} finally {
 					endTransportConfigurer();
 				}
 				requireMutable();
-				mcpServerBuilder.port(exactPort)
-						.endpointRegistry(exactEndpointRegistry)
-						.admissionController(exactAdmissionController);
 				lease.finishConfiguration();
 				McpServer mcpServer = mcpServerBuilder.build();
 				requireMutable();
 				this.sokletConfigBuilder.mcpServer(mcpServer);
+				this.importedMcpServer = null;
+				return this;
 			} finally {
 				lease.close();
 			}
-			return this;
 		}
 
 		/**
@@ -506,6 +564,9 @@ public final class SimulatorConfig {
 			if (this.activeTransportConfigurers != 0)
 				throw new IllegalStateException(
 						"A simulator configuration cannot be built from a transport configurer");
+			if (this.importedMcpServer != null)
+				configureMcpServer(ignored -> {
+				});
 			SimulatorConfig config = new SimulatorConfig(this);
 			this.built = true;
 			this.configurationGraph.seal();
@@ -569,9 +630,21 @@ public final class SimulatorConfig {
 
 		@NonNull
 		private synchronized McpBuilderLease openMcpBuilder(
-				@NonNull Integer port,
-				@NonNull McpEndpointRegistry endpointRegistry,
-				@NonNull McpAdmissionController admissionController) {
+				@NonNull Integer port) {
+			return openMcpBuilder(new McpBuilderLease(this,
+					requireNonNull(port)));
+		}
+
+		@NonNull
+		private synchronized McpBuilderLease openMcpBuilder(
+				@NonNull DefaultMcpServer sourceMcpServer) {
+			return openMcpBuilder(new McpBuilderLease(this,
+					requireNonNull(sourceMcpServer)));
+		}
+
+		@NonNull
+		private McpBuilderLease openMcpBuilder(
+				@NonNull McpBuilderLease lease) {
 			requireOpen();
 			if (this.mcpServer != null)
 				throw new IllegalStateException(
@@ -579,11 +652,8 @@ public final class SimulatorConfig {
 			if (this.activeMcpBuilderLease != null)
 				throw new IllegalStateException(
 						"A simulator MCP builder is already active");
-			McpBuilderLease lease = new McpBuilderLease(this,
-					requireNonNull(port), requireNonNull(endpointRegistry),
-					requireNonNull(admissionController));
-			this.activeMcpBuilderLease = lease;
-			return lease;
+			this.activeMcpBuilderLease = requireNonNull(lease);
+			return this.activeMcpBuilderLease;
 		}
 
 		private synchronized void verifyBuildAllowed(
@@ -633,14 +703,17 @@ public final class SimulatorConfig {
 		private volatile @Nullable Thread buildThread;
 
 		private McpBuilderLease(@NonNull ConfigurationGraph configurationGraph,
-				@NonNull Integer port,
-				@NonNull McpEndpointRegistry endpointRegistry,
-				@NonNull McpAdmissionController admissionController) {
+				@NonNull Integer port) {
 			this.configurationGraph = requireNonNull(configurationGraph);
 			this.builder = McpServer.withPort(requireNonNull(port))
-					.endpointRegistry(requireNonNull(endpointRegistry))
-					.admissionController(requireNonNull(admissionController))
 					.simulatorBuildRegistrar(this);
+		}
+
+		private McpBuilderLease(@NonNull ConfigurationGraph configurationGraph,
+				@NonNull DefaultMcpServer sourceMcpServer) {
+			this.configurationGraph = requireNonNull(configurationGraph);
+			this.builder = requireNonNull(sourceMcpServer)
+					.copyBuilderForSimulator(this);
 		}
 
 		private McpServer.@NonNull Builder builder() {

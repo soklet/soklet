@@ -140,7 +140,7 @@ final class DefaultMcpSecurityControls
 			"soklet-mcp-key-fingerprint-v1\0");
 	@NonNull
 	private static final byte[] PROTECTION_RING_DOMAIN = bytes(
-			"soklet-mcp-key-ring-fingerprint-v1\0");
+			"soklet-mcp-keyring-fingerprint-v1\0");
 	@NonNull
 	private static final byte[] TRACE_ENTRY_DOMAIN = bytes(
 			"soklet-mcp-trace-key-fingerprint-v1\0");

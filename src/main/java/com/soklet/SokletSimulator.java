@@ -53,15 +53,49 @@ public final class SokletSimulator {
 	@FunctionalInterface
 	public interface Simulation<E extends Throwable> {
 		/**
-		 * Executes against the isolated simulator.
+		 * Executes against the transport-isolated simulator.
 		 *
-		 * @param simulator isolated simulator
+		 * @param simulator transport-isolated simulator
 		 * @throws E application-selected failure type
 		 */
 		void run(@NonNull Simulator simulator) throws E;
 	}
 
 	private SokletSimulator() {
+	}
+
+	/**
+	 * Runs an existing Soklet application configuration against a fresh,
+	 * off-network simulator transport graph.
+	 * <p>
+	 * The source configuration supplies the application's settings and transport
+	 * shape. Every source transport type remains present in the derived graph;
+	 * use {@link SimulatorConfig#builder()} when a test must omit one. The
+	 * simulator call never starts, claims, reuses, or changes the source HTTP,
+	 * SSE, or MCP instances, so each invocation is transport-isolated.
+	 * <p>
+	 * Explicitly configured application and MCP collaborators are reused by
+	 * identity. Derivation does not inspect or rebind dependency-injection
+	 * providers or other objects that captured a source transport. Supply
+	 * test-scoped collaborators through
+	 * {@link SimulatorConfig#withSokletConfig(SokletConfig)} when needed.
+	 *
+	 * @param sokletConfig source application configuration
+	 * @param simulation simulation work
+	 * @param <E> checked throwable type selected by the simulation
+	 * @return the exact immutable scope-shutdown result
+	 * @throws E if the simulation fails; a teardown failure is then suppressed on it
+	 * @throws SokletShutdownIncompleteException if successful simulation execution is followed
+	 * by shutdown that cannot be proven complete
+	 */
+	@NonNull
+	public static <E extends Throwable> ShutdownResult run(
+			@NonNull SokletConfig sokletConfig,
+			@NonNull Simulation<E> simulation) throws E {
+		SokletConfig exactConfig = requireNonNull(sokletConfig);
+		Simulation<E> exactSimulation = requireNonNull(simulation);
+		return run(SimulatorConfig.fromSokletConfig(exactConfig),
+				exactSimulation);
 	}
 
 	/**

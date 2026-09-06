@@ -34,7 +34,8 @@ import static java.util.Objects.requireNonNull;
  *
  * <p>The matching resource registration owns the fixed cache scope and
  * default time to live. An output may override only the time to live for this
- * response.
+ * response. A localization-enabled server conservatively publishes a private,
+ * zero-time-to-live policy regardless of an output override.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

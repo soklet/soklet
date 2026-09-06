@@ -7467,6 +7467,15 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SokletConfig,Simulation<E>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "run(SokletConfig,Simulation<E>)",
+          "occurrence": 1,
+          "owner": "com.soklet.SokletSimulator",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletSimulator.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.TeardownOutcome#TeardownOutcome(InternalShutdownResult,SokletShutdownIncompleteException)->RequestOrThrowable.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "TeardownOutcome(InternalShutdownResult,SokletShutdownIncompleteException)",
@@ -34855,18 +34864,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SimulatorConfig.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig.ConfigurationGraph#openMcpBuilder(Integer,McpEndpointRegistry,McpAdmissionController)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig.ConfigurationGraph#openMcpBuilder(McpBuilderLease)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "openMcpBuilder(Integer,McpEndpointRegistry,McpAdmissionController)",
+          "member": "openMcpBuilder(McpBuilderLease)",
           "occurrence": 1,
           "owner": "com.soklet.SimulatorConfig.ConfigurationGraph",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/SimulatorConfig.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig.ConfigurationGraph#openMcpBuilder(Integer,McpEndpointRegistry,McpAdmissionController)->Throwable.IllegalStateException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig.ConfigurationGraph#openMcpBuilder(McpBuilderLease)->Throwable.IllegalStateException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "openMcpBuilder(Integer,McpEndpointRegistry,McpAdmissionController)",
+          "member": "openMcpBuilder(McpBuilderLease)",
           "occurrence": 2,
           "owner": "com.soklet.SimulatorConfig.ConfigurationGraph",
           "sink": "Throwable.IllegalStateException"
@@ -37735,36 +37744,36 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)",
+          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)",
+          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)",
           "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@3",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@3",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)",
+          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)",
           "occurrence": 3,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@4",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@4",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,int,McpApplicationRequestRouter)",
+          "member": "resourceResultWithCachePolicy(McpWireResult,McpResourceCachePolicy,boolean,boolean,boolean,int,McpApplicationRequestRouter)",
           "occurrence": 4,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "Throwable.IllegalArgumentException"
@@ -45995,6 +46004,15 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SokletConfig,Simulation<E>)->SimulationCapture.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "run(SokletConfig,Simulation<E>)",
+          "occurrence": 1,
+          "owner": "com.soklet.SokletSimulator",
+          "sink": "SimulationCapture.publicOrProtectedSurface"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletSimulator.java",
           "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#simulatorConfigurationIdentity()->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
           "member": "simulatorConfigurationIdentity()",
@@ -47572,27 +47590,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)->MetricsCollector.invocation.defaultInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)->MetricsCollector.invocation.defaultInstance@2",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)->MetricsCollector.invocation.disabledInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.disabledInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,McpHandlerInterceptor,McpToolOutputSanitizer,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.disabledInstance"

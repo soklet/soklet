@@ -27,7 +27,9 @@ legacy MCP protocol or Java API.
    with the Soklet-wide lifecycle.
 3. Choose either `SokletApplication` for a standalone process or direct
    `Soklet` ownership for an embedder.
-4. Rebuild simulation configuration from the scope-owned transports.
+4. Pass the completed application configuration to
+   [`SokletSimulator`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html);
+   add a simulator-specific builder only where a test needs an override.
 5. Recompile all annotation-driven code with `-parameters` and
    `SokletProcessor` enabled.
 6. Rebuild MCP registrations and handlers for the exact `2026-07-28` profile.
@@ -236,42 +238,107 @@ fresh one-shot transports.
 
 ## Simulator migration
 
-`Soklet.runSimulator(...)` is removed. Build a fresh, single-use
-`SimulatorConfig` for each run, then pass it to `SokletSimulator.run(...)`:
+[`Soklet::runSimulator`](<https://javadoc.soklet.com/com/soklet/Soklet.html>)
+is removed. In the common case, pass the application's completed
+[`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html)
+directly to
+[`SokletSimulator::run`](<https://javadoc.soklet.com/com/soklet/SokletSimulator.html#run(com.soklet.SokletConfig,com.soklet.SokletSimulator.Simulation)>):
 
 ```java
-SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-        .httpServer()
-        .sseServer()
-        .resourceMethodResolver(resourceMethods)
-        .build();
-
-ShutdownResult result = SokletSimulator.run(simulatorConfig, simulator -> {
+ShutdownResult result = SokletSimulator.run(sokletConfig, simulator -> {
   HttpRequestResult response = simulator.performHttpRequest(request);
   // assertions
 });
 ```
 
-For simulated MCP, supply its required registry and admission controller to
-the outer builder. The optional consumer customizes the MCP builder; the outer
-builder owns the call to `build()`:
+Each call derives a fresh off-network HTTP, SSE, and MCP transport for every
+corresponding transport present in the source configuration. The simulator
+call never starts, claims, or changes the source transport instances.
+Explicitly configured application collaborators are reused by identity,
+while unset defaults that depend on the completed configuration are derived
+again. An imported MCP server's build settings produce fresh framework-owned
+listener and runtime state, but application-supplied MCP collaborators,
+including rate limiters, are reused by identity. Tests remain responsible for
+isolating their mutable state. This is transport isolation, not a deep copy:
+Soklet does not inspect or rebind a dependency-injection provider or other
+collaborator that captured a source transport.
+
+Every transport present in the source remains present in the imported shape.
+If a test must omit one, use the standalone
+[`SimulatorConfig::builder`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#builder()>)
+form and configure only the intended transports and application settings.
+
+Use
+[`SimulatorConfig::fromSokletConfig`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#fromSokletConfig(com.soklet.SokletConfig)>)
+when an API expects a completed simulator configuration:
 
 ```java
-SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-    .mcpServer(port, endpointRegistry, admissionController,
-        mcpServerBuilder -> mcpServerBuilder
-            .requestTimeout(requestTimeout))
+SimulatorConfig simulatorConfig =
+    SimulatorConfig.fromSokletConfig(sokletConfig);
+```
+
+Use
+[`SimulatorConfig::withSokletConfig`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#withSokletConfig(com.soklet.SokletConfig)>)
+when one test needs an override. Later builder calls take precedence over the
+imported settings:
+
+```java
+SimulatorConfig simulatorConfig = SimulatorConfig
+    .withSokletConfig(sokletConfig)
+    .simulatorOptions(simulatorOptions)
+    .configureMcpServer(mcpServerBuilder -> mcpServerBuilder
+        .requestTimeout(shortTestTimeout)
+        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
     .build();
 ```
 
-Within the body, `Simulator.getHttpServer()`, `getSseServer()`, and
-`getMcpServer()` expose the exact transports selected for that run. The supplied
-MCP builder belongs to its configuration and cannot be built manually. A
-completed `SimulatorConfig` can be claimed by exactly one run; build a new one
-instead of reusing a configuration, builder, or simulated transport.
-`SimulatorOptions` controls materialization and capture behavior and is supplied
-with `SimulatorConfig.Builder#simulatorOptions`. Set lifecycle deadlines with
-`SimulatorConfig.Builder#lifecyclePolicy`.
+[`configureMcpServer(Consumer)`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#configureMcpServer(java.util.function.Consumer)>)
+customizes the MCP server imported from the application configuration. It can
+also replace an imported collaborator, such as a stateful rate limiter, with a
+test-scoped implementation. When the builder did not import an MCP server, the
+same method creates a fresh one from the standard MCP builder defaults.
+
+For a standalone, transport-isolated simulation that does not start from an
+application configuration, build the graph explicitly. The fresh MCP builder
+uses the same classpath-discovery and accept-all admission defaults as
+[`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>):
+
+```java
+SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+    .httpServer()
+    .sseServer()
+    .configureMcpServer(mcpServerBuilder -> mcpServerBuilder
+        .port(port)
+        .endpointRegistry(endpointRegistry)
+        .admissionController(admissionController)
+        .requestTimeout(requestTimeout)
+        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+    .resourceMethodResolver(resourceMethods)
+    .build();
+```
+
+Set an explicit endpoint registry or admission controller on the MCP builder
+supplied to `configureMcpServer`, as shown above. Like
+`McpServer.withPort(port)`, the standalone form still requires a fallback tool
+rate limiter when a discovered endpoint has a tool. The outer
+[`SimulatorConfig.Builder`](https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html)
+owns the call to [`McpServer.Builder::build`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#build()>);
+the configurer must not build or retain the supplied MCP builder.
+
+Within the body,
+[`Simulator::getHttpServer`](<https://javadoc.soklet.com/com/soklet/Simulator.html#getHttpServer()>),
+[`Simulator::getSseServer`](<https://javadoc.soklet.com/com/soklet/Simulator.html#getSseServer()>),
+and
+[`Simulator::getMcpServer`](<https://javadoc.soklet.com/com/soklet/Simulator.html#getMcpServer()>)
+expose the exact transports selected for that run. A completed
+[`SimulatorConfig`](https://javadoc.soklet.com/com/soklet/SimulatorConfig.html)
+can be claimed by exactly one run; derive or build a new one instead of reusing
+a configuration, builder, or simulated transport.
+[`SimulatorOptions`](https://javadoc.soklet.com/com/soklet/SimulatorOptions.html)
+controls materialization and capture behavior and is supplied with
+[`SimulatorConfig.Builder::simulatorOptions`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#simulatorOptions(com.soklet.SimulatorOptions)>).
+Set lifecycle deadlines with
+[`SimulatorConfig.Builder::lifecyclePolicy`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#lifecyclePolicy(com.soklet.LifecyclePolicy)>).
 Simulation is deterministic and off-network, so it does not prove kernel TCP,
 proxy, TLS, or live write-idle behavior.
 

@@ -126,13 +126,16 @@ class McpLocalizationAdversarialTests {
 		List<String> observedTags = new CopyOnWriteArrayList<>();
 		RecordingMetrics metrics = new RecordingMetrics();
 		int floodSize = 250;
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
-				endpointRegistry(), McpAdmissionController.acceptAllInstance(),
-				builder -> configureServer(builder, contexts, request -> {
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.port(0);
+			builder.endpointRegistry(endpointRegistry()).admissionController(
+					McpAdmissionController.acceptAllInstance());
+			configureServer(builder, contexts, request -> {
 					request.getLanguageRanges().stream().findFirst()
 							.ifPresent(range -> observedTags.add(range.getRange()));
 					return Locale.CANADA_FRENCH;
-				}))
+				});
+		})
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.build(), simulator -> {
@@ -168,10 +171,12 @@ class McpLocalizationAdversarialTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		List<String> bodies = new CopyOnWriteArrayList<>();
 
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
-				endpointRegistry(), McpAdmissionController.acceptAllInstance(),
-				builder -> configureServer(builder, contexts, request -> {
-				// Every request parks inside the provider so its locale selection
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.port(0);
+			builder.endpointRegistry(endpointRegistry()).admissionController(
+					McpAdmissionController.acceptAllInstance());
+			configureServer(builder, contexts, request -> {
+					// Every request parks inside the provider so its locale selection
 				// overlaps every peer's, and overlaps the invalidation below.
 				allInside.countDown();
 				try {
@@ -181,8 +186,9 @@ class McpLocalizationAdversarialTests {
 				}
 				String tag = request.getLanguageRanges().stream().findFirst()
 						.map(Locale.LanguageRange::getRange).orElse("und");
-				return Locale.forLanguageTag(tag);
-			})).resourceMethodResolver(
+					return Locale.forLanguageTag(tag);
+				});
+		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.build(), simulator -> {
 			serverReference.set(simulator.getMcpServer().orElseThrow());
@@ -289,8 +295,10 @@ class McpLocalizationAdversarialTests {
 			BuilderCustomizer customizer, Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
-				endpointRegistry(), admissionController, builder -> {
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.port(0);
+			builder.endpointRegistry(endpointRegistry())
+					.admissionController(admissionController);
 			configureServer(builder, contexts, selector);
 			customizer.customize(builder);
 		}).resourceMethodResolver(

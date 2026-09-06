@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +24,9 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /** Reflection contracts for the reviewed core lifecycle API. */
@@ -99,6 +102,58 @@ class CoreLifecyclePublicApiTests {
 		Assertions.assertEquals("sokletConfig", SokletApplication.class
 				.getDeclaredMethod("run", SokletConfig.class,
 						ShutdownTrigger[].class).getParameters()[0].getName());
+	}
+
+	@Test
+	void simulatorDerivationEntrypointsUseReviewedVocabularyAndNullness()
+			throws Exception {
+		Method withConfig = SimulatorConfig.class.getDeclaredMethod(
+				"withSokletConfig", SokletConfig.class);
+		Method fromConfig = SimulatorConfig.class.getDeclaredMethod(
+				"fromSokletConfig", SokletConfig.class);
+		Method directRun = SokletSimulator.class.getDeclaredMethod("run",
+				SokletConfig.class, SokletSimulator.Simulation.class);
+		Method configureMcp = SimulatorConfig.Builder.class.getDeclaredMethod(
+				"configureMcpServer", Consumer.class);
+
+		for (Method method : List.of(withConfig, fromConfig, directRun,
+				configureMcp)) {
+			Assertions.assertTrue(method.getAnnotatedReturnType()
+					.isAnnotationPresent(NonNull.class), method::toString);
+			Arrays.stream(method.getAnnotatedParameterTypes()).forEach(type ->
+					Assertions.assertTrue(type.isAnnotationPresent(NonNull.class),
+							method::toString));
+		}
+		Assertions.assertEquals("sokletConfig",
+				withConfig.getParameters()[0].getName());
+		Assertions.assertEquals("sokletConfig",
+				fromConfig.getParameters()[0].getName());
+		Assertions.assertEquals(List.of("sokletConfig", "simulation"),
+				Arrays.stream(directRun.getParameters()).map(
+						java.lang.reflect.Parameter::getName).toList());
+		Assertions.assertEquals("mcpServerConfigurer",
+				configureMcp.getParameters()[0].getName());
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SokletSimulator.class.getDeclaredMethod("run",
+						SokletConfig.class, SimulatorOptions.class,
+						SokletSimulator.Simulation.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SimulatorConfig.Builder.class.getDeclaredMethod("mcpServer",
+						Consumer.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SimulatorConfig.Builder.class.getDeclaredMethod("mcpServer",
+						Integer.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SimulatorConfig.Builder.class.getDeclaredMethod("mcpServer",
+						Integer.class, Consumer.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SimulatorConfig.Builder.class.getDeclaredMethod("mcpServer",
+						Integer.class, McpEndpointRegistry.class,
+						McpAdmissionController.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> SimulatorConfig.Builder.class.getDeclaredMethod("mcpServer",
+						Integer.class, McpEndpointRegistry.class,
+						McpAdmissionController.class, Consumer.class));
 	}
 
 	private static void assertAttachmentMethod(Class<?> contextType,

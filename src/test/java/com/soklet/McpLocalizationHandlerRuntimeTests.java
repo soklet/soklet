@@ -267,10 +267,13 @@ class McpLocalizationHandlerRuntimeTests {
 			List<Throwable> observedThrowables) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
-				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-				McpAdmissionController.acceptAllInstance(), builder -> {
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
 			builder
+					.port(0)
+					.endpointRegistry(
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.admissionController(
+							McpAdmissionController.acceptAllInstance())
 					.host(LOOPBACK)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())

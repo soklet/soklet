@@ -413,8 +413,10 @@ class McpLocalizationCatalogExtractionTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		AtomicReference<WireResponse> captured = new AtomicReference<>();
 
-		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0, registry,
-				McpAdmissionController.acceptAllInstance(), builder -> {
+		SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> {
+			builder.port(0);
+			builder.endpointRegistry(registry).admissionController(
+					McpAdmissionController.acceptAllInstance());
 			McpServer.Builder configuredBuilder = wireServerBuilder(builder);
 			if (localizer != null)
 				configuredBuilder.localizer(localizer);

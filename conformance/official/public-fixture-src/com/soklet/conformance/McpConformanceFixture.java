@@ -233,11 +233,13 @@ public final class McpConformanceFixture {
 				CorsAuthorizer.fromWhitelistAuthorizer(origin ->
 						origin.equals("http://" + LOOPBACK + ":0"));
 		SimulatorConfig.Builder configured = SimulatorConfig.builder()
-				.mcpServer(0,
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-						McpAdmissionController.acceptAllInstance(),
-						builder -> configureMcpServerForScenario(
-								scenario, corsAuthorizer, builder))
+				.configureMcpServer(builder -> configureMcpServerForScenario(
+						scenario, corsAuthorizer, builder
+								.port(0)
+								.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+										List.of(endpoint)))
+								.admissionController(
+										McpAdmissionController.acceptAllInstance())))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)

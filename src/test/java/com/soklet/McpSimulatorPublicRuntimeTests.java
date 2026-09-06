@@ -1285,8 +1285,12 @@ public class McpSimulatorPublicRuntimeTests {
 					this.endpointsFactory.get());
 			return SimulatorConfig.builder()
 					.simulatorOptions(simulatorOptions)
-					.mcpServer(0, endpointRegistry, this.admissionController,
-							this.mcpServerConfigurer)
+					.configureMcpServer(builder -> {
+						builder.port(0);
+						builder.endpointRegistry(endpointRegistry)
+								.admissionController(this.admissionController);
+						this.mcpServerConfigurer.accept(builder);
+					})
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metrics)

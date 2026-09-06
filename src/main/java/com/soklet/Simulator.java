@@ -29,7 +29,10 @@ import java.util.function.Consumer;
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
  * Instances of {@link Simulator} are made available through
- * {@link SokletSimulator#run(SimulatorConfig, SokletSimulator.Simulation)}.
+ * {@link SokletSimulator#run(SokletConfig, SokletSimulator.Simulation)} when
+ * testing an existing application configuration, or through
+ * {@link SokletSimulator#run(SimulatorConfig, SokletSimulator.Simulation)} for
+ * a standalone simulator configuration.
  * <p>
  * Usage example:
  * <pre>{@code @Test

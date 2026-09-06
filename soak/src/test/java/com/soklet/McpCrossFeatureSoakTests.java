@@ -662,11 +662,13 @@ public class McpCrossFeatureSoakTests {
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
 			@NonNull CountingLifecycle lifecycle) {
-		return () -> SimulatorConfig.builder().mcpServer(0,
-				McpEndpointRegistry.fromEndpoints(List.of(
-						mcpEndpoint(state, publisher))),
-				McpAdmissionController.acceptAllInstance(),
-				McpCrossFeatureSoakTests::configureMcpServer)
+		return () -> SimulatorConfig.builder().configureMcpServer(builder ->
+				McpCrossFeatureSoakTests.configureMcpServer(builder
+						.port(0)
+						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+								List.of(mcpEndpoint(state, publisher))))
+						.admissionController(
+								McpAdmissionController.acceptAllInstance())))
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metricsCollector)

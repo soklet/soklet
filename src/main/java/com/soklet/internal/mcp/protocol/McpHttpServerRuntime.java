@@ -4034,6 +4034,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 											capabilityRegistry.exactResourceDescriptors(),
 											endpoint.resourceListCachePolicy())),
 							endpoint.resourceListCachePolicy(), true, false,
+							endpointPolicy.localizationEnabled(),
 							endpoint.maximumCursorSizeInBytes(), applicationRouter));
 			} else {
 				// The framework-owned fallback is exactly one static page. Every
@@ -4212,6 +4213,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								invocation, uri, variables, route.cachePolicy())),
 						route.cachePolicy(), false,
 						resourceRetry,
+						endpointPolicy.localizationEnabled(),
 						endpoint.maximumCursorSizeInBytes(), applicationRouter));
 			} else {
 				// Preserve the generic package-private seam used by transport tests.
@@ -4727,6 +4729,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpWireResult result,
 			@NonNull McpResourceCachePolicy cachePolicy,
 			boolean resourceListResult, boolean resourceRetry,
+			boolean localizationEnabled,
 			int maximumCursorSizeInBytes,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
 		requireNonNull(result);
@@ -4745,29 +4748,33 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			validateResourceListResult(fields, applicationRouter);
 		else
 			validateResourceReadResult(fields);
-		if (resourceRetry) {
-			fields.put("cacheScope", new McpJsonString(
-					McpCacheScope.PRIVATE.wireValue()));
-			fields.put("ttlMs", new McpJsonNumber(BigDecimal.ZERO));
-			return McpWireResult.complete(new McpJsonObject(fields), result.metadata());
-		}
+
 		McpJsonValue configuredScope = fields.get("cacheScope");
 		if (configuredScope != null
 				&& (!(configuredScope instanceof McpJsonString string)
 				|| !cachePolicy.scope().wireValue().equals(string.value())))
 			throw new IllegalArgumentException(
 					"A resource result cannot override its cache scope.");
-		fields.put("cacheScope", new McpJsonString(cachePolicy.scope().wireValue()));
 
 		McpJsonValue configuredTtl = fields.get("ttlMs");
-		if (configuredTtl == null) {
-			fields.put("ttlMs", new McpJsonNumber(
-					cachePolicy.timeToLiveMilliseconds()));
-		} else if (!(configuredTtl instanceof McpJsonNumber number)
+		if (configuredTtl != null
+				&& (!(configuredTtl instanceof McpJsonNumber number)
 				|| number.value().stripTrailingZeros().scale() > 0
-				|| number.value().signum() < 0) {
+				|| number.value().signum() < 0))
 			throw new IllegalArgumentException(
 					"A resource result cache TTL must be a nonnegative integer.");
+
+		if (resourceRetry || localizationEnabled) {
+			fields.put("cacheScope", new McpJsonString(
+					McpCacheScope.PRIVATE.wireValue()));
+			fields.put("ttlMs", new McpJsonNumber(BigDecimal.ZERO));
+		} else {
+			fields.put("cacheScope", new McpJsonString(
+					cachePolicy.scope().wireValue()));
+
+			if (configuredTtl == null)
+				fields.put("ttlMs", new McpJsonNumber(
+						cachePolicy.timeToLiveMilliseconds()));
 		}
 
 		if (resourceListResult && fields.containsKey("nextCursor")) {

@@ -69,6 +69,8 @@ public final class SokletConfig {
 	private final McpServer mcpServer;
 	@NonNull
 	private final LifecyclePolicy lifecyclePolicy;
+	@NonNull
+	private final ApplicationSettings applicationSettings;
 
 	/**
 	 * Vends a configuration builder, primed with the given HTTP {@link HttpServer}.
@@ -117,6 +119,7 @@ public final class SokletConfig {
 	SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
+		this.applicationSettings = new ApplicationSettings(builder);
 		this.httpServer = builder.httpServer;
 		this.sseServer = builder.sseServer;
 		this.mcpServer = builder.mcpServer;
@@ -284,6 +287,77 @@ public final class SokletConfig {
 	@NonNull
 	InternalLifecyclePolicy getInternalLifecyclePolicy() {
 		return this.lifecyclePolicy.toInternal();
+	}
+
+	void applyApplicationSettingsTo(Builder builder) {
+		this.applicationSettings.applyTo(requireNonNull(builder));
+	}
+
+	/**
+	 * Retains the raw, transport-independent builder inputs used to construct a
+	 * configuration. Keeping the unresolved inputs matters when a simulator
+	 * derives a fresh configuration: defaults that depend on the completed
+	 * configuration must be rebuilt against the simulator configuration rather
+	 * than copied from the source configuration.
+	 */
+	@ThreadSafe
+	private static final class ApplicationSettings {
+		@Nullable
+		private final LifecyclePolicy lifecyclePolicy;
+		@Nullable
+		private final InstanceProvider instanceProvider;
+		@Nullable
+		private final ValueConverterRegistry valueConverterRegistry;
+		@Nullable
+		private final RequestBodyMarshaler requestBodyMarshaler;
+		@Nullable
+		private final ResourceMethodResolver resourceMethodResolver;
+		@Nullable
+		private final ResourceMethodParameterProvider
+				resourceMethodParameterProvider;
+		@Nullable
+		private final ResponseMarshaler responseMarshaler;
+		@Nullable
+		private final RequestInterceptor requestInterceptor;
+		@Nullable
+		private final List<@NonNull LifecycleObserver> lifecycleObservers;
+		@Nullable
+		private final MetricsCollector metricsCollector;
+		@Nullable
+		private final CorsAuthorizer corsAuthorizer;
+
+		private ApplicationSettings(@NonNull Builder builder) {
+			Builder exactBuilder = requireNonNull(builder);
+			this.lifecyclePolicy = exactBuilder.lifecyclePolicy;
+			this.instanceProvider = exactBuilder.instanceProvider;
+			this.valueConverterRegistry = exactBuilder.valueConverterRegistry;
+			this.requestBodyMarshaler = exactBuilder.requestBodyMarshaler;
+			this.resourceMethodResolver = exactBuilder.resourceMethodResolver;
+			this.resourceMethodParameterProvider =
+					exactBuilder.resourceMethodParameterProvider;
+			this.responseMarshaler = exactBuilder.responseMarshaler;
+			this.requestInterceptor = exactBuilder.requestInterceptor;
+			this.lifecycleObservers = exactBuilder.lifecycleObservers == null
+					? null : List.copyOf(exactBuilder.lifecycleObservers);
+			this.metricsCollector = exactBuilder.metricsCollector;
+			this.corsAuthorizer = exactBuilder.corsAuthorizer;
+		}
+
+		private void applyTo(@NonNull Builder builder) {
+			Builder exactBuilder = requireNonNull(builder);
+			exactBuilder.lifecyclePolicy = this.lifecyclePolicy;
+			exactBuilder.instanceProvider = this.instanceProvider;
+			exactBuilder.valueConverterRegistry = this.valueConverterRegistry;
+			exactBuilder.requestBodyMarshaler = this.requestBodyMarshaler;
+			exactBuilder.resourceMethodResolver = this.resourceMethodResolver;
+			exactBuilder.resourceMethodParameterProvider =
+					this.resourceMethodParameterProvider;
+			exactBuilder.responseMarshaler = this.responseMarshaler;
+			exactBuilder.requestInterceptor = this.requestInterceptor;
+			exactBuilder.lifecycleObservers = this.lifecycleObservers;
+			exactBuilder.metricsCollector = this.metricsCollector;
+			exactBuilder.corsAuthorizer = this.corsAuthorizer;
+		}
 	}
 
 	/**

@@ -238,9 +238,12 @@ class McpLocalizationSubscriptionRuntimeTests {
 												.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
-		return SimulatorConfig.builder().mcpServer(0,
-				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-				McpAdmissionController.acceptAllInstance(), builder -> builder
+		return SimulatorConfig.builder().configureMcpServer(builder -> builder
+					.port(0)
+					.endpointRegistry(
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.admissionController(
+							McpAdmissionController.acceptAllInstance())
 					.host(LOOPBACK)
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))

@@ -228,10 +228,14 @@ class McpLocalizationMrtrRuntimeTests {
 		McpEndpoint endpoint = endpoint(handlerInvocations);
 
 		SokletSimulator.run(SimulatorConfig.builder()
-				.mcpServer(0,
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-						McpAdmissionController.acceptAllInstance(),
-						builder -> configureServer(builder, localizer))
+				.configureMcpServer(builder -> {
+					builder.port(0);
+					builder.endpointRegistry(
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+							.admissionController(
+									McpAdmissionController.acceptAllInstance());
+					configureServer(builder, localizer);
+				})
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {

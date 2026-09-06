@@ -695,8 +695,10 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 						.build());
 			};
 			return SimulatorConfig.builder()
-					.mcpServer(0, endpointRegistry, admissionController,
-							mcpServerBuilder -> mcpServerBuilder
+					.configureMcpServer(mcpServerBuilder -> mcpServerBuilder
+						.port(0)
+						.endpointRegistry(endpointRegistry)
+						.admissionController(admissionController)
 						.host(LOOPBACK)
 						.requestRateLimiter(context ->
 								McpRateLimitDecision.allowed())

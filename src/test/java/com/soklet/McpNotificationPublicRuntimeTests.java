@@ -119,8 +119,11 @@ public class McpNotificationPublicRuntimeTests {
 								"Retry-After", Set.of("1"))));
 
 		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-				.mcpServer(0, endpointRegistry, admissionController, builder ->
+				.configureMcpServer(builder ->
 					baseServerBuilder(builder)
+					.port(0)
+					.endpointRegistry(endpointRegistry)
+					.admissionController(admissionController)
 					.requestRateLimiter(context -> {
 						limiterCalls.incrementAndGet();
 						String caseName = caseName(context.getRequest());
@@ -230,10 +233,13 @@ public class McpNotificationPublicRuntimeTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 
 		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
-				.mcpServer(0,
-						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
-						McpAdmissionController.acceptAllInstance(), builder ->
+				.configureMcpServer(builder ->
 					baseServerBuilder(builder)
+					.port(0)
+					.endpointRegistry(
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.admissionController(
+							McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.handlerInterceptor((context, features, continuation) -> {
 						interceptorCalls.incrementAndGet();

@@ -244,6 +244,56 @@ public class McpResourceProtocolTests {
 	}
 
 	@Test
+	public void localized_cache_clamp_validates_application_cache_fields_first()
+			throws Exception {
+		McpResourceCachePolicy publicCache =
+				new McpResourceCachePolicy(100L, McpCacheScope.PUBLIC);
+		McpNormalizedEndpoint endpoint = endpointBuilder()
+				.exactResource(new McpNormalizedResourceDescriptor(
+						"catalog://items/1", "Item", McpJsonObject.empty(),
+						McpJsonObject.empty(), publicCache))
+				.customResourceListHandler()
+				.resourceListCachePolicy(publicCache)
+				.build();
+		McpApplicationResourceListRoute listRoute =
+				new McpApplicationResourceListRoute(ignored ->
+						McpWireResult.complete(new McpJsonObject(Map.of(
+								"resources", new McpJsonArray(List.of()),
+								"cacheScope", new McpJsonString("private")))));
+		McpApplicationResourceReadRoute readRoute =
+				new McpApplicationResourceReadRoute(ignored -> {
+					Map<String, McpJsonValue> fields = new java.util.LinkedHashMap<>(
+							emptyReadResult().fields().members());
+					fields.put("ttlMs", new McpJsonNumber(-1L));
+					return McpWireResult.complete(new McpJsonObject(fields));
+				}, publicCache);
+		McpApplicationRequestRouter router =
+				McpApplicationRequestRouter.fromResourceRoutes(
+						Map.of("catalog://items/1", readRoute), List.of(),
+						Optional.of(listRoute));
+		McpHttpEndpointPolicy endpointPolicy = McpHttpEndpointPolicy
+				.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+						ignored -> McpAdmissionDecision.acceptedAnonymous())
+				.withLocalizationEnabled();
+
+		try (McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0), endpointPolicy,
+				endpoint, router,
+				McpApplicationExecutionConfiguration.productionDefaults(),
+				McpApplicationClock.SYSTEM)) {
+			int port = runtime.start().getPort();
+			FixedResponse invalidScope = send(port,
+					request("invalid-scope", "resources/list", ""),
+					headers("resources/list", null));
+			assertError(invalidScope, 500, -32603, "invalid-scope");
+
+			FixedResponse invalidTtl = read(port, "invalid-ttl",
+					"catalog://items/1");
+			assertError(invalidTtl, 500, -32603, "invalid-ttl");
+		}
+	}
+
+	@Test
 	public void dynamic_list_rejects_semantically_equivalent_resource_uris()
 			throws Exception {
 		String registeredUri = "CATALOG://ITEMS/a%2Fb";
