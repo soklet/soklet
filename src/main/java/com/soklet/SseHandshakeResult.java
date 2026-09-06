@@ -92,6 +92,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, SseHandshakeResult.Rejected {
 	/**
 	 * Vends an instance that indicates a successful handshake, with no additional information provided.

@@ -49,7 +49,7 @@ public interface InstanceProvider {
 	 * @return an instance of {@code T}
 	 */
 	@NonNull
-	<T> T provide(@NonNull Class<T> instanceClass);
+	<T> T provide(@NonNull Class<@NonNull T> instanceClass);
 
 	/**
 	 * Vends an instance appropriate for the supplied {@link Parameter}.

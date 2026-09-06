@@ -57,7 +57,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -73,21 +72,9 @@ class PublicApiContractTests {
 			"com.soklet.annotation",
 			"com.soklet.converter",
 			"com.soklet.exception");
-	/*
-	 * These interfaces only tag a permitted/open result family and define no
-	 * instance behavior of their own. A concurrency annotation on them is
-	 * therefore optional; their concrete implementations remain audited.
-	 */
-	private static final Set<String> THREAD_SAFETY_MARKER_EXEMPT_TYPES = Set.of(
-			"com.soklet.McpCompletePayload",
-			"com.soklet.McpJsonValue",
-			"com.soklet.McpOperationResult",
-			"com.soklet.SseHandshakeResult",
-			"com.soklet.SseRequestResult"
-	);
 
 	@Test
-	void exportedSourceInventoryHasThreadSafetyAndReturnNullnessContracts()
+	void exportedSourceInventoryHasThreadSafetyAndReferenceNullnessContracts()
 			throws Exception {
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		Assertions.assertNotNull(compiler,
@@ -121,14 +108,6 @@ class PublicApiContractTests {
 			Elements elements = task.getElements();
 			List<TypeElement> exportedTypes = exportedTypes(compilationUnits,
 					trees, elements);
-			Set<String> exportedTypeNames = exportedTypes.stream()
-					.map(elements::getBinaryName).map(Object::toString)
-					.collect(java.util.stream.Collectors.toUnmodifiableSet());
-			Assertions.assertTrue(exportedTypeNames.containsAll(
-					THREAD_SAFETY_MARKER_EXEMPT_TYPES),
-					() -> "Stale marker-interface exemptions: " + difference(
-							THREAD_SAFETY_MARKER_EXEMPT_TYPES, exportedTypeNames));
-
 			List<String> mismatches = new ArrayList<>();
 			for (TypeElement type : exportedTypes) {
 				String binaryName = elements.getBinaryName(type).toString();
@@ -142,8 +121,7 @@ class PublicApiContractTests {
 								|| annotation.equals(IMMUTABLE))
 						.sorted().toList();
 				boolean markerExempt = type.getKind() == ElementKind.ENUM
-						|| type.getKind() == ElementKind.ANNOTATION_TYPE
-						|| THREAD_SAFETY_MARKER_EXEMPT_TYPES.contains(binaryName);
+						|| type.getKind() == ElementKind.ANNOTATION_TYPE;
 				if ((!markerExempt && actual.size() != 1)
 						|| (markerExempt && actual.size() > 1))
 					mismatches.add(binaryName + (markerExempt
@@ -152,15 +130,30 @@ class PublicApiContractTests {
 							+ actual);
 
 				for (Element enclosed : type.getEnclosedElements()) {
+					if (enclosed.getKind() == ElementKind.FIELD
+							&& enclosed.getModifiers().contains(Modifier.PUBLIC)
+							&& !enclosed.asType().getKind().isPrimitive())
+						inspectNullness(binaryName + "#"
+								+ enclosed.getSimpleName() + " field",
+								enclosed.asType(), true, false, mismatches);
 					if (!(enclosed instanceof ExecutableElement method)
 							|| !method.getModifiers().contains(Modifier.PUBLIC)
-							|| !isSourceAuthoredMethod(method, trees)
-							|| method.getReturnType().getKind() == TypeKind.VOID
-							|| method.getReturnType().getKind().isPrimitive())
+							|| !isSourceAuthoredMethod(method, trees))
 						continue;
-					inspectReturnNullness(binaryName + "#"
-							+ method.getSimpleName(), method.getReturnType(), true,
-							false, mismatches);
+					String methodOwner = binaryName + "#"
+							+ method.getSimpleName();
+					for (int index = 0; index < method.getParameters().size();
+							++index) {
+						TypeMirror parameterType = method.getParameters().get(index)
+								.asType();
+						if (!parameterType.getKind().isPrimitive())
+							inspectNullness(methodOwner + " parameter " + index,
+									parameterType, true, false, mismatches);
+					}
+					if (method.getReturnType().getKind() != TypeKind.VOID
+							&& !method.getReturnType().getKind().isPrimitive())
+						inspectNullness(methodOwner + " return",
+								method.getReturnType(), true, false, mismatches);
 				}
 			}
 			Assertions.assertTrue(mismatches.isEmpty(),
@@ -213,6 +206,42 @@ class PublicApiContractTests {
 				AnnotatedWildcardType.class, typeArgument(observers, 0));
 		assertExactNullness(observerWildcard.getAnnotatedUpperBounds()[0],
 				NonNull.class);
+	}
+
+	@Test
+	void simulatorServerConfigurationSurfaceRemainsExact() throws Exception {
+		Set<String> serverMethodNames = Set.of("httpServer", "sseServer",
+				"mcpServer", "configureMcpServer");
+		Set<String> actual = java.util.Arrays.stream(
+					SimulatorConfig.Builder.class.getDeclaredMethods())
+				.filter(method -> java.lang.reflect.Modifier.isPublic(
+						method.getModifiers()))
+				.filter(method -> serverMethodNames.contains(method.getName()))
+				.map(PublicApiContractTests::methodDescriptor)
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		Assertions.assertEquals(Set.of(
+				"configureMcpServer(java.util.function.Consumer)",
+				"httpServer()",
+				"httpServer(java.util.function.Consumer)",
+				"sseServer()",
+				"sseServer(java.util.function.Consumer)"), actual);
+
+		assertConsumerParameter(SimulatorConfig.Builder.class.getMethod(
+				"httpServer", java.util.function.Consumer.class), HttpServer.class);
+		assertConsumerParameter(SimulatorConfig.Builder.class.getMethod(
+				"sseServer", java.util.function.Consumer.class), SseServer.class);
+		assertConsumerParameter(SimulatorConfig.Builder.class.getMethod(
+				"configureMcpServer", java.util.function.Consumer.class),
+				McpServer.Builder.class);
+	}
+
+	private static void assertConsumerParameter(Method method,
+			Class<?> payloadType) {
+		AnnotatedType consumer = method.getAnnotatedParameterTypes()[0];
+		assertExactNullness(consumer, NonNull.class);
+		AnnotatedType payload = typeArgument(consumer, 0);
+		Assertions.assertEquals(payloadType, payload.getType(), method::toString);
+		assertExactNullness(payload, NonNull.class);
 	}
 
 	private static void assertConsumerPayload(Class<?> handlerType)
@@ -289,12 +318,12 @@ class PublicApiContractTests {
 		return path != null && path.getLeaf() instanceof MethodTree;
 	}
 
-	private static void inspectReturnNullness(String owner, TypeMirror type,
+	private static void inspectNullness(String owner, TypeMirror type,
 			boolean root, boolean requireNonNull, List<String> mismatches) {
 		if ((root || requiresNestedNullness(type))
 				&& !(requireNonNull ? hasExactNullness(type, NonNull.class)
 						: hasAnyExactNullness(type)))
-			mismatches.add(owner + (root ? " return" : " nested return")
+			mismatches.add(owner + (root ? "" : " nested type")
 					+ " lacks " + (requireNonNull ? "@NonNull" : "nullness")
 					+ " at " + type);
 
@@ -303,21 +332,21 @@ class PublicApiContractTests {
 					.getQualifiedName().contentEquals("java.util.Optional");
 			List<? extends TypeMirror> arguments = declaredType.getTypeArguments();
 			for (int index = 0; index < arguments.size(); ++index)
-				inspectReturnNullness(owner + " type argument " + index,
+				inspectNullness(owner + " type argument " + index,
 						arguments.get(index), false, optional, mismatches);
 		} else if (type instanceof ArrayType arrayType) {
 			TypeMirror componentType = arrayType.getComponentType();
 			if (!componentType.getKind().isPrimitive())
-				inspectReturnNullness(owner + " array component", componentType,
+				inspectNullness(owner + " array component", componentType,
 						false, false, mismatches);
 		} else if (type instanceof WildcardType wildcardType) {
 			TypeMirror extendsBound = wildcardType.getExtendsBound();
 			if (extendsBound != null)
-				inspectReturnNullness(owner + " wildcard upper bound",
+				inspectNullness(owner + " wildcard upper bound",
 						extendsBound, false, requireNonNull, mismatches);
 			TypeMirror superBound = wildcardType.getSuperBound();
 			if (superBound != null)
-				inspectReturnNullness(owner + " wildcard lower bound", superBound,
+				inspectNullness(owner + " wildcard lower bound", superBound,
 						false, requireNonNull, mismatches);
 		}
 	}
@@ -349,10 +378,10 @@ class PublicApiContractTests {
 		return parameterized.getAnnotatedActualTypeArguments()[index];
 	}
 
-	private static Set<String> difference(Set<String> left,
-			Set<String> right) {
-		Set<String> result = new LinkedHashSet<>(left);
-		result.removeAll(right);
-		return result;
+	private static String methodDescriptor(Method method) {
+		return method.getName() + java.util.Arrays.stream(method.getParameterTypes())
+				.map(Class::getName)
+				.collect(java.util.stream.Collectors.joining(",", "(", ")"));
 	}
+
 }

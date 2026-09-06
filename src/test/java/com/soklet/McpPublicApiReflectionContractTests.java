@@ -83,17 +83,17 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 133;
+	private static final int PHASE_FOUR_TYPE_COUNT = 134;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 64;
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
-	private static final int CURRENT_MCP_TYPE_COUNT = 233;
+	private static final int CURRENT_MCP_TYPE_COUNT = 234;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f";
+			"ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7";
+			"bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60";
+			"73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -148,6 +148,12 @@ public class McpPublicApiReflectionContractTests {
 					Map.entry("com.soklet.McpLogLevel", List.of(
 							"DEBUG", "INFO", "NOTICE", "WARNING", "ERROR",
 							"CRITICAL", "ALERT", "EMERGENCY")),
+					Map.entry("com.soklet.McpOperationType", List.of(
+							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
+							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
+							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
+							"SUBSCRIPTIONS_LISTEN", "NOTIFICATIONS_CANCELED",
+							"OTHER")),
 					Map.entry("com.soklet.McpRateLimitTarget",
 							List.of("REQUEST", "TOOL")),
 					Map.entry("com.soklet.McpResourceAddressType",

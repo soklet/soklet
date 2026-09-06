@@ -53,6 +53,7 @@ com.soklet.McpJsonString
 com.soklet.McpJsonValue
 com.soklet.McpLogLevel
 com.soklet.McpOperationResult
+com.soklet.McpOperationType
 com.soklet.McpPromptArgumentDeclaration
 com.soklet.McpPromptArgumentDeclaration$Builder
 com.soklet.McpPromptGetContext

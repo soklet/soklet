@@ -385,7 +385,9 @@ public final class Response {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
+		public Copier headers(
+				@NonNull Consumer<@NonNull Map<@NonNull String,
+						@NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)
@@ -416,7 +418,9 @@ public final class Response {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier cookies(@NonNull Consumer<Set<@NonNull ResponseCookie>> cookiesConsumer) {
+		public Copier cookies(
+				@NonNull Consumer<@NonNull Set<@NonNull ResponseCookie>>
+						cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			if (this.builder.cookies == null)

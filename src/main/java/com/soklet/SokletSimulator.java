@@ -91,7 +91,7 @@ public final class SokletSimulator {
 	@NonNull
 	public static <E extends Throwable> ShutdownResult run(
 			@NonNull SokletConfig sokletConfig,
-			@NonNull Simulation<E> simulation) throws E {
+			@NonNull Simulation<@NonNull E> simulation) throws E {
 		SokletConfig exactConfig = requireNonNull(sokletConfig);
 		Simulation<E> exactSimulation = requireNonNull(simulation);
 		return run(SimulatorConfig.fromSokletConfig(exactConfig),
@@ -114,7 +114,7 @@ public final class SokletSimulator {
 	@NonNull
 	public static <E extends Throwable> ShutdownResult run(
 			@NonNull SimulatorConfig simulatorConfig,
-			@NonNull Simulation<E> simulation) throws E {
+			@NonNull Simulation<@NonNull E> simulation) throws E {
 		return ShutdownResult.fromInternal(run(simulatorConfig, simulation,
 				NanoClock.system(), new LifecycleWorkers()));
 	}

@@ -92,7 +92,8 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * @return a streaming response body
 	 */
 	@NonNull
-	static StreamingResponseBody fromInputStream(@NonNull Supplier<? extends InputStream> inputStreamSupplier) {
+	static StreamingResponseBody fromInputStream(
+			@NonNull Supplier<? extends @NonNull InputStream> inputStreamSupplier) {
 		return withInputStream(inputStreamSupplier).build();
 	}
 
@@ -103,7 +104,8 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * @return the builder
 	 */
 	@NonNull
-	static InputStreamBuilder withInputStream(@NonNull Supplier<? extends InputStream> inputStreamSupplier) {
+	static InputStreamBuilder withInputStream(
+			@NonNull Supplier<? extends @NonNull InputStream> inputStreamSupplier) {
 		return new InputStreamBuilder(inputStreamSupplier);
 	}
 
@@ -119,8 +121,9 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * @return a streaming response body
 	 */
 	@NonNull
-	static StreamingResponseBody fromReader(@NonNull Supplier<? extends Reader> readerSupplier,
-																					@NonNull Charset charset) {
+	static StreamingResponseBody fromReader(
+			@NonNull Supplier<? extends @NonNull Reader> readerSupplier,
+																			@NonNull Charset charset) {
 		return withReader(readerSupplier, charset).build();
 	}
 
@@ -132,8 +135,9 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * @return the builder
 	 */
 	@NonNull
-	static ReaderBuilder withReader(@NonNull Supplier<? extends Reader> readerSupplier,
-																	@NonNull Charset charset) {
+	static ReaderBuilder withReader(
+			@NonNull Supplier<? extends @NonNull Reader> readerSupplier,
+																@NonNull Charset charset) {
 		return new ReaderBuilder(readerSupplier, charset);
 	}
 

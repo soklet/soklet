@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.Function;
@@ -101,8 +102,9 @@ public interface SseBroadcaster {
 	 *                      (If the client has no context, the implementation passes {@code null})
 	 * @param eventProvider a function that provides the {@link SseEvent} for a given key
 	 */
-	<T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-													@NonNull Function<T, SseEvent> eventProvider);
+	<T> void broadcastEvent(
+			@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+			@NonNull Function<@Nullable T, @NonNull SseEvent> eventProvider);
 
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
@@ -132,6 +134,7 @@ public interface SseBroadcaster {
 	 * @param keySelector     a function that derives a grouping key from the client's associated context object
 	 * @param commentProvider a function that provides the comment payload for a given key
 	 */
-	<T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-														@NonNull Function<T, SseComment> commentProvider);
+	<T> void broadcastComment(
+			@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+			@NonNull Function<@Nullable T, @NonNull SseComment> commentProvider);
 }

@@ -50,6 +50,6 @@ public interface McpCompleteToolHandler<A, R> {
 	 */
 	@NonNull
 	R handle(@NonNull McpRequestContext request,
-			@NonNull McpToolArguments<A> arguments,
+			@NonNull McpToolArguments<@NonNull A> arguments,
 			@NonNull McpInvocationFeatures features) throws Exception;
 }

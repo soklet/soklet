@@ -49,6 +49,6 @@ public interface McpToolHandler<A> {
 	 */
 	@NonNull
 	McpOperationResult handle(@NonNull McpRequestContext request,
-			@NonNull McpToolArguments<A> arguments,
+			@NonNull McpToolArguments<@NonNull A> arguments,
 			@NonNull McpInvocationFeatures features) throws Exception;
 }

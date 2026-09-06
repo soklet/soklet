@@ -104,7 +104,8 @@ public final class McpContentAnnotations {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder audience(@NonNull McpRole... audience) {
+		public Builder audience(
+				@NonNull McpRole @NonNull... audience) {
 			requireNonNull(audience);
 			this.audience.clear();
 			for (McpRole role : audience)

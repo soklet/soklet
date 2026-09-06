@@ -129,7 +129,7 @@ public final class McpInputResponses {
 	 */
 	@NonNull
 	public <T> Optional<@NonNull T> find(@NonNull String key,
-			@NonNull Class<T> type) {
+			@NonNull Class<@NonNull T> type) {
 		return findConverted(key, requireNonNull(type));
 	}
 
@@ -147,7 +147,7 @@ public final class McpInputResponses {
 	 */
 	@NonNull
 	public <T> Optional<@NonNull T> find(@NonNull String key,
-			@NonNull TypeReference<T> type) {
+			@NonNull TypeReference<@NonNull T> type) {
 		return findConverted(key, requireNonNull(type).getType());
 	}
 

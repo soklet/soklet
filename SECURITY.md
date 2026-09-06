@@ -1389,9 +1389,11 @@ reviewed, default-off, bounded and redacted diagnostic rather than Java
 
 ## Current API and release-security state
 
-The current owner inventory is 133 Phase 4, 36 Phase 5, and 64 Phase 6 (233
-total), with all three phases frozen and no provisional owner. The implemented
-structured-log boundary completes the bounded `MCP_TRACE_CORRELATION` carrier
+The current MCP owner inventory is 134 Phase 4, 36 Phase 5, and 64 Phase 6
+(234 MCP total); the 51 reviewed non-MCP owners bring the current-side
+inventory to 285. All three phases are frozen and there is no provisional
+owner. The implemented structured-log boundary completes the bounded
+`MCP_TRACE_CORRELATION` carrier
 and separate raw-ID opt-in, but operator access, storage, retention, and
 sustained cardinality/drain evidence remain outside that implementation proof.
 Custom collectors, generic HTTP callbacks, application telemetry, and

@@ -327,7 +327,9 @@ public final class CorsPreflightResponse {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier accessControlAllowMethods(@NonNull Consumer<Set<@NonNull HttpMethod>> accessControlAllowMethodsConsumer) {
+		public Copier accessControlAllowMethods(
+				@NonNull Consumer<@NonNull Set<@NonNull HttpMethod>>
+						accessControlAllowMethodsConsumer) {
 			requireNonNull(accessControlAllowMethodsConsumer);
 
 			if (this.builder.accessControlAllowMethods == null)
@@ -358,7 +360,9 @@ public final class CorsPreflightResponse {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier accessControlAllowHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlAllowHeadersConsumer) {
+		public Copier accessControlAllowHeaders(
+				@NonNull Consumer<@NonNull Set<@NonNull String>>
+						accessControlAllowHeadersConsumer) {
 			requireNonNull(accessControlAllowHeadersConsumer);
 
 			if (this.builder.accessControlAllowHeaders == null)

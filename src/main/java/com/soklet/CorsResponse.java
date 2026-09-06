@@ -254,7 +254,9 @@ public final class CorsResponse {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier accessControlExposeHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlExposeHeadersConsumer) {
+		public Copier accessControlExposeHeaders(
+				@NonNull Consumer<@NonNull Set<@NonNull String>>
+						accessControlExposeHeadersConsumer) {
 			requireNonNull(accessControlExposeHeadersConsumer);
 
 			if (this.builder.accessControlExposeHeaders == null)

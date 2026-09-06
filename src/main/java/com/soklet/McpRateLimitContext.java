@@ -74,6 +74,19 @@ public interface McpRateLimitContext {
 	String getJsonRpcMethod();
 
 	/**
+	 * Returns the high-level type of the MCP operation being rate-limited.
+	 *
+	 * <p>This classification is suitable for application branching. The exact
+	 * validated wire value remains available from {@link #getJsonRpcMethod()}.
+	 *
+	 * @return operation type
+	 */
+	@NonNull
+	default McpOperationType getOperationType() {
+		return McpOperationType.fromJsonRpcMethod(getJsonRpcMethod());
+	}
+
+	/**
 	 * Returns the resolved operation name, such as a tool name, when present.
 	 *
 	 * @return operation name, or the empty optional

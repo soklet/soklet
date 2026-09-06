@@ -356,8 +356,8 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
-				@NonNull Class<T> argumentType,
-				@NonNull Class<R> outputType) {
+				@NonNull Class<@NonNull T> argumentType,
+				@NonNull Class<@NonNull R> outputType) {
 			return typedStage(argumentType, outputType);
 		}
 
@@ -372,8 +372,8 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
-				@NonNull Class<T> argumentType,
-				@NonNull TypeReference<R> outputType) {
+				@NonNull Class<@NonNull T> argumentType,
+				@NonNull TypeReference<@NonNull R> outputType) {
 			requireNonNull(outputType);
 			return typedStage(argumentType, outputType.getType());
 		}
@@ -389,8 +389,8 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
-				@NonNull TypeReference<T> argumentType,
-				@NonNull Class<R> outputType) {
+				@NonNull TypeReference<@NonNull T> argumentType,
+				@NonNull Class<@NonNull R> outputType) {
 			requireNonNull(argumentType);
 			return typedStage(argumentType.getType(), outputType);
 		}
@@ -406,8 +406,8 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T, R> CompleteHandlerStage<@NonNull T, @NonNull R> argumentAndOutputTypes(
-				@NonNull TypeReference<T> argumentType,
-				@NonNull TypeReference<R> outputType) {
+				@NonNull TypeReference<@NonNull T> argumentType,
+				@NonNull TypeReference<@NonNull R> outputType) {
 			requireNonNull(argumentType);
 			requireNonNull(outputType);
 			return typedStage(argumentType.getType(), outputType.getType());
@@ -422,7 +422,7 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T> OperationHandlerStage<@NonNull T> argumentType(
-				@NonNull Class<T> argumentType) {
+				@NonNull Class<@NonNull T> argumentType) {
 			return operationStage(argumentType);
 		}
 
@@ -435,7 +435,7 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public <T> OperationHandlerStage<@NonNull T> argumentType(
-				@NonNull TypeReference<T> argumentType) {
+				@NonNull TypeReference<@NonNull T> argumentType) {
 			requireNonNull(argumentType);
 			return operationStage(argumentType.getType());
 		}
@@ -545,7 +545,7 @@ public final class McpToolRegistration<A> {
 		 */
 		@NonNull
 		public CompleteBuilder<@NonNull A> handler(
-				@NonNull McpCompleteToolHandler<A, R> handler) {
+				@NonNull McpCompleteToolHandler<@NonNull A, @NonNull R> handler) {
 			requireNonNull(handler);
 			McpToolHandler<A> normalizedHandler = (request, arguments, features) -> {
 				R result = requireNonNull(
@@ -605,7 +605,8 @@ public final class McpToolRegistration<A> {
 		 * @return optional-metadata builder
 		 */
 		@NonNull
-		public OperationBuilder<@NonNull A> handler(@NonNull McpToolHandler<A> handler) {
+		public OperationBuilder<@NonNull A> handler(
+				@NonNull McpToolHandler<@NonNull A> handler) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
 					null, null, null,

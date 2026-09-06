@@ -56,7 +56,7 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		@NonNull
 		private final byte[] bytes;
 
-		public Bytes(@NonNull byte[] bytes) {
+		public Bytes(byte @NonNull [] bytes) {
 			this.bytes = requireNonNull(bytes);
 		}
 

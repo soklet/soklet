@@ -641,8 +641,8 @@ const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
     ["shutdownMetricsCollectorFailureIsContainedAndLoggedOnce","68922c414ce532a2e73d80a216e4d697e5822369c88e9a80da8e8bd3c5b9dda8",{"forcedShutdownMillis":1000,"gracefulShutdownMillis":2000,"startupCancellationMillis":2000,"startupMillis":5000}],
     ["residualStopAndLaterExitDoNotDuplicateLifecycleOrMetricsOutcome","1aa0f0aecaff326799116333959b34d03fa5857a02cf195827d44abaa481e676",{"forcedShutdownMillis":100,"gracefulShutdownMillis":100,"startupCancellationMillis":100,"startupMillis":5000}],
   ]),
-  ...reviewedPhasePolicyFile("src/test/java/com/soklet/SimulatorConfigDerivationTests.java", "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f", [
-    ["derivationCreatesFreshTransportsAndLeavesSourceReusable","0f70656a6808b5a2a4420834acb65cff7a653ea1f7a38e9eaa5fcba69ede552a",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/SimulatorConfigDerivationTests.java", "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b", [
+    ["derivationCreatesFreshTransportsAndLeavesSourceReusable","e8c100e7fcd7c1d73c30f731fec4de8d067815b4974714b9b5dbf96244128b13",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
     ["importedMcpConstructionIsClonedAndCanBeCustomized","bf34b8608327293f12b296c134f7233fe47f8149e8ebfb9ccd3da64cc80d7259",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
     ["directRunCreatesAConfigurationPerInvocationAndBuilderAcceptsOptions","b6dbc0f825a131dbb475c79cf3b174275089bcb27b801374f09763543f4de8e9",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
   ]),

@@ -61,6 +61,19 @@ public interface McpRequestContext {
 	@NonNull
 	String getJsonRpcMethod();
 
+	/**
+	 * Returns the high-level type of this MCP operation.
+	 *
+	 * <p>This classification is suitable for application branching. The exact
+	 * validated wire value remains available from {@link #getJsonRpcMethod()}.
+	 *
+	 * @return operation type
+	 */
+	@NonNull
+	default McpOperationType getOperationType() {
+		return McpOperationType.fromJsonRpcMethod(getJsonRpcMethod());
+	}
+
 	/** @return request identifier, or empty for a notification */
 	@NonNull
 	Optional<@NonNull McpRequestId> getRequestId();

@@ -30,6 +30,8 @@ Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
 MCP server default-construction amendment reviewed: 2026-09-04
 
+Typed MCP operation amendment reviewed: 2026-09-06
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -40,12 +42,12 @@ not a Phase 5/6 implementation, full conformance, or release-candidate claim.
 At the 2026-08-07 wrapper correction, the reviewed incompatibility set
 contained exactly 556 canonical symbols and had SHA-256
 `c3313a6f690429f833f4b8e09ab84e92ab187255ab83f5944818c68cdd6dfe8e`.
-After the later Phase 5/6 additions, localization and trace-log host
-amendments, the naming reviews through the final greenfield polish, and the
-greenfield public-record elimination and typed-request-state amendments, the
-current reviewed set contains exactly 621 canonical symbols and has SHA-256
-`25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
-The current lifecycle and pre-G3 API corrections are included in that set.
+After the later Phase 5/6 additions and all reviewed amendments through the
+typed MCP operation restoration, the current reviewed set contains exactly
+658 canonical symbols and has SHA-256
+`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+The lifecycle, pre-G3, naming, value-contract, and construction corrections
+are included in that set.
 `target/japicmp/mcp-api-diff.xml` is the modified-only report used to derive
 that set. It deliberately omits compatible unchanged/restored containers.
 
@@ -69,33 +71,32 @@ was not yet in the then-current inventory because no MCP descriptor had landed
 on that shared host. It was later added to and frozen in Phase 6 when its MCP
 simulation descriptors landed.
 
-After the telemetry, greenfield, lifecycle, and pre-G3 API amendments, the
-current exact MCP owner partition is 133 Phase 4, 37 Phase 5, 64 Phase 6, zero
-provisional, and 234 total; the exact non-MCP allowlist adds 38 owners for 272
-current-side owners. The cohesion naming amendment was one-for-one; result and
-context changes adjusted Phase 6; record conversion did not alter ownership.
-The typed-state amendment removed three Phase 5 carrier owners. The lifecycle
-cutover removed one Phase 4 and one Phase 6 owner; the annotation split then
-added one Phase 4 owner. The current partition and exact transitions are
-recorded in the lifecycle and pre-G3 correction sections below, with no
-compatibility alias retained.
+After all reviewed amendments, the current exact MCP owner partition is 134
+Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 234 total; the exact
+non-MCP allowlist adds 51 owners for 285 current-side owners. The cohesion
+naming amendment was one-for-one; result and context changes adjusted Phase 6;
+record conversion did not alter MCP ownership. The typed-state and later
+subscription-publisher amendments reduced Phase 5, while the lifecycle and
+annotation corrections changed Phase 4 ownership before the typed-operation
+restoration added its current owner. The dated sections below record those
+transitions without compatibility aliases.
 
 ## Frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,058 canonical records:
+`phase-4.signatures.jsonl` contains exactly 1,075 canonical records:
 
-- 133 classes;
+- 134 classes;
 - one constructor;
-- 79 fields; and
-- 845 methods.
+- 90 fields; and
+- 850 methods.
 
 The reviewed file's SHA-256 is
-`46f03620674c6312fd097cba643b5eeff1a11830df74393137ac85787e8552e0`.
+`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`f5819565d29698091e76af24ec02023aa15a4d17dc1f53cd9f56061d466a199b`.
-The 133-entry `phase-4.includes` inventory has SHA-256
-`fd3293a1089845a3c90c22cda8bd59986b8a975c3cb10211ab3ea8831a7e5021`.
+`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`.
+The 134-entry `phase-4.includes` inventory has SHA-256
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 
 ### Post-freeze wrapper correction
 
@@ -905,5 +906,35 @@ The Phase 4 snapshot still contains 1,058 records across the same 133 owners;
 the one-for-one method exchange gives it SHA-256
 `43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`.
 The reviewed reflection/nullability SHA-256 is
-`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
+`78f3787f2dcfa888973c65278d5837602c719751c6b304fda518875c744f59af`.
 Phase 5, Phase 6, and all owner inventories are unchanged.
+
+## 2026-09-06 typed MCP operation amendment
+
+The owner-approved operation-classification pass restores the public
+`McpOperationType` concept from Soklet 3.5.1 for the stateless 4.0 protocol.
+Its ten recognized values cover the complete inbound 4.0 method set, while
+`OTHER` classifies an unrecognized, future, or extension method without
+discarding the exact validated value exposed by `getJsonRpcMethod()`.
+
+`McpRequestContext`, `McpAdmissionContext`, and `McpRateLimitContext` each add
+the same non-null default `getOperationType()` accessor. The default derives
+the semantic type from the existing exact method string, so external context
+implementations inherit the complete mapping. Applications can branch on
+`McpOperationType.TOOLS_CALL` and related values without embedding protocol
+spellings, while admission, diagnostics, and extension-aware code retain the
+raw method when it is genuinely required.
+
+The Phase 4 owner count increases to 134 and its canonical snapshot to 1,075
+records: 134 classes, one constructor, 90 fields, and 850 methods. The
+signature, reflection/nullability, and include-inventory SHA-256 values are
+respectively
+`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`,
+`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`,
+and
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The complete owner partition is now 134/36/64/0, or 234 MCP owners and 285
+reviewed current-side owners. Restoring the enum and its surviving 3.5.1
+members removes eleven prior removal records; the released-3.5.1 compatibility
+ledger now contains 658 records with SHA-256
+`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.

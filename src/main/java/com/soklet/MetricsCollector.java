@@ -743,7 +743,8 @@ public interface MetricsCollector {
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder metricFilter(@Nullable Predicate<MetricSample> metricFilter) {
+			public Builder metricFilter(
+					@Nullable Predicate<@NonNull MetricSample> metricFilter) {
 				this.metricFilter = metricFilter;
 				return this;
 			}

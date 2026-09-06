@@ -1081,8 +1081,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 5984,
-    "candidateSha256": "ea01bd3be9088f5155bd4316930c85185af123f3e7a819e287d43883c9e66529",
+    "candidateCount": 5987,
+    "candidateSha256": "38fcf7b86546ae196051a9633b784476666abbd113f695eaee8aca4bb722ed57",
     "candidates": [
       {
         "kinds": [
@@ -23714,7 +23714,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 118,
+        "line": 105,
         "lineSha256": "31c0e6bb5c76f3c3f8827cff740e2390cac113195382bb5cf1410e5473beae1a",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23722,7 +23722,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 168,
+        "line": 161,
         "lineSha256": "efd5e9154b69ea8c4f40500fab3153e7abb51b0bda5494e4ce4a47670d8ebe72",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23730,7 +23730,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 175,
+        "line": 168,
         "lineSha256": "739a85ead98ccc1eac5e1467a67b6839865a9d6c888ba869a24dec476be7ec5f",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23738,7 +23738,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 177,
+        "line": 170,
         "lineSha256": "6d0293aaae54a2e83f1c9151305228cdcbb1dd2e8b24b376ec050440b7561a3a",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23746,7 +23746,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 179,
+        "line": 172,
         "lineSha256": "9d7b23221f2e40a93bc15a2db369700e8626f78818be3dc495884bd22e1e7703",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23754,7 +23754,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 181,
+        "line": 174,
         "lineSha256": "157ef99978f90a674db957f0e46de63ffc9e474fb3d77fe6a9c98d2708b604d1",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23762,7 +23762,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 187,
+        "line": 180,
         "lineSha256": "dad6cfb742b3e0904451f8584b5ebdca25114b4fef68fd8e02270761f7ba9f59",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23770,7 +23770,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 195,
+        "line": 188,
         "lineSha256": "4e8721dc5c57a89f1468365aa62e3e3d97a19f428a6595724bda3027110d4070",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23778,7 +23778,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 196,
+        "line": 189,
         "lineSha256": "d7433574fa575cfe87bf85e99ecd8fd523e82e3bfa6560e14aae2177a1fd5b01",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23786,7 +23786,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 197,
+        "line": 190,
         "lineSha256": "63cc12eb150f2c64861cf8ccb4c9d0347162822a63ae878c166cb3a8ecdb600c",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23794,7 +23794,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 198,
+        "line": 191,
         "lineSha256": "182c9043eb54a9c4b0103bd1a7acf3aa74906788d815625c847a64ab55946266",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
@@ -23802,8 +23802,32 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 200,
+        "line": 193,
         "lineSha256": "2a3c5c9072132973a953cde03896d3e3889961f832a2a1eebd28312c6ed741e0",
+        "path": "src/test/java/com/soklet/PublicApiContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 230,
+        "lineSha256": "7bcc3839c60c362a40d5798955a825022af631251c91ccabb08e7bbeb6310b18",
+        "path": "src/test/java/com/soklet/PublicApiContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 232,
+        "lineSha256": "eb8313e9be18884c41431269c4a0c786be9c1a50477a268ec21b5cecfc16c347",
+        "path": "src/test/java/com/soklet/PublicApiContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 235,
+        "lineSha256": "69c5051d4758cf500807db24c3327b90d0f4e59ce3617a470206beb7b9d36b43",
         "path": "src/test/java/com/soklet/PublicApiContractTests.java"
       },
       {
@@ -24188,15 +24212,15 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 103,
-        "lineSha256": "cbf3c60d5e03b16412369d966f7a7140f7777d6b8e91aa644b0c412fe610d957",
+        "line": 106,
+        "lineSha256": "11b7bdffce52190bc340a0e91d5c9a23ceb210de2ff2825b0a49a4bd27ddfdf6",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 113,
+        "line": 121,
         "lineSha256": "ab7b9726ff3763711ff96ad3ee89440cb7e27d095e079b48940b3b178d2f1c11",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24205,7 +24229,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 114,
+        "line": 122,
         "lineSha256": "3f72d785fa6592440b072049b9c07279d428e32d37cc44e739e2a2b4f8a9da22",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24214,7 +24238,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 115,
+        "line": 123,
         "lineSha256": "678180d21dedd4a5778373f6c9abcf25a8e84a5b87ea8bd1b82b2241886a6877",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24223,7 +24247,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 116,
+        "line": 124,
         "lineSha256": "aff8e2382a556d7accec0b5a12141e81354e62681b3ee3f0f97e0b8e2b1770c4",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24232,7 +24256,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 117,
+        "line": 125,
         "lineSha256": "ad823f5c51c917c445537308bdb1f83c8293b8100ca9cf27b4c8dfd08bf9ab8e",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24240,7 +24264,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 148,
+        "line": 156,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24248,7 +24272,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 149,
+        "line": 157,
         "lineSha256": "4b4a581b3b83855c0723ee148f541380128583645a902b220c89bcb29b78a1cb",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24256,7 +24280,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 163,
+        "line": 171,
         "lineSha256": "066a231966eaec2b1da11e783f458d1afe3ffb136421fc36a0a64c60707145a9",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24264,7 +24288,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 196,
+        "line": 204,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24272,7 +24296,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 197,
+        "line": 205,
         "lineSha256": "d8e13cf74c28cd71a198092b78029fdd8f3b691efc2501dca916268f4fc1e18b",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24280,7 +24304,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 199,
+        "line": 207,
         "lineSha256": "066a231966eaec2b1da11e783f458d1afe3ffb136421fc36a0a64c60707145a9",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24288,7 +24312,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 235,
+        "line": 243,
         "lineSha256": "46a1f2f70602eded2d308908050ab7633b4eb563e7bc1f2961a09f1ca25a81c4",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24297,7 +24321,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 236,
+        "line": 244,
         "lineSha256": "8aaea98dee74f433a8aba2714253c50b4cf05b98ae493e9183cbb1dba9d027f2",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24305,7 +24329,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 238,
+        "line": 246,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24313,7 +24337,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 239,
+        "line": 247,
         "lineSha256": "4b4a581b3b83855c0723ee148f541380128583645a902b220c89bcb29b78a1cb",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24321,7 +24345,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 248,
+        "line": 256,
         "lineSha256": "066a231966eaec2b1da11e783f458d1afe3ffb136421fc36a0a64c60707145a9",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24329,7 +24353,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 270,
+        "line": 278,
         "lineSha256": "e606524b3b280a3c656ba0e011fd3cda640b88794962a62892f260b1b6ebdf41",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24337,7 +24361,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 273,
+        "line": 281,
         "lineSha256": "5fce583f73fd8355a88de6a75d5eb0b3f44bc38b49f9206a23c07a705485d612",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24345,7 +24369,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 274,
+        "line": 282,
         "lineSha256": "6ed49a9be48ed4ffad1e50e7141cabb8ad883c58c1af38bd9fe4125839b1e7ba",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24353,7 +24377,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 276,
+        "line": 284,
         "lineSha256": "300dc6cbf7a1a6cc0ae7b346d9b502ee05cfc01c8cc6c0750c78dc3ba6909ec6",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24361,7 +24385,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 278,
+        "line": 286,
         "lineSha256": "919a7d547378694f3936d8b8f5c16778a46d1ff2198c2b08064edcdfdfaf290c",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24369,7 +24393,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 280,
+        "line": 288,
         "lineSha256": "592288d669e0e44291e871690a96190cd252c47cb20d7be4a5ea5a8c2164965e",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24377,7 +24401,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 282,
+        "line": 290,
         "lineSha256": "3bcf77a9552aa783c48061ce5a917513424a7e600ec29372840c0a23c9c71b18",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24385,7 +24409,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 283,
+        "line": 291,
         "lineSha256": "bd052e1552e77c3680ac74b8f656650257056c0fe584e21c18fafe3d135a9e11",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24393,7 +24417,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 284,
+        "line": 292,
         "lineSha256": "a40df7e8978217df35424ac1f199ef3727c7519aa8f4534b262e3e357e5f9ae4",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24401,7 +24425,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 306,
+        "line": 314,
         "lineSha256": "2fd0303f686c81ee3f92fa288f4f62664e23247679c954871c5e738968074209",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24409,7 +24433,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 318,
+        "line": 326,
         "lineSha256": "36eaca402fc9d41fb412f9329b409107dab174147f9d128512f8071f60c0e489",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24417,7 +24441,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 324,
+        "line": 332,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24425,7 +24449,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 364,
+        "line": 372,
         "lineSha256": "5077c51760afcbe77449eea56b79adac12bc881d436ebbd9fd381ca2d911737d",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24433,7 +24457,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 365,
+        "line": 373,
         "lineSha256": "7269cfa1d6b249a00ca192af9d316fa32b927622546044637da6498264639f8a",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24441,7 +24465,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 382,
+        "line": 390,
         "lineSha256": "dfa6dbdfbf26a5a5aa59ba98b04e03ffc2397879459d4f08783700d518a35111",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24449,7 +24473,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 420,
+        "line": 428,
         "lineSha256": "2fd0303f686c81ee3f92fa288f4f62664e23247679c954871c5e738968074209",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24457,7 +24481,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 430,
+        "line": 438,
         "lineSha256": "8fa233c953b67e7489783ca6380f4cfffbc39c76ecd84597dd85093736b698e2",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24465,7 +24489,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 431,
+        "line": 439,
         "lineSha256": "e84c13bc3ad7e5f5179d6198fb9b6cdcd42bbcc0c24d72627f72aa6f3ee95dcb",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24473,7 +24497,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 451,
+        "line": 459,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24481,7 +24505,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 486,
+        "line": 494,
         "lineSha256": "b551662abddf18018ffba50491742c0b86048f8379f68fb2b98329f183967ccc",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24489,32 +24513,8 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 487,
+        "line": 495,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 506,
-        "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 507,
-        "lineSha256": "4b4a581b3b83855c0723ee148f541380128583645a902b220c89bcb29b78a1cb",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 512,
-        "lineSha256": "0c1bb5b7fa5996a327e93d777a71b6224d778dd9782e84c4cd414d1f67ed1a9e",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
       {
@@ -24522,62 +24522,6 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 514,
-        "lineSha256": "8df9eead615a66a471652b4a6ae375f68488df1272d6249af098fbfafaece4ec",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 516,
-        "lineSha256": "8df9eead615a66a471652b4a6ae375f68488df1272d6249af098fbfafaece4ec",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 532,
-        "lineSha256": "3e8d84fa6f6d47736e6d2424f695948ff4058383a5ba89dfda022769f8f4f46a",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 533,
-        "lineSha256": "786dc2cb5ded0c090812fe595b5755078c63ca318dc1c2a894df5495587329d0",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 549,
-        "lineSha256": "b8e9245ee5e81de095523dfd3e4c1c12948e18e5b41900a7888bd9ddffcc635c",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 565,
-        "lineSha256": "5c356c815aa10722945ca75325fa45a4718fe17f9a2e6f643282660980823479",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 586,
-        "lineSha256": "c51d7afd15f8b802b818c399d1764762dd5d03804f1bc0979ee1c36fae63e620",
-        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 607,
         "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24585,7 +24529,87 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 608,
+        "line": 515,
+        "lineSha256": "4b4a581b3b83855c0723ee148f541380128583645a902b220c89bcb29b78a1cb",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 520,
+        "lineSha256": "0c1bb5b7fa5996a327e93d777a71b6224d778dd9782e84c4cd414d1f67ed1a9e",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 522,
+        "lineSha256": "8df9eead615a66a471652b4a6ae375f68488df1272d6249af098fbfafaece4ec",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 524,
+        "lineSha256": "8df9eead615a66a471652b4a6ae375f68488df1272d6249af098fbfafaece4ec",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 540,
+        "lineSha256": "3e8d84fa6f6d47736e6d2424f695948ff4058383a5ba89dfda022769f8f4f46a",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 541,
+        "lineSha256": "786dc2cb5ded0c090812fe595b5755078c63ca318dc1c2a894df5495587329d0",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 557,
+        "lineSha256": "b8e9245ee5e81de095523dfd3e4c1c12948e18e5b41900a7888bd9ddffcc635c",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 573,
+        "lineSha256": "5c356c815aa10722945ca75325fa45a4718fe17f9a2e6f643282660980823479",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 594,
+        "lineSha256": "c51d7afd15f8b802b818c399d1764762dd5d03804f1bc0979ee1c36fae63e620",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 615,
+        "lineSha256": "2616da1a458dcb7719b748788fe4a1515749bef01aa0e1e44ca3a14fac0963db",
+        "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 616,
         "lineSha256": "d8e13cf74c28cd71a198092b78029fdd8f3b691efc2501dca916268f4fc1e18b",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24593,7 +24617,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 634,
+        "line": 642,
         "lineSha256": "fc1d8a1033af2fff3c3f17d0fb18381a050474eef70e3d9bfc73c34b2b613935",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24601,7 +24625,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 645,
+        "line": 653,
         "lineSha256": "a21b3b8c064e098449ca9276124cf98e985a12efd8b605aeb51eb1fd905d40c8",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24609,7 +24633,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 647,
+        "line": 655,
         "lineSha256": "f666fbf3a1b375361844695d3680c0fe771dfba5e18909fc035561b140a39d13",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24617,7 +24641,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 664,
+        "line": 672,
         "lineSha256": "1d54e6f8bb903d48103a49bf3e430339db0c472029ea755fe7f96d14b05f8d87",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24625,7 +24649,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 673,
+        "line": 681,
         "lineSha256": "f3e7ca7a60c293485cd5a4f0570b947e0e57c956db252d9362f5715a8f632f8e",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24633,7 +24657,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 693,
+        "line": 701,
         "lineSha256": "faefbbb2fe4419d3dd98a6ca6f977e4e5102b67c226bfd26fc4e7c31c58b1696",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24641,7 +24665,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 720,
+        "line": 728,
         "lineSha256": "2e221216d0a832e69bf3aadeff3db35b12545937e833a087a10a85137a97dfcd",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24649,7 +24673,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 722,
+        "line": 730,
         "lineSha256": "382c80f4268aa951841540667f0004e2ea020ffc7e75c59c359d0560e09d7c58",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24657,7 +24681,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 759,
+        "line": 767,
         "lineSha256": "65795fa557fb21af2f0cd69ea631d117837681bd77d59f2d4dca0d6004eadd8b",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24665,7 +24689,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 760,
+        "line": 768,
         "lineSha256": "f2636c8e333bf1ed4fab4186987ee790026826ed72658633280d9157ee0d5877",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24674,7 +24698,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 761,
+        "line": 769,
         "lineSha256": "7d701720ca96c10fa6e0c816354e11d81d38ca601a0b0c0fdbe4e6149a2af101",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24683,7 +24707,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 762,
+        "line": 770,
         "lineSha256": "2e1d1a1965e0932b0801761bb996b459ba07def6768c79d4517031ca3738cb08",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24692,7 +24716,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 763,
+        "line": 771,
         "lineSha256": "c6b3f4469473e2312d80d857b09b7017fb84797cbdada2fde8c6b3a8543e880b",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -24701,7 +24725,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 764,
+        "line": 772,
         "lineSha256": "129c0b982d9b01539feedab050bd3cc18507f3a749c4632d64ba09087c5af978",
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java"
       },
@@ -49237,7 +49261,7 @@
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 1493,
       "JUNIT_OUTER_GUARD": 276,
-      "LIFECYCLE_SIGNAL": 3419,
+      "LIFECYCLE_SIGNAL": 3422,
       "NAMED_TIMEOUT_CANDIDATE": 1050,
       "PROCESS_OUTER_GUARD": 11,
       "WORKFLOW_OUTER_GUARD": 12
@@ -96251,7 +96275,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96282,7 +96306,7 @@
         "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java",
         "scopeKind": "TEST",
         "scopeName": "derivationCreatesFreshTransportsAndLeavesSourceReusable",
-        "scopeSha256": "0f70656a6808b5a2a4420834acb65cff7a653ea1f7a38e9eaa5fcba69ede552a",
+        "scopeSha256": "e8c100e7fcd7c1d73c30f731fec4de8d067815b4974714b9b5dbf96244128b13",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -96340,7 +96364,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96355,9 +96379,9 @@
         "hasInlinePolicy": true,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-5826d209c16c71fe",
+        "id": "SCOPE-31cd2f0f3ca42f94",
         "inlineCleanupMillis": null,
-        "line": 112,
+        "line": 120,
         "lineSha256": "29aa28bbd931b035ec7a44098ea99fc94b605520709d7bb66a183fd94b984c86",
         "observedOperations": [
           "CONFIGURE_POLICY"
@@ -96424,7 +96448,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96439,9 +96463,9 @@
         "hasInlinePolicy": true,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-0b5fbcb703b36bad",
+        "id": "SCOPE-480a19d7ba3e48aa",
         "inlineCleanupMillis": null,
-        "line": 225,
+        "line": 233,
         "lineSha256": "e642c18302086b61810c226b407569c8a3387aa5d0dcaafd083adbe1ff3369cd",
         "observedOperations": [
           "CONFIGURE_POLICY"
@@ -96508,7 +96532,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 291,
+          "line": 299,
           "lineSha256": "df5a14de14f97bced0a8fbdf0bb8707dec6031e7bf8a9eedbea4fcea40292294",
           "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96529,7 +96553,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96544,9 +96568,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-92c473fa368cecd2",
+        "id": "SCOPE-f14f004b5dfb8d38",
         "inlineCleanupMillis": null,
-        "line": 291,
+        "line": 299,
         "lineSha256": "df5a14de14f97bced0a8fbdf0bb8707dec6031e7bf8a9eedbea4fcea40292294",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96615,7 +96639,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96630,9 +96654,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-bcaa3199045c9377",
+        "id": "SCOPE-fb935448f4e557e8",
         "inlineCleanupMillis": null,
-        "line": 391,
+        "line": 399,
         "lineSha256": "2d30e3723f6a431ecdbf19a8d83ecded14dc8d17faeb46c105eccbaa67d45dbd",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER"
@@ -96699,7 +96723,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96714,9 +96738,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-0d199d61a26825d4",
+        "id": "SCOPE-a0a516cbd646a3a7",
         "inlineCleanupMillis": null,
-        "line": 483,
+        "line": 491,
         "lineSha256": "1286e7f8a813b2e9d9dd06fd6d7cd4e15e0534fc22df884d817af3b438a7fc39",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER"
@@ -96763,7 +96787,7 @@
         "generationCount": 3,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 505,
+          "line": 513,
           "lineSha256": "b068ad8578e89ca7c46bde9a61f81ad248700b38374060412e693a6794f3cb51",
           "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -96788,7 +96812,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 505,
+          "line": 513,
           "lineSha256": "b068ad8578e89ca7c46bde9a61f81ad248700b38374060412e693a6794f3cb51",
           "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96809,7 +96833,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96824,9 +96848,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-4567f09ac31141e1",
+        "id": "SCOPE-a88e9de178e155cb",
         "inlineCleanupMillis": null,
-        "line": 505,
+        "line": 513,
         "lineSha256": "b068ad8578e89ca7c46bde9a61f81ad248700b38374060412e693a6794f3cb51",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96894,7 +96918,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96909,9 +96933,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-c2c66a4483fea967",
+        "id": "SCOPE-ab4eb8e891cf5935",
         "inlineCleanupMillis": null,
-        "line": 538,
+        "line": 546,
         "lineSha256": "c6511924bd66bad28f958f274f7b8a09b441d47394ada7cfb217d9da1a4f7920",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER"
@@ -96952,7 +96976,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 10000,
         "controlProof": {
-          "line": 605,
+          "line": 613,
           "lineSha256": "c99e19036fcb1b16e77f9e2d30b96c6dd293c1da1e73d0afaf4ced232a3954da",
           "path": "src/test/java/com/soklet/SimulatorConfigDerivationTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -96999,7 +97023,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "bead227d2056d890f8c7c4ed4308d99dd3a9c9ad488dd25c7fea3c61c862ee0f",
+        "fileSha256": "81f340e863f43102225895ef001654e4b10dc614138a70ad36fbd6956fc3408b",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -97014,9 +97038,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-5db2d69fa099a1e5",
+        "id": "SCOPE-9a5c8ba3608796a7",
         "inlineCleanupMillis": null,
-        "line": 605,
+        "line": 613,
         "lineSha256": "c99e19036fcb1b16e77f9e2d30b96c6dd293c1da1e73d0afaf4ced232a3954da",
         "observedOperations": [
           "RUN_SIMULATOR"

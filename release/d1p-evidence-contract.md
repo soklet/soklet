@@ -130,7 +130,7 @@ reflection contract, official conformance build/runner, public fixture, and
 transport-composition fixture bytes. Generated and
 reviewed signature/incompatibility tuple sets must agree before a manifest can
 be produced. The configuration also requires the accepted D1p cardinalities:
-133/36/64/0 owners, 1,029/179/421 signatures, 618 incompatibility rows, and 39
+134/36/64/0 owners, 1,075/189/423 signatures, 658 incompatibility rows, and 51
 non-MCP allowlist rows. The `freeze` set is a compact cross-check of all per-phase
 counts/digests and the owner, allowlist, incompatibility, and reflection
 digests. The API-freeze wrapper separately proves that the allowlist is the

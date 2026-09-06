@@ -729,6 +729,29 @@ listener binds to `127.0.0.1` by default; configure
 authentication/admission, and TLS termination deliberately
 before exposing it remotely.
 
+##### Operation classification
+
+Application policy and handler interceptors can branch on the semantic
+[`McpOperationType`](https://javadoc.soklet.com/com/soklet/McpOperationType.html)
+instead of comparing JSON-RPC method strings:
+
+```java
+if (context.getOperationType() == McpOperationType.TOOLS_CALL) {
+  // Apply tool-call-specific policy.
+}
+```
+
+[`McpRequestContext::getOperationType`](<https://javadoc.soklet.com/com/soklet/McpRequestContext.html#getOperationType()>),
+[`McpAdmissionContext::getOperationType`](<https://javadoc.soklet.com/com/soklet/McpAdmissionContext.html#getOperationType()>),
+and
+[`McpRateLimitContext::getOperationType`](<https://javadoc.soklet.com/com/soklet/McpRateLimitContext.html#getOperationType()>)
+provide the same classification. `OTHER` covers an unrecognized, future, or
+extension method, while
+[`McpRequestContext::getJsonRpcMethod`](<https://javadoc.soklet.com/com/soklet/McpRequestContext.html#getJsonRpcMethod()>)
+retains the exact validated wire value for diagnostics and extension-aware
+code. Keep a default branch when switching over operation types because Soklet
+may recognize additional operations in later MCP profiles.
+
 After admission, static `tools/list` and `prompts/list` catalogs are immutable
 and caller-neutral; Soklet does not authorization-filter their descriptors. A
 registered tool remains listed when it declares a required client capability,
@@ -1517,10 +1540,10 @@ state. Application-supplied MCP collaborators, including rate limiters, are
 reused by identity; replace them through
 [`SimulatorConfig.Builder::configureMcpServer`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#configureMcpServer(java.util.function.Consumer)>)
 when a test needs isolated collaborator state. For a standalone test without
-an application configuration, the same `configureMcpServer` method supplies a
-fresh MCP builder. Set its logical port and any test-specific settings in that
-callback. The builder uses the same classpath-discovery and accept-all defaults
-as
+an application configuration, that method supplies a fresh MCP builder whose
+logical port defaults to `0`. Override the port and add any test-specific
+settings in that callback when needed. The builder uses the same
+classpath-discovery and accept-all defaults as
 [`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>),
 including its requirement to configure a fallback tool rate limiter when any
 discovered endpoint has a tool. Supply an explicit endpoint registry or
@@ -2698,8 +2721,9 @@ The twenty-first adds seven top-level public simulation types,
 and two abstract methods to
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html), while
 leaving the metric/snapshot/canary inventories unchanged.
-Those Vxx counts remain historical. The current API inventory is 133/36/64
-Phase 4/5/6 owners (233 total), all three phases are frozen, and
+Those Vxx counts remain historical. The current MCP API inventory is 134/36/64
+Phase 4/5/6 owners (234 MCP total); the 51 reviewed non-MCP owners bring the
+current-side inventory to 285. All three phases are frozen, and
 `api/mcp/provisional.includes` is empty. The release-validation workflow and
 fail-closed evidence assembler are implemented, but no immutable candidate run
 is claimed. The last full pre-typed-state local evidence was green at core

@@ -127,7 +127,8 @@ public final class EffectiveOriginResolver {
 	 * @return this resolver
 	 */
 	@NonNull
-	public EffectiveOriginResolver trustedProxyPredicate(@Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
+	public EffectiveOriginResolver trustedProxyPredicate(
+			@Nullable Predicate<@NonNull InetSocketAddress> trustedProxyPredicate) {
 		this.trustedProxyPredicate = trustedProxyPredicate;
 		return this;
 	}

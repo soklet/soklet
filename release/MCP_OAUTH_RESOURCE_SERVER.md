@@ -155,15 +155,15 @@ public final class OAuthAdmissionController
 
   private static Optional<String> requiredScope(
       McpAdmissionContext context) {
-    return switch (context.getJsonRpcMethod()) {
-      case "server/discover", "tools/list", "prompts/list",
-          "resources/list", "resources/templates/list" ->
+    return switch (context.getOperationType()) {
+      case SERVER_DISCOVER, TOOLS_LIST, PROMPTS_LIST,
+          RESOURCES_LIST, RESOURCES_TEMPLATES_LIST ->
           Optional.of("mcp:discover");
-      case "tools/call" -> context.getOperationName()
+      case TOOLS_CALL -> context.getOperationName()
           .flatMap(name -> Optional.ofNullable(TOOL_SCOPES.get(name)));
-      case "prompts/get" -> Optional.of("mcp:prompts:get");
-      case "resources/read" -> Optional.of("mcp:resources:read");
-      case "subscriptions/listen" ->
+      case PROMPTS_GET -> Optional.of("mcp:prompts:get");
+      case RESOURCES_READ -> Optional.of("mcp:resources:read");
+      case SUBSCRIPTIONS_LISTEN ->
           Optional.of("mcp:subscriptions:listen");
       default -> Optional.empty();
     };

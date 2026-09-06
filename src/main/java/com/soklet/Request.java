@@ -1937,7 +1937,9 @@ public final class Request {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier queryParameters(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> queryParametersConsumer) {
+		public Copier queryParameters(
+				@NonNull Consumer<@NonNull Map<@NonNull String,
+						@NonNull Set<@NonNull String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
 
 			if (this.builder.queryParameters == null)
@@ -1999,7 +2001,9 @@ public final class Request {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
+		public Copier headers(
+				@NonNull Consumer<@NonNull Map<@NonNull String,
+						@NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)

@@ -126,7 +126,7 @@ public final class McpIcon {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder sizes(@NonNull String... sizes) {
+		public Builder sizes(@NonNull String @NonNull... sizes) {
 			requireNonNull(sizes);
 			this.sizes.clear();
 			for (String size : sizes)

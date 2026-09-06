@@ -43,6 +43,19 @@ public interface McpAdmissionContext {
 	/** @return the validated JSON-RPC method */
 	@NonNull String getJsonRpcMethod();
 
+	/**
+	 * Returns the high-level type of the MCP operation being admitted.
+	 *
+	 * <p>This classification is suitable for application branching. The exact
+	 * validated wire value remains available from {@link #getJsonRpcMethod()}.
+	 *
+	 * @return operation type
+	 */
+	@NonNull
+	default McpOperationType getOperationType() {
+		return McpOperationType.fromJsonRpcMethod(getJsonRpcMethod());
+	}
+
 	/** @return whether the message is a JSON-RPC notification */
 	@NonNull Boolean isNotification();
 

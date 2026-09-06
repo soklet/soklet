@@ -54,7 +54,7 @@ public final class McpPromptOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public static McpPromptOutput fromMessages(
-			@NonNull McpPromptMessage... messages) {
+			@NonNull McpPromptMessage @NonNull... messages) {
 		return builder().addMessages(List.of(messages)).build();
 	}
 

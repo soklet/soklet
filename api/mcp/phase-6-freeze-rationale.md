@@ -39,21 +39,21 @@ the current full japicmp report.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 621 canonical
+The reviewed current incompatibility set contains exactly 658 canonical
 symbols and has SHA-256
-`25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
+`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
 The matching full japicmp report establishes an exact owner universe of:
 
-- 133 Phase 4 owners;
-- 37 Phase 5 owners;
+- 134 Phase 4 owners;
+- 36 Phase 5 owners;
 - 64 Phase 6 owners;
 - zero provisional owners; and
-- 234 MCP owners, plus 38 reviewed non-MCP owners for 272 current-side owners.
+- 234 MCP owners, plus 51 reviewed non-MCP owners for 285 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
-The Phase 4 owner inventory remains 133, while its signature snapshot includes
-the one compatible
-`LogEventType.MCP_TRACE_CORRELATION` field. Among the reviewed Phase 4 host
+The Phase 4 owner inventory is 134, while its signature snapshot includes the
+compatible `LogEventType.MCP_TRACE_CORRELATION` field and the restored
+`McpOperationType` classification. Among the reviewed Phase 4 host
 localization amendments, only `McpServer.getLocalizationControl()` added a
 source incompatibility at that amendment checkpoint; it was one of exactly
 three localization-host amendments. `provisional.includes` is intentionally
@@ -76,23 +76,23 @@ Phase 5 carrier owners and changes no Phase 6 descriptor.
 
 ## Frozen Phase 6 snapshot
 
-`phase-6.signatures.jsonl` contains exactly 424 canonical records:
+`phase-6.signatures.jsonl` contains exactly 423 canonical records:
 
 - 64 classes;
 - zero constructors;
-- 42 fields; and
+- 41 fields; and
 - 318 methods.
 
 The reviewed file's SHA-256 is
-`09d69ee536b2408917836ab570b28c975f937c81ddc89c3ca94ab2118a4742ae`.
+`991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
 The independent reflection contract freezes the Phase 6 JSpecify type-use
 layout with SHA-256
-`01eba9130dd61536076431c633833dc66b41f5ec605870cfb6f3a29a183db930`.
+`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
 The 64-entry `phase-6.includes` inventory has SHA-256
-`9103918bad58c5b6d6d41384803518876f3dfc6ae7363bf3d9084e3fab37f139`.
+`29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 424 records and was byte-for-
+current full japicmp report produced the same 423 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate now
 compares the Phase 4, Phase 5, and Phase 6 snapshots bidirectionally on every
 run, and `frozen-phases` lists the contiguous sorted prefix `4`, `5`, `6`.
@@ -592,7 +592,7 @@ across the unchanged 64 owners: 64 classes, no public constructors, 41 fields,
 and 318 methods. Its signature SHA-256 is
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`;
 its reflection/nullability SHA-256 is
-`3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`;
+`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`;
 and the canonically sorted include inventory has SHA-256
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
 

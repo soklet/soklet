@@ -152,7 +152,7 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins,
-																							 @NonNull Function<String, Boolean> allowCredentialsResolver) {
+																 @NonNull Function<@NonNull String, @NonNull Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistedOrigins);
 		requireNonNull(allowCredentialsResolver);
 
@@ -173,7 +173,8 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}, omitting {@code Access-Control-Allow-Credentials} by default
 	 */
 	@NonNull
-	static CorsAuthorizer fromWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer) {
+	static CorsAuthorizer fromWhitelistAuthorizer(
+			@NonNull Function<@NonNull String, @NonNull Boolean> whitelistAuthorizer) {
 		requireNonNull(whitelistAuthorizer);
 		return WhitelistedOriginsCorsAuthorizer.fromAuthorizer(whitelistAuthorizer, (origin) -> false);
 	}
@@ -193,8 +194,9 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}, with {@code allowCredentialsResolver} dictating whether credentials are allowed
 	 */
 	@NonNull
-	static CorsAuthorizer fromWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer,
-																									@NonNull Function<String, Boolean> allowCredentialsResolver) {
+	static CorsAuthorizer fromWhitelistAuthorizer(
+			@NonNull Function<@NonNull String, @NonNull Boolean> whitelistAuthorizer,
+			@NonNull Function<@NonNull String, @NonNull Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistAuthorizer);
 		requireNonNull(allowCredentialsResolver);
 

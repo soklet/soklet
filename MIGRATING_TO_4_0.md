@@ -299,7 +299,8 @@ test-scoped implementation. When the builder did not import an MCP server, the
 same method creates a fresh one from the standard MCP builder defaults.
 
 For a standalone, transport-isolated simulation that does not start from an
-application configuration, build the graph explicitly. The fresh MCP builder
+application configuration, build the graph explicitly. The fresh MCP builder's
+logical port defaults to `0` and may be overridden in the callback. It otherwise
 uses the same classpath-discovery and accept-all admission defaults as
 [`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>):
 
@@ -386,6 +387,12 @@ are:
   contexts and registrations. Interceptors receive an explicit
   `McpRequestContext`, `McpInvocationFeatures`, and
   `McpHandlerContinuation`; the continuation only proceeds downstream.
+- Continue using `McpOperationType` as the high-level branching abstraction
+  from 3.5.1, now with values for the modern profile and `OTHER` for an
+  unrecognized, future, or extension method. Request, admission, and rate-limit
+  contexts expose it through `getOperationType()`; use `getJsonRpcMethod()`
+  only when exact validated wire text is required. Keep a default enum branch
+  because the recognized set may grow in later supported profiles.
 - Replace request-admission/session policy with `McpAdmissionController`.
   Authentication, token verification, authorization rules, protected resource
   metadata, and identity-provider behavior remain application-owned.

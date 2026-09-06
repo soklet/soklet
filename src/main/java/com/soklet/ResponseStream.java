@@ -42,7 +42,8 @@ public interface ResponseStream {
 	 * @throws InterruptedException if the writer is interrupted while waiting for stream capacity
 	 * @throws StreamingResponseCanceledException if the stream has been canceled
 	 */
-	void write(@NonNull byte[] bytes) throws IOException, InterruptedException, StreamingResponseCanceledException;
+	void write(byte @NonNull [] bytes) throws IOException,
+			InterruptedException, StreamingResponseCanceledException;
 
 	/**
 	 * Writes the remaining bytes of a byte buffer to the response stream without mutating the caller's buffer.

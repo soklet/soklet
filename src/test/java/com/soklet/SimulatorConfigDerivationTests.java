@@ -98,14 +98,22 @@ class SimulatorConfigDerivationTests {
 		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				sourceMcpServer.getDiagnostics().getStatus());
 
-		// Simulator derivation did not claim the production transports: the exact
-		// source configuration can still own and complete its normal lifecycle.
-		try (Soklet soklet = Soklet.fromConfig(sourceConfig)) {
-			soklet.start();
-			Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
+		// Simulator derivation did not claim the production transports: where live
+		// SSE is supported, the exact source configuration can still own and
+		// complete its normal lifecycle. JDK 17 cannot perform that final live-SSE
+		// check because DefaultSseServer deliberately requires virtual threads.
+		if (Utilities.virtualThreadsAvailable()) {
+			try (Soklet soklet = Soklet.fromConfig(sourceConfig)) {
+				soklet.start();
+				Assertions.assertEquals(SokletStatus.RUNNING,
+						soklet.getStatus());
+			}
+			Assertions.assertEquals(McpServerStatus.TERMINATED,
+					sourceMcpServer.getDiagnostics().getStatus());
+		} else {
+			Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+					sourceMcpServer.getDiagnostics().getStatus());
 		}
-		Assertions.assertEquals(McpServerStatus.TERMINATED,
-				sourceMcpServer.getDiagnostics().getStatus());
 	}
 
 	@Test

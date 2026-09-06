@@ -18,15 +18,16 @@ MCP value-contract, invocation/input-declaration, and focused naming/surface
 amendments, followed by the 2026-09-04 public-contract annotation and
 transport-ownership documentation amendment and the 2026-09-04 non-MCP
 public-record elimination amendment, followed by the 2026-09-04 MCP server
-default-construction amendment. The
+default-construction amendment, the 2026-09-06 exported-nullability completion,
+and the 2026-09-06 typed-operation amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 669 records and has SHA-256
-`283b4031a8f28e5f4d0640b2cc0deeaf68d345312786fabefa49bac7b8f5a4b1`.
+4.0.0 source tree. It currently contains 658 records and has SHA-256
+`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -67,17 +68,17 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
+| `phase-4.includes` | 134 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 0 | empty after the reviewed telemetry amendment |
 | `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
 
-The 233-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 284 current types.
+The 234-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 285 current types.
 Ownership records when a type is intended to stabilize; they do not themselves freeze it.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`f028ced0c56d597aea55d1a43a96a518a3445b4bd66e1a08d997f5bb8a83cb64`,
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`,
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`,
 and
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
@@ -367,9 +368,9 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
-1,058 canonical records across all 133 selected owners: 133 classes, one
-constructor, 79 fields, and 845 methods. Its SHA-256 is
-`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`.
+1,075 canonical records across all 134 selected owners: 134 classes, one
+constructor, 90 fields, and 850 methods. Its SHA-256 is
+`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`.
 `phase-5.signatures.jsonl` freezes 189 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 134 methods.
 Its SHA-256 is
@@ -379,10 +380,11 @@ selected owners: 64 classes, zero constructors, 41 fields, and 318 methods.
 Its SHA-256 is
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
 Their current reflection/nullability digests are respectively
-`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`,
-`682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`,
+`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`,
+`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`,
 and
-`3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`.
+`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
+
 The reviewed 2026-08-15 telemetry amendment moved all 32 former provisional
 owners into Phase 6 without changing their descriptors;
 `provisional.includes` is now empty.
@@ -1551,25 +1553,25 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-669 reviewed incompatibilities across 284 owners: 233 MCP and 51 non-MCP.
+658 reviewed incompatibilities across 285 owners: 234 MCP and 51 non-MCP.
 The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
 `RequestStreamTerminationKey`, and `SubscriptionTerminationKey` are now frozen
-Phase 6 owners. The amended frozen inventories contain 1,058 Phase 4, 189
-Phase 5, and 423 Phase 6 signatures. Phase 4 contains 133 classes, one
-constructor, 79 fields, and 845 methods, with SHA-256
-`43da0415aac1388939668369ec89f82038e5a59816f54fdfee92d3bfcb5063e2`
+Phase 6 owners. The amended frozen inventories contain 1,075 Phase 4, 189
+Phase 5, and 423 Phase 6 signatures. Phase 4 contains 134 classes, one
+constructor, 90 fields, and 850 methods, with SHA-256
+`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`
 and exact nullability digest
-`a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
+`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 134 methods,
 with SHA-256
 `0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`
 and exact nullability digest
-`682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`.
+`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`.
 Phase 6 contains 64 classes, zero constructors, 41 fields, and 318 methods,
 with SHA-256
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`
 and exact nullability digest
-`3df4ec35547cde4f6ad5a2816824bfcd65a5c8145aa50f07ab1857b6c17c7b60`.
+`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
 The sole public constructor in the frozen surface is the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; all non-throwable values
 are constructed through factories or builders.
@@ -2336,3 +2338,51 @@ one-for-one, and now has SHA-256
 Its reflection/nullability SHA-256 is
 `a0e576eb3e7bd37333cbcbc54037a991299153a3ed6fa0686c4186f714bf033f`.
 Phase 5, Phase 6, and all owner inventories remain unchanged.
+
+### 2026-09-06 exported nullability completion amendment
+
+The exported source-contract audit now covers public fields and parameters as
+well as return types, recursively checking generic arguments, wildcard bounds,
+and array components. The resulting annotation pass makes callback payloads,
+type tokens, varargs elements, arrays, and other nested reference types
+explicit throughout the public API. It also gives the two public SSE result
+families explicit `@ThreadSafe` contracts and freezes the intended five-method
+simulator server-configuration surface.
+
+These are source-level contract refinements only: the Phase 4/5/6 descriptor
+snapshots remain byte-identical at 1,058/189/423 records. Their reviewed
+reflection/nullability SHA-256 values are now respectively
+`78f3787f2dcfa888973c65278d5837602c719751c6b304fda518875c744f59af`,
+`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`,
+and
+`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
+
+### 2026-09-06 typed MCP operation amendment
+
+The owner-approved operation-classification pass restores the public
+`McpOperationType` concept from Soklet 3.5.1 for the stateless 4.0 protocol.
+Its ten recognized values cover the complete inbound 4.0 method set, while
+`OTHER` classifies an unrecognized, future, or extension method without
+discarding the exact validated value exposed by `getJsonRpcMethod()`.
+
+`McpRequestContext`, `McpAdmissionContext`, and `McpRateLimitContext` each add
+the same non-null default `getOperationType()` accessor. The default derives
+the semantic type from the existing exact method string, so external context
+implementations inherit the complete mapping. Applications can branch on
+`McpOperationType.TOOLS_CALL` and related values without embedding protocol
+spellings, while admission, diagnostics, and extension-aware code retain the
+raw method when it is genuinely required.
+
+The Phase 4 owner count increases to 134 and its canonical snapshot to 1,075
+records: 134 classes, one constructor, 90 fields, and 850 methods. The
+signature, reflection/nullability, and include-inventory SHA-256 values are
+respectively
+`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`,
+`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`,
+and
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The complete owner partition is now 134/36/64/0, or 234 MCP owners and 285
+reviewed current-side owners. Restoring the enum and its surviving 3.5.1
+members removes eleven prior removal records; the released-3.5.1 compatibility
+ledger now contains 658 records with SHA-256
+`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.

@@ -109,6 +109,15 @@ validates those fields before application admission and exposes normalized,
 bounded request information through `McpRequestContext` and the operation-
 specific context.
 
+`McpRequestContext`, `McpAdmissionContext`, and `McpRateLimitContext` expose
+the semantic `McpOperationType` through `getOperationType()`. Application
+branching should normally use that type instead of comparing protocol strings.
+The separate `getJsonRpcMethod()` accessor preserves the exact validated wire
+value for diagnostics and extension-aware policy; `McpOperationType.OTHER`
+classifies an unrecognized, future, or extension method without discarding that
+value. Because the recognized operation set may grow with later MCP
+profiles, enum switches should retain a forward-compatible default.
+
 One server may host multiple `McpEndpoint` instances. Endpoint selection uses
 the normalized exact request path. Tool, prompt, and resource names may repeat
 on different endpoint paths without leaking across them, while handler slots,
@@ -685,6 +694,12 @@ authorization-server selection, scope semantics, and RFC compliance. Unsafe
 or reserved response headers fail closed, and notifications retain the HTTP
 status and safe headers without acquiring a JSON-RPC body.
 
+Authorization policy can switch on
+`McpAdmissionContext.getOperationType()` and then refine a named operation
+through `getOperationName()`. This avoids coupling ordinary policy code to wire
+spellings such as `"tools/call"`; inspect `getJsonRpcMethod()` only when the
+exact method text is itself part of the policy.
+
 HTTP `Forwarded` and `X-Forwarded-For` headers are equally inert at this
 boundary: Soklet never turns them into an admission identity or silently
 replaces the application's partition key. If an application deliberately uses
@@ -721,6 +736,12 @@ request or notification. A tool call then runs exactly one resolved tool
 limiter in this order: tool override, endpoint override, server fallback.
 Named and direct setters are mutually exclusive and last-call-wins; every name
 in `McpRateLimiterRegistry` resolves when the immutable server is built.
+
+Custom limiters have the same distinction:
+`McpRateLimitContext.getOperationType()` is the stable application-facing
+classification, while `getJsonRpcMethod()` is the exact validated method text.
+For example, a policy that distinguishes tool calls should compare the former
+to `McpOperationType.TOOLS_CALL`, not compare the latter to a string literal.
 
 The built-in `McpRateLimiter.fromInMemoryDefaults()` is a finite, bounded token
 bucket local to one JVM. It is not fleet-wide enforcement. A denial returns
@@ -773,6 +794,20 @@ get, resource read, and custom resource list handler. Its continuation is
 synchronous, same-thread, call-lifetime-bound, and one-shot. Framework-owned
 discovery and static catalogs do not pass through it because no application
 handler exists to intercept.
+
+An interceptor can branch on the same semantic operation type without knowing
+the JSON-RPC wire spelling:
+
+```java
+mcpServerBuilder.handlerInterceptor((context, features, continuation) -> {
+  if (context.getOperationType() == McpOperationType.TOOLS_CALL)
+    auditToolCall(context);
+  return continuation.proceed();
+});
+```
+
+Use `context.getJsonRpcMethod()` instead only when exact wire-method text is
+needed, such as extension-aware diagnostics.
 
 For a tool call, the application pipeline is structural and required-capability
 validation, admission, framework-state opening when present, observation,
@@ -973,8 +1008,10 @@ For a standalone simulator graph, start with
 [`SimulatorConfig::builder`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#builder()>).
 The same
 [`configureMcpServer(Consumer)`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html#configureMcpServer(java.util.function.Consumer)>)
-method supplies a fresh MCP builder; set its logical port in the callback. It
-uses the same generated-endpoint discovery and accept-all admission defaults as
+method supplies a fresh MCP builder whose logical port defaults to `0`. Override
+it with [`port(Integer)`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#port(java.lang.Integer)>)
+when a test needs another logical value. The fresh builder uses the same
+generated-endpoint discovery and accept-all admission defaults as
 [`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>).
 A discovered tool still requires a configured fallback tool rate limiter, just
 as it does on the production builder. Override endpoint discovery or admission
@@ -2528,8 +2565,8 @@ unfrozen.
 
 ## Current Phase 6 and release state
 
-The current MCP API universe is 233 owners: 133 Phase 4, 36 Phase 5, and all 64
-Phase 6 owners are frozen; 39 non-MCP owners bring current-side coverage to 272. The
+The current MCP API universe is 234 owners: 134 Phase 4, 36 Phase 5, and all 64
+Phase 6 owners are frozen; 51 non-MCP owners bring current-side coverage to 285. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed

@@ -52,8 +52,8 @@ public interface RequestInterceptor {
 	 * @param requestProcessor receives the request to use for subsequent processing
 	 */
 	default void wrapRequest(@NonNull ServerType serverType,
-													 @NonNull Request request,
-													 @NonNull Consumer<Request> requestProcessor) {
+										 @NonNull Request request,
+										 @NonNull Consumer<@NonNull Request> requestProcessor) {
 		requireNonNull(serverType);
 		requireNonNull(request);
 		requireNonNull(requestProcessor);
@@ -83,10 +83,11 @@ public interface RequestInterceptor {
 	 * @param responseWriter            receives the response to send to the client
 	 */
 	default void interceptRequest(@NonNull ServerType serverType,
-																	@NonNull Request request,
-																	@Nullable ResourceMethod resourceMethod,
-																	@NonNull Function<Request, MarshaledResponse> responseGenerator,
-																	@NonNull Consumer<MarshaledResponse> responseWriter) {
+															@NonNull Request request,
+															@Nullable ResourceMethod resourceMethod,
+															@NonNull Function<@NonNull Request,
+																	@NonNull MarshaledResponse> responseGenerator,
+															@NonNull Consumer<@NonNull MarshaledResponse> responseWriter) {
 		requireNonNull(serverType);
 		requireNonNull(request);
 		requireNonNull(responseGenerator);

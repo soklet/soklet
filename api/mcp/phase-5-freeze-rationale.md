@@ -45,10 +45,10 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 133 Phase 4, 37 Phase 5, 64 Phase 6, zero provisional, and 234
-MCP owners; the 38-owner non-MCP allowlist brings current-side coverage to 272.
+partition is 134 Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 234
+MCP owners; the 51-owner non-MCP allowlist brings current-side coverage to 285.
 
-The 37 current Phase 5 owners are the exact sorted entries in
+The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
 and its 133-owner inventory were
 unchanged, while Phase 6 and provisional owners remained unfrozen. Phase 6
@@ -65,27 +65,27 @@ The 2026-08-18 public-record elimination amendment retained the owner partition
 and advanced that checkpoint to 565 records. Typed request state then removed
 three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections leave
 Phase 5 byte-identical while the current released-3.5.1 comparison contains
-621 records with SHA-256 `25c842a78adc9217d13d8c6a68a8aec996026923ba81fe9dded7234298098964`.
+658 records with SHA-256 `f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
 
 ## Frozen Phase 5 snapshot
 
-`phase-5.signatures.jsonl` contains exactly 190 canonical records:
+`phase-5.signatures.jsonl` contains exactly 189 canonical records:
 
-- 37 classes;
+- 36 classes;
 - zero constructors;
 - 19 fields; and
 - 134 methods.
 
 The reviewed file's SHA-256 is
-`54a96f16d32096b4a4a68a29f727443853178e5da1f0dadacce2004cca70d420`.
+`0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`.
 The independent reflection contract freezes the Phase 5 JSpecify type-use
 layout with SHA-256
-`5c90b20e8b582931ca636d91ccf11c9fdc92734289bdad9b27eb9a529645db7f`.
-The 37-entry `phase-5.includes` inventory has SHA-256
-`97e1796b3972136dcba44dcd978e47df15ab8351138d080c1d52f8df58ae29f7`.
+`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`.
+The 36-entry `phase-5.includes` inventory has SHA-256
+`0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 190 records and was byte-for-
+current full japicmp report produced the same 189 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate compares
 the Phase 4, Phase 5, and now Phase 6 snapshots bidirectionally on every run.
 
@@ -432,7 +432,7 @@ public constructors, 19 fields, and 134 methods.
 The Phase 5 signature SHA-256 is
 `0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`;
 the reflection/nullability SHA-256 is
-`682eb068e722f49fca8329d39994bee747a98f1e93d9812d4186e341cf0356a7`;
+`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`;
 and the canonically sorted include inventory has SHA-256
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
 The complete owner partition is now 133/36/64/0, or 233 MCP owners and 271

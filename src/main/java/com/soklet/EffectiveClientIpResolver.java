@@ -122,7 +122,8 @@ public final class EffectiveClientIpResolver {
 	 * @return this resolver
 	 */
 	@NonNull
-	public EffectiveClientIpResolver trustedProxyPredicate(@Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
+	public EffectiveClientIpResolver trustedProxyPredicate(
+			@Nullable Predicate<@NonNull InetSocketAddress> trustedProxyPredicate) {
 		this.trustedProxyPredicate = trustedProxyPredicate;
 		return this;
 	}

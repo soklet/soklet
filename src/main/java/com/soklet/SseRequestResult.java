@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccepted, SseRequestResult.HandshakeRejected, SseRequestResult.RequestFailed {
 	/**
 	 * Represents the result of an SSE accepted handshake (connection stays open) when simulated by {@link Simulator#performSseRequest(Request)}.
@@ -147,7 +148,8 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
 		 */
-		public void registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
+		public void registerEventConsumer(
+				@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
 
 			getLock().lock();
@@ -185,7 +187,8 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
 		 */
-		public void registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
+		public void registerCommentConsumer(
+				@NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 
 			getLock().lock();

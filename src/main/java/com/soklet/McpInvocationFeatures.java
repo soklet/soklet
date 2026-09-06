@@ -82,8 +82,8 @@ public interface McpInvocationFeatures {
 			@Override
 			@NonNull
 			public <T> Optional<@NonNull T> find(
-					@NonNull Class<T> featureType) {
-				Class<T> requiredType = requireNonNull(featureType);
+					@NonNull Class<@NonNull T> featureType) {
+				Class<@NonNull T> requiredType = requireNonNull(featureType);
 				return Optional.ofNullable(requiredType.cast(
 						immutableFeatures.get(requiredType)));
 			}
@@ -103,7 +103,8 @@ public interface McpInvocationFeatures {
 	 * @throws NullPointerException if {@code featureType} is null
 	 */
 	@NonNull
-	<T> Optional<@NonNull T> find(@NonNull Class<T> featureType);
+	<T> Optional<@NonNull T> find(
+			@NonNull Class<@NonNull T> featureType);
 
 	/**
 	 * Returns the cooperative cancelation signal for this invocation.
@@ -147,8 +148,8 @@ public interface McpInvocationFeatures {
 	 * @throws IllegalStateException if the feature is unavailable
 	 */
 	@NonNull
-	default <T> T require(@NonNull Class<T> featureType) {
-		Class<T> requiredFeatureType = requireNonNull(featureType);
+	default <T> T require(@NonNull Class<@NonNull T> featureType) {
+		Class<@NonNull T> requiredFeatureType = requireNonNull(featureType);
 		return find(requiredFeatureType).orElseThrow(() ->
 				new IllegalStateException(
 						"Required MCP invocation feature is unavailable: "

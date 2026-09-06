@@ -194,7 +194,8 @@ public interface Simulator {
 	 * @return this simulator
 	 */
 	@NonNull
-	default Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+	default Simulator onBroadcastError(
+			@Nullable Consumer<@NonNull Throwable> onBroadcastError) {
 		return this;
 	}
 
@@ -207,7 +208,8 @@ public interface Simulator {
 	 * @return this simulator
 	 */
 	@NonNull
-	default Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+	default Simulator onUnicastError(
+			@Nullable Consumer<@NonNull Throwable> onUnicastError) {
 		return this;
 	}
 
