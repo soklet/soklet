@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -156,6 +157,24 @@ public final class McpJsonRpcError {
 	@NonNull
 	public Optional<@NonNull McpJsonValue> getData() {
 		return Optional.ofNullable(this.data);
+	}
+
+	/** @return whether the code, message, and data are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpJsonRpcError error))
+			return false;
+		return this.code == error.code
+				&& this.message.equals(error.message)
+				&& Objects.equals(this.data, error.data);
+	}
+
+	/** @return structural error hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.code, this.message, this.data);
 	}
 
 	private static int requireApplicationCode(int code) {

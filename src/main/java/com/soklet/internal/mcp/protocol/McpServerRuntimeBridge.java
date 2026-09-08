@@ -86,6 +86,9 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class McpServerRuntimeBridge {
 	@NonNull
+	private static final String TASKS_EXTENSION_IDENTIFIER =
+			"io.modelcontextprotocol/tasks";
+	@NonNull
 	private static final McpJsonCodec CANONICAL_JSON_CODEC =
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
 	@NonNull
@@ -891,6 +894,9 @@ public final class McpServerRuntimeBridge {
 				McpNormalizedEndpoint.withServerInformation(implementation)
 						.serverInformationIncluded(
 								publicEndpoint.isServerInformationIncluded());
+		if (endpointPlan.tasksSupported())
+			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
+					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
 		Optional<McpSubscriptionEventSource> subscriptionEventSource =
 				publicEndpoint.getSubscriptionConfig().map(configuration -> {
@@ -1543,7 +1549,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull ResourcePlan> resourcePlans,
 			@NonNull ResourceListPlan resourceListPlan,
 			@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
-			boolean localizationEnabled) {
+			boolean localizationEnabled, boolean tasksSupported) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1561,7 +1567,7 @@ public final class McpServerRuntimeBridge {
 				@NonNull List<@NonNull ResourcePlan> resourcePlans,
 				@NonNull ResourceListPlan resourceListPlan) {
 			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
-					Optional.empty(), false);
+					Optional.empty(), false, false);
 		}
 	}
 

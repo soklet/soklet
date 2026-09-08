@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -73,6 +74,23 @@ public final class McpPromptOutput implements McpCompletePayload {
 	@NonNull
 	public List<@NonNull McpPromptMessage> getMessages() {
 		return this.messages;
+	}
+
+	/** @return whether the description and messages are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpPromptOutput output))
+			return false;
+		return Objects.equals(this.description, output.description)
+				&& this.messages.equals(output.messages);
+	}
+
+	/** @return structural prompt-output hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.description, this.messages);
 	}
 
 	/**

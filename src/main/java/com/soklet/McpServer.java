@@ -80,6 +80,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpToolOutputSanitizer getToolOutputSanitizer();
 
 	/**
+	 * Returns the optional application-owned task manager.
+	 * <p>
+	 * When present, this server advertises support for the MCP Tasks extension.
+	 * Soklet neither starts nor closes the manager and does not own its worker
+	 * runtime.
+	 *
+	 * @return task manager, or the empty optional when Tasks are disabled
+	 */
+	@NonNull
+	Optional<@NonNull McpTaskManager> getTaskManager();
+
+	/**
 	 * Returns the optional limiter applied once to every admitted request or
 	 * notification.
 	 *
@@ -243,6 +255,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private McpToolOutputSanitizer toolOutputSanitizer;
 		@Nullable
+		private McpTaskManager taskManager;
+		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 		@Nullable
 		private McpRateLimiter requestRateLimiter;
@@ -321,6 +335,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.admissionController = exactSource.admissionController;
 			this.handlerInterceptor = exactSource.handlerInterceptor;
 			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
+			this.taskManager = exactSource.taskManager;
 			this.corsAuthorizer = exactSource.corsAuthorizer;
 			this.requestRateLimiter = exactSource.requestRateLimiter;
 			this.toolRateLimiter = exactSource.toolRateLimiter;
@@ -700,6 +715,23 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Configures the application-owned MCP task manager. A configured manager
+		 * enables and advertises the MCP Tasks extension for every endpoint on this
+		 * server.
+		 * <p>
+		 * Soklet invokes the manager concurrently but does not start it, close it, or
+		 * own its workers. Passing {@code null} disables Tasks.
+		 *
+		 * @param taskManager application-owned task manager, or null to disable Tasks
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder taskManager(@Nullable McpTaskManager taskManager) {
+			this.taskManager = taskManager;
+			return this;
+		}
+
+		/**
 		 * Configures the optional limiter applied once to every admitted MCP
 		 * request or notification.
 		 *
@@ -980,7 +1012,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.maximumSubscriptionDuration,
 					endpointRegistry,
 					this.admissionController, this.handlerInterceptor,
-					this.toolOutputSanitizer, this.corsAuthorizer,
+					this.toolOutputSanitizer, this.taskManager,
+					this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
 					this.unknownMirroredHeaderNameDiagnostics,
 					this.logRawValidatedTraceIds,

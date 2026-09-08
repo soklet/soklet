@@ -17,8 +17,11 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+
+import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
 
@@ -132,5 +135,22 @@ public final class McpCompleteResult implements McpOperationResult {
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether the payload and metadata are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpCompleteResult result))
+			return false;
+		return this.payload.equals(result.payload)
+				&& this.metadata.equals(result.metadata);
+	}
+
+	/** @return structural payload-and-metadata hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.payload, this.metadata);
 	}
 }

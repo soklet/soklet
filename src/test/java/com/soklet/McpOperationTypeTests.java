@@ -98,6 +98,9 @@ class McpOperationTypeTests {
 		methods.put("resources/read", McpOperationType.RESOURCES_READ);
 		methods.put("subscriptions/listen",
 				McpOperationType.SUBSCRIPTIONS_LISTEN);
+		methods.put("tasks/get", McpOperationType.TASKS_GET);
+		methods.put("tasks/update", McpOperationType.TASKS_UPDATE);
+		methods.put("tasks/cancel", McpOperationType.TASKS_CANCEL);
 		methods.put("notifications/cancelled",
 				McpOperationType.NOTIFICATIONS_CANCELED);
 		return Map.copyOf(methods);

@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -27,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -53,6 +55,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			"com.example/handler-result";
 	private static final String INTERCEPTOR_METADATA_KEY =
 			"com.example/interceptor-result";
+	private static final AtomicInteger TASK_CONTROL_ARGUMENT_CONSTRUCTIONS =
+			new AtomicInteger();
 
 	@Test
 	public void validUnknownExtensionFallsBackToCoreWithoutInventedOrReflectedSupport()
@@ -326,6 +330,292 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void configuredTaskManagerAdvertisesTasksExtensionWithoutClientReflection()
+			throws Exception {
+		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-capability-test", "4.0.0").build())
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.taskManager(taskManager)
+				.host(LOOPBACK)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			Assertions.assertSame(taskManager,
+					server.getTaskManager().orElseThrow());
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> response = discover(port, "tasks-capability", "{}");
+
+			Assertions.assertEquals(200, response.statusCode(), response.body());
+			Assertions.assertTrue(response.body().contains(
+					"\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}"),
+					response.body());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void taskControlRequiresConfiguredManagerAndNegotiatedToolCall()
+			throws Exception {
+		List<Optional<McpTaskControl>> observedTaskControls =
+				new CopyOnWriteArrayList<>();
+		List<Optional<McpTaskControl>> observedPromptTaskControls =
+				new CopyOnWriteArrayList<>();
+		List<McpRequestContext> observedRequestContexts =
+				new CopyOnWriteArrayList<>();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					observedRequestContexts.add(request);
+					observedTaskControls.add(features.getTaskControl());
+					return McpCompleteResult.fromToolText("ordinary-completion");
+				})
+				.structuredContentMirroredAsText(false)
+				.build();
+		McpPromptRegistration prompt = McpPromptRegistration
+				.withName("tasks.control.prompt")
+				.handler((request, arguments, features) -> {
+					observedPromptTaskControls.add(features.getTaskControl());
+					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
+							.addMessage(McpPromptMessage.fromUserContent(
+									McpTextContent.fromText("ordinary-completion")))
+							.build());
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-control-test", "4.0.0").build())
+				.addTool(tool)
+				.addPrompt(prompt)
+				.build();
+		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
+		McpServer configuredServer = taskControlServer(endpoint,
+				Optional.of(taskManager));
+		Soklet configuredSoklet = managedSoklet(configuredServer);
+
+		try {
+			configuredSoklet.start();
+			int port = configuredServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			Assertions.assertEquals(200,
+					callTaskControlTool(port, "capable", true).statusCode());
+			Assertions.assertEquals(200,
+					callTaskControlTool(port, "incapable", false).statusCode());
+			Assertions.assertEquals(200,
+					callTaskControlPrompt(port, "non-tool").statusCode());
+		} finally {
+			configuredSoklet.close();
+		}
+
+		McpServer unconfiguredServer = taskControlServer(endpoint, Optional.empty());
+		Soklet unconfiguredSoklet = managedSoklet(unconfiguredServer);
+		try {
+			unconfiguredSoklet.start();
+			int port = unconfiguredServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			Assertions.assertEquals(200,
+					callTaskControlTool(port, "no-manager", true).statusCode());
+		} finally {
+			unconfiguredSoklet.close();
+		}
+
+		Assertions.assertEquals(3, observedTaskControls.size());
+		McpTaskControl taskControl = observedTaskControls.get(0).orElseThrow();
+		Assertions.assertSame(observedRequestContexts.get(0),
+				taskControl.getRequestContext());
+		Assertions.assertEquals(McpJsonObject.builder()
+				.put("formatVersion", 1)
+				.put("protocolVersion", PROTOCOL_VERSION)
+				.put("endpointPath", MCP_PATH)
+				.put("operationType", "tools_call")
+				.put("operationName", TOOL_NAME)
+				.put("rawArguments", McpJsonObject.builder()
+						.put("query", "catalog").build())
+				.putNull("outputSchema")
+				.put("structuredContentMirroredAsText", false)
+				.build(), taskControl.getTaskOrigin().getPersistedState());
+		Assertions.assertTrue(observedTaskControls.get(1).isEmpty());
+		Assertions.assertTrue(observedTaskControls.get(2).isEmpty());
+		Assertions.assertEquals(List.of(Optional.empty()),
+				observedPromptTaskControls);
+	}
+
+	@Test
+	public void typedArgumentsMustBeValidBeforeTaskOriginCanBeUsed()
+			throws Exception {
+		String toolName = "tasks.control.typed";
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		List<Optional<McpTaskControl>> observedTaskControls =
+				new CopyOnWriteArrayList<>();
+		McpToolRegistration<TaskControlArguments> tool = McpToolRegistration
+				.withName(toolName)
+				.argumentType(TaskControlArguments.class)
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("ordinary-completion");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-typed-control-test", "4.0.0").build())
+				.addTool(tool)
+				.build();
+		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
+			interceptorInvocations.incrementAndGet();
+			observedTaskControls.add(features.getTaskControl());
+			if (context.getRequestId().orElseThrow().asString()
+					.equals(Optional.of("typed-short-circuit")))
+				return McpCompleteResult.fromToolText("intercepted");
+			Optional<McpTaskControl> taskControl = features.getTaskControl();
+			try {
+				taskControl.ifPresent(McpTaskControl::getTaskOrigin);
+			} catch (McpInvalidToolArgumentsException exception) {
+				Assertions.assertThrows(McpInvalidToolArgumentsException.class,
+						() -> taskControl.orElseThrow().getTaskOrigin());
+				throw exception;
+			}
+			return continuation.proceed();
+		};
+		McpServer server = taskControlServer(endpoint,
+				Optional.of(McpTaskManager.fromInMemoryDefaults()), interceptor);
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.set(0);
+			String capableMetadata = "{\"_meta\":{"
+					+ "\"io.modelcontextprotocol/protocolVersion\":\""
+					+ PROTOCOL_VERSION + "\","
+					+ "\"io.modelcontextprotocol/clientCapabilities\":{"
+					+ "\"extensions\":{\"" + TASKS_EXTENSION_ID
+					+ "\":{}}}}";
+			HttpResponse<String> valid = post(port, "tools/call", toolName,
+					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-valid\","
+							+ "\"method\":\"tools/call\",\"params\":"
+							+ capableMetadata + ",\"name\":\"" + toolName
+							+ "\",\"arguments\":{\"query\":\"catalog\","
+							+ "\"pageSizes\":[10]}}}");
+			Assertions.assertEquals(200, valid.statusCode(), valid.body());
+			Assertions.assertEquals(1, interceptorInvocations.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(1,
+					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					"Valid typed arguments must be decoded exactly once.");
+			Assertions.assertTrue(observedTaskControls.get(0).isPresent());
+
+			HttpResponse<String> shortCircuited = post(port, "tools/call", toolName,
+					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-short-circuit\","
+							+ "\"method\":\"tools/call\",\"params\":"
+							+ capableMetadata + ",\"name\":\"" + toolName
+							+ "\",\"arguments\":{\"query\":"
+							+ "\"missing pageSizes\"}}}");
+			Assertions.assertEquals(200, shortCircuited.statusCode(),
+					shortCircuited.body());
+			Assertions.assertTrue(shortCircuited.body().contains("intercepted"),
+					shortCircuited.body());
+			Assertions.assertEquals(2, interceptorInvocations.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(1,
+					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					"An inline interceptor short circuit must retain pre-validation behavior.");
+			Assertions.assertTrue(observedTaskControls.get(1).isPresent());
+
+			HttpResponse<String> invalid = post(port, "tools/call", toolName,
+					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-invalid\","
+							+ "\"method\":\"tools/call\",\"params\":"
+							+ capableMetadata + ",\"name\":\"" + toolName
+							+ "\",\"arguments\":{\"query\":"
+							+ "\"missing pageSizes\"}}}");
+			Assertions.assertEquals(400, invalid.statusCode(), invalid.body());
+			Assertions.assertTrue(invalid.body().contains("\"code\":-32602"),
+					invalid.body());
+			Assertions.assertEquals(3, interceptorInvocations.get(),
+					"Interception must retain its pre-validation ordering.");
+			Assertions.assertEquals(1, handlerInvocations.get(),
+					"Invalid typed arguments must not enter the tool handler.");
+			Assertions.assertEquals(1,
+					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					"Invalid typed arguments must not construct a partial value.");
+			Assertions.assertEquals(3, observedTaskControls.size());
+			Assertions.assertTrue(observedTaskControls.get(2).isPresent(),
+					"A control may be inspected, but invalid arguments must prevent its origin from being used.");
+
+			HttpResponse<String> rejectedDuringConstruction = post(port,
+					"tools/call", toolName,
+					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-rejected\","
+							+ "\"method\":\"tools/call\",\"params\":"
+							+ capableMetadata + ",\"name\":\"" + toolName
+							+ "\",\"arguments\":{\"query\":\"reject\","
+							+ "\"pageSizes\":[10]}}}");
+			Assertions.assertEquals(400, rejectedDuringConstruction.statusCode(),
+					rejectedDuringConstruction.body());
+			Assertions.assertTrue(rejectedDuringConstruction.body().contains(
+					"\"code\":-32602"), rejectedDuringConstruction.body());
+			Assertions.assertEquals(4, interceptorInvocations.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(2,
+					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					"A failed typed decode must not retry when task origin is accessed again.");
+			Assertions.assertEquals(4, observedTaskControls.size());
+			Assertions.assertTrue(observedTaskControls.get(3).isPresent());
+
+			HttpResponse<String> incapableInvalid = post(port, "tools/call",
+					toolName,
+					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-incapable\","
+							+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+							+ "\"io.modelcontextprotocol/protocolVersion\":\""
+							+ PROTOCOL_VERSION + "\","
+							+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+							+ "\"name\":\"" + toolName + "\",\"arguments\":{"
+							+ "\"query\":\"missing pageSizes\"}}}");
+			Assertions.assertEquals(400, incapableInvalid.statusCode(),
+					incapableInvalid.body());
+			Assertions.assertEquals(5, interceptorInvocations.get(),
+					"Non-Tasks calls retain interceptor-before-validation ordering.");
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(2,
+					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get());
+			Assertions.assertEquals(Optional.empty(),
+					observedTaskControls.get(4));
+		} finally {
+			soklet.close();
+		}
+	}
+
+	private static McpServer taskControlServer(@NonNull McpEndpoint endpoint,
+			@NonNull Optional<@NonNull McpTaskManager> taskManager) {
+		return taskControlServer(endpoint, taskManager,
+				McpHandlerInterceptor.passThroughInstance());
+	}
+
+	private static McpServer taskControlServer(@NonNull McpEndpoint endpoint,
+			@NonNull Optional<@NonNull McpTaskManager> taskManager,
+			@NonNull McpHandlerInterceptor handlerInterceptor) {
+		McpServer.Builder builder = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.host(LOOPBACK)
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+				.handlerInterceptor(handlerInterceptor)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK));
+		taskManager.ifPresent(builder::taskManager);
+		return builder.build();
+	}
+
 	private static Soklet managedSoklet(McpServer server) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
@@ -396,6 +686,34 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 						StandardCharsets.UTF_8));
 	}
 
+	private static HttpResponse<String> callTaskControlTool(int port, String id,
+			boolean tasksCapable) throws Exception {
+		String extensions = tasksCapable
+				? "{\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}}"
+				: "{}";
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\","
+				+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":"
+				+ extensions + "},\"name\":\"" + TOOL_NAME + "\","
+				+ "\"arguments\":{\"query\":\"catalog\"}}}";
+		return post(port, "tools/call", TOOL_NAME, body);
+	}
+
+	private static HttpResponse<String> callTaskControlPrompt(int port, String id)
+			throws Exception {
+		String promptName = "tasks.control.prompt";
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\","
+				+ "\"method\":\"prompts/get\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{"
+				+ "\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}}},"
+				+ "\"name\":\"" + promptName + "\"}}";
+		return post(port, "prompts/get", promptName, body);
+	}
+
 	private static HttpResponse<String> callWithObsoleteTask(int port)
 			throws Exception {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"obsolete-task\","
@@ -463,5 +781,15 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.version(HttpClient.Version.HTTP_1_1)
 				.build()
 				.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private record TaskControlArguments(@NonNull String query,
+			@NonNull List<@NonNull Integer> pageSizes) {
+		private TaskControlArguments {
+			TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.incrementAndGet();
+			if ("reject".equals(query))
+				throw new IllegalArgumentException(
+						"Rejected only to exercise failed-decode memoization.");
+		}
 	}
 }

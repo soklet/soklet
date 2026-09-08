@@ -16,19 +16,24 @@
 
 package com.soklet;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
- * Open result spine for programmatic MCP handlers and handler interception.
+ * Current state of a durable MCP task.
  *
- * <p>The framework-owned result family includes {@link McpCompleteResult},
- * {@link McpInputRequiredResult}, {@link McpTaskCreatedResult}, and
- * {@link McpResourcePage}. Applications should not implement this interface
- * directly. Each MCP method accepts only its corresponding result
- * implementation.
+ * <p>Java API names use Soklet's one-L {@code CANCELED} spelling. The MCP
+ * Tasks wire representation remains the specification-required
+ * {@code "cancelled"} value.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
-public interface McpOperationResult {
+public enum McpTaskStatus {
+	/** The augmented operation is being processed. */
+	WORKING,
+	/** Processing is paused until the client supplies requested input. */
+	INPUT_REQUIRED,
+	/** The operation completed successfully at the JSON-RPC level. */
+	COMPLETED,
+	/** The operation failed with a JSON-RPC error. */
+	FAILED,
+	/** The operation was canceled before completion. */
+	CANCELED
 }

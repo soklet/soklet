@@ -86,10 +86,10 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PHASE_FOUR_TYPE_COUNT = 134;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 64;
-	private static final int PROVISIONAL_TYPE_COUNT = 0;
-	private static final int CURRENT_MCP_TYPE_COUNT = 234;
+	private static final int PROVISIONAL_TYPE_COUNT = 12;
+	private static final int CURRENT_MCP_TYPE_COUNT = 246;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1";
+			"52e414c7aa0ca3ba588bd8c9681e8064607bd5b864112946ffc0694e3612df33";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -152,8 +152,8 @@ public class McpPublicApiReflectionContractTests {
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
 							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
-							"SUBSCRIPTIONS_LISTEN", "NOTIFICATIONS_CANCELED",
-							"OTHER")),
+							"SUBSCRIPTIONS_LISTEN", "TASKS_GET", "TASKS_UPDATE",
+							"TASKS_CANCEL", "NOTIFICATIONS_CANCELED", "OTHER")),
 					Map.entry("com.soklet.McpRateLimitTarget",
 							List.of("REQUEST", "TOOL")),
 					Map.entry("com.soklet.McpResourceAddressType",
@@ -405,9 +405,14 @@ public class McpPublicApiReflectionContractTests {
 						"requestHandlerExecutorServiceSupplier",
 						"requestHandlerQueueCapacity", "requestRateLimiter",
 						"requestTimeout", "streamQueueCapacity",
-						"toolOutputSanitizer", "toolRateLimiter",
+						"taskManager", "toolOutputSanitizer", "toolRateLimiter",
 						"traceCorrelationKey", "unknownMirroredHeaderNameDiagnostics",
 						"unknownMirroredHeaderPolicy", "writeTimeout"),
+				McpInMemoryTaskManager.Builder.class, Set.of(
+						"maximumRetainedTasks", "pollInterval", "taskTimeToLive"),
+				McpTask.Builder.class, Set.of(
+						"metadata", "pollInterval", "taskStatusMessage",
+						"timeToLive"),
 				McpEndpoint.Builder.class, Set.of(
 						"serverInformationIncluded", "instructions",
 						"resourceListCachePolicy", "resourceListHandler",
@@ -878,9 +883,10 @@ public class McpPublicApiReflectionContractTests {
 				.sorted()
 				.toList();
 		Assertions.assertEquals(List.of(
-				"com.soklet.McpJsonRpcException(com.soklet.McpJsonRpcError)"),
+				"com.soklet.McpJsonRpcException(com.soklet.McpJsonRpcError)",
+				"com.soklet.McpTaskNotFoundException()"),
 				publicConstructors,
-				"Only the throwable MCP API may expose public construction");
+				"Only throwable MCP APIs may expose public construction");
 
 		for (Class<?> type : FORMER_PUBLIC_RECORD_TYPES)
 			assertEncapsulatedFinalValueType(type);

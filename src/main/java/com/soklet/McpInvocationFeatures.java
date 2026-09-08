@@ -138,6 +138,22 @@ public interface McpInvocationFeatures {
 	}
 
 	/**
+	 * Returns the control for durably creating an MCP task from this invocation.
+	 *
+	 * <p>The control is present only when the current operation supports task
+	 * augmentation and the client declared the MCP Tasks extension capability on
+	 * this request. Presence does not mean that the client prefers or requires a
+	 * task; the server remains the sole per-request decision maker. An absent
+	 * control requires inline completion.
+	 *
+	 * @return invocation task control, if task creation is permitted
+	 */
+	@NonNull
+	default Optional<@NonNull McpTaskControl> getTaskControl() {
+		return find(McpTaskControl.class);
+	}
+
+	/**
 	 * Requires a feature using the same exact-class lookup as
 	 * {@link #find(Class)}.
 	 *

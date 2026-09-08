@@ -306,6 +306,7 @@ class SimulatorConfigDerivationTests {
 				(context, features, continuation) -> continuation.proceed();
 		McpToolOutputSanitizer sanitizer =
 				(request, toolName, arguments, output) -> output;
+		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpRateLimiter requestRateLimiter = context ->
 				McpRateLimitDecision.allowed();
 		McpRateLimiterRegistry limiterRegistry = McpRateLimiterRegistry.builder()
@@ -317,6 +318,7 @@ class SimulatorConfigDerivationTests {
 				.admissionController(sourceAdmission)
 				.handlerInterceptor(handlerInterceptor)
 				.toolOutputSanitizer(sanitizer)
+				.taskManager(taskManager)
 				.requestRateLimiter(requestRateLimiter)
 				.rateLimiterRegistry(limiterRegistry)
 				.corsAuthorizer(corsAuthorizer)
@@ -357,6 +359,8 @@ class SimulatorConfigDerivationTests {
 				derivedMcpServer.getHandlerInterceptor());
 		Assertions.assertSame(sanitizer,
 				derivedMcpServer.getToolOutputSanitizer());
+		Assertions.assertSame(taskManager,
+				derivedMcpServer.getTaskManager().orElseThrow());
 		Assertions.assertSame(requestRateLimiter,
 				derivedMcpServer.getRequestRateLimiter().orElseThrow());
 		Assertions.assertSame(limiterRegistry,
@@ -405,6 +409,7 @@ class SimulatorConfigDerivationTests {
 				(context, features, continuation) -> continuation.proceed();
 		McpToolOutputSanitizer sanitizer =
 				(request, toolName, arguments, output) -> output;
+		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpRateLimiter requestRateLimiter = context ->
 				McpRateLimitDecision.allowed();
 		McpRateLimiter toolRateLimiter = context ->
@@ -442,6 +447,7 @@ class SimulatorConfigDerivationTests {
 				.admissionController(admissionController)
 				.handlerInterceptor(handlerInterceptor)
 				.toolOutputSanitizer(sanitizer)
+				.taskManager(taskManager)
 				.corsAuthorizer(corsAuthorizer)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
@@ -479,6 +485,8 @@ class SimulatorConfigDerivationTests {
 				derivedMcpServer.getLocalizationControl());
 		Assertions.assertSame(localizer,
 				derivedMcpServer.localizer().orElseThrow());
+		Assertions.assertSame(taskManager,
+				derivedMcpServer.getTaskManager().orElseThrow());
 		Assertions.assertSame(toolRateLimiter,
 				derivedMcpServer.getToolRateLimiter().orElseThrow());
 		Assertions.assertEquals(4, derivedMcpServer.getDiagnostics()
@@ -681,7 +689,8 @@ class SimulatorConfigDerivationTests {
 				"requestTimeout", "writeTimeout",
 				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
 				"admissionController", "handlerInterceptor",
-				"toolOutputSanitizer", "corsAuthorizer", "requestRateLimiter",
+				"toolOutputSanitizer", "taskManager", "corsAuthorizer",
+				"requestRateLimiter",
 				"toolRateLimiter", "rateLimiterRegistry", "absentOriginPolicy",
 				"unknownMirroredHeaderPolicy", "logRawValidatedTraceIds",
 				"unknownMirroredHeaderNameDiagnostics", "protectionConfig",

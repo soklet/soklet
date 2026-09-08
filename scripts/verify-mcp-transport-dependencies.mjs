@@ -65,7 +65,7 @@ export const NETWORK_EVENT_LOOP_REVIEWED_SIMPLE_NAMES = Object.freeze([
   'EventLoopGroup',
 ]);
 
-const STATE_DOMAIN_TERMS = Object.freeze(['replay', 'session', 'stdio', 'task']);
+const STATE_DOMAIN_TERMS = Object.freeze(['replay', 'session', 'stdio']);
 const STATE_STORAGE_ROLE_TERMS = Object.freeze([
   'buffer', 'cache', 'journal', 'log', 'queue', 'registry', 'repository',
   'state', 'storage', 'store',
@@ -82,18 +82,6 @@ const REVIEWED_EXISTING_DOMAIN_FIELDS = Object.freeze([
     file: 'src/main/java/com/soklet/Soklet.java',
     owner: 'com.soklet.Soklet.DefaultSimulator',
     rationale: 'Existing rejected simulation lifecycle proof handle; it is not an MCP wire session or future transport state.',
-  },
-  {
-    field: 'protocolTask',
-    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
-    owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
-    rationale: 'Existing request-local FutureTask ownership; it is not MCP Tasks protocol state.',
-  },
-  {
-    field: 'MAXIMUM_SUPPORTED_PENDING_TASK_COUNT',
-    file: 'src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java',
-    owner: 'com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits',
-    rationale: 'Existing schema-evaluator work bound; task means local evaluation work, not MCP Tasks protocol state.',
   },
 ]);
 const REVIEWED_EXISTING_DOMAIN_TYPES = Object.freeze([

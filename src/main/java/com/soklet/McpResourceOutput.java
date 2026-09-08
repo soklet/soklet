@@ -25,8 +25,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
+import static com.soklet.McpContentValueSupport.resourceContentsEqual;
+import static com.soklet.McpContentValueSupport.resourceContentsHashCode;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -91,6 +94,40 @@ public final class McpResourceOutput implements McpCompletePayload {
 	@NonNull
 	public Optional<@NonNull Duration> getCacheTimeToLiveOverride() {
 		return Optional.ofNullable(this.cacheTimeToLiveOverride);
+	}
+
+	/** @return whether contents and cache override are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpResourceOutput output))
+			return false;
+		return contentsEqual(this.contents, output.contents)
+				&& Objects.equals(this.cacheTimeToLiveOverride,
+					output.cacheTimeToLiveOverride);
+	}
+
+	/** @return structural resource-output hash code */
+	@Override
+	public int hashCode() {
+		int contentsHashCode = 1;
+		for (McpResourceContents resourceContents : this.contents)
+			contentsHashCode = 31 * contentsHashCode
+					+ resourceContentsHashCode(resourceContents);
+		return Objects.hash(contentsHashCode, this.cacheTimeToLiveOverride);
+	}
+
+	private static boolean contentsEqual(
+			@NonNull List<@NonNull McpResourceContents> first,
+			@NonNull List<@NonNull McpResourceContents> second) {
+		if (first.size() != second.size())
+			return false;
+		for (int index = 0; index < first.size(); ++index) {
+			if (!resourceContentsEqual(first.get(index), second.get(index)))
+				return false;
+		}
+		return true;
 	}
 
 	/**

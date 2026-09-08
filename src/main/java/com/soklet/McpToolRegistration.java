@@ -292,9 +292,19 @@ public final class McpToolRegistration<A> {
 	McpOperationResult invoke(@NonNull McpRequestContext request,
 			@NonNull McpJsonObject rawArguments,
 			@NonNull McpInvocationFeatures features) throws Exception {
-		requireNonNull(request);
+		return invokeDecoded(request, decodeArguments(rawArguments), features);
+	}
+
+	/**
+	 * Validates and decodes raw arguments without entering application code.
+	 * This package-private seam lets the server lazily establish that a task
+	 * origin is durable-safe and reuse the same decoded value when the handler
+	 * continuation proceeds.
+	 */
+	@NonNull
+	McpToolArguments<@NonNull A> decodeArguments(
+			@NonNull McpJsonObject rawArguments) {
 		requireNonNull(rawArguments);
-		requireNonNull(features);
 		A arguments;
 		try {
 			arguments = requireNonNull(
@@ -303,8 +313,20 @@ public final class McpToolRegistration<A> {
 		} catch (IllegalArgumentException exception) {
 			throw new McpInvalidToolArgumentsException(exception);
 		}
-		McpToolArguments<A> toolArguments =
-				new DefaultToolArguments<>(arguments, rawArguments);
+		return new DefaultToolArguments<>(arguments, rawArguments);
+	}
+
+	/**
+	 * Invokes the normalized handler with arguments already validated and
+	 * decoded by {@link #decodeArguments(McpJsonObject)}.
+	 */
+	@NonNull
+	McpOperationResult invokeDecoded(@NonNull McpRequestContext request,
+			@NonNull McpToolArguments<@NonNull A> toolArguments,
+			@NonNull McpInvocationFeatures features) throws Exception {
+		requireNonNull(request);
+		requireNonNull(toolArguments);
+		requireNonNull(features);
 		return requireNonNull(this.handler.handle(request, toolArguments, features),
 				"The MCP tool handler returned null.");
 	}

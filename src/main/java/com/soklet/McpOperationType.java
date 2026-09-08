@@ -53,6 +53,12 @@ public enum McpOperationType {
 	RESOURCES_READ,
 	/** Subscription stream creation through {@code subscriptions/listen}. */
 	SUBSCRIPTIONS_LISTEN,
+	/** Durable task retrieval through {@code tasks/get}. */
+	TASKS_GET,
+	/** Durable task input-response delivery through {@code tasks/update}. */
+	TASKS_UPDATE,
+	/** Durable task cancelation signaling through {@code tasks/cancel}. */
+	TASKS_CANCEL,
 	/** Request cancelation signaling through {@code notifications/cancelled}. */
 	NOTIFICATIONS_CANCELED,
 	/** An unrecognized, future, or extension operation. */
@@ -70,6 +76,9 @@ public enum McpOperationType {
 			case "resources/templates/list" -> RESOURCES_TEMPLATES_LIST;
 			case "resources/read" -> RESOURCES_READ;
 			case "subscriptions/listen" -> SUBSCRIPTIONS_LISTEN;
+			case "tasks/get" -> TASKS_GET;
+			case "tasks/update" -> TASKS_UPDATE;
+			case "tasks/cancel" -> TASKS_CANCEL;
 			case "notifications/cancelled" -> NOTIFICATIONS_CANCELED;
 			default -> OTHER;
 		};

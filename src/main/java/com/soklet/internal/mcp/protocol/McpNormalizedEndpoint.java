@@ -24,7 +24,9 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,6 +48,8 @@ final class McpNormalizedEndpoint {
 	private final boolean serverInformationIncluded;
 	@NonNull
 	private final McpJsonObject discoveryMetadata;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpJsonObject> serverExtensions;
 	@NonNull
 	private final List<@NonNull McpNormalizedOperation> tools;
 	@NonNull
@@ -74,6 +78,8 @@ final class McpNormalizedEndpoint {
 		this.discoveryCachePolicy = builder.discoveryCachePolicy;
 		this.serverInformationIncluded = builder.serverInformationIncluded;
 		this.discoveryMetadata = builder.discoveryMetadata;
+		this.serverExtensions = McpProtocolSupport.immutableOpenObjectMap(
+				builder.serverExtensions);
 		this.tools = immutableOperations(builder.tools, "tool");
 		this.prompts = immutableOperations(builder.prompts, "prompt");
 		this.exactResources = immutableOperations(builder.exactResources, "exact resource URI");
@@ -122,6 +128,11 @@ final class McpNormalizedEndpoint {
 	@NonNull
 	McpJsonObject discoveryMetadata() {
 		return discoveryMetadata;
+	}
+
+	@NonNull
+	Map<@NonNull String, @NonNull McpJsonObject> serverExtensions() {
+		return serverExtensions;
 	}
 
 	@NonNull
@@ -290,6 +301,8 @@ final class McpNormalizedEndpoint {
 		@NonNull
 		private McpJsonObject discoveryMetadata;
 		@NonNull
+		private final Map<@NonNull String, @NonNull McpJsonObject> serverExtensions;
+		@NonNull
 		private final List<@NonNull McpNormalizedOperation> tools;
 		@NonNull
 		private final List<@NonNull McpNormalizedOperation> prompts;
@@ -312,6 +325,7 @@ final class McpNormalizedEndpoint {
 			this.discoveryCachePolicy = McpDiscoveryCachePolicy.privateNoCache();
 			this.serverInformationIncluded = true;
 			this.discoveryMetadata = McpJsonObject.empty();
+			this.serverExtensions = new LinkedHashMap<>();
 			this.tools = new ArrayList<>();
 			this.prompts = new ArrayList<>();
 			this.exactResources = new ArrayList<>();
@@ -347,6 +361,15 @@ final class McpNormalizedEndpoint {
 		Builder discoveryMetadata(@NonNull McpJsonObject discoveryMetadata) {
 			this.discoveryMetadata = McpProtocolSupport.requireApplicationMetadataFields(
 					discoveryMetadata, Set.of(McpResultMetadata.SERVER_INFORMATION_KEY));
+			return this;
+		}
+
+		@NonNull
+		Builder serverExtension(@NonNull String identifier,
+				@NonNull McpJsonObject settings) {
+			serverExtensions.put(
+					McpProtocolSupport.requireExtensionIdentifier(identifier),
+					requireNonNull(settings));
 			return this;
 		}
 

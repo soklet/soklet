@@ -522,18 +522,18 @@ try {
         'public final class McpServerRuntimeBridge {\n\tprivate Object replayBuffer;'));
     }, /state\/storage field declaration/u);
 
-  expectRejected('cross-domain taskSessions field is future storage state',
+  expectRejected('task prefix cannot hide a session-domain field',
     (root) => {
       mutateSource(root, BRIDGE, (source) => source.replace(
         'public final class McpServerRuntimeBridge {',
         'public final class McpServerRuntimeBridge {\n\tprivate Object taskSessions;'));
     }, /state\/storage field declaration/u);
 
-  expectRejected('cross-domain TaskSession record is future storage state',
+  expectRejected('task prefix cannot hide a data-bearing Session record',
     (root) => {
       mutateSource(root, BRIDGE, (source) => appendType(source,
         'record TaskSession(String id) {}'));
-    }, /state\/storage type declaration/u);
+    }, /Data-bearing future-domain record declaration/u);
 
   expectRejected('single-domain data-bearing Session record is future state',
     (root) => {
@@ -547,10 +547,11 @@ try {
         'final class Session { private final String id = "future-session"; }'));
     }, /Data-bearing future-domain class declaration/u);
 
-  expectAccepted('McpTask capability and control declarations are harmless',
+  expectAccepted('MCP Tasks declarations are part of the 4.0 baseline',
     (root) => {
-      mutateSource(root, BRIDGE, (source) => appendType(source,
-        'final class McpTaskCapability {}\nfinal class McpTaskControl {}'));
+      mutateSource(root, BRIDGE, (source) => source.replace(
+        'public final class McpServerRuntimeBridge {',
+        'public final class McpServerRuntimeBridge {\n\tprivate Object taskRegistry;'));
     });
 
   expectRejected('progress and subscriptions cannot split outbound channels',

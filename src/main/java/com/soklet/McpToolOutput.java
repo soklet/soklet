@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -122,6 +123,25 @@ public final class McpToolOutput implements McpCompletePayload {
 		if (this.structuredContent != null)
 			builder.structuredContent(this.structuredContent);
 		return builder;
+	}
+
+	/** @return whether every tool-output property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpToolOutput output))
+			return false;
+		return this.error == output.error
+				&& this.content.equals(output.content)
+				&& Objects.equals(this.structuredContent,
+					output.structuredContent);
+	}
+
+	/** @return structural tool-output hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.content, this.structuredContent, this.error);
 	}
 
 	/**

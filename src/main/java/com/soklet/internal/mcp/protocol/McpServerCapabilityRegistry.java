@@ -180,7 +180,8 @@ final class McpServerCapabilityRegistry {
 		}
 
 		this.capabilities = new McpServerCapabilities(
-				toolsCapability, promptsCapability, resourcesCapability);
+				toolsCapability, promptsCapability, resourcesCapability,
+				endpoint.serverExtensions());
 
 		Optional<McpImplementationMetadata> serverInformation =
 				endpoint.serverInformationIncluded()
@@ -488,11 +489,15 @@ enum McpOperationKind {
 record McpServerCapabilities(
 		@NonNull Optional<@NonNull McpCatalogCapability> tools,
 		@NonNull Optional<@NonNull McpCatalogCapability> prompts,
-		@NonNull Optional<@NonNull McpResourceCapability> resources) {
+		@NonNull Optional<@NonNull McpResourceCapability> resources,
+		@NonNull Map<@NonNull String, @NonNull McpJsonObject> extensions) {
 	McpServerCapabilities {
 		requireNonNull(tools);
 		requireNonNull(prompts);
 		requireNonNull(resources);
+		extensions = McpProtocolSupport.immutableOpenObjectMap(extensions);
+		for (String identifier : extensions.keySet())
+			McpProtocolSupport.requireExtensionIdentifier(identifier);
 	}
 
 	@NonNull
@@ -501,6 +506,12 @@ record McpServerCapabilities(
 		tools.ifPresent(value -> values.put("tools", value.toJsonObject()));
 		prompts.ifPresent(value -> values.put("prompts", value.toJsonObject()));
 		resources.ifPresent(value -> values.put("resources", value.toJsonObject()));
+		if (!extensions.isEmpty()) {
+			Map<String, McpJsonValue> extensionValues =
+					new LinkedHashMap<>(extensions.size());
+			extensionValues.putAll(extensions);
+			values.put("extensions", new McpJsonObject(extensionValues));
+		}
 		return new McpJsonObject(values);
 	}
 }

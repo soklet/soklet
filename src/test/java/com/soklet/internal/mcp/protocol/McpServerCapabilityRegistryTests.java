@@ -25,6 +25,9 @@ import java.util.Optional;
 import java.util.Set;
 
 public class McpServerCapabilityRegistryTests {
+	private static final String TASKS_EXTENSION_IDENTIFIER =
+			"io.modelcontextprotocol/tasks";
+
 	@Test
 	public void empty_registration_advertises_no_optional_server_capability() {
 		McpServerCapabilityRegistry registry =
@@ -69,6 +72,24 @@ public class McpServerCapabilityRegistryTests {
 			Assertions.assertFalse(capabilities.members().containsKey("extensions"));
 			Assertions.assertFalse(capabilities.members().containsKey("logging"));
 		}
+	}
+
+	@Test
+	public void tasks_extension_is_advertised_only_when_configured() {
+		McpJsonObject absent = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder().build()).capabilities().toJsonObject();
+		McpJsonObject present = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder()
+						.serverExtension(TASKS_EXTENSION_IDENTIFIER,
+								McpJsonObject.empty())
+						.build()).capabilities().toJsonObject();
+
+		Assertions.assertFalse(absent.members().containsKey("extensions"));
+		Assertions.assertEquals(
+				new McpJsonObject(Map.of(TASKS_EXTENSION_IDENTIFIER,
+						McpJsonObject.empty())),
+				present.members().get("extensions"));
+		Assertions.assertEquals(Set.of("extensions"), present.members().keySet());
 	}
 
 	@Test

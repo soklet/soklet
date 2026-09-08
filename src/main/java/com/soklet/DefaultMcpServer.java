@@ -107,6 +107,9 @@ final class DefaultMcpServer implements McpServer {
 			"prompts/get", "resources/list", "resources/templates/list",
 			"resources/read", "subscriptions/listen", "notifications/cancelled");
 	@NonNull
+	private static final String TASKS_EXTENSION_IDENTIFIER =
+			"io.modelcontextprotocol/tasks";
+	@NonNull
 	private final Object lifecycleLock;
 	private final int maximumCursorSizeInBytes;
 	private final int maximumSubscriptionsPerPartition;
@@ -126,6 +129,8 @@ final class DefaultMcpServer implements McpServer {
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
 	private final McpToolOutputSanitizer toolOutputSanitizer;
+	@Nullable
+	private final McpTaskManager taskManager;
 	@Nullable
 	private final McpRateLimiter requestRateLimiter;
 	@Nullable
@@ -183,6 +188,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpAdmissionController admissionController,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
+			@Nullable McpTaskManager taskManager,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
@@ -210,6 +216,7 @@ final class DefaultMcpServer implements McpServer {
 		this.admissionController = requireNonNull(admissionController);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
+		this.taskManager = taskManager;
 		this.requestRateLimiter = requestRateLimiter;
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
@@ -495,7 +502,7 @@ final class DefaultMcpServer implements McpServer {
 								invocation)));
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),
-				this.localizer != null);
+				this.localizer != null, this.taskManager != null);
 	}
 
 	/**
@@ -888,6 +895,12 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
+	public Optional<@NonNull McpTaskManager> getTaskManager() {
+		return Optional.ofNullable(this.taskManager);
+	}
+
+	@Override
+	@NonNull
 	public Optional<@NonNull McpRateLimiter> getRequestRateLimiter() {
 		return Optional.ofNullable(this.requestRateLimiter);
 	}
@@ -1136,18 +1149,24 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull ToolInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
+		Optional<DefaultMcpTaskControl<A>> taskControl = taskControl(tool,
+				requestContext, invocation.rawArguments());
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
 				invocation.cancelationToken(), invocation.progressEmitter(),
 				invocation.pastDeadline(), invocation.continuationLocale(),
-				invocation.selectedLocaleSlot());
+				invocation.selectedLocaleSlot(), Optional.empty(),
+				taskControl.map(control -> (McpTaskControl) control));
 		McpOperationResult result;
 		try {
-			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
-					invocationFeatures,
-					() -> tool.invoke(
-							requestContext, invocation.rawArguments(),
-							invocationFeatures));
+			result = interceptHandler(requestContext,
+					invocation.handlerEntryGuard(), invocationFeatures,
+					() -> taskControl.isPresent()
+							? tool.invokeDecoded(requestContext,
+									taskControl.orElseThrow().decodedArguments(),
+									invocationFeatures)
+							: tool.invoke(requestContext,
+									invocation.rawArguments(), invocationFeatures));
 		} catch (McpInvalidToolArgumentsException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
@@ -1390,6 +1409,7 @@ final class DefaultMcpServer implements McpServer {
 				continuationLocale, selectedLocaleSlot, Optional.empty());
 	}
 
+	@NonNull
 	private McpInvocationFeatures invocationFeatures(
 			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
@@ -1399,6 +1419,23 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Optional<@NonNull String> continuationLocale,
 			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 			@NonNull Optional<@NonNull String> resourceListCursor) {
+		return invocationFeatures(requestContext, endpoint, jsonRpcMethod,
+				cancelationToken, progressEmitter, pastDeadline,
+				continuationLocale, selectedLocaleSlot, resourceListCursor,
+				Optional.empty());
+	}
+
+	@NonNull
+	private McpInvocationFeatures invocationFeatures(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+			@NonNull BooleanSupplier pastDeadline,
+			@NonNull Optional<@NonNull String> continuationLocale,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull Optional<@NonNull String> resourceListCursor,
+			@NonNull Optional<@NonNull McpTaskControl> taskControl) {
 		requireNonNull(requestContext);
 		String endpointPath = requireNonNull(endpoint).getPath();
 		String boundedMethod = metricMethod(jsonRpcMethod);
@@ -1412,6 +1449,8 @@ final class DefaultMcpServer implements McpServer {
 		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
 				new DefaultMcpProgressReporter(token, value,
 						endpointPath, boundedMethod)));
+		requireNonNull(taskControl).ifPresent(value ->
+				features.put(McpTaskControl.class, value));
 		// Created after queue admission and the handler slot, immediately before
 		// the interceptor, so rejected/dequeued work never calls the provider.
 		applicationLocalizationContext(requestContext, token, pastDeadline,
@@ -1419,6 +1458,127 @@ final class DefaultMcpServer implements McpServer {
 				.ifPresent(context ->
 						features.put(McpLocalizationContext.class, context));
 		return McpInvocationFeatures.fromFeatures(features);
+	}
+
+	@NonNull
+	private <A> Optional<@NonNull DefaultMcpTaskControl<A>> taskControl(
+			@NonNull McpToolRegistration<A> tool,
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpJsonObject rawArguments) {
+		requireNonNull(tool);
+		requireNonNull(requestContext);
+		requireNonNull(rawArguments);
+		if (this.taskManager == null
+				|| !isTaskControlEligible(requestContext))
+			return Optional.empty();
+
+		McpJsonObject.Builder persistedState = McpJsonObject.builder()
+				.put("formatVersion", 1)
+				.put("protocolVersion", requestContext.getProtocolVersion())
+				.put("endpointPath", requestContext.getEndpoint().getPath())
+				.put("operationType", "tools_call")
+				.put("operationName", tool.getName())
+				.put("rawArguments", rawArguments);
+		tool.getOutputSchema().ifPresentOrElse(
+				outputSchema -> persistedState.put("outputSchema",
+						outputSchema.getDocument()),
+				() -> persistedState.putNull("outputSchema"));
+		persistedState.put("structuredContentMirroredAsText",
+				tool.isStructuredContentMirroredAsText());
+		McpTaskOrigin taskOrigin = McpTaskOrigin.fromPersistedState(
+				persistedState.build());
+
+		return Optional.of(new DefaultMcpTaskControl<>(requestContext, tool,
+				rawArguments, taskOrigin));
+	}
+
+	private boolean isTaskControlEligible(
+			@NonNull McpRequestContext requestContext) {
+		requireNonNull(requestContext);
+		return this.taskManager != null
+				&& "tools/call".equals(requestContext.getJsonRpcMethod())
+				&& requestContext.getClientCapabilities()
+						.findExtension(TASKS_EXTENSION_IDENTIFIER).isPresent();
+	}
+
+	/**
+	 * Lazily validates and memoizes typed arguments at the first point that
+	 * either application code requests a durable origin or the handler
+	 * continuation begins. This preserves the interceptor-before-complete-input-
+	 * validation contract while making an origin impossible to use for invalid
+	 * typed arguments.
+	 */
+	@ThreadSafe
+	private static final class DefaultMcpTaskControl<A>
+			implements McpTaskControl {
+		@NonNull
+		private final McpRequestContext requestContext;
+		@NonNull
+		private final McpToolRegistration<A> tool;
+		@NonNull
+		private final McpJsonObject rawArguments;
+		@NonNull
+		private final McpTaskOrigin taskOrigin;
+		@Nullable
+		private volatile McpToolArguments<A> decodedArguments;
+		private volatile boolean argumentDecodingFailed;
+
+		private DefaultMcpTaskControl(
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpToolRegistration<A> tool,
+				@NonNull McpJsonObject rawArguments,
+				@NonNull McpTaskOrigin taskOrigin) {
+			this.requestContext = requireNonNull(requestContext);
+			this.tool = requireNonNull(tool);
+			this.rawArguments = requireNonNull(rawArguments);
+			this.taskOrigin = requireNonNull(taskOrigin);
+		}
+
+		@Override
+		@NonNull
+		public McpRequestContext getRequestContext() {
+			return this.requestContext;
+		}
+
+		@Override
+		@NonNull
+		public McpTaskOrigin getTaskOrigin() {
+			decodedArguments();
+			return this.taskOrigin;
+		}
+
+		@NonNull
+		private McpToolArguments<A> decodedArguments() {
+			McpToolArguments<A> exactDecodedArguments = this.decodedArguments;
+			if (exactDecodedArguments != null)
+				return exactDecodedArguments;
+			if (this.argumentDecodingFailed)
+				throw previouslyFailedArgumentDecoding();
+			synchronized (this) {
+				exactDecodedArguments = this.decodedArguments;
+				if (exactDecodedArguments != null)
+					return exactDecodedArguments;
+				if (this.argumentDecodingFailed)
+					throw previouslyFailedArgumentDecoding();
+				try {
+					exactDecodedArguments = this.tool.decodeArguments(
+							this.rawArguments);
+				} catch (McpInvalidToolArgumentsException exception) {
+					this.argumentDecodingFailed = true;
+					throw exception;
+				}
+				this.decodedArguments = exactDecodedArguments;
+				return exactDecodedArguments;
+			}
+		}
+
+		@NonNull
+		private static McpInvalidToolArgumentsException
+				previouslyFailedArgumentDecoding() {
+			return new McpInvalidToolArgumentsException(
+					new IllegalArgumentException(
+							"MCP tool arguments were already found invalid."));
+		}
 	}
 
 	/**
