@@ -86,9 +86,12 @@ public interface McpTaskManager {
 	 * input requests.
 	 *
 	 * <p>A request may supply any partial subset of outstanding responses.
-	 * Unknown, already-consumed, and superseded response keys are ignored. The
-	 * update acknowledgement may precede a worker's subsequent observable state
-	 * change.
+	 * Unknown, already-consumed, and superseded response keys are ignored, as is
+	 * a response whose MCP union variant does not match its outstanding request.
+	 * Implementations may perform that correlation through
+	 * {@link McpInputRequest#matchesInputResponse(McpJsonValue)}.
+	 * The update acknowledgement may precede a worker's subsequent observable
+	 * state change.
 	 *
 	 * @param context independently admitted task update
 	 * @throws McpTaskNotFoundException if the task is unknown or unauthorized

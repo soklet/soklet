@@ -663,6 +663,23 @@
         "MCP-SAMPLING-003"
       ],
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-058",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#matches",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "matches",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-ELICIT-003",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
       "id": "OPEN-045",
       "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#optionalAnnotations",
       "matcherRuleId": "OPEN-MATCH-002",

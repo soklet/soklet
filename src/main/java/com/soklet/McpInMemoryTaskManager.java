@@ -429,7 +429,8 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	/**
 	 * Accepts responses for currently outstanding input requests visible to the
 	 * requesting MCP authorization partition and endpoint. Unknown or already
-	 * consumed response keys are ignored.
+	 * consumed response keys and responses whose union variant does not match the
+	 * outstanding request are ignored.
 	 *
 	 * @param context protocol task update context
 	 * @throws McpTaskNotFoundException if the task is absent, expired, or not
@@ -453,7 +454,11 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 					new LinkedHashMap<>();
 			for (Map.Entry<@NonNull String, @NonNull McpJsonValue> response
 					: context.getInputResponses().asMap().entrySet()) {
-				if (remainingInputRequests.remove(response.getKey()) != null) {
+				McpInputRequest inputRequest = remainingInputRequests.get(
+						response.getKey());
+				if (inputRequest != null && inputRequest.matchesInputResponse(
+						response.getValue())) {
+					remainingInputRequests.remove(response.getKey());
 					acceptedInputResponses.put(response.getKey(),
 							response.getValue());
 				}

@@ -444,6 +444,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 						.put("query", "catalog").build())
 				.putNull("outputSchema")
 				.put("structuredContentMirroredAsText", false)
+				.put("inputRequestDeclarations", McpJsonArray.emptyInstance())
 				.build(), taskControl.getTaskOrigin().getPersistedState());
 		Assertions.assertTrue(observedTaskControls.get(1).isEmpty());
 		Assertions.assertTrue(observedTaskControls.get(2).isEmpty());

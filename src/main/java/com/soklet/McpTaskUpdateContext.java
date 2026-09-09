@@ -28,8 +28,11 @@ import static java.util.Objects.requireNonNull;
  * <p>The request has already passed Soklet's structural validation and
  * admission pipeline. A task manager must authorize and apply the update as
  * one application-owned operation. It must ignore unknown, already-consumed,
- * or no-longer-outstanding response keys and make accepted responses
- * idempotent according to the MCP Tasks contract.
+ * or no-longer-outstanding response keys, ignore a response whose MCP union
+ * variant does not match the outstanding request, and make accepted responses
+ * idempotent according to the MCP Tasks contract. Implementations may perform
+ * that correlation through
+ * {@link McpInputRequest#matchesInputResponse(McpJsonValue)}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

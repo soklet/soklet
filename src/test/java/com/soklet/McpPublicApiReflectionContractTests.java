@@ -91,7 +91,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
 			"d6299ae37278087e7b655cb3cd1c46a7b2dca363b9bfaf39db07e84739029ec0";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b";
+			"2b4fd2a4664d9605f847132f4dd234fac9540ef274ca58cabdeceb0408e8345a";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -955,6 +955,11 @@ public class McpPublicApiReflectionContractTests {
 				McpInputRequestDeclaration.class);
 		assertGetter(McpInputRequest.class, "getParams", McpJsonObject.class);
 		assertGetter(McpInputRequest.class, "getMethod", String.class);
+		Method matchesInputResponse = assertInstanceMethod(McpInputRequest.class,
+				"matchesInputResponse", Boolean.class, MethodShape.CONCRETE,
+				false, McpJsonValue.class);
+		assertErasedGenericSignature(matchesInputResponse);
+		assertParameterNames(matchesInputResponse, "inputResponse");
 
 		assertFactory(McpInputRequestDeclaration.class, "fromElicitationForm",
 				McpInputRequestDeclaration.class, List.of("requirement"),

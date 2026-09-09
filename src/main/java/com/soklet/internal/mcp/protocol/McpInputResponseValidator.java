@@ -47,6 +47,24 @@ final class McpInputResponseValidator {
 	private McpInputResponseValidator() {
 	}
 
+	static boolean matches(
+			@NonNull McpInputRequestDeclaration declaration,
+			@NonNull McpJsonValue response) {
+		requireNonNull(declaration);
+		requireNonNull(response);
+		if (!(response instanceof McpJsonObject object))
+			return false;
+		return switch (declaration.method()) {
+			case "elicitation/create" ->
+					matches(() -> validateElicitResult(object));
+			case "sampling/createMessage" ->
+					matches(() -> validateCreateMessageResult(object));
+			case "roots/list" ->
+					matches(() -> validateListRootsResult(object));
+			default -> false;
+		};
+	}
+
 	static void validate(@NonNull McpJsonValue response) {
 		requireNonNull(response);
 		McpJsonObject object = requireObject(response);

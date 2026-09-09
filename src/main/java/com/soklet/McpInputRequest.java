@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -32,8 +33,9 @@ import static java.util.Objects.requireNonNull;
  * registration metadata that permits it. Applications should reuse a
  * declaration registered through the operation's
  * {@code addInputRequestDeclaration}
- * configuration. Soklet validates that relationship when it emits the
- * containing result.
+ * configuration. For a durable task, Soklet includes those declarations in
+ * the task origin for the application to persist, then validates that
+ * relationship before it emits the containing task snapshot.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -85,6 +87,29 @@ public final class McpInputRequest {
 	@NonNull
 	public String getMethod() {
 		return this.declaration.getJsonRpcMethod();
+	}
+
+	/**
+	 * Reports whether a client response matches this request's declared MCP
+	 * input-response union branch.
+	 *
+	 * <p>This validates the protocol-level response shape for the declaration.
+	 * It does not validate accepted elicitation content against this request's
+	 * requested schema or against application-specific policy.
+	 *
+	 * @param inputResponse client response to inspect
+	 * @return whether the response matches the declared MCP union branch
+	 * @throws NullPointerException if {@code inputResponse} is null
+	 */
+	@NonNull
+	public Boolean matchesInputResponse(@NonNull McpJsonValue inputResponse) {
+		return McpServerRuntimeBridge.matchesInputResponse(this.declaration,
+				requireNonNull(inputResponse));
+	}
+
+	void requireValidParams() {
+		McpServerRuntimeBridge.requireValidInputRequestParams(this.declaration,
+				this.params);
 	}
 
 	/** @return whether this value has the same declaration and parameters */

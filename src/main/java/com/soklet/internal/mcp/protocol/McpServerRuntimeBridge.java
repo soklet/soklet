@@ -131,6 +131,36 @@ public final class McpServerRuntimeBridge {
 	private final List<@NonNull EndpointPlan> executableEndpointPlans;
 
 	/**
+	 * Internal public-package bridge for method-specific input-request parameter
+	 * validation.
+	 */
+	public static void requireValidInputRequestParams(
+			com.soklet.@NonNull McpInputRequestDeclaration declaration,
+			com.soklet.@NonNull McpJsonObject params) {
+		McpEmbeddedInputRequest.fromDeclaration(
+				toInternal(requireNonNull(declaration)),
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(requireNonNull(params)));
+	}
+
+	/**
+	 * Internal public-package bridge for correlating an input response with its
+	 * declared MCP response-union branch.
+	 */
+	public static boolean matchesInputResponse(
+			com.soklet.@NonNull McpInputRequestDeclaration declaration,
+			com.soklet.@NonNull McpJsonValue inputResponse) {
+		com.soklet.internal.mcp.protocol.McpJsonValue internalResponse;
+		try {
+			internalResponse = toInternal(requireNonNull(inputResponse));
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
+		return McpInputResponseValidator.matches(
+				toInternal(requireNonNull(declaration)), internalResponse);
+	}
+
+	/**
 	 * Creates a discovery-only listener projection.
 	 */
 	public McpServerRuntimeBridge(@NonNull String host, int port,

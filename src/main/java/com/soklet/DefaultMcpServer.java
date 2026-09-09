@@ -1319,6 +1319,7 @@ final class DefaultMcpServer implements McpServer {
 			throws Exception {
 		TaskOriginResolution origin = resolveTaskOrigin(endpoint,
 				requireNonNull(task).getTaskOrigin());
+		requireTaskInputRequestsDeclared(task, origin);
 		if (task.getTaskStatus() != McpTaskStatus.COMPLETED
 				|| !includeDetailedResult)
 			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
@@ -1387,8 +1388,108 @@ final class DefaultMcpServer implements McpServer {
 		String protocolVersion = taskOriginString(fields, "protocolVersion");
 		if (!MCP_TASK_ORIGIN_PROTOCOL_VERSION.equals(protocolVersion))
 			throw invalidTaskOrigin();
+		List<McpInputRequestDeclaration> inputRequestDeclarations =
+				taskInputRequestDeclarations(fields);
 		return new TaskOriginResolution(toolName, rawArguments,
-				outputSchemaBridge, mirror.getValue());
+				outputSchemaBridge, mirror.getValue(), inputRequestDeclarations);
+	}
+
+	private static void requireTaskInputRequestsDeclared(
+			@NonNull McpTask task,
+			@NonNull TaskOriginResolution origin) {
+		requireNonNull(task);
+		requireNonNull(origin);
+		if (task.getTaskStatus() != McpTaskStatus.INPUT_REQUIRED)
+			return;
+
+		for (McpInputRequest inputRequest : task.getInputRequests().values()) {
+			inputRequest.requireValidParams();
+			if (!origin.inputRequestDeclarations().contains(
+					inputRequest.getDeclaration()))
+				throw new IllegalArgumentException(
+						"An MCP task input request was not declared by its originating tool.");
+		}
+	}
+
+	@NonNull
+	private static List<@NonNull McpInputRequestDeclaration>
+			taskInputRequestDeclarations(
+					@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
+		McpJsonValue value = requireNonNull(fields).get(
+				"inputRequestDeclarations");
+		if (!(value instanceof McpJsonArray array))
+			throw invalidTaskOrigin();
+
+		List<McpInputRequestDeclaration> declarations = new ArrayList<>();
+		for (McpJsonValue element : array.getElements()) {
+			if (!(element instanceof McpJsonObject object))
+				throw invalidTaskOrigin();
+			declarations.add(taskInputRequestDeclaration(object));
+		}
+		return List.copyOf(declarations);
+	}
+
+	@NonNull
+	private static McpInputRequestDeclaration taskInputRequestDeclaration(
+			@NonNull McpJsonObject persistedDeclaration) {
+		Map<String, McpJsonValue> fields = requireNonNull(persistedDeclaration)
+				.getMembers();
+		McpInputRequestType inputRequestType = switch (taskOriginString(fields,
+				"inputRequestType")) {
+			case "elicitation_form" -> McpInputRequestType.ELICITATION_FORM;
+			case "elicitation_url" -> McpInputRequestType.ELICITATION_URL;
+			case "sampling" -> McpInputRequestType.SAMPLING;
+			case "roots" -> McpInputRequestType.ROOTS;
+			default -> throw invalidTaskOrigin();
+		};
+		McpInputRequirement requirement = switch (taskOriginString(fields,
+				"requirement")) {
+			case "required" -> McpInputRequirement.REQUIRED;
+			case "conditional" -> McpInputRequirement.CONDITIONAL;
+			default -> throw invalidTaskOrigin();
+		};
+		McpJsonValue capabilitiesValue = fields.get("capabilities");
+		if (!(capabilitiesValue instanceof McpJsonArray capabilitiesArray))
+			throw invalidTaskOrigin();
+		Set<McpClientCapability> capabilities = new java.util.LinkedHashSet<>();
+		for (McpJsonValue capabilityValue : capabilitiesArray.getElements()) {
+			if (!(capabilityValue instanceof McpJsonString capabilityString)
+					|| !capabilities.add(taskClientCapability(
+							capabilityString.getValue())))
+				throw invalidTaskOrigin();
+		}
+
+		McpInputRequestDeclaration declaration = switch (inputRequestType) {
+			case ELICITATION_FORM -> McpInputRequestDeclaration
+					.fromElicitationForm(requirement);
+			case ELICITATION_URL -> McpInputRequestDeclaration
+					.fromElicitationUrl(requirement);
+			case SAMPLING -> {
+				Set<McpClientCapability> optionalCapabilities =
+						new java.util.LinkedHashSet<>(capabilities);
+				optionalCapabilities.remove(McpClientCapability.SAMPLING);
+				yield McpInputRequestDeclaration.fromSampling(
+						optionalCapabilities, requirement);
+			}
+			case ROOTS -> McpInputRequestDeclaration.fromRoots(requirement);
+		};
+		if (!declaration.getCapabilities().equals(capabilities))
+			throw invalidTaskOrigin();
+		return declaration;
+	}
+
+	@NonNull
+	private static McpClientCapability taskClientCapability(
+			@NonNull String persistedCapability) {
+		return switch (requireNonNull(persistedCapability)) {
+			case "elicitation_form" -> McpClientCapability.ELICITATION_FORM;
+			case "elicitation_url" -> McpClientCapability.ELICITATION_URL;
+			case "sampling" -> McpClientCapability.SAMPLING;
+			case "sampling_context" -> McpClientCapability.SAMPLING_CONTEXT;
+			case "sampling_tools" -> McpClientCapability.SAMPLING_TOOLS;
+			case "roots" -> McpClientCapability.ROOTS;
+			default -> throw invalidTaskOrigin();
+		};
 	}
 
 	@NonNull
@@ -1412,11 +1513,15 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpJsonObject rawArguments,
 			@NonNull Optional<@NonNull McpRuntimeToolOutputSchemaBridge>
 					outputSchemaBridge,
-			boolean structuredContentMirroredAsText) {
+			boolean structuredContentMirroredAsText,
+			@NonNull List<@NonNull McpInputRequestDeclaration>
+					inputRequestDeclarations) {
 		private TaskOriginResolution {
 			requireNonNull(toolName);
 			requireNonNull(rawArguments);
 			requireNonNull(outputSchemaBridge);
+			inputRequestDeclarations = List.copyOf(
+					requireNonNull(inputRequestDeclarations));
 		}
 	}
 
@@ -1701,11 +1806,61 @@ final class DefaultMcpServer implements McpServer {
 				() -> persistedState.putNull("outputSchema"));
 		persistedState.put("structuredContentMirroredAsText",
 				tool.isStructuredContentMirroredAsText());
+		persistedState.put("inputRequestDeclarations",
+				taskInputRequestDeclarations(tool.getInputRequestDeclarations()));
 		McpTaskOrigin taskOrigin = McpTaskOrigin.fromPersistedState(
 				persistedState.build());
 
 		return Optional.of(new DefaultMcpTaskControl<>(requestContext, tool,
 				rawArguments, taskOrigin));
+	}
+
+	@NonNull
+	private static McpJsonArray taskInputRequestDeclarations(
+			@NonNull List<@NonNull McpInputRequestDeclaration> declarations) {
+		McpJsonArray.Builder persistedDeclarations = McpJsonArray.builder();
+		for (McpInputRequestDeclaration declaration
+				: requireNonNull(declarations)) {
+			McpJsonArray.Builder capabilities = McpJsonArray.builder();
+			requireNonNull(declaration).getCapabilities().stream()
+					.sorted()
+					.map(DefaultMcpServer::taskClientCapability)
+					.forEach(capabilities::add);
+			persistedDeclarations.add(McpJsonObject.builder()
+					.put("inputRequestType", taskInputRequestType(
+							declaration.getInputRequestType()))
+					.put("capabilities", capabilities.build())
+					.put("requirement", switch (declaration.getRequirement()) {
+						case REQUIRED -> "required";
+						case CONDITIONAL -> "conditional";
+					})
+					.build());
+		}
+		return persistedDeclarations.build();
+	}
+
+	@NonNull
+	private static String taskInputRequestType(
+			@NonNull McpInputRequestType inputRequestType) {
+		return switch (requireNonNull(inputRequestType)) {
+			case ELICITATION_FORM -> "elicitation_form";
+			case ELICITATION_URL -> "elicitation_url";
+			case SAMPLING -> "sampling";
+			case ROOTS -> "roots";
+		};
+	}
+
+	@NonNull
+	private static String taskClientCapability(
+			@NonNull McpClientCapability capability) {
+		return switch (requireNonNull(capability)) {
+			case ELICITATION_FORM -> "elicitation_form";
+			case ELICITATION_URL -> "elicitation_url";
+			case SAMPLING -> "sampling";
+			case SAMPLING_CONTEXT -> "sampling_context";
+			case SAMPLING_TOOLS -> "sampling_tools";
+			case ROOTS -> "roots";
+		};
 	}
 
 	private boolean isTaskControlEligible(

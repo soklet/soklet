@@ -196,7 +196,7 @@ public class McpInMemoryTaskManagerTests {
 				Assertions.assertThrows(McpTaskNotFoundException.class, () ->
 						manager.updateTask(updateContext(
 								requestContext("/one", "other"), task.getTaskId(),
-								Map.of("answer", McpJsonString.fromValue("secret")))));
+								Map.of("answer", inputResponse("secret")))));
 		Assertions.assertEquals(unknownFailure.getMessage(),
 				unauthorizedUpdateFailure.getMessage());
 		Assertions.assertTrue(manager.findTask(task.getTaskId()).orElseThrow()
@@ -246,9 +246,17 @@ public class McpInMemoryTaskManagerTests {
 				task.getTaskId()));
 
 		manager.updateTask(updateContext(control.getRequestContext(),
+				task.getTaskId(), Map.of("first", McpJsonObject.builder()
+						.put("roots", McpJsonArray.emptyInstance()).build())));
+		Assertions.assertEquals(waiting,
+				manager.findTask(task.getTaskId()).orElseThrow());
+		Assertions.assertTrue(manager.takeTaskInputResponses(task.getTaskId())
+				.asMap().isEmpty());
+
+		manager.updateTask(updateContext(control.getRequestContext(),
 				task.getTaskId(), Map.of(
-					"first", McpJsonString.fromValue("answer-one"),
-					"unknown", McpJsonString.fromValue("ignored"))));
+					"first", inputResponse("answer-one"),
+					"unknown", inputResponse("ignored"))));
 		McpTask partiallyAnswered = manager.findTask(task.getTaskId())
 				.orElseThrow();
 		Assertions.assertEquals(McpTaskStatus.INPUT_REQUIRED,
@@ -261,7 +269,7 @@ public class McpInMemoryTaskManagerTests {
 
 		McpInputResponses firstResponses = manager.takeTaskInputResponses(
 				task.getTaskId());
-		Assertions.assertEquals(McpJsonString.fromValue("answer-one"),
+		Assertions.assertEquals(inputResponse("answer-one"),
 				firstResponses.find("first").orElseThrow());
 		Assertions.assertTrue(firstResponses.find("unknown").isEmpty());
 		Assertions.assertTrue(manager.takeTaskInputResponses(task.getTaskId())
@@ -269,12 +277,12 @@ public class McpInMemoryTaskManagerTests {
 
 		manager.updateTask(updateContext(control.getRequestContext(),
 				task.getTaskId(), Map.of(
-					"first", McpJsonString.fromValue("duplicate"),
-					"second", McpJsonString.fromValue("answer-two"))));
+					"first", inputResponse("duplicate"),
+					"second", inputResponse("answer-two"))));
 		McpTask resumed = manager.findTask(task.getTaskId()).orElseThrow();
 		Assertions.assertEquals(McpTaskStatus.WORKING, resumed.getTaskStatus());
 		Assertions.assertTrue(resumed.getInputRequests().isEmpty());
-		Assertions.assertEquals(McpJsonString.fromValue("answer-two"),
+		Assertions.assertEquals(inputResponse("answer-two"),
 				manager.takeTaskInputResponses(task.getTaskId())
 						.find("second").orElseThrow());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
@@ -297,7 +305,7 @@ public class McpInMemoryTaskManagerTests {
 		manager.markTaskWorking(supersededTask.getTaskId(), null);
 		manager.updateTask(updateContext(control.getRequestContext(),
 				supersededTask.getTaskId(), Map.of("superseded",
-						McpJsonString.fromValue("ignored"))));
+						inputResponse("ignored"))));
 		Assertions.assertTrue(manager.takeTaskInputResponses(
 				supersededTask.getTaskId()).asMap().isEmpty());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
@@ -319,7 +327,7 @@ public class McpInMemoryTaskManagerTests {
 		Assertions.assertThrows(IllegalStateException.class, () ->
 				manager.updateTask(updateContext(control.getRequestContext(),
 						task.getTaskId(), Map.of("answer",
-								McpJsonString.fromValue("first try")))));
+								inputResponse("first try")))));
 		McpTask unchanged = manager.findTask(task.getTaskId()).orElseThrow();
 		Assertions.assertEquals(McpTaskStatus.INPUT_REQUIRED,
 				unchanged.getTaskStatus());
@@ -329,8 +337,8 @@ public class McpInMemoryTaskManagerTests {
 
 		manager.updateTask(updateContext(control.getRequestContext(),
 				task.getTaskId(), Map.of("answer",
-						McpJsonString.fromValue("second try"))));
-		Assertions.assertEquals(McpJsonString.fromValue("second try"),
+						inputResponse("second try"))));
+		Assertions.assertEquals(inputResponse("second try"),
 				manager.takeTaskInputResponses(task.getTaskId())
 						.find("answer").orElseThrow());
 	}
@@ -573,7 +581,28 @@ public class McpInMemoryTaskManagerTests {
 		return McpInputRequest.fromDeclaration(
 				McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.CONDITIONAL),
-				McpJsonObject.builder().put("value", value).build());
+				McpJsonObject.builder()
+						.put("mode", "form")
+						.put("message", value)
+						.put("requestedSchema", McpJsonObject.builder()
+								.put("type", "object")
+								.put("properties", McpJsonObject.builder()
+										.put("value", McpJsonObject.builder()
+												.put("type", "string")
+												.build())
+										.build())
+								.build())
+						.build());
+	}
+
+	@NonNull
+	private static McpJsonObject inputResponse(@NonNull String value) {
+		return McpJsonObject.builder()
+				.put("action", "accept")
+				.put("content", McpJsonObject.builder()
+						.put("value", value)
+						.build())
+				.build();
 	}
 
 	private static final class MutableTime extends Clock
