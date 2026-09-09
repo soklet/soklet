@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -111,14 +112,14 @@ public final class McpTask {
 			throw new IllegalArgumentException(
 					"Task last-updated time must not precede its creation time.");
 		this.timeToLive = requireWholeMilliseconds(builder.timeToLive,
-				"Task time to live", true);
+				"Task time to live");
 		this.pollInterval = requireWholeMilliseconds(builder.pollInterval,
-				"Task poll interval", false);
+				"Task poll interval");
 		this.inputRequests = Collections.unmodifiableMap(
 				new LinkedHashMap<>(builder.inputRequests));
 		this.completedResult = builder.completedResult;
 		this.failure = builder.failure;
-		this.metadata = requireNonNull(builder.metadata);
+		this.metadata = requireApplicationMetadata(builder.metadata);
 		validateStatusPayload();
 	}
 
@@ -165,7 +166,7 @@ public final class McpTask {
 	/**
 	 * Returns the duration after creation for which the task may be retained.
 	 *
-	 * @return nonnegative whole-millisecond duration, or empty for unlimited
+	 * @return positive whole-millisecond duration, or empty for unlimited
 	 */
 	@NonNull
 	public Optional<@NonNull Duration> getTimeToLive() {
@@ -266,15 +267,12 @@ public final class McpTask {
 
 	@Nullable
 	private static Duration requireWholeMilliseconds(
-			@Nullable Duration duration, @NonNull String description,
-			boolean zeroAllowed) {
+			@Nullable Duration duration, @NonNull String description) {
 		if (duration == null)
 			return null;
 		requireNonNull(description);
-		if (duration.isNegative() || (!zeroAllowed && duration.isZero()))
-			throw new IllegalArgumentException(description + (zeroAllowed
-					? " must not be negative."
-					: " must be positive."));
+		if (duration.isNegative() || duration.isZero())
+			throw new IllegalArgumentException(description + " must be positive.");
 		long milliseconds;
 		try {
 			milliseconds = duration.toMillis();
@@ -389,17 +387,17 @@ public final class McpTask {
 		/**
 		 * Sets the task time to live or selects unlimited retention.
 		 *
-		 * @param timeToLive nonnegative whole-millisecond duration, or null for
+		 * @param timeToLive positive whole-millisecond duration, or null for
 		 *                   the wire-level unlimited value
 		 * @return this builder
-		 * @throws IllegalArgumentException if the duration is negative, has
+		 * @throws IllegalArgumentException if the duration is not positive, has
 		 * sub-millisecond precision, or does not fit in a signed 64-bit
 		 * millisecond count
 		 */
 		@NonNull
 		public Builder timeToLive(@Nullable Duration timeToLive) {
 			this.timeToLive = requireWholeMilliseconds(timeToLive,
-					"Task time to live", true);
+					"Task time to live");
 			return this;
 		}
 
@@ -416,7 +414,7 @@ public final class McpTask {
 		@NonNull
 		public Builder pollInterval(@Nullable Duration pollInterval) {
 			this.pollInterval = requireWholeMilliseconds(pollInterval,
-					"Task poll interval", false);
+					"Task poll interval");
 			return this;
 		}
 
@@ -502,6 +500,8 @@ public final class McpTask {
 		 *
 		 * @param metadata immutable metadata, or null to restore the empty default
 		 * @return this builder
+		 * @throws IllegalArgumentException when {@link #build()} is called if the
+		 * metadata uses a reserved MCP key
 		 */
 		@NonNull
 		public Builder metadata(@Nullable McpJsonObject metadata) {

@@ -37,6 +37,8 @@ import com.soklet.McpJsonValue;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
+import com.soklet.McpTask;
+import com.soklet.McpTaskNotFoundException;
 import com.soklet.McpAdmissionRejection;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
@@ -1114,9 +1116,20 @@ public final class McpServerRuntimeBridge {
 							"The MCP request rate limiter returned null.")));
 		}
 
+		Map<String, McpApplicationRequestHandler> frameworkHandlers =
+				new LinkedHashMap<>();
+		endpointPlan.taskManagerAdapter().ifPresent(adapter -> {
+			frameworkHandlers.put("tasks/get",
+					invocation -> invokeTaskGet(adapter, invocation));
+			frameworkHandlers.put("tasks/update",
+					invocation -> invokeTaskUpdate(adapter, invocation));
+			frameworkHandlers.put("tasks/cancel",
+					invocation -> invokeTaskCancel(adapter, invocation));
+		});
 		McpApplicationRequestRouter applicationRouter =
-				McpApplicationRequestRouter.fromHandlersAndValidatedOperationRoutes(
-						Map.of(), toolRoutes, promptRoutes, exactResourceRoutes,
+				McpApplicationRequestRouter
+						.fromFrameworkHandlersAndValidatedOperationRoutes(
+						frameworkHandlers, toolRoutes, promptRoutes, exactResourceRoutes,
 						resourceTemplateRoutes, internalResourceListRoute);
 		if (requestObservationAdapter.isEmpty())
 			return new McpHttpEndpointBinding(endpointPolicy, endpoint,
@@ -1549,7 +1562,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull ResourcePlan> resourcePlans,
 			@NonNull ResourceListPlan resourceListPlan,
 			@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
-			boolean localizationEnabled, boolean tasksSupported) {
+			boolean localizationEnabled,
+			@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1558,6 +1572,12 @@ public final class McpServerRuntimeBridge {
 			resourcePlans = List.copyOf(requireNonNull(resourcePlans));
 			requireNonNull(resourceListPlan);
 			requireNonNull(catalogLocalizer);
+			requireNonNull(taskManagerAdapter);
+		}
+
+		/** @return whether this endpoint has the Tasks protocol extension */
+		public boolean tasksSupported() {
+			return taskManagerAdapter.isPresent();
 		}
 
 		/** Plans an endpoint with localization disabled. */
@@ -1567,7 +1587,63 @@ public final class McpServerRuntimeBridge {
 				@NonNull List<@NonNull ResourcePlan> resourcePlans,
 				@NonNull ResourceListPlan resourceListPlan) {
 			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
-					Optional.empty(), false, false);
+					Optional.empty(), false, Optional.empty());
+		}
+	}
+
+	/**
+	 * Internal application-task adapter for one endpoint.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public interface TaskManagerAdapter {
+		/** Finds and renders an authorized task snapshot. */
+		@NonNull
+		Optional<@NonNull TaskSnapshot> findTask(
+				@NonNull McpRequestContext requestContext,
+				@NonNull String taskId) throws Exception;
+
+		/** Delivers validated client input responses. */
+		void updateTask(@NonNull McpRequestContext requestContext,
+				@NonNull String taskId,
+				@NonNull McpInputResponses inputResponses) throws Exception;
+
+		/** Records durable cancelation intent. */
+		void requestTaskCancelation(@NonNull McpRequestContext requestContext,
+				@NonNull String taskId) throws Exception;
+	}
+
+	/**
+	 * Public-JSON task projection whose origin has already been validated and
+	 * whose completed output has already passed application-layer safeguards.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record TaskSnapshot(@NonNull McpTask task,
+			@NonNull Optional<@NonNull McpJsonObject> completedResultFields,
+			@NonNull Optional<@NonNull McpJsonObject> completedResultMetadata,
+			boolean structuredContentMirroredAsText) {
+		/** Validates one immutable task projection. */
+		public TaskSnapshot {
+			requireNonNull(task);
+			requireNonNull(completedResultFields);
+			requireNonNull(completedResultMetadata);
+			if (completedResultFields.isPresent()
+					!= completedResultMetadata.isPresent())
+				throw new IllegalArgumentException(
+						"MCP task result fields and metadata must be supplied together.");
+			if (task.getTaskStatus() != com.soklet.McpTaskStatus.COMPLETED
+					&& (completedResultFields.isPresent()
+					|| completedResultMetadata.isPresent()
+					|| structuredContentMirroredAsText))
+				throw new IllegalArgumentException(
+						"Only completed MCP task snapshots may carry rendered result fields and metadata.");
+			if (structuredContentMirroredAsText
+					&& completedResultFields.isEmpty())
+				throw new IllegalArgumentException(
+						"MCP structured-content mirroring requires rendered result fields.");
 		}
 	}
 
@@ -2442,6 +2518,8 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public sealed interface ToolInvocationResult permits ToolInvocationResult.Complete,
 			ToolInvocationResult.Structured, ToolInvocationResult.InputRequired,
+			ToolInvocationResult.TaskCreated,
+			ToolInvocationResult.TaskCapabilityRequired,
 			ToolInvocationResult.InvalidInput {
 		@NonNull
 		static Complete complete(@NonNull McpJsonObject resultFields,
@@ -2459,6 +2537,18 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		static InputRequired inputRequired(@NonNull McpInputRequiredResult result) {
 			return new InputRequired(result);
+		}
+
+		/** @return a durably verified task-creation result */
+		@NonNull
+		static TaskCreated taskCreated(@NonNull TaskSnapshot taskSnapshot) {
+			return new TaskCreated(taskSnapshot);
+		}
+
+		/** @return a task result rejected for missing request capability */
+		@NonNull
+		static TaskCapabilityRequired taskCapabilityRequired() {
+			return TaskCapabilityRequired.INSTANCE;
 		}
 
 		@NonNull
@@ -2507,6 +2597,31 @@ public final class McpServerRuntimeBridge {
 			public InputRequired {
 				requireNonNull(result);
 			}
+		}
+
+		/**
+		 * Task creation whose durable snapshot was verified before response.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record TaskCreated(@NonNull TaskSnapshot taskSnapshot)
+				implements ToolInvocationResult {
+			/** Validates the task snapshot. */
+			public TaskCreated {
+				requireNonNull(taskSnapshot);
+			}
+		}
+
+		/**
+		 * Internal control value for a handler that attempted task creation
+		 * without the per-request Tasks capability.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		enum TaskCapabilityRequired implements ToolInvocationResult {
+			INSTANCE
 		}
 
 		/**
@@ -3235,6 +3350,12 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof ToolInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof ToolInvocationResult.TaskCapabilityRequired)
+			throw new McpProtocolJsonRpcException(
+					McpJsonRpcError.missingRequiredClientExtension(
+							TASKS_EXTENSION_IDENTIFIER));
+		if (result instanceof ToolInvocationResult.TaskCreated taskCreated)
+			return taskResult(taskCreated.taskSnapshot(), true);
 		if (result instanceof ToolInvocationResult.InputRequired inputRequired)
 			return inputRequiredResult(inputRequired.result(),
 					inputRequestPlan,
@@ -3281,6 +3402,224 @@ public final class McpServerRuntimeBridge {
 				Optional.empty(), resultMetadata);
 		return McpWireResult.complete(resultFields,
 				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata));
+	}
+
+	@NonNull
+	private static McpWireResult invokeTaskGet(
+			@NonNull TaskManagerAdapter taskManagerAdapter,
+			@NonNull McpApplicationInvocation invocation) throws Exception {
+		String taskId = taskId(invocation.request());
+		Optional<TaskSnapshot> taskSnapshot = requireNonNull(
+				taskManagerAdapter.findTask(requirePublicRequestContext(invocation),
+						taskId),
+				"The MCP task manager adapter returned null.");
+		if (taskSnapshot.isEmpty())
+			throw new McpInvalidApplicationInputException();
+		TaskSnapshot snapshot = taskSnapshot.orElseThrow();
+		requireTaskInputCapabilities(snapshot,
+				invocation.request().params().metadata().clientCapabilities());
+		return taskResult(snapshot, false);
+	}
+
+	private static void requireTaskInputCapabilities(
+			@NonNull TaskSnapshot taskSnapshot,
+			@NonNull McpClientCapabilities clientCapabilities)
+			throws McpProtocolJsonRpcException {
+		McpTask task = requireNonNull(taskSnapshot).task();
+		if (task.getTaskStatus() != com.soklet.McpTaskStatus.INPUT_REQUIRED)
+			return;
+		Set<McpClientCapabilityRequirement> missingCapabilities =
+				new LinkedHashSet<>();
+		for (McpInputRequest inputRequest : task.getInputRequests().values()) {
+			McpInputRequestDeclaration declaration = toInternal(
+					requireNonNull(inputRequest).getDeclaration());
+			for (McpClientCapabilityRequirement capability
+					: declaration.capabilities())
+				if (!requireNonNull(clientCapabilities).supports(capability))
+					missingCapabilities.add(capability);
+		}
+		if (!missingCapabilities.isEmpty())
+			throw new McpProtocolJsonRpcException(
+					McpJsonRpcError.missingRequiredClientCapabilities(
+							missingCapabilities));
+	}
+
+	@NonNull
+	private static McpWireResult invokeTaskUpdate(
+			@NonNull TaskManagerAdapter taskManagerAdapter,
+			@NonNull McpApplicationInvocation invocation) throws Exception {
+		String taskId = taskId(invocation.request());
+		com.soklet.internal.mcp.protocol.McpJsonValue inputResponsesValue =
+				invocation.request().params().fields().members().get("inputResponses");
+		if (!(inputResponsesValue
+				instanceof com.soklet.internal.mcp.protocol.McpJsonObject inputResponses))
+			throw new McpInvalidApplicationInputException();
+		McpRequestContext requestContext = requirePublicRequestContext(invocation);
+		McpInputResponses publicInputResponses = requestContext.getInputResponses();
+		if (!publicInputResponses.asMap().equals(
+				toPublicInputResponses(inputResponses).asMap()))
+			throw new IllegalStateException(
+					"Validated MCP task input responses changed before dispatch.");
+		try {
+			taskManagerAdapter.updateTask(requestContext, taskId,
+					publicInputResponses);
+		} catch (McpTaskNotFoundException exception) {
+			throw new McpInvalidApplicationInputException();
+		}
+		return McpWireResult.complete(
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+	}
+
+	@NonNull
+	private static McpWireResult invokeTaskCancel(
+			@NonNull TaskManagerAdapter taskManagerAdapter,
+			@NonNull McpApplicationInvocation invocation) throws Exception {
+		String taskId = taskId(invocation.request());
+		try {
+			taskManagerAdapter.requestTaskCancelation(
+					requirePublicRequestContext(invocation), taskId);
+		} catch (McpTaskNotFoundException exception) {
+			throw new McpInvalidApplicationInputException();
+		}
+		return McpWireResult.complete(
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+	}
+
+	@NonNull
+	private static String taskId(
+			McpJsonRpcMessage.@NonNull Request request) throws
+			McpInvalidApplicationInputException {
+		com.soklet.internal.mcp.protocol.McpJsonValue taskIdValue =
+				requireNonNull(request).params().fields().members().get("taskId");
+		if (!(taskIdValue
+				instanceof com.soklet.internal.mcp.protocol.McpJsonString string)
+				|| string.value().isBlank()
+				|| string.value().indexOf('\r') >= 0
+				|| string.value().indexOf('\n') >= 0)
+			throw new McpInvalidApplicationInputException();
+		return string.value();
+	}
+
+	@NonNull
+	private static McpWireResult taskResult(@NonNull TaskSnapshot taskSnapshot,
+			boolean creation) {
+		TaskSnapshot snapshot = requireNonNull(taskSnapshot);
+		McpJsonObject fields = taskFields(snapshot, !creation);
+		com.soklet.internal.mcp.protocol.McpJsonObject internalFields =
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(fields);
+		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(snapshot.task().getMetadata());
+		McpResultMetadata metadata = new McpResultMetadata(
+				Optional.empty(), internalMetadata);
+		Optional<McpResultMetadata> optionalMetadata = metadata.isEmpty()
+				? Optional.empty() : Optional.of(metadata);
+		return creation
+				? McpWireResult.extension(McpResultType.extension("task"),
+						internalFields, optionalMetadata)
+				: McpWireResult.complete(internalFields, optionalMetadata);
+	}
+
+	@NonNull
+	private static McpJsonObject taskFields(@NonNull TaskSnapshot taskSnapshot,
+			boolean detailed) {
+		TaskSnapshot snapshot = requireNonNull(taskSnapshot);
+		McpTask task = snapshot.task();
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("taskId", McpJsonString.fromValue(task.getTaskId()));
+		fields.put("status", McpJsonString.fromValue(switch (task.getTaskStatus()) {
+			case WORKING -> "working";
+			case INPUT_REQUIRED -> "input_required";
+			case COMPLETED -> "completed";
+			case FAILED -> "failed";
+			case CANCELED -> "cancelled";
+		}));
+		task.getTaskStatusMessage().ifPresent(value ->
+				fields.put("statusMessage", McpJsonString.fromValue(value)));
+		fields.put("createdAt",
+				McpJsonString.fromValue(task.getCreatedAt().toString()));
+		fields.put("lastUpdatedAt",
+				McpJsonString.fromValue(task.getLastUpdatedAt().toString()));
+		if (task.getTimeToLive().isEmpty()) {
+			fields.put("ttlMs", McpJsonNull.INSTANCE);
+		} else {
+			long milliseconds = task.getTimeToLive().orElseThrow().toMillis();
+			if (milliseconds <= 0L)
+				throw new IllegalArgumentException(
+						"MCP task time to live must be positive when rendered.");
+			fields.put("ttlMs", McpJsonNumber.fromValue(
+					java.math.BigDecimal.valueOf(milliseconds)));
+		}
+		task.getPollInterval().ifPresent(value -> fields.put("pollIntervalMs",
+				McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(
+						value.toMillis()))));
+		if (!detailed)
+			return McpJsonObject.fromMembers(fields);
+
+		switch (task.getTaskStatus()) {
+			case WORKING, CANCELED -> {
+			}
+			case INPUT_REQUIRED -> fields.put("inputRequests",
+					inputRequests(task.getInputRequests()));
+			case COMPLETED -> fields.put("result",
+					completedTaskResult(snapshot));
+			case FAILED -> fields.put("error", taskFailure(
+					task.getFailure().orElseThrow()));
+		}
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject inputRequests(
+			@NonNull Map<@NonNull String, @NonNull McpInputRequest> inputRequests) {
+		Map<String, McpJsonValue> rendered = new LinkedHashMap<>();
+		for (Map.Entry<String, McpInputRequest> entry
+				: requireNonNull(inputRequests).entrySet()) {
+			McpInputRequest request = requireNonNull(entry.getValue());
+			McpInputRequestDeclaration declaration = toInternal(
+					request.getDeclaration());
+			McpEmbeddedInputRequest embedded =
+					McpEmbeddedInputRequest.fromDeclaration(declaration,
+							(com.soklet.internal.mcp.protocol.McpJsonObject)
+									toInternal(request.getParams()));
+			rendered.put(requireNonNull(entry.getKey()),
+					toPublic(embedded.toJsonObject()));
+		}
+		return McpJsonObject.fromMembers(rendered);
+	}
+
+	@NonNull
+	private static McpJsonObject completedTaskResult(
+			@NonNull TaskSnapshot taskSnapshot) {
+		McpJsonObject publicResultFields = taskSnapshot.completedResultFields()
+				.orElseThrow();
+		if (taskSnapshot.structuredContentMirroredAsText()) {
+			com.soklet.internal.mcp.protocol.McpJsonObject internalResultFields =
+					(com.soklet.internal.mcp.protocol.McpJsonObject)
+							toInternal(publicResultFields);
+			publicResultFields = (McpJsonObject) toPublic(
+					withStructuredContentTextMirror(internalResultFields));
+		}
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>(
+				publicResultFields.getMembers());
+		fields.put("resultType", McpJsonString.fromValue("complete"));
+		McpJsonObject metadata = taskSnapshot.completedResultMetadata()
+				.orElseThrow();
+		if (!metadata.getMembers().isEmpty())
+			fields.put("_meta", metadata);
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject taskFailure(
+			com.soklet.@NonNull McpJsonRpcError failure) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("code", McpJsonNumber.fromValue(
+				java.math.BigDecimal.valueOf(failure.getCode())));
+		fields.put("message", McpJsonString.fromValue(failure.getMessage()));
+		failure.getData().ifPresent(value -> fields.put("data", value));
+		return McpJsonObject.fromMembers(fields);
 	}
 
 	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonObject

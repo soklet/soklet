@@ -76,13 +76,16 @@ public class McpServerCapabilityRegistryTests {
 
 	@Test
 	public void tasks_extension_is_advertised_only_when_configured() {
-		McpJsonObject absent = McpServerCapabilityRegistry.fromEndpoint(
-				endpointBuilder().build()).capabilities().toJsonObject();
-		McpJsonObject present = McpServerCapabilityRegistry.fromEndpoint(
+		McpServerCapabilityRegistry absentRegistry =
+				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder().build());
+		McpServerCapabilityRegistry presentRegistry =
+				McpServerCapabilityRegistry.fromEndpoint(
 				endpointBuilder()
 						.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 								McpJsonObject.empty())
-						.build()).capabilities().toJsonObject();
+						.build());
+		McpJsonObject absent = absentRegistry.capabilities().toJsonObject();
+		McpJsonObject present = presentRegistry.capabilities().toJsonObject();
 
 		Assertions.assertFalse(absent.members().containsKey("extensions"));
 		Assertions.assertEquals(
@@ -90,6 +93,12 @@ public class McpServerCapabilityRegistryTests {
 						McpJsonObject.empty())),
 				present.members().get("extensions"));
 		Assertions.assertEquals(Set.of("extensions"), present.members().keySet());
+		Assertions.assertFalse(absentRegistry.permitsResultType(
+				McpResultType.extension("task")));
+		Assertions.assertTrue(presentRegistry.permitsResultType(
+				McpResultType.extension("task")));
+		Assertions.assertFalse(presentRegistry.permitsResultType(
+				McpResultType.extension("future")));
 	}
 
 	@Test

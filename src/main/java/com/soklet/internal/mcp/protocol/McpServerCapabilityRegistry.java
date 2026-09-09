@@ -300,7 +300,11 @@ final class McpServerCapabilityRegistry {
 	}
 
 	boolean permitsResultType(@NonNull McpResultType resultType) {
-		return requireNonNull(resultType).isCore();
+		McpResultType requiredResultType = requireNonNull(resultType);
+		return requiredResultType.isCore()
+				|| ("task".equals(requiredResultType.wireValue())
+				&& capabilities.extensions().containsKey(
+						"io.modelcontextprotocol/tasks"));
 	}
 
 	@NonNull

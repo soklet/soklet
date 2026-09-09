@@ -30,9 +30,10 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Provisional open wire result. Core factories enforce the invariants of the
- * result type they emit; the extension factory keeps the representation open
- * without advertising or enabling an extension in Soklet 4.0.
+ * Open wire result. Core factories enforce the invariants of the result type
+ * they emit; the extension factory supports explicitly negotiated protocol
+ * extensions such as Tasks while keeping extension advertisement and
+ * per-request capability enforcement at the owning runtime boundary.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

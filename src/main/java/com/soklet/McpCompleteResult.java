@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.util.Objects;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -111,7 +112,7 @@ public final class McpCompleteResult implements McpOperationResult {
 	private McpCompleteResult(@NonNull McpCompletePayload payload,
 			@NonNull McpJsonObject metadata) {
 		this.payload = requireNonNull(payload);
-		this.metadata = requireNonNull(metadata);
+		this.metadata = requireApplicationMetadata(metadata);
 	}
 
 	/**
@@ -119,6 +120,8 @@ public final class McpCompleteResult implements McpOperationResult {
 	 *
 	 * @param metadata immutable metadata object
 	 * @return copied complete result
+	 * @throws NullPointerException if {@code metadata} is null
+	 * @throws IllegalArgumentException if metadata uses a reserved MCP key
 	 */
 	@NonNull
 	public McpCompleteResult withMetadata(@NonNull McpJsonObject metadata) {

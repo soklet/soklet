@@ -85,9 +85,10 @@ public interface McpTaskManager {
 	 * Atomically authorizes and accepts client responses to outstanding task
 	 * input requests.
 	 *
-	 * <p>Unknown, already-consumed, and superseded response keys are ignored.
-	 * The update acknowledgement may precede a worker's subsequent observable
-	 * state change.
+	 * <p>A request may supply any partial subset of outstanding responses.
+	 * Unknown, already-consumed, and superseded response keys are ignored. The
+	 * update acknowledgement may precede a worker's subsequent observable state
+	 * change.
 	 *
 	 * @param context independently admitted task update
 	 * @throws McpTaskNotFoundException if the task is unknown or unauthorized
@@ -103,7 +104,9 @@ public interface McpTaskManager {
 	 * <p>A successful return acknowledges intent only. A worker may later honor
 	 * it, or completion or failure may win the race. This method is unrelated to
 	 * request-scoped {@link CancelationToken} and
-	 * {@code notifications/cancelled} behavior.
+	 * {@code notifications/cancelled} behavior. A known terminal task must be
+	 * accepted idempotently; only an unknown or unauthorized task uses the
+	 * not-found signal.
 	 *
 	 * @param context independently admitted task-cancelation request
 	 * @throws McpTaskNotFoundException if the task is unknown or unauthorized

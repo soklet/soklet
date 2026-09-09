@@ -248,6 +248,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private static final String MCP_NAME = "Mcp-Name";
 	@NonNull
+	private static final String TASKS_EXTENSION_IDENTIFIER =
+			"io.modelcontextprotocol/tasks";
+	@NonNull
+	private static final Set<@NonNull String> TASK_REQUEST_METHODS =
+			Set.of("tasks/get", "tasks/update", "tasks/cancel");
+	@NonNull
 	private static final String CACHE_CONTROL = "Cache-Control";
 	@NonNull
 	private static final String CACHE_CONTROL_NO_STORE = "no-store";
@@ -3975,6 +3981,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				"resources/templates/list".equals(mappedRequest.method());
 		boolean subscriptionListenRequest =
 				"subscriptions/listen".equals(mappedRequest.method());
+		boolean taskRequest = isTaskRequestMethod(mappedRequest.method());
 		Optional<String> operationName = Optional.empty();
 		Optional<McpApplicationToolRoute> toolRoute = Optional.empty();
 		Optional<McpApplicationPromptRoute> promptRoute = Optional.empty();
@@ -4064,6 +4071,40 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			} catch (IllegalArgumentException exception) {
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 			}
+		} else if (taskRequest) {
+			Optional<McpApplicationRequestHandler> taskHandler =
+					applicationRouter.resolve(mappedRequest.method());
+			boolean tasksSupported = capabilityRegistry.capabilities().extensions()
+					.containsKey(TASKS_EXTENSION_IDENTIFIER)
+					&& taskHandler.isPresent();
+			if (!tasksSupported)
+				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
+			if (!mappedRequest.params().metadata().clientCapabilities().extensions()
+					.containsKey(TASKS_EXTENSION_IDENTIFIER))
+				return missingTasksCapability(protocolProfile, mappedRequest.id(),
+						corsHeaders);
+
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			McpJsonValue taskIdValue = fields.get("taskId");
+			if (!(taskIdValue instanceof McpJsonString taskId)
+					|| !validTaskId(taskId.value()))
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			operationName = Optional.of(taskId.value());
+
+			if ("tasks/update".equals(mappedRequest.method())) {
+				try {
+					Optional<McpJsonObject> parsedInputResponses =
+							parseInputResponses(fields);
+					if (parsedInputResponses.isEmpty())
+						return invalidParams(protocolProfile, mappedRequest,
+								corsHeaders);
+					inputResponses = parsedInputResponses.orElseThrow();
+				} catch (IllegalArgumentException exception) {
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				}
+			}
+			applicationHandler = taskHandler;
 		} else if ("tools/call".equals(mappedRequest.method())) {
 			Map<String, McpJsonValue> fields =
 					mappedRequest.params().fields().members();
@@ -4224,6 +4265,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return invalidResourceUriParams(protocolProfile, mappedRequest, uri, corsHeaders);
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 			}
+		} else if (mappedRequest.method().startsWith("tasks/")) {
+			// The Tasks extension owns its complete method namespace. Obsolete and
+			// unknown task methods never fall through to an application route.
+			return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 		} else {
 			applicationHandler = applicationRouter.resolve(mappedRequest.method());
 			if (applicationHandler.isEmpty())
@@ -4696,6 +4741,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		for (McpJsonValue response : responses.members().values())
 			McpInputResponseValidator.validate(response);
 		return Optional.of(responses);
+	}
+
+	private static boolean validTaskId(@NonNull String taskId) {
+		requireNonNull(taskId);
+		return !taskId.isBlank()
+				&& taskId.indexOf('\r') < 0
+				&& taskId.indexOf('\n') < 0;
 	}
 
 	@NonNull
@@ -5966,7 +6018,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private boolean requiresMcpName(@NonNull String method) {
 		return "tools/call".equals(method)
 				|| "prompts/get".equals(method)
-				|| "resources/read".equals(method);
+				|| "resources/read".equals(method)
+				|| isTaskRequestMethod(method);
+	}
+
+	private static boolean isTaskRequestMethod(@NonNull String method) {
+		return TASK_REQUEST_METHODS.contains(requireNonNull(method));
 	}
 
 	@NonNull
@@ -5977,7 +6034,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				|| !(wireRequest.params().orElseThrow() instanceof McpJsonObject params))
 			return Optional.empty();
 
-		String fieldName = "resources/read".equals(wireRequest.method()) ? "uri" : "name";
+		String fieldName;
+		if ("resources/read".equals(wireRequest.method()))
+			fieldName = "uri";
+		else if (isTaskRequestMethod(wireRequest.method()))
+			fieldName = "taskId";
+		else
+			fieldName = "name";
 		McpJsonValue value = params.members().get(fieldName);
 		return value instanceof McpJsonString string
 				? Optional.of(string.value())
@@ -6034,6 +6097,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				400, "Bad Request", Optional.of(request.id()),
 				new McpJsonRpcError(McpJsonRpcError.INVALID_PARAMS,
 						"Invalid params", Optional.empty()), corsHeaders);
+	}
+
+	@NonNull
+	private MicrohttpResponse missingTasksCapability(
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpJsonRpcId requestId,
+			@NonNull List<@NonNull Header> corsHeaders) {
+		return profiledJsonRpcError(protocolProfile,
+				McpProfileErrorKind.OPERATION, 400, "Bad Request",
+				Optional.of(requireNonNull(requestId)),
+				McpJsonRpcError.missingRequiredClientExtension(
+						TASKS_EXTENSION_IDENTIFIER),
+				corsHeaders);
 	}
 
 	@NonNull

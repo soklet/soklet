@@ -65,7 +65,9 @@ public interface McpAdmissionContext {
 	/** @return the validated MCP protocol version */
 	@NonNull String getProtocolVersion();
 
-	/** @return the selected tool, prompt, or resource name, when applicable */
+	/**
+	 * @return the selected tool, prompt, resource, or task ID, when applicable
+	 */
 	@NonNull Optional<@NonNull String> getOperationName();
 
 	/** @return informational client implementation metadata, when supplied */

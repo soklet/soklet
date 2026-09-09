@@ -45,16 +45,19 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvoc
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
-import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskSnapshot;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolPlan;
+import com.soklet.internal.mcp.schema.McpRuntimeToolOutputSchemaBridge;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -82,6 +85,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
 
@@ -105,10 +109,17 @@ final class DefaultMcpServer implements McpServer {
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
-			"resources/read", "subscriptions/listen", "notifications/cancelled");
+			"resources/read", "subscriptions/listen", "notifications/cancelled",
+			"tasks/get", "tasks/update", "tasks/cancel");
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/tasks";
+	@NonNull
+	private static final String MCP_TASK_ORIGIN_PROTOCOL_VERSION =
+			"2026-07-28";
+	@NonNull
+	private static final Pattern MCP_TOOL_NAME_PATTERN =
+			Pattern.compile("[A-Za-z0-9_.-]+");
 	@NonNull
 	private final Object lifecycleLock;
 	private final int maximumCursorSizeInBytes;
@@ -502,7 +513,49 @@ final class DefaultMcpServer implements McpServer {
 								invocation)));
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),
-				this.localizer != null, this.taskManager != null);
+				this.localizer != null, taskManagerAdapter(endpoint));
+	}
+
+	@NonNull
+	private Optional<@NonNull TaskManagerAdapter> taskManagerAdapter(
+			@NonNull McpEndpoint endpoint) {
+		McpTaskManager configuredTaskManager = this.taskManager;
+		if (configuredTaskManager == null)
+			return Optional.empty();
+		return Optional.of(new TaskManagerAdapter() {
+			@Override
+			@NonNull
+			public Optional<@NonNull TaskSnapshot> findTask(
+					@NonNull McpRequestContext requestContext,
+					@NonNull String taskId) throws Exception {
+				Optional<McpTask> task = requireNonNull(
+						configuredTaskManager.findTask(new McpTaskRequestContext(
+								requestContext, taskId)),
+						"The MCP task manager returned null.");
+				if (task.isEmpty())
+					return Optional.empty();
+				McpTask snapshot = task.orElseThrow();
+				requireTaskIdMatches(taskId, snapshot);
+				return Optional.of(taskSnapshot(endpoint, requestContext, snapshot,
+						true));
+			}
+
+			@Override
+			public void updateTask(@NonNull McpRequestContext requestContext,
+					@NonNull String taskId,
+					@NonNull McpInputResponses inputResponses) throws Exception {
+				configuredTaskManager.updateTask(new McpTaskUpdateContext(
+						requestContext, taskId, inputResponses));
+			}
+
+			@Override
+			public void requestTaskCancelation(
+					@NonNull McpRequestContext requestContext,
+					@NonNull String taskId) throws Exception {
+				configuredTaskManager.requestTaskCancelation(
+						new McpTaskRequestContext(requestContext, taskId));
+			}
+		});
 	}
 
 	/**
@@ -1171,6 +1224,36 @@ final class DefaultMcpServer implements McpServer {
 			return ToolInvocationResult.invalidInput();
 		}
 
+		if (result instanceof McpTaskCreatedResult<?> taskCreatedResult) {
+			McpTaskManager configuredTaskManager = this.taskManager;
+			if (configuredTaskManager == null)
+				throw new IllegalArgumentException(
+						"An MCP task result requires a configured task manager.");
+			if (taskControl.isEmpty())
+				return ToolInvocationResult.taskCapabilityRequired();
+			DefaultMcpTaskControl<A> control = taskControl.orElseThrow();
+			McpTaskOrigin taskOrigin;
+			try {
+				taskOrigin = control.getTaskOrigin();
+			} catch (McpInvalidToolArgumentsException exception) {
+				return ToolInvocationResult.invalidInput();
+			}
+			String taskId = taskCreatedResult.getTaskId();
+			Optional<McpTask> task = requireNonNull(
+					configuredTaskManager.findTask(new McpTaskRequestContext(
+							requestContext, taskId)),
+					"The MCP task manager returned null.");
+			if (task.isEmpty())
+				throw new IllegalStateException(
+						"The created MCP task was not durably readable.");
+			McpTask snapshot = task.orElseThrow();
+			requireTaskIdMatches(taskId, snapshot);
+			if (!taskOrigin.equals(snapshot.getTaskOrigin()))
+				throw new IllegalStateException(
+						"The created MCP task did not preserve its invocation origin.");
+			return ToolInvocationResult.taskCreated(taskSnapshot(
+					invocation.endpoint(), requestContext, snapshot, false));
+		}
 		if (result instanceof McpInputRequiredResult inputRequiredResult)
 			return ToolInvocationResult.inputRequired(inputRequiredResult);
 		if (!(result instanceof McpCompleteResult completeResult))
@@ -1202,6 +1285,122 @@ final class DefaultMcpServer implements McpServer {
 
 		return ToolInvocationResult.complete(toolOutputFields(sanitizedOutput),
 				completeResult.getMetadata());
+	}
+
+	private static void requireTaskIdMatches(@NonNull String requestedTaskId,
+			@NonNull McpTask task) {
+		if (!requireNonNull(requestedTaskId).equals(
+				requireNonNull(task).getTaskId()))
+			throw new IllegalStateException(
+					"The MCP task manager returned a mismatched task ID.");
+	}
+
+	@NonNull
+	private TaskSnapshot taskSnapshot(@NonNull McpEndpoint endpoint,
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpTask task, boolean includeDetailedResult)
+			throws Exception {
+		TaskOriginResolution origin = resolveTaskOrigin(endpoint,
+				requireNonNull(task).getTaskOrigin());
+		if (task.getTaskStatus() != McpTaskStatus.COMPLETED
+				|| !includeDetailedResult)
+			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
+					false);
+
+		McpCompleteResult completedResult = task.getCompletedResult()
+				.orElseThrow();
+		if (!(completedResult.getPayload() instanceof McpToolOutput output))
+			throw new IllegalArgumentException(
+					"A completed MCP tool task must contain tool output.");
+		McpToolOutput sanitizedOutput = requireNonNull(
+				this.toolOutputSanitizer.sanitize(requireNonNull(requestContext),
+						origin.toolName(), origin.rawArguments(), output),
+				"The MCP tool-output sanitizer returned null.");
+		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
+				completedResult.getMetadata(),
+				origin.structuredContentMirroredAsText());
+		Optional<McpJsonValue> structuredContent =
+				sanitizedOutput.getStructuredContent();
+		if (structuredContent.isPresent()
+				&& origin.outputSchemaBridge().isPresent()
+				&& !origin.outputSchemaBridge().orElseThrow().isValid(
+						structuredContent.orElseThrow()))
+			throw new IllegalArgumentException(
+					"MCP deferred structured tool output does not satisfy its output schema.");
+		return new TaskSnapshot(task,
+				Optional.of(toolOutputFields(sanitizedOutput)),
+				Optional.of(completedResult.getMetadata()),
+				origin.structuredContentMirroredAsText());
+	}
+
+	@NonNull
+	private static TaskOriginResolution resolveTaskOrigin(
+			@NonNull McpEndpoint endpoint, @NonNull McpTaskOrigin taskOrigin) {
+		Map<String, McpJsonValue> fields = requireNonNull(taskOrigin)
+				.getPersistedState().getMembers();
+		McpJsonValue formatVersion = fields.get("formatVersion");
+		if (!(formatVersion instanceof McpJsonNumber number)
+				|| number.getValue().compareTo(java.math.BigDecimal.ONE) != 0)
+			throw invalidTaskOrigin();
+		String endpointPath = taskOriginString(fields, "endpointPath");
+		if (!requireNonNull(endpoint).getPath().equals(endpointPath))
+			throw invalidTaskOrigin();
+		if (!"tools_call".equals(taskOriginString(fields, "operationType")))
+			throw invalidTaskOrigin();
+		String toolName = taskOriginString(fields, "operationName");
+		if (toolName.length() > 128
+				|| !MCP_TOOL_NAME_PATTERN.matcher(toolName).matches())
+			throw invalidTaskOrigin();
+		if (!(fields.get("rawArguments") instanceof McpJsonObject rawArguments))
+			throw invalidTaskOrigin();
+		McpPublicJsonValueConverter.toInternalObject(rawArguments);
+		McpJsonValue persistedOutputSchema = fields.get("outputSchema");
+		Optional<McpRuntimeToolOutputSchemaBridge> outputSchemaBridge;
+		if (persistedOutputSchema == McpJsonNull.INSTANCE)
+			outputSchemaBridge = Optional.empty();
+		else if (persistedOutputSchema instanceof McpJsonObject outputSchema)
+			outputSchemaBridge = Optional.of(
+					McpRuntimeToolOutputSchemaBridge.compileToolOutput(outputSchema));
+		else
+			throw invalidTaskOrigin();
+		McpJsonValue mirrorValue = fields.get(
+				"structuredContentMirroredAsText");
+		if (!(mirrorValue instanceof McpJsonBoolean mirror))
+			throw invalidTaskOrigin();
+		String protocolVersion = taskOriginString(fields, "protocolVersion");
+		if (!MCP_TASK_ORIGIN_PROTOCOL_VERSION.equals(protocolVersion))
+			throw invalidTaskOrigin();
+		return new TaskOriginResolution(toolName, rawArguments,
+				outputSchemaBridge, mirror.getValue());
+	}
+
+	@NonNull
+	private static String taskOriginString(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
+			@NonNull String name) {
+		McpJsonValue value = requireNonNull(fields).get(requireNonNull(name));
+		if (!(value instanceof McpJsonString string))
+			throw invalidTaskOrigin();
+		return string.getValue();
+	}
+
+	@NonNull
+	private static IllegalArgumentException invalidTaskOrigin() {
+		return new IllegalArgumentException(
+				"The MCP task carries an invalid origin.");
+	}
+
+	private record TaskOriginResolution(
+			@NonNull String toolName,
+			@NonNull McpJsonObject rawArguments,
+			@NonNull Optional<@NonNull McpRuntimeToolOutputSchemaBridge>
+					outputSchemaBridge,
+			boolean structuredContentMirroredAsText) {
+		private TaskOriginResolution {
+			requireNonNull(toolName);
+			requireNonNull(rawArguments);
+			requireNonNull(outputSchemaBridge);
+		}
 	}
 
 	@NonNull

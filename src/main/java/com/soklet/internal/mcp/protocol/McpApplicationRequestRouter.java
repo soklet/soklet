@@ -445,7 +445,7 @@ final class McpApplicationRequestRouter {
 			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
 		return fromHandlersAndOperationRoutes(handlersByMethod, toolRoutesByName,
 				promptRoutesByName, exactResourceRoutesByUri,
-				resourceTemplateRoutes, resourceListRoute, true);
+				resourceTemplateRoutes, resourceListRoute, true, false);
 	}
 
 	@NonNull
@@ -462,7 +462,31 @@ final class McpApplicationRequestRouter {
 		// every template pair against one endpoint-scoped overlap budget.
 		return fromHandlersAndOperationRoutes(handlersByMethod, toolRoutesByName,
 				promptRoutesByName, exactResourceRoutesByUri,
-				resourceTemplateRoutes, resourceListRoute, false);
+				resourceTemplateRoutes, resourceListRoute, false, false);
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter
+			fromFrameworkHandlersAndValidatedOperationRoutes(
+					@NonNull Map<@NonNull String,
+							@NonNull McpApplicationRequestHandler> frameworkHandlersByMethod,
+					@NonNull Map<@NonNull String,
+							@NonNull McpApplicationToolRoute> toolRoutesByName,
+					@NonNull Map<@NonNull String,
+							@NonNull McpApplicationPromptRoute> promptRoutesByName,
+					@NonNull Map<@NonNull String,
+							@NonNull McpApplicationResourceReadRoute>
+							exactResourceRoutesByUri,
+					@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+							resourceTemplateRoutes,
+					@NonNull Optional<@NonNull McpApplicationResourceListRoute>
+							resourceListRoute) {
+		// This bridge-only path installs only the exact framework-owned Tasks
+		// methods. Application-handler factories retain their ordinary reservation
+		// checks, and this path cannot install arbitrary or other framework methods.
+		return fromHandlersAndOperationRoutes(frameworkHandlersByMethod,
+				toolRoutesByName, promptRoutesByName, exactResourceRoutesByUri,
+				resourceTemplateRoutes, resourceListRoute, false, true);
 	}
 
 	@NonNull
@@ -475,7 +499,8 @@ final class McpApplicationRequestRouter {
 			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
 					resourceTemplateRoutes,
 			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute,
-			boolean validateResourceTemplateOverlap) {
+			boolean validateResourceTemplateOverlap,
+			boolean frameworkTaskHandlers) {
 		requireNonNull(handlersByMethod);
 		requireNonNull(toolRoutesByName);
 		requireNonNull(promptRoutesByName);
@@ -489,10 +514,10 @@ final class McpApplicationRequestRouter {
 			String method = requireNonNull(entry.getKey());
 			if (method.isBlank())
 				throw new IllegalArgumentException("Application MCP methods must not be blank.");
-			if ("server/discover".equals(method) || "tools/list".equals(method)
-					|| "prompts/list".equals(method)
-					|| "resources/list".equals(method)
-					|| "resources/templates/list".equals(method))
+			if (frameworkTaskHandlers && !isFrameworkTaskMethod(method))
+				throw new IllegalArgumentException(
+						"Only framework-owned MCP task methods may be installed by the framework handler factory.");
+			if (!frameworkTaskHandlers && isFrameworkOwnedMethod(method))
 				throw new IllegalArgumentException(
 						"Framework-owned MCP methods cannot be replaced by an application handler.");
 			copied.put(method, requireNonNull(entry.getValue()));
@@ -561,6 +586,21 @@ final class McpApplicationRequestRouter {
 				Collections.unmodifiableMap(copiedPromptRoutes),
 				Collections.unmodifiableMap(copiedExactResourceRoutes),
 				copiedResourceTemplateRoutes, resourceListRoute);
+	}
+
+	private static boolean isFrameworkOwnedMethod(@NonNull String method) {
+		return method.startsWith("tasks/") || switch (method) {
+			case "server/discover", "tools/list", "prompts/list", "resources/list",
+					"resources/templates/list" -> true;
+			default -> false;
+		};
+	}
+
+	private static boolean isFrameworkTaskMethod(@NonNull String method) {
+		return switch (method) {
+			case "tasks/get", "tasks/update", "tasks/cancel" -> true;
+			default -> false;
+		};
 	}
 
 	@NonNull

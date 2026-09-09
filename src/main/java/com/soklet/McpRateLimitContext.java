@@ -87,7 +87,8 @@ public interface McpRateLimitContext {
 	}
 
 	/**
-	 * Returns the resolved operation name, such as a tool name, when present.
+	 * Returns the resolved operation name, such as a tool name or task ID, when
+	 * present.
 	 *
 	 * @return operation name, or the empty optional
 	 */

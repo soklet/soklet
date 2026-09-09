@@ -102,4 +102,19 @@ record McpJsonRpcError(int code, @NonNull String message,
 		return new McpJsonRpcError(MISSING_REQUIRED_CLIENT_CAPABILITY,
 				"Missing required client capability", Optional.of(data));
 	}
+
+	@NonNull
+	static McpJsonRpcError missingRequiredClientExtension(
+			@NonNull String extensionIdentifier) {
+		String identifier = McpProtocolSupport.requireExtensionIdentifier(
+				requireNonNull(extensionIdentifier));
+		McpJsonObject extensions = new McpJsonObject(Map.of(identifier,
+				McpJsonObject.empty()));
+		McpJsonObject requiredCapabilities = new McpJsonObject(
+				Map.of("extensions", extensions));
+		McpJsonObject data = new McpJsonObject(
+				Map.of("requiredCapabilities", requiredCapabilities));
+		return new McpJsonRpcError(MISSING_REQUIRED_CLIENT_CAPABILITY,
+				"Missing required client capability", Optional.of(data));
+	}
 }

@@ -83,9 +83,9 @@ public interface McpRequestContext {
 	String getProtocolVersion();
 
 	/**
-	 * Returns the selected application operation: a tool name, prompt name, or
-	 * requested resource URI. Custom resource-list handling has no narrower
-	 * operation name.
+	 * Returns the selected application operation: a tool name, prompt name,
+	 * requested resource URI, or task ID for a task protocol operation. Custom
+	 * resource-list handling has no narrower operation name.
 	 *
 	 * <p>This value is useful for application observation but is not safe as an
 	 * unbounded built-in metric label.</p>
@@ -113,9 +113,10 @@ public interface McpRequestContext {
 	McpJsonObject getRequestMetadata();
 
 	/**
-	 * Returns client responses supplied with a multi-round-trip retry.
+	 * Returns client responses supplied with a multi-round-trip retry or a
+	 * durable {@code tasks/update} request.
 	 *
-	 * @return immutable input responses, empty for an initial request
+	 * @return immutable input responses, empty when none were supplied
 	 */
 	@NonNull
 	McpInputResponses getInputResponses();

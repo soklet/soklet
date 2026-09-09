@@ -154,6 +154,9 @@ public class McpTaskPublicApiTests {
 						.timeToLive(Duration.ofMillis(-1)));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> task(McpTaskStatus.WORKING)
+						.timeToLive(Duration.ZERO));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> task(McpTaskStatus.WORKING)
 						.timeToLive(Duration.ofNanos(1)));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> task(McpTaskStatus.WORKING)
@@ -180,6 +183,16 @@ public class McpTaskPublicApiTests {
 				() -> builder.addInputRequests(Map.of("one", inputRequest())));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> builder.build().getInputRequests().clear());
+
+		McpJsonObject reservedMetadata = McpJsonObject.builder()
+				.put("io.modelcontextprotocol/related-task", "obsolete")
+				.build();
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> task(McpTaskStatus.WORKING)
+						.metadata(reservedMetadata).build());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpCompleteResult.fromToolText("complete")
+						.withMetadata(reservedMetadata));
 	}
 
 	@Test

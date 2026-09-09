@@ -39,6 +39,15 @@ import static java.util.Objects.requireNonNull;
  * content or exception-derived data. Implementations must be safe for
  * concurrent invocation.
  * <p>
+ * A completed durable task is sanitized again on each authorized
+ * {@code tasks/get} request, potentially on different server nodes. The
+ * supplied request context is the independently admitted polling request, not
+ * the original {@code tools/call}; the original tool name and raw arguments
+ * are supplied separately from the task's persisted origin. A sanitizer must
+ * therefore be deterministic and idempotent for repeated equivalent calls and
+ * must not rely on one-shot side effects. It may use the current polling
+ * identity to apply authorization-sensitive redaction.
+ * <p>
  * A sanitizer that changes only selected output fields should start from
  * {@link McpToolOutput#toBuilder()} so content order, structured content, and
  * error state are preserved unless changed deliberately.
@@ -51,9 +60,10 @@ public interface McpToolOutputSanitizer {
 	/**
 	 * Sanitizes one complete tool output.
 	 *
-	 * @param request immutable request context
-	 * @param toolName invoked tool name
-	 * @param rawArguments immutable raw tool arguments
+	 * @param request immutable current request context; for a completed durable
+	 *                task, this is the authorized {@code tasks/get} request
+	 * @param toolName original invoked tool name
+	 * @param rawArguments immutable original raw tool arguments
 	 * @param output complete unsanitized tool output
 	 * @return non-null output to validate and serialize
 	 * @throws Exception if application sanitization fails
