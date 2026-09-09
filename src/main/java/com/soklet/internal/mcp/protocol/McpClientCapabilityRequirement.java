@@ -30,7 +30,22 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-sealed interface McpClientCapabilityRequirement permits McpCoreClientCapability {
+sealed interface McpClientCapabilityRequirement permits McpCoreClientCapability,
+		McpExtensionClientCapability {
+}
+
+/**
+ * One required extension capability retained separately from the core MCP
+ * capability vocabulary.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpExtensionClientCapability(@NonNull String identifier)
+		implements McpClientCapabilityRequirement {
+	McpExtensionClientCapability {
+		identifier = McpProtocolSupport.requireExtensionIdentifier(identifier);
+	}
 }
 
 /**

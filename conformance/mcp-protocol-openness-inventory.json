@@ -155,7 +155,7 @@
     },
     {
       "closureAuthority": "SOKLET_POLICY",
-      "compatibleOptionalMemberBehavior": "A new framework-owned method or result kind requires an explicit router/profile change; application handlers cannot silently replace framework-owned methods.",
+      "compatibleOptionalMemberBehavior": "Task methods and core framework-owned methods remain reserved to Soklet; widening requires an explicit routing change and application handlers cannot silently replace them.",
       "conformanceRows": [
         "MCP-DISC-001",
         "MCP-PAGE-005",
@@ -164,10 +164,31 @@
         "MCP-TOOL-001"
       ],
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-      "id": "OPEN-007",
-      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#fromHandlersAndOperationRoutes",
-      "matcherRuleId": "OPEN-MATCH-004",
-      "method": "fromHandlersAndOperationRoutes",
+      "id": "OPEN-055",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#isFrameworkOwnedMethod",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "isFrameworkOwnedMethod",
+      "owner": "com.soklet.internal.mcp.protocol.McpApplicationRequestRouter",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "The Tasks-extension request set is closed deliberately so only implemented task operations are installed as framework handlers; a new task operation requires an explicit router change.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+      "id": "OPEN-056",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#isFrameworkTaskMethod",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "isFrameworkTaskMethod",
       "owner": "com.soklet.internal.mcp.protocol.McpApplicationRequestRouter",
       "phase": "deferred-r2c",
       "roadmapNegativeInventoryKeys": [
@@ -534,6 +555,27 @@
       "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
       "phase": "profile-2026-07-28",
       "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "The runtime recognizes only the implemented Tasks-extension request methods for request naming and transport policy; widening requires an explicit task-protocol change.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-057",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#isTaskRequestMethod",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "isTaskRequestMethod",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
     },
     {
       "closureAuthority": "SOKLET_POLICY",

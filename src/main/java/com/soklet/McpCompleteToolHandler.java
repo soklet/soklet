@@ -30,6 +30,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * through an advanced {@link McpToolHandler} and
  * {@link McpCompleteResult#fromToolText(String)} instead.
  *
+ * <p>For an operation that creates a durable task while retaining its eventual
+ * typed output contract, use
+ * {@link McpToolRegistration.CompleteHandlerStage#operationHandler(
+ * McpToolHandler)}.
+ *
  * <p>Implementations must be safe for concurrent invocation.
  *
  * @param <A> bound argument type

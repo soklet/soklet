@@ -100,6 +100,55 @@ class McpToolRegistrationTests {
 	}
 
 	@Test
+	void typedOperationRegistrationRetainsEventualOutputContractAndRequiresTasks()
+			throws Exception {
+		McpToolRegistration<Arguments> registration =
+				McpToolRegistration.withName("reports.generate")
+						.argumentAndOutputTypes(Arguments.class, Result.class)
+						.operationHandler((request, arguments, features) -> {
+							assertEquals("exact",
+									arguments.getConvertedArguments().query());
+							return McpTaskCreatedResult.<Result>fromTaskId("task-1");
+						})
+						.title("Generate report")
+						.build();
+
+		McpTaskCreatedResult<?> result = assertInstanceOf(
+				McpTaskCreatedResult.class,
+				registration.invoke(requestContext(), argumentsJson(),
+						McpInvocationFeatures.fromFeatures(Map.of())));
+
+		assertEquals("task-1", result.getTaskId());
+		assertEquals(Result.class, registration.getOutputType().orElseThrow());
+		assertEquals(McpJsonString.fromValue("object"), registration
+				.getOutputSchema().orElseThrow().getDocument()
+				.find("type").orElseThrow());
+		assertFalse(registration.isStructuredOutputValid(McpJsonObject.emptyInstance()));
+		assertTrue(registration.isTaskRequired());
+
+		McpToolRegistration<Arguments> alwaysComplete =
+				McpToolRegistration.withName("reports.inline")
+						.argumentAndOutputTypes(Arguments.class, Result.class)
+						.handler((request, arguments, features) ->
+								new Result(List.of()))
+						.build();
+		McpToolRegistration<Arguments> dynamic =
+				McpToolRegistration.withName("reports.dynamic")
+						.argumentType(Arguments.class)
+						.handler((request, arguments, features) ->
+								McpTaskCreatedResult.<Result>fromTaskId("task-2"))
+						.build();
+
+		assertFalse(alwaysComplete.isTaskRequired());
+		assertFalse(dynamic.isTaskRequired());
+		assertTrue(dynamic.getOutputType().isEmpty());
+		assertThrows(NullPointerException.class, () ->
+				McpToolRegistration.withName("null-task-handler")
+						.argumentAndOutputTypes(Arguments.class, Result.class)
+						.operationHandler(null));
+	}
+
+	@Test
 	void mirroredHeadersArePublishedAndRejectedOutsideTheirInputContract() {
 		McpToolRegistration<MirroredArguments> registration =
 				McpToolRegistration.withName("mirrored")

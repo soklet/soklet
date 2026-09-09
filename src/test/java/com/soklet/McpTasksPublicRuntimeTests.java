@@ -71,6 +71,178 @@ public class McpTasksPublicRuntimeTests {
 	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
 			McpInputRequestDeclaration.fromRoots(
 					McpInputRequirement.CONDITIONAL);
+	private static final McpInputRequestDeclaration REQUIRED_ROOTS_DECLARATION =
+			McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED);
+
+	@Test
+	public void typedTaskRequiredToolPreflightsEveryMissingCapabilityBeforeApplicationEffects()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger localizationProviderInvocations = new AtomicInteger();
+		AtomicReference<McpTaskControl> observedTaskControl =
+				new AtomicReference<>();
+
+		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
+				.withName("tasks.typed-required")
+				.argumentAndOutputTypes(RequiredArguments.class,
+						DeferredResult.class)
+				.operationHandler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					Assertions.assertEquals("valid",
+							arguments.getConvertedArguments().required());
+					Assertions.assertEquals(Locale.ENGLISH,
+							features.require(McpLocalizationContext.class)
+									.getLocale());
+					McpTaskControl taskControl = features.getTaskControl()
+							.orElseThrow();
+					observedTaskControl.set(taskControl);
+					McpTaskOrigin taskOrigin = taskControl.getTaskOrigin();
+					taskManager.taskOrigin = Optional.of(taskOrigin);
+					taskManager.putTask(task("typed-required-task", taskOrigin,
+							McpTaskStatus.WORKING));
+					return McpTaskCreatedResult
+							.<DeferredResult>fromTaskId("typed-required-task");
+				})
+				.addInputRequestDeclaration(REQUIRED_ROOTS_DECLARATION)
+				.structuredContentMirroredAsText(false)
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-required-preflight-test", "4.0.0").build())
+				.addTool(tool)
+				.build();
+		McpLocalizer localizer = McpLocalizer
+				.withFallbackLocale(Locale.ENGLISH, request -> {
+					localizationProviderInvocations.incrementAndGet();
+					return McpLocalizationContext.withLocale(Locale.ENGLISH,
+							text -> McpLocalizationResult.useDefaultText())
+							.build();
+				})
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(endpoint)))
+				.admissionController(context -> {
+					admissions.incrementAndGet();
+					return McpAdmissionDecision.accepted(ADMISSION_IDENTITY);
+				})
+				.host(LOOPBACK)
+				.requestRateLimiter(context -> {
+					requestLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.handlerInterceptor((context, features, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return continuation.proceed();
+				})
+				.localizer(localizer)
+				.taskManager(taskManager)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			String missingBody = "{\"jsonrpc\":\"2.0\","
+					+ "\"id\":\"typed-required-missing\","
+					+ "\"method\":\"tools/call\",\"params\":{"
+					+ taskMetadata(false, false) + ",\"name\":"
+					+ "\"tasks.typed-required\",\"arguments\":{"
+					+ "\"required\":\"valid\"}}}";
+			HttpResponse<String> missing = post(port, "tools/call",
+					"tasks.typed-required", missingBody);
+			assertNoStore(missing, 400);
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\","
+							+ "\"id\":\"typed-required-missing\","
+							+ "\"error\":{\"code\":-32021,\"message\":"
+							+ "\"Missing required client capability\",\"data\":{"
+							+ "\"requiredCapabilities\":{\"roots\":{},"
+							+ "\"extensions\":{\"" + TASKS_EXTENSION_ID
+							+ "\":{}}}}}}",
+					missing.body());
+			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(0, requestLimiterInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, localizationProviderInvocations.get());
+			Assertions.assertEquals(0, taskManager.findInvocations.get());
+
+			String capableBody = "{\"jsonrpc\":\"2.0\","
+					+ "\"id\":\"typed-required-capable\","
+					+ "\"method\":\"tools/call\",\"params\":{"
+					+ taskMetadata(true, true) + ",\"name\":"
+					+ "\"tasks.typed-required\",\"arguments\":{"
+					+ "\"required\":\"valid\"}}}";
+			HttpResponse<String> capable = post(port, "tools/call",
+					"tasks.typed-required", capableBody);
+			assertNoStore(capable, 200);
+			Assertions.assertTrue(capable.body().contains(
+					"\"resultType\":\"task\""), capable.body());
+			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(1, requestLimiterInvocations.get());
+			Assertions.assertEquals(1, toolLimiterInvocations.get());
+			Assertions.assertEquals(1, interceptorInvocations.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(1, localizationProviderInvocations.get());
+			Assertions.assertEquals(1, taskManager.findInvocations.get());
+			Assertions.assertNotNull(observedTaskControl.get());
+
+			McpJsonObject persistedState = taskManager.taskOrigin.orElseThrow()
+					.getPersistedState();
+			McpJsonObject outputSchema = Assertions.assertInstanceOf(
+					McpJsonObject.class,
+					persistedState.find("outputSchema").orElseThrow());
+			McpJsonObject outputProperties = Assertions.assertInstanceOf(
+					McpJsonObject.class,
+					outputSchema.find("properties").orElseThrow());
+			Assertions.assertTrue(outputProperties.find("value").isPresent());
+			Assertions.assertEquals(McpJsonBoolean.fromValue(false),
+					persistedState.find("structuredContentMirroredAsText")
+							.orElseThrow());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void taskRequiredRegistrationRequiresConfiguredTaskManager() {
+		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
+				.withName("tasks.manager-required")
+				.argumentAndOutputTypes(RequiredArguments.class,
+						DeferredResult.class)
+				.operationHandler((request, arguments, features) ->
+						McpTaskCreatedResult.<DeferredResult>fromTaskId("unused"))
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-manager-required-test", "4.0.0").build())
+				.addTool(tool)
+				.build();
+
+		IllegalStateException exception = Assertions.assertThrows(
+				IllegalStateException.class,
+				() -> McpServer.withPort(0)
+						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+								List.of(endpoint)))
+						.toolRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.build());
+		Assertions.assertTrue(exception.getMessage().contains(
+				"requires a configured task manager"), exception.getMessage());
+	}
 
 	@Test
 	public void creationAndEveryDetailedTaskStateHaveExactWireShapes()
@@ -874,5 +1046,8 @@ public class McpTasksPublicRuntimeTests {
 	}
 
 	private record RequiredArguments(@NonNull String required) {
+	}
+
+	private record DeferredResult(@NonNull String value) {
 	}
 }

@@ -945,7 +945,7 @@ public final class McpServerRuntimeBridge {
 					invocation -> invokeTool(toolPlan, inputRequestPlan, invocation,
 							publicEndpoint, requestStateRuntime),
 					internalToolRateLimiter, inputRequestPlan,
-					toolPlan.requestStateMode());
+					toolPlan.requestStateMode(), toolPlan.taskRequired());
 			if (toolRoutes.putIfAbsent(toolPlan.name(), route) != null)
 				throw new IllegalArgumentException(
 						"Duplicate tool plan '" + toolPlan.name() + "'.");
@@ -1664,6 +1664,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
 					inputRequestDeclarations,
 			@NonNull McpRequestStateMode requestStateMode,
+			boolean taskRequired,
 			@NonNull ToolInvoker invoker) {
 		/**
 		 * Creates a tool plan without multi-round-trip declarations.
@@ -1680,7 +1681,7 @@ public final class McpServerRuntimeBridge {
 			this(name, inputSchemaDocument, mirroredHeaderPlan,
 					outputSchemaDocument, descriptorFields, metadata,
 					structuredContentMirroredAsText, toolRateLimitAdapter,
-					List.of(), McpRequestStateMode.NONE, invoker);
+					List.of(), McpRequestStateMode.NONE, false, invoker);
 		}
 
 		public ToolPlan {
@@ -1707,7 +1708,8 @@ public final class McpServerRuntimeBridge {
 					+ ", descriptorFieldCount=" + descriptorFields.getMembers().size()
 					+ ", metadataFieldCount=" + metadata.getMembers().size()
 					+ ", structuredContentMirroredAsText="
-					+ structuredContentMirroredAsText + "]";
+					+ structuredContentMirroredAsText
+					+ ", taskRequired=" + taskRequired + "]";
 		}
 	}
 

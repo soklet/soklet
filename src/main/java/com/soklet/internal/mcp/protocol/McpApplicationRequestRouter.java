@@ -124,17 +124,26 @@ final class McpProtocolJsonRpcException extends Exception {
 record McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
 		@NonNull McpRateLimiter rateLimiter,
 		@NonNull McpInputRequestPlan inputRequestPlan,
-		@NonNull McpRequestStateMode requestStateMode) {
+		@NonNull McpRequestStateMode requestStateMode,
+		boolean taskRequired) {
 	McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpRateLimiter rateLimiter) {
 		this(handler, rateLimiter, McpInputRequestPlan.empty(),
-				McpRequestStateMode.NONE);
+				McpRequestStateMode.NONE, false);
 	}
 
 	McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpRateLimiter rateLimiter,
 			@NonNull McpInputRequestPlan inputRequestPlan) {
-		this(handler, rateLimiter, inputRequestPlan, McpRequestStateMode.NONE);
+		this(handler, rateLimiter, inputRequestPlan, McpRequestStateMode.NONE,
+				false);
+	}
+
+	McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
+			@NonNull McpRateLimiter rateLimiter,
+			@NonNull McpInputRequestPlan inputRequestPlan,
+			@NonNull McpRequestStateMode requestStateMode) {
+		this(handler, rateLimiter, inputRequestPlan, requestStateMode, false);
 	}
 
 	McpApplicationToolRoute {

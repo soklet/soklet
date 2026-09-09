@@ -511,8 +511,9 @@ public class McpWireDtoSketchTests {
 				envelopeData.members().get("requiredCapabilities");
 		Assertions.assertTrue(coreRequirements.members().containsKey("elicitation"));
 		Assertions.assertFalse(coreRequirements.members().containsKey("extensions"),
-				"The current factory remains core-only; this is not a Tasks error path.");
-		Assertions.assertArrayEquals(new Class<?>[] { McpCoreClientCapability.class },
+				"A core-only requirement must not invent an extension requirement.");
+		Assertions.assertArrayEquals(new Class<?>[] { McpCoreClientCapability.class,
+				McpExtensionClientCapability.class },
 				McpClientCapabilityRequirement.class.getPermittedSubclasses());
 	}
 

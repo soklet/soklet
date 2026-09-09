@@ -39,7 +39,9 @@ import static java.util.Objects.requireNonNull;
  * <p>Registration is staged: choose a name, choose typed or raw-JSON
  * arguments, provide a handler, configure optional metadata, and explicitly
  * call {@code build()}. Typed schemas and intrinsic binding plans compile
- * synchronously while the type tokens are still in hand.
+ * synchronously while the type tokens are still in hand. A typed-output stage
+ * can select either an always-complete handler or a statically task-required
+ * operation handler while retaining the same eventual output contract.
  *
  * @param <A> bound argument type
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -84,6 +86,7 @@ public final class McpToolRegistration<A> {
 	@Nullable
 	private final McpRateLimiter rateLimiter;
 	private final boolean structuredContentMirroredAsText;
+	private final boolean taskRequired;
 	@NonNull
 	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
 	@NonNull
@@ -99,8 +102,9 @@ public final class McpToolRegistration<A> {
 	 * Begins a staged registration for a named tool.
 	 *
 	 * <p>The next stage selects typed or raw-JSON arguments. Supplying both
-	 * argument and output types selects the simple typed-completion path;
-	 * supplying only an argument type selects the advanced
+	 * argument and output types selects a typed-output path whose next stage
+	 * chooses inline completion or a statically task-required operation;
+	 * supplying only an argument type selects the untyped advanced
 	 * {@link McpOperationResult} path. No stage exposes {@code build()} before
 	 * a handler has been supplied.
 	 *
@@ -130,6 +134,7 @@ public final class McpToolRegistration<A> {
 		this.rateLimiter = state.rateLimiter;
 		this.structuredContentMirroredAsText =
 				state.structuredContentMirroredAsText;
+		this.taskRequired = state.taskRequired;
 		this.inputRequestDeclarations =
 				List.copyOf(state.inputRequestDeclarations);
 		this.requestStateMode = state.requestStateMode;
@@ -183,7 +188,7 @@ public final class McpToolRegistration<A> {
 		return this.mirroredHeaderPlan;
 	}
 
-	/** @return generated output schema for a typed-completion registration */
+	/** @return generated output schema for a typed-output registration */
 	@NonNull
 	public Optional<@NonNull McpToolSchema> getOutputSchema() {
 		return Optional.ofNullable(this.outputSchema);
@@ -192,7 +197,7 @@ public final class McpToolRegistration<A> {
 	/**
 	 * Returns the Java output type from which Soklet derived a schema.
 	 *
-	 * @return declared output type for a typed-completion registration
+	 * @return declared output type for a typed-output registration
 	 */
 	@NonNull
 	public Optional<@NonNull Type> getOutputType() {
@@ -271,7 +276,7 @@ public final class McpToolRegistration<A> {
 	/**
 	 * Returns the normalized advanced handler.
 	 *
-	 * <p>For a typed-completion registration, Soklet supplies an adapter that
+	 * <p>For an always-complete typed registration, Soklet supplies an adapter that
 	 * converts the Java result with the same compiled binding that generated
 	 * {@link #getOutputSchema()}.
 	 *
@@ -333,13 +338,21 @@ public final class McpToolRegistration<A> {
 
 	/**
 	 * Validates structured output against the compiled schema retained by a
-	 * typed-completion registration. Advanced registrations have no output
+	 * typed-output registration. Untyped advanced registrations have no output
 	 * schema and therefore accept every structured JSON value here.
 	 */
 	boolean isStructuredOutputValid(@NonNull McpJsonValue structuredOutput) {
 		requireNonNull(structuredOutput);
 		return this.outputSchemaBridge == null
 				|| this.outputSchemaBridge.isValid(structuredOutput);
+	}
+
+	/**
+	 * Indicates whether Soklet must preflight the Tasks capability before
+	 * invoking this registration's application handler.
+	 */
+	boolean isTaskRequired() {
+		return this.taskRequired;
 	}
 
 	@NonNull
@@ -529,7 +542,12 @@ public final class McpToolRegistration<A> {
 	}
 
 	/**
-	 * Handler-selection stage for the simple typed-completion path.
+	 * Handler-selection stage for a typed-output path.
+	 *
+	 * <p>{@link #handler(McpCompleteToolHandler)} selects an operation that
+	 * always completes inline. {@link #operationHandler(McpToolHandler)} selects
+	 * an advanced operation that retains the same eventual output schema and is
+	 * statically known to require Tasks.
 	 *
 	 * @param <A> argument type
 	 * @param <R> structured output type
@@ -585,13 +603,47 @@ public final class McpToolRegistration<A> {
 					this.outputType,
 					new McpToolSchema(this.outputBridge.getSchemaDocument()),
 					this.outputBridge,
-					normalizedHandler, this.inputBridge::decode);
+					normalizedHandler, this.inputBridge::decode, false);
 			return new CompleteBuilder<>(state);
+		}
+
+		/**
+		 * Supplies the required advanced handler for a task-required operation
+		 * whose eventual structured output has type {@code R}.
+		 *
+		 * <p>Unlike {@link #handler(McpCompleteToolHandler)}, this handler returns
+		 * the {@link McpOperationResult} spine directly, including
+		 * {@link McpTaskCreatedResult}. Soklet retains the selected output type and
+		 * schema for deferred completed-result validation and treats this as a
+		 * task-required registration. A client that did not negotiate the Tasks
+		 * extension is rejected before the application handler is invoked.
+		 *
+		 * @param handler advanced task-required handler
+		 * @return optional-metadata builder
+		 */
+		@NonNull
+		public OperationBuilder<@NonNull A> operationHandler(
+				@NonNull McpToolHandler<@NonNull A> handler) {
+			RegistrationState<A> state = new RegistrationState<>(this.name,
+					this.argumentType,
+					new McpToolSchema(this.inputBridge.getSchemaDocument()),
+					this.inputBridge.getMirroredHeaderPlan(),
+					this.outputType,
+					new McpToolSchema(this.outputBridge.getSchemaDocument()),
+					this.outputBridge,
+					requireNonNull(handler), this.inputBridge::decode, true);
+			return new OperationBuilder<>(state);
 		}
 	}
 
 	/**
 	 * Handler-selection stage for the advanced operation-result path.
+	 *
+	 * <p>This path does not statically require Tasks because a handler may choose
+	 * an inline result. A handler that conditionally creates a task must first
+	 * check {@link McpInvocationFeatures#getTaskControl()}. To declare that every
+	 * invocation requires Tasks while retaining a typed eventual output schema,
+	 * use {@link CompleteHandlerStage#operationHandler(McpToolHandler)}.
 	 *
 	 * @param <A> argument type
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -623,6 +675,10 @@ public final class McpToolRegistration<A> {
 		/**
 		 * Supplies the required advanced handler.
 		 *
+		 * <p>This dynamic path is not preflighted as task-required. Before creating
+		 * durable work, a handler that may return {@link McpTaskCreatedResult} must
+		 * require or inspect {@link McpInvocationFeatures#getTaskControl()}.
+		 *
 		 * @param handler advanced handler
 		 * @return optional-metadata builder
 		 */
@@ -632,7 +688,7 @@ public final class McpToolRegistration<A> {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
 					null, null, null,
-					requireNonNull(handler), this.argumentDecoder);
+					requireNonNull(handler), this.argumentDecoder, false);
 			return new OperationBuilder<>(state);
 		}
 	}
@@ -1014,6 +1070,7 @@ public final class McpToolRegistration<A> {
 		@Nullable
 		private McpRateLimiter rateLimiter;
 		private boolean structuredContentMirroredAsText = true;
+		private final boolean taskRequired;
 		@NonNull
 		private final List<@NonNull McpInputRequestDeclaration>
 				inputRequestDeclarations = new ArrayList<>();
@@ -1028,7 +1085,8 @@ public final class McpToolRegistration<A> {
 				@Nullable Type outputType, @Nullable McpToolSchema outputSchema,
 				@Nullable McpRuntimeTypedSchemaBridge<?> outputSchemaBridge,
 				@NonNull McpToolHandler<A> handler,
-				@NonNull ArgumentDecoder<A> argumentDecoder) {
+				@NonNull ArgumentDecoder<A> argumentDecoder,
+				boolean taskRequired) {
 			this.name = requireNonNull(name);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
@@ -1038,11 +1096,15 @@ public final class McpToolRegistration<A> {
 			this.outputSchemaBridge = outputSchemaBridge;
 			this.handler = requireNonNull(handler);
 			this.argumentDecoder = requireNonNull(argumentDecoder);
+			this.taskRequired = taskRequired;
 			if ((this.outputType == null) != (this.outputSchema == null)
 					|| (this.outputSchema == null)
 					!= (this.outputSchemaBridge == null))
 				throw new IllegalArgumentException(
 						"Output type, schema, and bridge must be present together.");
+			if (this.taskRequired && this.outputType == null)
+				throw new IllegalArgumentException(
+						"A task-required registration must declare an output type.");
 		}
 	}
 }

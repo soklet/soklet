@@ -720,7 +720,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * server.
 		 * <p>
 		 * Soklet invokes the manager concurrently but does not start it, close it, or
-		 * own its workers. Passing {@code null} disables Tasks.
+		 * own its workers. Passing {@code null} disables Tasks and is valid only when
+		 * no registered tool statically requires Tasks.
 		 *
 		 * @param taskManager application-owned task manager, or null to disable Tasks
 		 * @return this builder
@@ -970,8 +971,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               conflicting, or unloadable index or provider; the
 		 *                               keep-alive interval is not shorter than the write
 		 *                               timeout; a configured limiter name is unknown;
-		 *                               tools exist without a fallback tool limiter; or a
-		 *                               configured localization response exceeds its
+		 *                               tools exist without a fallback tool limiter; a
+		 *                               task-required tool exists without a task manager;
+		 *                               or a configured localization response exceeds its
 		 *                               provider-lookup limit
 		 */
 		@NonNull

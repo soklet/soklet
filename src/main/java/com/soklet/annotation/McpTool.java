@@ -30,9 +30,19 @@ import java.lang.annotation.Target;
  * Soklet's annotation processor derives the input schema from parameters
  * annotated with {@link McpToolArgument}. For an ordinary typed-completion
  * method, it derives the output schema from the declared return type. A method
- * returning {@code McpOperationResult} or a subtype instead uses the advanced
- * result path and has no derived output schema. {@link McpToolProperty}
- * customizes property metadata on ordinary typed input and output records.
+ * returning {@link com.soklet.McpTaskCreatedResult} is statically task-only and
+ * derives its eventual output schema from the result's type argument; Soklet
+ * rejects a client without the Tasks capability before invoking it. Other
+ * methods returning {@link com.soklet.McpOperationResult} or a subtype use the
+ * dynamic advanced-result path and have no derived output schema.
+ * {@link McpToolProperty} customizes property metadata on ordinary typed input
+ * and output records.
+ *
+ * <p>A statically task-only method may accept one unannotated
+ * {@link com.soklet.McpTaskControl} parameter directly. The same control remains
+ * available through {@link com.soklet.McpInvocationFeatures} for dynamic
+ * handlers. A task-control parameter must not be annotated with
+ * {@link McpToolArgument}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

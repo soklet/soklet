@@ -260,6 +260,7 @@ final class DefaultMcpServer implements McpServer {
 		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
+		validateTaskRequiredTools(endpointPlans, taskManager);
 		validateRequestStateProtection(endpointPlans, protectionConfig);
 		Optional<RequestStateProtectionPlan> requestStateProtectionPlan =
 				Optional.ofNullable(protectionConfig)
@@ -1103,7 +1104,23 @@ final class DefaultMcpServer implements McpServer {
 				tool.isStructuredContentMirroredAsText(),
 				toRateLimitAdapter(resolvedRateLimiter),
 				tool.getInputRequestDeclarations(), tool.getRequestStateMode(),
+				tool.isTaskRequired(),
 				invocation -> invokeTool(tool, invocation));
+	}
+
+	private static void validateTaskRequiredTools(
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@Nullable McpTaskManager taskManager) {
+		requireNonNull(endpointPlans);
+		if (taskManager != null)
+			return;
+
+		for (EndpointPlan endpointPlan : endpointPlans)
+			for (ToolPlan toolPlan : endpointPlan.toolPlans())
+				if (toolPlan.taskRequired())
+					throw new IllegalStateException(
+							"MCP tool '" + toolPlan.name()
+									+ "' requires a configured task manager.");
 	}
 
 	@NonNull

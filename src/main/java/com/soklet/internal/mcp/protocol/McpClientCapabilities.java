@@ -80,8 +80,13 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 		requireNonNull(requirements);
 		Builder builder = builder();
 
-		for (McpClientCapabilityRequirement requirement : requirements)
-			builder.capability((McpCoreClientCapability) requireNonNull(requirement));
+		for (McpClientCapabilityRequirement requirement : requirements) {
+			requireNonNull(requirement);
+			if (requirement instanceof McpCoreClientCapability coreCapability)
+				builder.capability(coreCapability);
+			else if (requirement instanceof McpExtensionClientCapability extension)
+				builder.extension(extension.identifier(), McpJsonObject.empty());
+		}
 
 		return builder.build();
 	}
@@ -89,7 +94,11 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 	boolean supports(@NonNull McpClientCapabilityRequirement requirement) {
 		requireNonNull(requirement);
 
-		McpCoreClientCapability coreCapability = (McpCoreClientCapability) requirement;
+		if (requirement instanceof McpExtensionClientCapability extension)
+			return extensions.containsKey(extension.identifier());
+
+		McpCoreClientCapability coreCapability =
+				(McpCoreClientCapability) requirement;
 
 		return switch (coreCapability) {
 			case ELICITATION_FORM -> elicitation

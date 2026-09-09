@@ -19,15 +19,16 @@ amendments, followed by the 2026-09-04 public-contract annotation and
 transport-ownership documentation amendment and the 2026-09-04 non-MCP
 public-record elimination amendment, followed by the 2026-09-04 MCP server
 default-construction amendment, the 2026-09-06 exported-nullability completion,
-and the 2026-09-06 typed-operation amendment. The
+the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional Tasks
+authoring amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 658 records and has SHA-256
-`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+4.0.0 source tree. It currently contains 657 records and has SHA-256
+`6a62b7d5a87f0bfb40abe6c9c81e77bdc72b28974037292fa8262e7cd2effbc8`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -71,10 +72,10 @@ scope has exactly one owner:
 | `phase-4.includes` | 134 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
-| `provisional.includes` | 0 | empty after the reviewed telemetry amendment |
+| `provisional.includes` | 12 | provisional MCP Tasks types |
 | `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
 
-The 234-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 285 current types.
+The 246-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 297 current types.
 Ownership records when a type is intended to stabilize; they do not themselves freeze it.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
@@ -89,14 +90,13 @@ compatibility inventory.
 
 ## Current local evidence
 
-The 2026-08-16 local refresh was green at 562 incompatibilities, 237 exact
-owners, and 1,053/195/428 Phase 4/5/6 signature records. Core clean verify
-passes 1,669/0/0/4 and builds Javadocs; JDK 21 static analysis reports `BUILD
-SUCCESS`, and SpotBugs reports zero findings. The artifact-backed local
-simulator and pinned live official CLI each pass 39/39 in development mode.
-These results revalidate the frozen API and local development artifact; they
-are not immutable release-candidate provenance, public Javadoc publication,
-or sustained operational evidence.
+The 2026-09-09 local refresh is green at 657 incompatibilities, 297 exact
+owners, and 1,092/189/423 Phase 4/5/6 signature records. Core clean test passes
+2,326/0/0/4 and packaging builds Javadocs; local JDK 26 static analysis reports
+`BUILD SUCCESS`, SpotBugs reports zero findings, and the aggregate API-freeze
+verifier passes. These results revalidate the current API and local development
+artifact; they are not immutable release-candidate provenance, public Javadoc
+publication, or sustained operational evidence.
 
 The 2026-08-17 greenfield cohesion naming amendment subsequently regenerated
 the count-neutral 1,053/195/428 phase snapshots and the same 133/39/65/0 owner

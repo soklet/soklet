@@ -231,6 +231,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private TypeMirror mcpResourceReadContextType;
 	private TypeMirror mcpResourceListContextType;
 	private TypeMirror mcpOperationResultType;
+	private TypeMirror mcpTaskCreatedResultType;
+	private TypeMirror mcpTaskControlType;
 	private TypeMirror stringType;
 	private TypeMirror optionalType;
 	private TypeMirror exceptionType;
@@ -328,6 +330,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement("com.soklet.McpOperationResult");
 		this.mcpOperationResultType = mcpOperationResult == null
 				? null : mcpOperationResult.asType();
+		TypeElement mcpTaskCreatedResult =
+				elements.getTypeElement("com.soklet.McpTaskCreatedResult");
+		this.mcpTaskCreatedResultType = mcpTaskCreatedResult == null
+				? null : mcpTaskCreatedResult.asType();
+		TypeElement mcpTaskControl =
+				elements.getTypeElement("com.soklet.McpTaskControl");
+		this.mcpTaskControlType = mcpTaskControl == null
+				? null : mcpTaskControl.asType();
 		TypeElement string = elements.getTypeElement("java.lang.String");
 		this.stringType = string == null ? null : string.asType();
 		TypeElement optional = elements.getTypeElement("java.util.Optional");
@@ -1152,11 +1162,25 @@ public final class SokletProcessor extends AbstractProcessor {
 				validateMcpInputRequestDeclarations(method, annotation);
 		String requestStateMode = annotationEnumConstantName(annotation,
 				"requestStateMode");
-		boolean operationResultReturn = isSubtypeOf(method.getReturnType(),
+		TypeMirror returnType = method.getReturnType();
+		boolean operationResultReturn = isSubtypeOf(returnType,
 				mcpOperationResultType);
+		boolean taskCreatedReturn = isExactType(returnType,
+				mcpTaskCreatedResultType);
+		TypeMirror structuredOutputType;
+		McpToolReturnKind returnKind;
+		if (taskCreatedReturn) {
+			returnKind = McpToolReturnKind.TASK_CREATED;
+			structuredOutputType = taskCreatedOutputType(method, returnType);
+		} else if (operationResultReturn) {
+			returnKind = McpToolReturnKind.OPERATION_RESULT;
+			structuredOutputType = null;
+		} else {
+			returnKind = McpToolReturnKind.TYPED_COMPLETE;
+			structuredOutputType = returnType;
+		}
 		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
 				|| !"NONE".equals(requestStateMode);
-		boolean advancedOperation = operationResultReturn;
 		if (multiRoundTripMetadata && !operationResultReturn)
 			mcpError(method,
 					"Soklet: An @McpTool method that declares input requests or request state must return McpOperationResult or a subtype.");
@@ -1176,6 +1200,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		boolean invocationFeaturesSeen = false;
 		boolean cancelationTokenSeen = false;
 		boolean progressReporterSeen = false;
+		boolean taskControlSeen = false;
 		int toolArgumentIndex = 0;
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror argument = findAnnotation(parameter,
@@ -1191,6 +1216,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					parameter.asType());
 			boolean bareProgressReporter = isExactType(parameter.asType(),
 					mcpProgressReporterType);
+			boolean taskControl = isExactType(parameter.asType(),
+					mcpTaskControlType);
 			if (bareProgressReporter) {
 				if (argument != null)
 					mcpError(parameter,
@@ -1200,15 +1227,15 @@ public final class SokletProcessor extends AbstractProcessor {
 				continue;
 			}
 			if (!requestContext && !invocationFeatures && !cancelationToken
-					&& !progressReporter
+					&& !progressReporter && !taskControl
 					&& !isTypeAccessibleFromGeneratedProvider(parameter.asType(),
 							providerPackage))
 				mcpError(parameter,
 						"Soklet: An @McpTool argument type must be accessible to the generated MCP endpoint provider.");
 			if (requestContext || invocationFeatures || cancelationToken
-					|| progressReporter) {
+					|| progressReporter || taskControl) {
 				if (argument != null) {
-					if (cancelationToken || progressReporter)
+					if (cancelationToken || progressReporter || taskControl)
 						mcpError(parameter,
 								"Soklet: Injectable MCP feature parameters must not also be annotated with @McpToolArgument.");
 					else
@@ -1239,13 +1266,24 @@ public final class SokletProcessor extends AbstractProcessor {
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.CANCELATION_TOKEN, null, null,
 							parameter.asType(), "", "", null));
-				} else {
+				} else if (progressReporter) {
 					if (progressReporterSeen)
 						mcpError(parameter,
 								"Soklet: An @McpTool method may inject Optional<McpProgressReporter> at most once.");
 					progressReporterSeen = true;
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.PROGRESS_REPORTER, null, null,
+							parameter.asType(), "", "", null));
+				} else {
+					if (returnKind != McpToolReturnKind.TASK_CREATED)
+						mcpError(parameter,
+								"Soklet: McpTaskControl may be injected only into an @McpTool method that returns McpTaskCreatedResult<R>.");
+					if (taskControlSeen)
+						mcpError(parameter,
+								"Soklet: An @McpTool method may inject McpTaskControl at most once.");
+					taskControlSeen = true;
+					bindings.add(new McpParameterBinding(
+							McpParameterBindingKind.TASK_CONTROL, null, null,
 							parameter.asType(), "", "", null));
 				}
 				continue;
@@ -1285,11 +1323,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (mcpProcessingErrorCount == errorsBefore) {
 			McpTypeMirrorTypedSchemaBridge.Result result;
 			try {
-				result = advancedOperation
+				result = structuredOutputType == null
 						? McpTypeMirrorTypedSchemaBridge.compileToolInputSchema(
 								types, elements, schemaArguments)
 						: McpTypeMirrorTypedSchemaBridge.compileToolSchemas(types,
-								elements, schemaArguments, method.getReturnType());
+								elements, schemaArguments, structuredOutputType);
 			} catch (RuntimeException exception) {
 				mcpError(method,
 						"Soklet: Unable to derive deterministic typed schemas for MCP tool '%s'.",
@@ -1314,15 +1352,52 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 
 		if (mcpProcessingErrorCount != errorsBefore || inputSchemaBytes == null
-				|| (!advancedOperation && outputSchemaBytes == null))
+				|| (structuredOutputType != null && outputSchemaBytes == null))
 			return null;
 		return new McpToolModel(method, name, title, description, rateLimiterName,
-				structuredContentMirroredAsText, advancedOperation,
+				structuredContentMirroredAsText, returnKind,
+				structuredOutputType,
 				List.copyOf(inputRequestDeclarations), requestStateMode,
 				List.copyOf(bindings),
-				sha256Hex(inputSchemaBytes), advancedOperation
+				sha256Hex(inputSchemaBytes), structuredOutputType == null
 						? MCP_ABSENT_OUTPUT_SCHEMA_DIGEST
 						: sha256Hex(outputSchemaBytes));
+	}
+
+	@Nullable
+	private TypeMirror taskCreatedOutputType(
+			@NonNull ExecutableElement method, @NonNull TypeMirror returnType) {
+		if (!(returnType instanceof DeclaredType declared)
+				|| declared.getTypeArguments().size() != 1) {
+			mcpError(method,
+					"Soklet: @McpTool McpTaskCreatedResult return type must declare exactly one concrete eventual output type.");
+			return null;
+		}
+		TypeMirror outputType = declared.getTypeArguments().get(0);
+		if (!isConcreteMcpTaskOutputType(outputType)) {
+			mcpError(method,
+					"Soklet: @McpTool McpTaskCreatedResult return type must declare exactly one concrete eventual output type without wildcards or type variables.");
+			return null;
+		}
+		return outputType;
+	}
+
+	private boolean isConcreteMcpTaskOutputType(@NonNull TypeMirror type) {
+		if (type.getKind() == TypeKind.TYPEVAR
+				|| type.getKind() == TypeKind.WILDCARD)
+			return false;
+		if (type instanceof ArrayType array)
+			return isConcreteMcpTaskOutputType(array.getComponentType());
+		if (!(type instanceof DeclaredType declared))
+			return true;
+		TypeMirror enclosing = declared.getEnclosingType();
+		if (enclosing.getKind() != TypeKind.NONE
+				&& !isConcreteMcpTaskOutputType(enclosing))
+			return false;
+		for (TypeMirror argument : declared.getTypeArguments())
+			if (!isConcreteMcpTaskOutputType(argument))
+				return false;
+		return true;
 	}
 
 	private McpPromptModel validateMcpPrompt(
@@ -2399,15 +2474,23 @@ public final class SokletProcessor extends AbstractProcessor {
 			source.append("\t\tvar toolBuilder").append(index)
 					.append(" = com.soklet.McpToolRegistration.withName(")
 					.append(javaStringLiteral(tool.name())).append(")\n");
-			if (tool.advancedOperation())
+			if (tool.returnKind() == McpToolReturnKind.OPERATION_RESULT)
 				source.append("\t\t\t\t.argumentType(").append(carrierName)
 						.append(".class)\n");
-			else
+			else {
+				TypeMirror structuredOutputType = tool.structuredOutputType();
+				if (structuredOutputType == null)
+					throw new IllegalStateException(
+							"A typed MCP tool is missing its output type.");
 				source.append("\t\t\t\t.argumentAndOutputTypes(").append(carrierName)
 						.append(".class, ")
-						.append(resultTypeExpression(tool.method().getReturnType()))
+						.append(resultTypeExpression(structuredOutputType))
 						.append(")\n");
-			source.append("\t\t\t\t.handler((request, arguments, features) -> ")
+			}
+			source.append("\t\t\t\t.")
+					.append(tool.returnKind() == McpToolReturnKind.TASK_CREATED
+							? "operationHandler" : "handler")
+					.append("((request, arguments, features) -> ")
 					.append("instanceResolver.apply(request).")
 					.append(tool.method().getSimpleName()).append('(')
 					.append(invocationArguments(tool.bindings()))
@@ -2649,6 +2732,8 @@ public final class SokletProcessor extends AbstractProcessor {
 						"features.getCancelationToken()";
 				case PROGRESS_REPORTER ->
 						"features.getProgressReporter()";
+				case TASK_CONTROL ->
+						"features.getTaskControl().orElseThrow()";
 				case TOOL_ARGUMENT -> "arguments.getConvertedArguments()."
 						+ binding.carrierName() + "()";
 			});
@@ -4172,11 +4257,19 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private record McpToolModel(ExecutableElement method, String name,
 			String title, String description, String rateLimiterName,
-			boolean structuredContentMirroredAsText, boolean advancedOperation,
+			boolean structuredContentMirroredAsText,
+			McpToolReturnKind returnKind,
+			@Nullable TypeMirror structuredOutputType,
 			List<McpInputRequestModel> inputRequestDeclarations,
 			String requestStateMode,
 			List<McpParameterBinding> bindings, String inputSchemaDigest,
 			String outputSchemaDigest) {}
+
+	private enum McpToolReturnKind {
+		TYPED_COMPLETE,
+		OPERATION_RESULT,
+		TASK_CREATED
+	}
 
 	private record McpPromptModel(ExecutableElement method, String name,
 			String title, String description, boolean promptOutputReturn,
@@ -4196,6 +4289,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		INVOCATION_FEATURES,
 		CANCELATION_TOKEN,
 		PROGRESS_REPORTER,
+		TASK_CONTROL,
 		TOOL_ARGUMENT
 	}
 

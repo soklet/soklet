@@ -3988,6 +3988,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
 		McpInputRequestPlan inputRequestPlan = McpInputRequestPlan.empty();
 		McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
+		boolean taskRequired = false;
 		McpJsonObject inputResponses = McpJsonObject.empty();
 		boolean inputResponsesSupplied = false;
 		Optional<String> suppliedRequestState = Optional.empty();
@@ -4132,6 +4133,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				applicationHandler = Optional.of(resolvedRoute.handler());
 				inputRequestPlan = resolvedRoute.inputRequestPlan();
 				requestStateMode = resolvedRoute.requestStateMode();
+				taskRequired = resolvedRoute.taskRequired();
 			} else {
 				// Retain the package-private generic method route for existing runtime
 				// tests while production registrations use exact immutable tool routes.
@@ -4291,8 +4293,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		Set<McpClientCapabilityRequirement> missingCapabilities =
-				inputRequestPlan.missingAtAdmission(
-						mappedRequest.params().metadata().clientCapabilities());
+				new LinkedHashSet<>(inputRequestPlan.missingAtAdmission(
+						mappedRequest.params().metadata().clientCapabilities()));
+		if (taskRequired && !mappedRequest.params().metadata().clientCapabilities()
+				.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
+			missingCapabilities.add(new McpExtensionClientCapability(
+					TASKS_EXTENSION_IDENTIFIER));
 		if (!missingCapabilities.isEmpty())
 			return profiledJsonRpcError(protocolProfile,
 					McpProfileErrorKind.OPERATION, 400, "Bad Request",
