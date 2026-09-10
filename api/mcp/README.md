@@ -20,15 +20,17 @@ transport-ownership documentation amendment and the 2026-09-04 non-MCP
 public-record elimination amendment, followed by the 2026-09-04 MCP server
 default-construction amendment, the 2026-09-06 exported-nullability completion,
 the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional MCP
-Tasks implementation checkpoint. The
+Tasks implementation checkpoint, followed by the 2026-09-10 release-review
+API amendment and provisional Tasks signature freeze, and the final
+lifecycle-observer and public-value amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 657 records and has SHA-256
-`6a62b7d5a87f0bfb40abe6c9c81e77bdc72b28974037292fa8262e7cd2effbc8`.
+4.0.0 source tree. It currently contains 646 records and has SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -72,11 +74,14 @@ scope has exactly one owner:
 | `phase-4.includes` | 134 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
-| `provisional.includes` | 14 | provisional MCP Tasks types |
+| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
 | `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
 
 The 248-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 299 current types.
-Ownership records when a type is intended to stabilize; they do not themselves freeze it.
+Ownership alone does not freeze a type. The three phase snapshots freeze their
+phase inventories, and the separate `provisional.signatures.jsonl` snapshot
+now freezes the 14 Tasks owners while retaining their explicit provisional
+maturity classification.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`,
@@ -92,13 +97,14 @@ compatibility inventory.
 
 ## Current local evidence
 
-The 2026-09-09 local refresh is green at 657 incompatibilities, 299 exact
-owners, and 1,092/190/423 Phase 4/5/6 signature records. Core clean test passes
-2,362/0/0/4 and packaging builds Javadocs; local JDK 26 static analysis reports
-`BUILD SUCCESS`, SpotBugs reports zero findings, and the aggregate API-freeze
-verifier passes. These results revalidate the current API and local development
-artifact; they are not immutable release-candidate provenance, public Javadoc
-publication, or sustained operational evidence.
+The final 2026-09-10 reconciliation is green at 646 incompatibilities, 299
+exact owners, 1,131/200/425 Phase 4/5/6 signature records, and 98 provisional
+Tasks signature records. The aggregate API-freeze verifier passes against the
+reviewed snapshots. These results revalidate the current API and local
+development artifact; they are not immutable release-candidate provenance,
+public Javadoc publication, or sustained operational evidence. The earlier
+2026-09-09 checkpoint's broader core/static-analysis results remain historical
+evidence rather than a claim that those full lanes were rerun by this refresh.
 
 The 2026-08-17 greenfield cohesion naming amendment subsequently regenerated
 the count-neutral 1,053/195/428 phase snapshots and the same 133/39/65/0 owner
@@ -369,27 +375,31 @@ separate evidence is recorded below.
 ## Active freeze
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
-currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
-1,075 canonical records across all 134 selected owners: 134 classes, one
-constructor, 90 fields, and 850 methods. Its SHA-256 is
-`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`.
-`phase-5.signatures.jsonl` freezes 189 canonical records across all 36
-selected owners: 36 classes, zero constructors, 19 fields, and 134 methods.
+currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
+freezes 1,131 canonical records across all 134 selected owners: 134 classes,
+one constructor, 94 fields, and 902 methods. Its SHA-256 is
+`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`.
+`phase-5.signatures.jsonl` freezes 200 canonical records across all 36
+selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
 Its SHA-256 is
-`0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`.
-`phase-6.signatures.jsonl` freezes 423 canonical records across all 64
-selected owners: 64 classes, zero constructors, 41 fields, and 318 methods.
+`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`.
+`phase-6.signatures.jsonl` freezes 425 canonical records across all 64
+selected owners: 64 classes, zero constructors, 41 fields, and 320 methods.
 Its SHA-256 is
-`991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
-Their current reflection/nullability digests are respectively
-`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`,
-`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`,
+`06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`.
+The separate `provisional.signatures.jsonl` freezes 98 canonical records across
+the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
+Its SHA-256 is
+`70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
+The Phase 4/5/6 reflection/nullability digests are respectively
+`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`,
+`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`,
 and
-`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
+`10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
 
 The reviewed 2026-08-15 telemetry amendment moved all 32 former provisional
-owners into Phase 6 without changing their descriptors;
-`provisional.includes` is now empty.
+owners into Phase 6 without changing their descriptors; at that historical
+checkpoint, `provisional.includes` was empty.
 
 The snapshot includes a deliberate 2026-08-07 post-freeze correction to Soklet's
 unreleased `3.6.0` MCP API: 49 Phase 4 scalar signatures now use non-null
@@ -958,7 +968,7 @@ accepted progress/keepalive observations and the single close before terminal
 cross-thread total order. Samples use bounded `endpoint`,
 `method`, and lower-snake `reason`: `completed`, `client_disconnected`,
 `request_canceled`, `deadline_exceeded`, `write_failed`, `backpressure`,
-`server_stopped`, `simulator_capture_item_limit_exceeded`,
+`server_stopping`, `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`. The
 13 inclusive buckets are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600,
 7,200, and 14,400 seconds plus overflow. No standalone open/close counters
@@ -1003,7 +1013,7 @@ Exact `SubscriptionOpened`/`SubscriptionClosed` delivery drives
 and `soklet_mcp_subscription_duration_nanos` with HELP `MCP subscription
 duration in nanoseconds`. Samples use bounded `endpoint` and lower-snake
 `reason`: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`. The 13 buckets
 are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds
@@ -1549,32 +1559,39 @@ scripts/verify-mcp-api-freezes.sh
 
 The aggregate first runs `scripts/api-diff/verify.sh`, verifies the exact owner
 union from the full report, and then regenerates and bidirectionally compares
-the signature snapshot for every phase named by `frozen-phases`. Generated
-evidence is written under `target/japicmp/` and
-`target/mcp-api-freezes/`. Neither script updates a reviewed file.
+the signature snapshot for every phase named by `frozen-phases`. It then
+regenerates and bidirectionally compares the 14-owner provisional Tasks
+snapshot as an additional mandatory freeze. Generated evidence is written
+under `target/japicmp/` and `target/mcp-api-freezes/`. Neither script updates a
+reviewed file.
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-657 reviewed incompatibilities across 299 owners: 248 MCP and 51 non-MCP.
+646 reviewed incompatibilities across 299 owners: 248 MCP and 51 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
-contain 1,092 Phase 4, 190 Phase 5, and 423 Phase 6 signatures. Phase 4 contains
-134 classes, one constructor, 93 fields, and 864 methods, with SHA-256
-`765f0768a8fc40fd872036054ef54f212688ad49f240514ca15cdce991bdbc10`
+contain 1,131 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
+134 classes, one constructor, 94 fields, and 902 methods, with SHA-256
+`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`
 and exact nullability digest
-`d6299ae37278087e7b655cb3cd1c46a7b2dca363b9bfaf39db07e84739029ec0`.
-Phase 5 contains 36 classes, zero constructors, 19 fields, and 135 methods,
+`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`.
+Phase 5 contains 36 classes, zero constructors, 19 fields, and 145 methods,
 with SHA-256
-`8fdfad9393655dc44e8759801abb955bb09a7418174dd6325455e51a0c2933a2`
+`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`
 and exact nullability digest
-`2b4fd2a4664d9605f847132f4dd234fac9540ef274ca58cabdeceb0408e8345a`.
-Phase 6 contains 64 classes, zero constructors, 41 fields, and 318 methods,
+`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`.
+Phase 6 contains 64 classes, zero constructors, 41 fields, and 320 methods,
 with SHA-256
-`991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`
+`06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`
 and exact nullability digest
-`73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
-The sole public constructor in the frozen surface is the throwable
-`McpJsonRpcException(McpJsonRpcError)` constructor; all non-throwable values
-are constructed through factories or builders.
+`10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
+The provisional Tasks snapshot contains 14 classes, one constructor, five
+fields, and 78 methods, with SHA-256
+`70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
+The sole public constructor in the Phase 4/5/6 surface is the throwable
+`McpJsonRpcException(McpJsonRpcError)` constructor. The provisional Tasks
+snapshot separately contains the public no-argument
+`McpTaskNotFoundException` constructor; all other non-throwable values are
+constructed through factories or builders.
 
 The L1-exit checkpoint tree passed a clean Corretto 26 verify at 1,557/0/0/4
 over 456 main and 179 test sources. The exact 2026-08-13 L2 framework-catalog
@@ -2423,3 +2440,81 @@ The released-3.5.1 compatibility ledger remains at 657 records with SHA-256
 `6a62b7d5a87f0bfb40abe6c9c81e77bdc72b28974037292fa8262e7cd2effbc8`.
 These local checks do not freeze the provisional Tasks API or establish
 release-candidate provenance.
+
+### 2026-09-10 release-review API amendment and Tasks freeze
+
+The owner-approved pre-release review makes three deliberate API corrections.
+First, Phase 4 restores the nine released 3.5.1 MCP listener hardening methods
+on `McpServer.Builder`: `requestHeaderTimeout`, `requestBodyTimeout`,
+`maximumRequestSizeInBytes`, `maximumHeaderCount`,
+`maximumHeadersSizeInBytes`, `maximumRequestTargetLengthInBytes`,
+`requestReadBufferSizeInBytes`, `concurrentConnectionLimit`, and
+`connectionQueueCapacity`. The last method is the historical name for the
+same setting as `streamQueueCapacity`; it is not a second queue. Restoring the
+exact descriptors removes nine reviewed removal records from the 3.5.1
+compatibility ledger.
+
+Second,
+`McpToolRegistration.CompleteHandlerStage.inlineOperationHandler(McpToolHandler)`
+is an intentional additive Phase 4 method. It preserves a typed output schema
+for an advanced tool that always completes inline and therefore may return
+explicit content or `isError` without falsely making Tasks a startup/client
+requirement. The existing `operationHandler(McpToolHandler)` remains the
+statically task-required path. No compatibility alias is needed because the
+new method fills a previously unrepresentable 4.0 construction shape.
+
+These changes raise the Phase 4 snapshot to 1,102 records: 134 classes, one
+constructor, 93 fields, and 874 methods. Its signature SHA-256 is
+`bf223c33b2c96de368e7ab303be4aa03edfa9dc55af3bb6f49fc5a14ec4aa226`;
+the reviewed reflection/nullability SHA-256 is
+`812dd8a48c4f0cd4f63ec33993b36b33a290fbfcdb96f6cfc5303b6aaa5ff68e`;
+and the 134-owner include inventory remains
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The compatibility ledger now contains 648 records with SHA-256
+`2f46e40adfed3c186050a6e4c0be6c238b71fe1cd48f0ddb77b19f34d7c88752`.
+
+Third, the 14-owner provisional Tasks inventory now has its own mandatory,
+bidirectional reviewed signature snapshot. It contains 98 records: 14 classes,
+one constructor, five fields, and 78 methods, with SHA-256
+`70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
+The unchanged include inventory has SHA-256
+`11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
+That snapshot includes the reviewed durable
+`McpTaskOrigin.fromPersistedString(String)` and `toPersistedString()` boundary.
+“Provisional” continues to describe Tasks protocol/API maturity; it no longer
+means the published 4.0.0 descriptors can drift without review.
+
+The historical D1p canonical semantic manifest was sealed before Tasks existed
+and remains immutable rather than being retroactively rewritten. The active
+release gate instead runs the extended aggregate wrapper, generates the
+provisional descriptor set beside the Phase 4/5/6 sets under
+`target/mcp-api-freezes/`, and retains that complete directory in the API-freeze
+candidate evidence. This local amendment and its checks do not themselves
+establish release-candidate provenance or publication evidence.
+
+### 2026-09-10 lifecycle-observer and final public-value amendment
+
+The final review adds the Phase 4
+`LogEventType.LIFECYCLE_OBSERVER_TRANSITION_FAILED` value and completes
+structural `equals(Object)`/`hashCode()` contracts on 14 Phase 4 values, five
+Phase 5 values, and one Phase 6 value. The additions are intentional frozen
+surface. Restoring the two released `McpClientCapabilities` methods removes
+their prior compatible-removal entries from the 3.5.1 comparison; no other
+incompatibility record changes.
+
+The final reviewed signature counts are 1,131/200/425 for Phase 4/5/6 and 98
+for provisional Tasks. Their SHA-256 values are respectively
+`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`,
+`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`,
+`06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`,
+and
+`70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
+The corresponding Phase 4/5/6 reflection/nullability digests are
+`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`,
+`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`,
+and
+`10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
+The 646-record compatibility ledger has SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+The 134/36/64/14 owner partition and all four include inventories remain
+unchanged.

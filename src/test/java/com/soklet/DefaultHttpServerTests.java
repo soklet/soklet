@@ -11,7 +11,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.channels.Selector;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -30,6 +32,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPInputStream;
 
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
 
 public class DefaultHttpServerTests {
@@ -63,6 +67,59 @@ public class DefaultHttpServerTests {
 		Assertions.assertEquals(1_024, customServer.getMaximumHeadersSizeInBytes());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				HttpServer.withPort(0).maximumHeadersSizeInBytes(0).build());
+	}
+
+	@Test
+	public void requestControlledTransportFailuresAreRedactedFromHttpLogs()
+			throws Exception {
+		String methodSecret = "method-secret-7a912fe4";
+		String urlSecret = "url-secret-7a912fe4";
+		String encodingSecret = "encoding-secret-7a912fe4";
+		int port = findFreePort();
+		CountDownLatch unparseableLogs = new CountDownLatch(3);
+		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(port)
+				.host("127.0.0.1")
+				.requestDecompressionPolicy(RequestDecompressionPolicy.fromDefaults())
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(LogEvent logEvent) {
+						if (logEvent.getLogEventType()
+								== LogEventType.SERVER_UNPARSEABLE_REQUEST) {
+							logEvents.add(logEvent);
+							unparseableLogs.countDown();
+						}
+					}
+				})
+				.build(), (request, responseConsumer) ->
+				Assertions.fail("Malformed transport request reached application handler"));
+
+		try {
+			server.start();
+			sendRawRequest(port, methodSecret + " / HTTP/1.1\r\n"
+					+ "Host: 127.0.0.1:" + port + "\r\nConnection: close\r\n\r\n");
+			sendRawRequest(port, "GET /pay?card=" + urlSecret + "%ZZ HTTP/1.1\r\n"
+					+ "Host: 127.0.0.1:" + port + "\r\nConnection: close\r\n\r\n");
+			sendRawRequest(port, "POST / HTTP/1.1\r\n"
+					+ "Host: 127.0.0.1:" + port + "\r\n"
+					+ "Content-Encoding: " + encodingSecret + "\r\n"
+					+ "Content-Length: 1\r\nConnection: close\r\n\r\nX");
+
+			Assertions.assertTrue(unparseableLogs.await(5, TimeUnit.SECONDS),
+					logEvents.toString());
+			Assertions.assertEquals(3, logEvents.size());
+			for (LogEvent logEvent : logEvents) {
+				String rendering = logEvent.toString();
+				Assertions.assertFalse(rendering.contains(methodSecret), rendering);
+				Assertions.assertFalse(rendering.contains(urlSecret), rendering);
+				Assertions.assertFalse(rendering.contains(encodingSecret), rendering);
+			}
+		} finally {
+			server.stop();
+		}
 	}
 
 	@Test
@@ -482,6 +539,13 @@ public class DefaultHttpServerTests {
 	private static byte[] gunzip(byte[] bytes) throws IOException {
 		try (GZIPInputStream inputStream = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
 			return readAll(inputStream);
+		}
+	}
+
+	private static void sendRawRequest(int port, String request) throws Exception {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+			socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
+			socket.getOutputStream().flush();
 		}
 	}
 

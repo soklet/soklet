@@ -21,7 +21,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.IOException;
@@ -72,7 +75,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 	}
 
 	@Test
-	void staleFormatThreeSidecarRequiresCleanRegeneration(
+	void staleFormatThreeSidecarIsInvalidatedAndRegenerated(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Fixture fixture = createFixture(temporaryDirectory);
 		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint()),
@@ -94,9 +97,41 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				public final class Plain {}
 				""", StandardCharsets.UTF_8);
 
-		Assertions.assertFalse(fixture.compile(List.of(unrelated),
+		Assertions.assertTrue(fixture.compile(List.of(unrelated),
 				"-Asoklet.cacheMode=sidecar"));
-		assertIndexVersion(sidecar, "3");
+		Assertions.assertTrue(Files.readAllLines(sidecar,
+				StandardCharsets.UTF_8).isEmpty());
+		Assertions.assertTrue(Files.readAllLines(classOutputIndex,
+				StandardCharsets.UTF_8).isEmpty());
+	}
+
+	@Test
+	void malformedAuthoritativeIndexNamesExactPathLineAndRemedy(
+			@TempDir Path temporaryDirectory) throws IOException {
+		Fixture fixture = createFixture(temporaryDirectory);
+		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint()),
+				"-Asoklet.cacheMode=sidecar"));
+		Path classOutputIndex = classOutputIndex(fixture.classDirectory());
+		Files.writeString(classOutputIndex, "# retained comment\nmalformed\n",
+				StandardCharsets.UTF_8);
+		Path unrelated = fixture.firstEndpoint().getParent().resolve("Plain.java");
+		Files.writeString(unrelated, """
+				package example;
+				public final class Plain {}
+				""", StandardCharsets.UTF_8);
+
+		CompilationResult result = compileWithSokletProcessorDiagnostics(
+				fixture.classDirectory(), temporaryDirectory.resolve("generated-third"),
+				List.of(unrelated), List.of("-Asoklet.cacheMode=sidecar"));
+
+		Assertions.assertFalse(result.successful(), result.diagnostics().toString());
+		String expected = "index at "
+				+ classOutputIndex.toRealPath()
+				+ ":2 is malformed; delete it and rebuild.";
+		Assertions.assertTrue(result.diagnostics().stream()
+				.filter(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR)
+				.anyMatch(diagnostic -> diagnostic.getMessage(null)
+						.contains(expected)), result.diagnostics().toString());
 	}
 
 	@Test
@@ -398,10 +433,19 @@ public class SokletProcessorMcpIndexPersistenceTests {
 	private static boolean compileWithSokletProcessor(Path classes,
 			Path generated, List<Path> sources, List<String> processorOptions)
 			throws IOException {
+		return compileWithSokletProcessorDiagnostics(classes, generated, sources,
+				processorOptions).successful();
+	}
+
+	private static CompilationResult compileWithSokletProcessorDiagnostics(
+			Path classes, Path generated, List<Path> sources,
+			List<String> processorOptions) throws IOException {
+		Files.createDirectories(generated);
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		Assertions.assertNotNull(compiler);
+		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
-				null, null, StandardCharsets.UTF_8)) {
+				diagnostics, null, StandardCharsets.UTF_8)) {
 			String classpath = classes + System.getProperty("path.separator")
 					+ System.getProperty("java.class.path");
 			List<String> options = new ArrayList<>(List.of("--release", "17",
@@ -409,12 +453,16 @@ public class SokletProcessorMcpIndexPersistenceTests {
 					classes.toString(), "-s", generated.toString()));
 			options.addAll(processorOptions);
 			JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager,
-					null, options, null,
+					diagnostics, options, null,
 					fileManager.getJavaFileObjectsFromPaths(sources));
 			task.setProcessors(List.of(new SokletProcessor()));
-			return task.call();
+			return new CompilationResult(Boolean.TRUE.equals(task.call()),
+					List.copyOf(diagnostics.getDiagnostics()));
 		}
 	}
+
+	private record CompilationResult(boolean successful,
+			List<Diagnostic<? extends JavaFileObject>> diagnostics) {}
 
 	private record Fixture(Path classDirectory, Path generatedDirectory,
 			Path firstEndpoint, Path secondEndpoint) {

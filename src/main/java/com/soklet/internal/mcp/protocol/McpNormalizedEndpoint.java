@@ -695,16 +695,23 @@ enum McpResourceNotificationType {
 @ThreadSafe
 record McpNormalizedSubscriptionConfiguration(
 		@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes,
-		boolean taskNotifications) {
+		boolean taskNotifications, boolean frameworkCatalogNotifications) {
 	McpNormalizedSubscriptionConfiguration(
 			@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes) {
-		this(notificationTypes, false);
+		this(notificationTypes, false, false);
+	}
+
+	McpNormalizedSubscriptionConfiguration(
+			@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes,
+			boolean taskNotifications) {
+		this(notificationTypes, taskNotifications, false);
 	}
 
 	McpNormalizedSubscriptionConfiguration {
 		requireNonNull(notificationTypes);
 
-		if (notificationTypes.isEmpty() && !taskNotifications)
+		if (notificationTypes.isEmpty() && !taskNotifications
+				&& !frameworkCatalogNotifications)
 			throw new IllegalArgumentException(
 					"At least one subscription notification type is required.");
 

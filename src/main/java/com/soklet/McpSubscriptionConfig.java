@@ -34,6 +34,11 @@ import static java.util.Objects.requireNonNull;
  * either process-local or distributed broadcast delivery. This value does not
  * transfer publisher lifecycle ownership to Soklet.
  *
+ * <p>Instances intentionally retain reference identity because the publisher
+ * is a live application-owned capability, not immutable value data. Code that
+ * compares configurations should compare notification types and publisher
+ * identity according to its own lifecycle model.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

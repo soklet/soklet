@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -99,6 +100,27 @@ public final class McpResourcePage implements McpOperationResult {
 	@NonNull
 	public Optional<@NonNull Duration> getCacheTimeToLiveOverride() {
 		return Optional.ofNullable(this.cacheTimeToLiveOverride);
+	}
+
+	/** @return whether every page property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpResourcePage page))
+			return false;
+		return this.resources.equals(page.resources)
+				&& this.metadata.equals(page.metadata)
+				&& Objects.equals(this.nextCursor, page.nextCursor)
+				&& Objects.equals(this.cacheTimeToLiveOverride,
+						page.cacheTimeToLiveOverride);
+	}
+
+	/** @return structural page hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.resources, this.metadata, this.nextCursor,
+				this.cacheTimeToLiveOverride);
 	}
 
 	/**

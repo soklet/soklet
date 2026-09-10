@@ -51,22 +51,37 @@ final class McpWireResult {
 	private final Optional<@NonNull McpResultMetadata> metadata;
 	@Nullable
 	private final McpJsonObject precomputedJsonObject;
+	@Nullable
+	private final McpJsonObject compatibilityMirrorFallbackFields;
 
 	private McpWireResult(@NonNull McpResultType resultType,
 			@NonNull McpJsonObject fields,
 			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
-		this(resultType, fields, metadata, null);
+		this(resultType, fields, metadata, null, null);
 	}
 
 	private McpWireResult(@NonNull McpResultType resultType,
 			@NonNull McpJsonObject fields,
 			@NonNull Optional<@NonNull McpResultMetadata> metadata,
 			@Nullable McpJsonObject precomputedJsonObject) {
+		this(resultType, fields, metadata, precomputedJsonObject, null);
+	}
+
+	private McpWireResult(@NonNull McpResultType resultType,
+			@NonNull McpJsonObject fields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata,
+			@Nullable McpJsonObject precomputedJsonObject,
+			@Nullable McpJsonObject compatibilityMirrorFallbackFields) {
 		this.resultType = requireNonNull(resultType);
 		this.fields = McpProtocolSupport.requireExtensionFields(
 				fields, Set.of("resultType", "_meta"));
 		this.metadata = requireNonNull(metadata);
 		this.precomputedJsonObject = precomputedJsonObject;
+		this.compatibilityMirrorFallbackFields =
+				compatibilityMirrorFallbackFields == null ? null
+						: McpProtocolSupport.requireExtensionFields(
+								compatibilityMirrorFallbackFields,
+								Set.of("resultType", "_meta"));
 	}
 
 	/**
@@ -83,7 +98,32 @@ final class McpWireResult {
 		requireNonNull(source);
 		requireNonNull(precomputedJsonObject);
 		return new McpWireResult(source.resultType, source.fields, source.metadata,
-				precomputedJsonObject);
+				precomputedJsonObject, source.compatibilityMirrorFallbackFields);
+	}
+
+	/**
+	 * Returns {@code source} with the framework-owned server identity merged into
+	 * its result metadata. Application metadata is retained verbatim; the
+	 * reserved-key validation in {@link McpResultMetadata} prevents it from
+	 * impersonating the framework-owned identity.
+	 */
+	@NonNull
+	static McpWireResult withServerInformation(@NonNull McpWireResult source,
+			@NonNull Optional<@NonNull McpImplementationMetadata>
+					serverInformation) {
+		McpWireResult requiredSource = requireNonNull(source);
+		Optional<McpImplementationMetadata> requiredServerInformation =
+				requireNonNull(serverInformation);
+		McpJsonObject extensionFields = requiredSource.metadata
+				.map(McpResultMetadata::extensionFields)
+				.orElseGet(McpJsonObject::empty);
+		McpResultMetadata merged = new McpResultMetadata(
+				requiredServerInformation, extensionFields);
+		Optional<McpResultMetadata> optionalMerged = merged.isEmpty()
+				? Optional.empty() : Optional.of(merged);
+		return new McpWireResult(requiredSource.resultType, requiredSource.fields,
+				optionalMerged, requiredSource.precomputedJsonObject,
+				requiredSource.compatibilityMirrorFallbackFields);
 	}
 
 	@NonNull
@@ -95,6 +135,19 @@ final class McpWireResult {
 	static McpWireResult complete(@NonNull McpJsonObject fields,
 			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
 		return new McpWireResult(McpResultType.COMPLETE, fields, metadata);
+	}
+
+	/**
+	 * Returns a complete result whose optional structured-content text mirror may
+	 * be discarded if the fully composed response exceeds a wire limit.
+	 */
+	@NonNull
+	static McpWireResult completeWithCompatibilityMirror(
+			@NonNull McpJsonObject mirroredFields,
+			@NonNull McpJsonObject unmirroredFields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
+		return new McpWireResult(McpResultType.COMPLETE, mirroredFields, metadata,
+				null, unmirroredFields);
 	}
 
 	@NonNull
@@ -150,6 +203,15 @@ final class McpWireResult {
 	@NonNull
 	McpJsonObject fields() {
 		return fields;
+	}
+
+	/** Returns an equivalent result without its optional compatibility mirror. */
+	@NonNull
+	Optional<@NonNull McpWireResult> withoutCompatibilityMirror() {
+		if (compatibilityMirrorFallbackFields == null)
+			return Optional.empty();
+		return Optional.of(new McpWireResult(resultType,
+				compatibilityMirrorFallbackFields, metadata));
 	}
 
 	@NonNull

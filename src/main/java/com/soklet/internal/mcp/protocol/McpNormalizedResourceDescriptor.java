@@ -358,7 +358,28 @@ final class McpLevelOneUriTemplate {
 		requireMaximumUtf8Bytes(expanded.toString(),
 				MAXIMUM_TEMPLATE_UTF_8_BYTES,
 				"Expanded resource URI template");
-		requireValidAbsoluteUri(expanded.toString(), "Expanded resource URI template");
+		String expandedUri = requireValidAbsoluteUri(expanded.toString(),
+				"Expanded resource URI template");
+		String syntaxNormalizedExpandedUri = normalizeRfc3986SyntaxCase(
+				expandedUri);
+		if (!expandedUri.equals(syntaxNormalizedExpandedUri)) {
+			List<Part> syntaxNormalizedParts = new ArrayList<>(parts.size());
+			int expandedIndex = 0;
+			for (Part part : parts) {
+				if (part instanceof LiteralPart literal) {
+					int literalEnd = expandedIndex + literal.value().length();
+					syntaxNormalizedParts.add(new LiteralPart(
+							syntaxNormalizedExpandedUri.substring(expandedIndex,
+									literalEnd)));
+					expandedIndex = literalEnd;
+				} else {
+					syntaxNormalizedParts.add(part);
+					// Variables use the single-character expansion above.
+					++expandedIndex;
+				}
+			}
+			parts = syntaxNormalizedParts;
+		}
 		return new McpLevelOneUriTemplate(template, parts);
 	}
 
@@ -453,7 +474,8 @@ final class McpLevelOneUriTemplate {
 		requireMaximumUtf8Bytes(uri,
 				MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES,
 				"Template-routed resource URI");
-		return new NormalizedResourceUri(normalizePercentTripletCase(uri));
+		return new NormalizedResourceUri(normalizeRfc3986SyntaxCase(
+				normalizePercentTripletCase(uri)));
 	}
 
 	@NonNull
@@ -801,6 +823,54 @@ final class McpLevelOneUriTemplate {
 			index += 3;
 		}
 		return normalized == null ? value : normalized.toString();
+	}
+
+	/**
+	 * Applies the case-insensitive portions of RFC 3986 syntax equivalence while
+	 * leaving user info, ports, paths, queries, fragments, and registry-based
+	 * authorities byte-exact. The input has already passed the URI validator.
+	 */
+	@NonNull
+	private static String normalizeRfc3986SyntaxCase(@NonNull String value) {
+		requireNonNull(value);
+		URI parsed = URI.create(value);
+		char[] characters = null;
+		int schemeEnd = value.indexOf(':');
+		for (int index = 0; index < schemeEnd; ++index) {
+			char character = value.charAt(index);
+			if (character >= 'A' && character <= 'Z') {
+				if (characters == null)
+					characters = value.toCharArray();
+				characters[index] = (char) (character + ('a' - 'A'));
+			}
+		}
+
+		String rawAuthority = parsed.getRawAuthority();
+		if (rawAuthority != null && parsed.getHost() != null) {
+			int authorityStart = schemeEnd + 3;
+			String rawUserInfo = parsed.getRawUserInfo();
+			int hostStart = authorityStart
+					+ (rawUserInfo == null ? 0 : rawUserInfo.length() + 1);
+			String hostAndPort = rawAuthority.substring(
+					rawUserInfo == null ? 0 : rawUserInfo.length() + 1);
+			int hostLength;
+			if (hostAndPort.startsWith("[")) {
+				hostLength = hostAndPort.indexOf(']') + 1;
+			} else if (parsed.getPort() >= 0) {
+				hostLength = hostAndPort.lastIndexOf(':');
+			} else {
+				hostLength = hostAndPort.length();
+			}
+			for (int index = hostStart; index < hostStart + hostLength; ++index) {
+				char character = value.charAt(index);
+				if (character >= 'A' && character <= 'Z') {
+					if (characters == null)
+						characters = value.toCharArray();
+					characters[index] = (char) (character + ('a' - 'A'));
+				}
+			}
+		}
+		return characters == null ? value : new String(characters);
 	}
 
 	private static char uppercaseHexadecimal(char character) {

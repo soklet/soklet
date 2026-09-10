@@ -2,12 +2,13 @@
   "bounds": [
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#directTransportDefaultsAndAggregateAccountingAreFrozen",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#request_body_limit_has_an_exact_body_only_boundary"
       ],
       "category": "BODY",
       "deterministicFailure": {
-        "contract": "An oversized request body or aggregate request fails with HTTP 413 before MCP JSON parsing.",
+        "contract": "An invalid public request-size configuration fails construction; an oversized request body or aggregate request fails with HTTP 413 before MCP JSON parsing.",
         "stage": "TRANSPORT_PARSE"
       },
       "enforcementOwners": [
@@ -20,9 +21,25 @@
       "id": "FINITE-BODY-001",
       "name": "HTTP request body and aggregate request bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java#configuredRequestLimitReachesHttpAndJsonParsingLayers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#discovery_works_as_the_first_request_and_preserves_id_types"
       ],
       "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES",
+          "owner": "com.soklet.McpServer.Builder"
+        },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_REQUEST_BODY_BYTES",
@@ -45,6 +62,13 @@
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         },
         {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumRequestSizeInBytes(Integer)",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "maximumRequestSizeInBytes(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
           "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_AGGREGATE_REQUEST_BYTES",
           "matcherRuleId": "FINITE-MATCH-004",
@@ -60,6 +84,18 @@
         }
       ],
       "values": [
+        {
+          "accounting": "decoded request entity bytes for a public McpServer when unset",
+          "key": "server.maximum-request-body-bytes.default",
+          "unit": "BYTES",
+          "value": "10485760"
+        },
+        {
+          "accounting": "largest configurable decoded request entity for a public McpServer",
+          "key": "server.maximum-request-body-bytes.hard",
+          "unit": "BYTES",
+          "value": "16777216"
+        },
         {
           "accounting": "reserved HTTP framing contribution to the aggregate",
           "key": "transport.http-framing-allowance-bytes",
@@ -224,6 +260,7 @@
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#combinedInputAtTheCodeUnitBoundParsesAndOverTheBoundIsNotTruncated",
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#parsedRangeCountAtThirtyTwoParsesAndThirtyThreeIsNotTruncated",
         "src/test/java/com/soklet/McpRequestPropagationTests.java#baggageParsingIsBoundedDecodedAndImmutable",
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java#custom_integer_accepts_the_safe_range_boundaries",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#headerCountAndEncodedByteLimitsHaveExactListenerBoundaries",
         "src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecTests.java#plain_values_enforce_ascii_whitespace_and_decoded_size_rules",
@@ -250,6 +287,7 @@
       "id": "FINITE-HEADER-001",
       "name": "HTTP and MCP header bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java#custom_mirrors_decode_all_types_compare_numerically_and_strip_ows"
       ],
       "sourceOwners": [
@@ -289,6 +327,20 @@
           "owner": "com.soklet.McpRequestPropagation"
         },
         {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_HEADER_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_HEADER_COUNT",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java#com.soklet.internal.mcp.protocol.McpCustomMirroredHeaderValidator#MAXIMUM_SAFE_INTEGER",
           "matcherRuleId": "FINITE-MATCH-001",
@@ -322,6 +374,20 @@
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumHeaderCount",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumHeaderCount(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumHeaderCount(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumHeadersSizeInBytes(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumHeadersSizeInBytes(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java",
@@ -417,11 +483,17 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonCodec.java",
           "member": "parse/toUtf8Bytes",
           "owner": "com.soklet.internal.mcp.protocol.McpJsonCodec"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
+          "member": "encode/decode",
+          "owner": "com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec"
         }
       ],
       "id": "FINITE-JSON-001",
-      "name": "Strict JSON production defaults and hard ceilings",
+      "name": "Strict JSON production defaults, hard ceilings, and durable task-origin bound",
       "positiveTests": [
+        "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskOriginHasBoundedDurableTextRoundTrip",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonCodecReplaysTheRetainedCorpus"
       ],
       "sourceOwners": [
@@ -592,6 +664,13 @@
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumTokenLengthInCharacters",
           "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java#com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec#MAXIMUM_PERSISTED_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_PERSISTED_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec"
         }
       ],
       "values": [
@@ -690,6 +769,12 @@
           "key": "json.token-characters.production",
           "unit": "UTF16_CODE_UNITS",
           "value": "1048576"
+        },
+        {
+          "accounting": "canonical UTF-8 JSON for one durable task origin",
+          "key": "task.origin.persisted-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "4194304"
         }
       ]
     },
@@ -1271,21 +1356,42 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#creationIsImmediatelyReadableAndCapacityNeverEvictsLiveTasks",
+        "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#defaultsAndBuilderResetsAreFiniteAndValidated",
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#bounded_handler_capacity_queues_one_and_rejects_the_third_exactly",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredPerPrincipalCapRejectsWithoutDisturbingAndRecovers",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredQueueContainsBackpressureAndReleasesTheFullCap"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredQueueContainsBackpressureAndReleasesTheFullCap",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#malformedRecognizedFilterFieldsFailBeforeAdmission",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#oneSubscriberOverflowCannotRejectAnUnrelatedSubscriber",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#moreThanMaximumUniqueTaskIdsFailsBeforeAdmissionOrLookup"
       ],
       "category": "QUEUE_STREAM",
       "deterministicFailure": {
-        "contract": "Full request queues return the fixed capacity response; full stream queues apply bounded backpressure or the documented nonblocking offer outcome.",
+        "contract": "Full request and task-notification projection queues return or apply their fixed capacity outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome.",
         "stage": "APPLICATION_OR_STREAM_ADMISSION"
       },
       "enforcementOwners": [
         {
+          "file": "src/main/java/com/soklet/McpInMemoryTaskManager.java",
+          "member": "createTask",
+          "owner": "com.soklet.McpInMemoryTaskManager"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
           "member": "McpApplicationHandlerDispatcher",
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "TaskNotificationProjectionScheduler",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "parseAcceptedSubscriptionFilter",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
@@ -1294,17 +1400,54 @@
         }
       ],
       "id": "FINITE-QUEUE-STREAM-001",
-      "name": "Request, subscription, simulation, and stream queue bounds",
+      "name": "Request, task, subscription, simulation, and stream queue bounds",
       "positiveTests": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#slow_reader_applies_bounded_backpressure_without_blocking_other_requests"
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#slow_reader_applies_bounded_backpressure_without_blocking_other_requests",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#transientExecutorRejectionRetainsBoundedProjectionWorkForRetry"
       ],
       "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpInMemoryTaskManager.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpInMemoryTaskManager.java#com.soklet.McpInMemoryTaskManager#DEFAULT_MAXIMUM_RETAINED_TASKS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_RETAINED_TASKS",
+          "owner": "com.soklet.McpInMemoryTaskManager"
+        },
         {
           "file": "src/main/java/com/soklet/McpServer.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION",
           "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_RESOURCE_SUBSCRIPTION_URIS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_RESOURCE_SUBSCRIPTION_URIS",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_SUBSCRIPTION_IDS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TASK_SUBSCRIPTION_IDS",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
@@ -1354,6 +1497,20 @@
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "streamQueueCapacity",
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpInMemoryTaskManager.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpInMemoryTaskManager.java#com.soklet.McpInMemoryTaskManager.Builder#maximumRetainedTasks(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumRetainedTasks(Integer)",
+          "owner": "com.soklet.McpInMemoryTaskManager.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#connectionQueueCapacity(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "connectionQueueCapacity(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
         },
         {
           "file": "src/main/java/com/soklet/McpServer.java",
@@ -1429,10 +1586,40 @@
           "value": "128"
         },
         {
+          "accounting": "distinct normalized resource URIs in one subscription filter",
+          "key": "queue.subscription-resource-uris",
+          "unit": "URIS",
+          "value": "256"
+        },
+        {
+          "accounting": "distinct task IDs in one subscription filter",
+          "key": "queue.subscription-task-ids",
+          "unit": "TASK_IDS",
+          "value": "256"
+        },
+        {
           "accounting": "active subscriptions per admission partition and endpoint",
           "key": "queue.subscriptions-per-partition",
           "unit": "SUBSCRIPTIONS",
           "value": "32"
+        },
+        {
+          "accounting": "unexpired tasks retained by one in-memory task manager",
+          "key": "queue.task-manager-retained-capacity",
+          "unit": "TASKS",
+          "value": "1024"
+        },
+        {
+          "accounting": "pending task-notification projections; effective capacity is the lesser of this ceiling and protocol request-queue capacity",
+          "key": "queue.task-notification-projection-capacity",
+          "unit": "TASKS",
+          "value": "128"
+        },
+        {
+          "accounting": "task-notification projection workers; effective concurrency is the lesser of this ceiling and protocol concurrency minus one",
+          "key": "queue.task-notification-projection-concurrency",
+          "unit": "WORKERS",
+          "value": "4"
         }
       ]
     },
@@ -1485,6 +1672,45 @@
           "key": "stream.terminal-byte-capacity",
           "unit": "BYTES",
           "value": "4194312"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpRateLimiterTests.java#fullPartitionTableUsesABoundedRotatingReclaimProbe"
+      ],
+      "category": "QUEUE_STREAM",
+      "deterministicFailure": {
+        "contract": "A full retained-partition table examines at most 64 rotating slots per admission; when that bounded window contains no fully replenished bucket, the new partition is denied for the configured refill interval.",
+        "stage": "RATE_LIMIT_ADMISSION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpRateLimiter.java",
+          "member": "reclaimOneFullBucket",
+          "owner": "com.soklet.DefaultMcpRateLimiter"
+        }
+      ],
+      "id": "FINITE-QUEUE-STREAM-003",
+      "name": "Rate-limiter partition-reclaim work bound",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpRateLimiterTests.java#retainedPartitionsAreBoundedReclaimedAndResettable"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpRateLimiter.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#MAXIMUM_PARTITION_RECLAIM_PROBES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_PARTITION_RECLAIM_PROBES",
+          "owner": "com.soklet.DefaultMcpRateLimiter"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "retained partition slots inspected during one bounded reclaim attempt",
+          "key": "rate-limit.partition-reclaim-probes",
+          "unit": "PROBES",
+          "value": "64"
         }
       ]
     },
@@ -1607,8 +1833,10 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#defaultsAndBuilderResetsAreFiniteAndValidated",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#keep_alive_write_does_not_extend_the_absolute_request_deadline",
+        "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskBuilderValidatesIdentifiersTimesDurationsAndCollections",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#keep_alive_write_does_not_extend_or_hide_the_active_deadline",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#response_write_idle_timeout_closes_stream_and_interrupts_handler",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#transport_durations_must_fit_monotonic_nanosecond_accounting",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java#maximumDurationIsAbsoluteAcrossKeepAlivesAndEvents",
@@ -1729,6 +1957,13 @@
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
         },
         {
+          "file": "src/main/java/com/soklet/McpInMemoryTaskManager.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpInMemoryTaskManager.java#com.soklet.McpInMemoryTaskManager.Builder#pollInterval(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "pollInterval(Duration)",
+          "owner": "com.soklet.McpInMemoryTaskManager.Builder"
+        },
+        {
           "file": "src/main/java/com/soklet/McpServer.java",
           "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#keepAliveInterval(Duration)",
           "matcherRuleId": "FINITE-MATCH-003",
@@ -1744,6 +1979,20 @@
         },
         {
           "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestBodyTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "requestBodyTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestHeaderTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "requestHeaderTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
           "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestTimeout(Duration)",
           "matcherRuleId": "FINITE-MATCH-003",
           "member": "requestTimeout(Duration)",
@@ -1755,6 +2004,13 @@
           "matcherRuleId": "FINITE-MATCH-003",
           "member": "writeTimeout(Duration)",
           "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpTask.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpTask.java#com.soklet.McpTask.Builder#pollInterval(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "pollInterval(Duration)",
+          "owner": "com.soklet.McpTask.Builder"
         }
       ],
       "values": [
@@ -1793,6 +2049,12 @@
           "key": "subscription.maximum-duration-nanos",
           "unit": "NANOSECONDS",
           "value": "86400000000000"
+        },
+        {
+          "accounting": "polling interval advertised by the default in-memory task manager",
+          "key": "task.manager.poll-interval-nanos.default",
+          "unit": "NANOSECONDS",
+          "value": "1000000000"
         },
         {
           "accounting": "absolute request-body read interval",
@@ -1952,6 +2214,7 @@
       "boundaryTests": [
         "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java#annotatedExactResourceUrisStopAtTheClassFileStringBoundaryWithoutCascades",
         "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java#publicResourceRoutingEnforcesExactFiniteUriBounds",
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#endpointPathBoundMatchesAndReachesTheProductionListener",
         "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#endpoint_overlap_search_accepts_exact_total_budget_and_fails_closed_one_over",
         "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#overlap_search_accepts_exact_state_budget_and_fails_closed_one_over",
@@ -1977,9 +2240,17 @@
       "id": "FINITE-URI-TEMPLATE-001",
       "name": "Resource URI and Level 1 URI-template bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#maximum_shape_level_one_template_matching_is_bounded"
       ],
       "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES",
+          "owner": "com.soklet.McpServer.Builder"
+        },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEndpointPathLimit.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpEndpointPathLimit.java#com.soklet.internal.mcp.protocol.McpEndpointPathLimit#MAXIMUM_REQUEST_TARGET_BYTES",
@@ -2056,6 +2327,13 @@
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumRequestTargetBytes",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumRequestTargetLengthInBytes(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumRequestTargetLengthInBytes(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
         },
         {
           "file": "src/main/java/com/soklet/SokletProcessor.java",
@@ -2306,15 +2584,6 @@
       "member": "MINIMUM_KEY_BYTES",
       "owner": "com.soklet.McpProtectionKey",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
-    },
-    {
-      "file": "src/main/java/com/soklet/McpRateLimiter.java",
-      "id": "FINITE-EX-011",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#LONG_MAXIMUM",
-      "matcherRuleId": "FINITE-MATCH-001",
-      "member": "LONG_MAXIMUM",
-      "owner": "com.soklet.DefaultMcpRateLimiter",
-      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     },
     {
       "file": "src/main/java/com/soklet/McpRateLimiter.java",
@@ -2584,15 +2853,6 @@
       "matcherRuleId": "FINITE-MATCH-003",
       "member": "refillInterval(Duration)",
       "owner": "com.soklet.McpTokenBucketConfig.Builder",
-      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
-    },
-    {
-      "file": "src/main/java/com/soklet/McpRateLimiter.java",
-      "id": "FINITE-EX-042",
-      "key": "FINITE-MATCH-004:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#minimumTimeUntilReclaimable(long)",
-      "matcherRuleId": "FINITE-MATCH-004",
-      "member": "minimumTimeUntilReclaimable(long)",
-      "owner": "com.soklet.DefaultMcpRateLimiter",
       "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     }
   ],

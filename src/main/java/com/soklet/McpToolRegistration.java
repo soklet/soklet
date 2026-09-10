@@ -40,8 +40,9 @@ import static java.util.Objects.requireNonNull;
  * arguments, provide a handler, configure optional metadata, and explicitly
  * call {@code build()}. Typed schemas and intrinsic binding plans compile
  * synchronously while the type tokens are still in hand. A typed-output stage
- * can select either an always-complete handler or a statically task-required
- * operation handler while retaining the same eventual output contract.
+ * can select an always-complete handler, an inline advanced handler, or a
+ * statically task-required operation handler while retaining the same output
+ * contract.
  *
  * @param <A> bound argument type
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -545,9 +546,12 @@ public final class McpToolRegistration<A> {
 	 * Handler-selection stage for a typed-output path.
 	 *
 	 * <p>{@link #handler(McpCompleteToolHandler)} selects an operation that
-	 * always completes inline. {@link #operationHandler(McpToolHandler)} selects
-	 * an advanced operation that retains the same eventual output schema and is
-	 * statically known to require Tasks.
+	 * always completes inline with a typed value.
+	 * {@link #inlineOperationHandler(McpToolHandler)} selects an inline advanced
+	 * operation that may return explicit content or an {@code isError} tool
+	 * result. {@link #operationHandler(McpToolHandler)} selects an advanced
+	 * operation that retains the same eventual output schema and is statically
+	 * known to require Tasks.
 	 *
 	 * @param <A> argument type
 	 * @param <R> structured output type
@@ -608,6 +612,24 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
+		 * Supplies an inline advanced handler while retaining the typed output
+		 * schema.
+		 *
+		 * <p>The handler returns the {@link McpOperationResult} spine directly,
+		 * which permits explicit content and {@code isError} tool results. This
+		 * path is not statically task-required; a successful result must include
+		 * structured content satisfying the retained output schema.</p>
+		 *
+		 * @param handler inline advanced handler
+		 * @return optional-metadata builder
+		 */
+		@NonNull
+		public OperationBuilder<@NonNull A> inlineOperationHandler(
+				@NonNull McpToolHandler<@NonNull A> handler) {
+			return operationBuilder(handler, false);
+		}
+
+		/**
 		 * Supplies the required advanced handler for a task-required operation
 		 * whose eventual structured output has type {@code R}.
 		 *
@@ -624,6 +646,13 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public OperationBuilder<@NonNull A> operationHandler(
 				@NonNull McpToolHandler<@NonNull A> handler) {
+			return operationBuilder(handler, true);
+		}
+
+		@NonNull
+		private OperationBuilder<@NonNull A> operationBuilder(
+				@NonNull McpToolHandler<@NonNull A> handler,
+				boolean taskRequired) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType,
 					new McpToolSchema(this.inputBridge.getSchemaDocument()),
@@ -631,7 +660,8 @@ public final class McpToolRegistration<A> {
 					this.outputType,
 					new McpToolSchema(this.outputBridge.getSchemaDocument()),
 					this.outputBridge,
-					requireNonNull(handler), this.inputBridge::decode, true);
+					requireNonNull(handler), this.inputBridge::decode,
+					taskRequired);
 			return new OperationBuilder<>(state);
 		}
 	}

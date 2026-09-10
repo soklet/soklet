@@ -23,10 +23,15 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Programmatic dynamic {@code resources/list} handler.
  *
- * <p>When an endpoint has this handler, its returned page is the sole
- * authority for that response. Soklet does not implicitly merge exact-URI
- * registrations into the page. Implementations must be safe for concurrent
- * invocation.
+ * <p>When an endpoint has this handler, its returned page is authoritative for
+ * that response. Soklet does not implicitly merge exact-URI registrations into
+ * the page. Every descriptor with an exact {@code uri} must identify either an
+ * exact-URI resource registration or a matching URI-template registration on
+ * the same endpoint, so every listed resource remains readable. Soklet
+ * validates the complete page after the handler returns; a violation rejects
+ * the request with JSON-RPC error
+ * {@code -32603} and HTTP status {@code 500}. Implementations must be safe for
+ * concurrent invocation.
  *
  * <p>The application owns cursor syntax and cryptographic integrity,
  * authorization binding, expiry, page position, catalog revision, retained

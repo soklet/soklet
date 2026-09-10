@@ -96,8 +96,10 @@ public class McpLocalizationPublicApiTests {
 						"hashCode()",
 						"toString()")),
 				Map.entry(McpLocalizationCatalog.class, Set.of(
+						"equals(java.lang.Object)",
 						"fromEndpointRegistry(com.soklet.McpEndpointRegistry)",
-						"getTexts()")),
+						"getTexts()",
+						"hashCode()")),
 				Map.entry(McpLocalizationControl.class, Set.of(
 						"invalidateCatalogs()", "isEnabled()")),
 				Map.entry(McpLocalizableText.class, Set.of(

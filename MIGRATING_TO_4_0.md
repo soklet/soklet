@@ -196,8 +196,9 @@ mapping so a future enum addition cannot silently change metric cardinality.
 
 ## HTTP, SSE, and custom transports
 
-Custom transport SPIs now participate in an aggregate lifecycle rather than
-being independently started and stopped. Migrate custom implementations to
+Custom HTTP and SSE transport SPIs now participate in an aggregate lifecycle
+rather than being independently started and stopped. Migrate those custom
+implementations to
 the current transport identity, attachment/runtime, lifecycle context, and
 termination-proof contracts. A decorator must preserve stable identity and
 must distinguish framework-mediated transparent delegation from a
@@ -209,6 +210,28 @@ method for an independently terminating child is
 `attachTransparentDelegate(...)`. Soklet can validate honest evidence presented
 through those contracts; it cannot detect a custom transport that lies about
 its own attestation or behavior.
+
+MCP is intentionally different in 4.0.0. `McpServer` is sealed to Soklet's
+built-in request-scoped HTTP/1.1 implementation, and there is no public MCP
+attachment context or transport SPI. A 3.5.1 custom `McpServer`
+implementation cannot be migrated through the HTTP/SSE attachment methods;
+move application behavior into endpoint, admission, rate-limit, interceptor,
+and handler APIs, and place any deployment-specific proxying outside Soklet's
+MCP listener.
+
+The built-in builder retains the 3.5.1 transport-hardening setters:
+`requestHeaderTimeout`, `requestBodyTimeout`, `maximumRequestSizeInBytes`,
+`maximumHeaderCount`, `maximumHeadersSizeInBytes`,
+`maximumRequestTargetLengthInBytes`, `requestReadBufferSizeInBytes`,
+`concurrentConnectionLimit`, and `connectionQueueCapacity`. The default body
+limit remains 10 MiB; 4.0.0 accepts configured values only through the reviewed
+16 MiB production-JSON ceiling. `connectionQueueCapacity` is the historical
+alias for `streamQueueCapacity`; they configure the same 128-item default
+outbound stream queue, and the most recent setter call wins. The other defaults
+remain 60 seconds for each read timeout, 100 headers, 64 KiB of aggregate
+headers, an 8,192-byte request target, a 64 KiB read buffer, and 8,192 concurrent
+connections. Setting the connection limit to zero disables Soklet's cap and
+requires an effective deployment-layer bound.
 
 If migrating from an earlier 4.0 snapshot, update lifecycle result and exception
 names as a hard cutover:
@@ -365,6 +388,27 @@ diagnostic naming `2026-07-28`. It is not negotiation or a compatibility
 handshake. Malformed transport/JSON and unrelated methods do not acquire that
 diagnostic.
 
+### MCP Origin and CORS migration
+
+The 3.5.1 `McpCorsAuthorizer` type is removed. Configure the shared
+`CorsAuthorizer` on `McpServer.Builder` instead. The built-in
+`CorsAuthorizer.fromWhitelistedOrigins(...)` factories support both ordinary
+HTTP resource-method preflights and MCP's transport-neutral preflights.
+
+A custom `CorsAuthorizer` must explicitly implement
+`authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)` for MCP. The
+default implementation of that overload rejects; implementing only the older
+`Map<HttpMethod, ResourceMethod>` overload still compiles but causes every MCP
+preflight to receive HTTP 403. This fail-closed default is deliberate. Verify
+the transport-neutral overload during migration rather than delegating it
+blindly when the application uses different policy for MCP and ordinary HTTP.
+
+An absent `Origin` remains allowed unless `McpAbsentOriginPolicy.REQUIRE_ORIGIN`
+is configured. A present `Origin` is denied unless the configured authorizer
+approves it. Supplying no authorizer restores reject-all behavior for present
+origins; use `CorsAuthorizer.rejectAllInstance()` to make that deployment
+choice explicit.
+
 ## MCP Java API migration
 
 The 3.5.1 MCP Java API was removed and rebuilt. Important migration patterns
@@ -380,6 +424,14 @@ are:
   application-owned durable state.
 - Build endpoints with `McpEndpoint`/`McpEndpointRegistry` or generated
   `@McpServerEndpoint` descriptors. Capabilities are derived from registrations.
+- MCP endpoint paths are fixed in 4.0.0. Templated endpoint HTTP paths such as
+  `/tenants/{tenantId}/mcp` and their `@McpEndpointPathParameter` bindings have
+  no direct replacement. For a bounded tenant set, register one fixed endpoint
+  per tenant; otherwise carry tenant identity through application-owned
+  admission or register a required `Mcp-Param-*` header whose value application
+  admission authenticates and authorizes. The header alone is untrusted. The
+  retained request/admission endpoint-path-parameter maps are always empty in
+  4.0.0. This is separate from resource URI templates, which remain supported.
 - Use Java-first typed schemas. Soklet derives the closed Tool Schema Profile 1
   schema from supported records, maps, lists, arrays, scalars, enums, and
   bounded optional properties. Applications cannot install a hand-authored
@@ -406,7 +458,9 @@ are:
   [`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>),
   persist the invocation's
   [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html)
-  with the application work, and return
+  with the application work by storing
+  `taskControl.getTaskOrigin().toPersistedString()`, reconstruct it on read with
+  `McpTaskOrigin.fromPersistedString(...)`, and return
   [`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html).
   Soklet owns protocol adaptation and deferred typed-output validation; the
   application owns durable storage, authorization binding, work publication,
@@ -429,7 +483,14 @@ Common annotation replacements include:
 | `@McpArgument` | `@McpToolArgument` on a tool parameter |
 | Hand-described record properties | `@McpToolProperty` on record components when metadata is needed |
 | `@McpListResources` | `@McpResourceList` |
-| `@McpEndpointPathParameter` / `@McpUriParameter` | `@McpResourceUriParameter` on a resource URI-template parameter |
+| `@McpUriParameter` | `@McpResourceUriParameter` on a resource URI-template parameter |
+| `@McpEndpointPathParameter` | No direct replacement; MCP endpoint HTTP paths are fixed in 4.0.0. Use separate fixed endpoints or application-owned admitted/header tenancy as described above. |
+
+The equivalent CORS type replacement is `McpCorsAuthorizer` →
+`CorsAuthorizer`. A custom replacement must implement the transport-neutral
+`authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)` overload described
+under [MCP Origin and CORS migration](#mcp-origin-and-cors-migration); relying on
+its default implementation deliberately rejects MCP preflight requests.
 
 The processor rejects unsupported or ambiguous method/record shapes at build
 time. This can surface errors that 3.5.1 deferred until runtime.

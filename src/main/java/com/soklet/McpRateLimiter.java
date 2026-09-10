@@ -21,6 +21,8 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -92,9 +94,7 @@ public interface McpRateLimiter {
 @ThreadSafe
 final class DefaultMcpRateLimiter implements McpRateLimiter {
 	private static final int MAXIMUM_RETAINED_PARTITIONS = 16_384;
-	@NonNull
-	private static final BigInteger LONG_MAXIMUM =
-			BigInteger.valueOf(Long.MAX_VALUE);
+	private static final int MAXIMUM_PARTITION_RECLAIM_PROBES = 64;
 	@NonNull
 	private final McpTokenBucketConfig configuration;
 	private final long refillIntervalNanos;
@@ -105,12 +105,16 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 	@NonNull
 	private final BigInteger refillTokens;
 	@NonNull
-	private final ConcurrentMap<@NonNull BucketKey, @NonNull Bucket> buckets;
+	private final ConcurrentMap<@NonNull BucketKey, @NonNull RetainedBucket> buckets;
+	@NonNull
+	private final List<@NonNull RetainedBucket> bucketSlots;
 	@NonNull
 	private final McpRateLimiterClock clock;
 	private final int maximumRetainedPartitions;
+	private final int maximumPartitionReclaimProbes;
 	@NonNull
 	private final ReentrantReadWriteLock partitionLock;
+	private int nextPartitionReclaimProbeSlot;
 
 	DefaultMcpRateLimiter(@NonNull McpTokenBucketConfig configuration) {
 		this(configuration, System::nanoTime, MAXIMUM_RETAINED_PARTITIONS);
@@ -118,18 +122,32 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 
 	DefaultMcpRateLimiter(@NonNull McpTokenBucketConfig configuration,
 			@NonNull McpRateLimiterClock clock, int maximumRetainedPartitions) {
+		this(configuration, clock, maximumRetainedPartitions,
+				Math.min(MAXIMUM_PARTITION_RECLAIM_PROBES,
+						maximumRetainedPartitions));
+	}
+
+	DefaultMcpRateLimiter(@NonNull McpTokenBucketConfig configuration,
+			@NonNull McpRateLimiterClock clock, int maximumRetainedPartitions,
+			int maximumPartitionReclaimProbes) {
 		this.configuration = requireNonNull(configuration);
 		this.refillIntervalNanos = configuration.getRefillInterval().toNanos();
 		this.tokenUnit = BigInteger.valueOf(this.refillIntervalNanos);
 		this.capacityUnits = this.tokenUnit.multiply(
 				BigInteger.valueOf(configuration.getCapacity()));
 		this.refillTokens = BigInteger.valueOf(configuration.getRefillTokens());
-		this.buckets = new ConcurrentHashMap<>();
-		this.clock = requireNonNull(clock);
 		if (maximumRetainedPartitions < 1)
 			throw new IllegalArgumentException(
 					"maximumRetainedPartitions must be positive");
+		if (maximumPartitionReclaimProbes < 1)
+			throw new IllegalArgumentException(
+					"maximumPartitionReclaimProbes must be positive");
+		this.buckets = new ConcurrentHashMap<>();
+		this.bucketSlots = new ArrayList<>(maximumRetainedPartitions);
+		this.clock = requireNonNull(clock);
 		this.maximumRetainedPartitions = maximumRetainedPartitions;
+		this.maximumPartitionReclaimProbes = Math.min(
+				maximumPartitionReclaimProbes, maximumRetainedPartitions);
 		this.partitionLock = new ReentrantReadWriteLock();
 	}
 
@@ -145,9 +163,9 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 
 		this.partitionLock.readLock().lock();
 		try {
-			Bucket bucket = this.buckets.get(key);
-			if (bucket != null)
-				return bucket.acquire(nowNanos, this.capacityUnits,
+			RetainedBucket retainedBucket = this.buckets.get(key);
+			if (retainedBucket != null)
+				return retainedBucket.bucket().acquire(nowNanos, this.capacityUnits,
 						this.tokenUnit, this.refillTokens);
 		} finally {
 			this.partitionLock.readLock().unlock();
@@ -155,56 +173,59 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 
 		this.partitionLock.writeLock().lock();
 		try {
-			Bucket bucket = this.buckets.get(key);
-			if (bucket != null)
-				return bucket.acquire(nowNanos, this.capacityUnits,
+			RetainedBucket retainedBucket = this.buckets.get(key);
+			if (retainedBucket != null)
+				return retainedBucket.bucket().acquire(nowNanos, this.capacityUnits,
 						this.tokenUnit, this.refillTokens);
 
+			int reclaimedSlot = -1;
 			if (this.buckets.size() >= this.maximumRetainedPartitions)
-				reclaimOneFullBucket(nowNanos);
+				reclaimedSlot = reclaimOneFullBucket(nowNanos);
 			if (this.buckets.size() >= this.maximumRetainedPartitions)
 				return McpRateLimitDecision.denied(
-						minimumTimeUntilReclaimable(nowNanos));
+						this.configuration.getRefillInterval());
 
 			Bucket newBucket = new Bucket(this.capacityUnits, nowNanos);
 			McpRateLimitDecision decision = newBucket.acquire(nowNanos,
 					this.capacityUnits, this.tokenUnit, this.refillTokens);
-			this.buckets.put(key, newBucket);
+			RetainedBucket newRetainedBucket = new RetainedBucket(key, newBucket);
+			this.buckets.put(key, newRetainedBucket);
+			if (reclaimedSlot < 0)
+				this.bucketSlots.add(newRetainedBucket);
+			else
+				this.bucketSlots.set(reclaimedSlot, newRetainedBucket);
 			return decision;
 		} finally {
 			this.partitionLock.writeLock().unlock();
 		}
 	}
 
-	private void reclaimOneFullBucket(long nowNanos) {
-		for (var entry : this.buckets.entrySet()) {
-			if (entry.getValue().isFull(nowNanos, this.capacityUnits,
-					this.refillTokens)) {
-				this.buckets.remove(entry.getKey(), entry.getValue());
-				return;
-			}
+	private int reclaimOneFullBucket(long nowNanos) {
+		int slotCount = this.bucketSlots.size();
+		int probeCount = Math.min(slotCount,
+				this.maximumPartitionReclaimProbes);
+		for (int probe = 0; probe < probeCount; probe++) {
+			int slot = this.nextPartitionReclaimProbeSlot;
+			this.nextPartitionReclaimProbeSlot = slot + 1 == slotCount
+					? 0 : slot + 1;
+			RetainedBucket candidate = this.bucketSlots.get(slot);
+			if (!candidate.bucket().isFull(nowNanos, this.capacityUnits,
+					this.refillTokens))
+				continue;
+			if (!this.buckets.remove(candidate.key(), candidate))
+				throw new IllegalStateException(
+						"A retained rate-limit partition could not be reclaimed.");
+			return slot;
 		}
-	}
-
-	@NonNull
-	private Duration minimumTimeUntilReclaimable(long nowNanos) {
-		BigInteger minimumNanos = null;
-		for (Bucket bucket : this.buckets.values()) {
-			BigInteger candidate = bucket.nanosUntilFull(nowNanos,
-					this.capacityUnits, this.refillTokens);
-			if (minimumNanos == null || candidate.compareTo(minimumNanos) < 0)
-				minimumNanos = candidate;
-		}
-		if (minimumNanos == null)
-			return this.configuration.getRefillInterval();
-		long boundedNanos = minimumNanos.min(LONG_MAXIMUM).longValueExact();
-		return Duration.ofNanos(Math.max(1L, boundedNanos));
+		return -1;
 	}
 
 	void reset() {
 		this.partitionLock.writeLock().lock();
 		try {
 			this.buckets.clear();
+			this.bucketSlots.clear();
+			this.nextPartitionReclaimProbeSlot = 0;
 		} finally {
 			this.partitionLock.writeLock().unlock();
 		}
@@ -234,6 +255,14 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 			requireNonNull(endpointPath);
 			requireNonNull(partitionKey);
 			requireNonNull(target);
+		}
+	}
+
+	private record RetainedBucket(@NonNull BucketKey key,
+			@NonNull Bucket bucket) {
+		private RetainedBucket {
+			requireNonNull(key);
+			requireNonNull(bucket);
 		}
 	}
 
@@ -275,15 +304,6 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 				@NonNull BigInteger refillTokens) {
 			refill(nowNanos, capacityUnits, refillTokens);
 			return this.availableUnits.equals(capacityUnits);
-		}
-
-		@NonNull
-		private synchronized BigInteger nanosUntilFull(long nowNanos,
-				@NonNull BigInteger capacityUnits,
-				@NonNull BigInteger refillTokens) {
-			refill(nowNanos, capacityUnits, refillTokens);
-			return ceilingDivide(capacityUnits.subtract(this.availableUnits),
-					refillTokens).max(BigInteger.ONE);
 		}
 
 		private void refill(long nowNanos, @NonNull BigInteger capacityUnits,

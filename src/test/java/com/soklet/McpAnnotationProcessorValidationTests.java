@@ -29,6 +29,7 @@ import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
@@ -53,6 +54,95 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
  */
 @ThreadSafe
 public class McpAnnotationProcessorValidationTests {
+	@Test
+	void rejectsInheritedClasspathMcpOperationsOnTheEndpointElement(
+			@TempDir Path temporaryDirectory) throws IOException {
+		Path baseSource = temporaryDirectory.resolve(
+				"base-src/example/BaseOperations.java");
+		Path baseClasses = temporaryDirectory.resolve("base-classes");
+		Path endpointSource = temporaryDirectory.resolve(
+				"endpoint-src/example/InheritedEndpoint.java");
+		Path endpointClasses = temporaryDirectory.resolve("endpoint-classes");
+		Path generated = temporaryDirectory.resolve("generated");
+		Files.createDirectories(baseSource.getParent());
+		Files.createDirectories(baseClasses);
+		Files.createDirectories(endpointSource.getParent());
+		Files.createDirectories(endpointClasses);
+		Files.createDirectories(generated);
+		Files.writeString(baseSource, """
+				package example;
+				import com.soklet.McpPromptOutput;
+				import com.soklet.McpResourceOutput;
+				import com.soklet.McpResourcePage;
+				import com.soklet.annotation.McpPrompt;
+				import com.soklet.annotation.McpResource;
+				import com.soklet.annotation.McpResourceList;
+				import com.soklet.annotation.McpTool;
+				public class BaseOperations {
+				  @McpTool(name = "tool") public Result tool() { return null; }
+				  @McpPrompt(name = "prompt") public McpPromptOutput prompt() { return null; }
+				  @McpResource(uri = "test://resource", name = "resource")
+				  public McpResourceOutput resource() { return null; }
+				  @McpResourceList public McpResourcePage resources() { return null; }
+				  public record Result(String value) {}
+				}
+				""", StandardCharsets.UTF_8);
+		Files.writeString(endpointSource, """
+				package example;
+				import com.soklet.annotation.McpServerEndpoint;
+				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				public final class InheritedEndpoint extends BaseOperations {}
+				""", StandardCharsets.UTF_8);
+
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		Assertions.assertNotNull(compiler);
+		try (StandardJavaFileManager fileManager =
+					compiler.getStandardFileManager(null, null,
+							StandardCharsets.UTF_8)) {
+			JavaCompiler.CompilationTask baseTask = compiler.getTask(null,
+					fileManager, null, List.of("--release", "17", "-proc:none",
+							"-classpath", System.getProperty("java.class.path"),
+							"-d", baseClasses.toString()), null,
+					fileManager.getJavaFileObjects(baseSource));
+			Assertions.assertTrue(Boolean.TRUE.equals(baseTask.call()));
+		}
+
+		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+		try (StandardJavaFileManager fileManager =
+					compiler.getStandardFileManager(diagnostics, null,
+							StandardCharsets.UTF_8)) {
+			String classpath = baseClasses + System.getProperty("path.separator")
+					+ System.getProperty("java.class.path");
+			JavaCompiler.CompilationTask endpointTask = compiler.getTask(null,
+					fileManager, diagnostics, List.of("--release", "17",
+							"-Asoklet.cacheMode=none", "-classpath", classpath,
+							"-d", endpointClasses.toString(), "-s",
+							generated.toString()), null,
+					fileManager.getJavaFileObjects(endpointSource));
+			endpointTask.setProcessors(List.of(new SokletProcessor()));
+			Assertions.assertFalse(Boolean.TRUE.equals(endpointTask.call()));
+		}
+
+		List<Diagnostic<? extends JavaFileObject>> inherited = diagnostics
+				.getDiagnostics().stream()
+				.filter(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR)
+				.filter(diagnostic -> diagnostic.getMessage(Locale.ROOT).contains(
+						"Inherited MCP operation"))
+				.toList();
+		Assertions.assertEquals(4, inherited.size(), inherited.toString());
+		for (String operation : List.of("@McpTool method tool",
+				"@McpPrompt method prompt", "@McpResource method resource",
+				"@McpResourceList method resources"))
+			Assertions.assertTrue(inherited.stream().anyMatch(diagnostic ->
+					diagnostic.getMessage(Locale.ROOT).contains(operation)
+							&& diagnostic.getMessage(Locale.ROOT).contains(
+							"supertype example.BaseOperations")
+							&& endpointSource.toUri().equals(
+							diagnostic.getSource().toUri())
+							&& diagnostic.getLineNumber() > 0),
+					operation + ": " + inherited);
+	}
+
 	@Test
 	void rejectsSignatureTypesInaccessibleToGeneratedProvider() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
@@ -280,10 +370,15 @@ public class McpAnnotationProcessorValidationTests {
 				.compile(source);
 
 		assertThat(compilation).failed();
-		for (String toolName : List.of("invalid-token", "duplicate-headers",
-				"invalid-scalar", "output-placement"))
-			assertThat(compilation).hadErrorContaining(
-					"MCP tool '" + toolName + "'").inFile(source);
+		for (String expected : List.of(
+				"MCP tool 'invalid-token' input schema is unsupported at $/properties/value (INVALID_MIRRORED_HEADER_NAME)",
+				"MCP tool 'duplicate-headers' input schema is unsupported at $/properties/second (DUPLICATE_MIRRORED_HEADER)",
+				"MCP tool 'invalid-scalar' input schema is unsupported at $/properties/ratio (INVALID_MIRRORED_HEADER_TYPE)",
+				"MCP tool 'output-placement' output schema is unsupported at $/properties/value (MISPLACED_MIRRORED_HEADER)"))
+			assertThat(compilation).hadErrorContaining(expected).inFile(source);
+		Assertions.assertFalse(compilation.errors().toString().contains(
+				"Unable to derive deterministic typed schemas"),
+				compilation.errors().toString());
 	}
 
 	@Test

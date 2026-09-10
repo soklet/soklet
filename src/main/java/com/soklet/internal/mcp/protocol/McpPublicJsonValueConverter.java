@@ -84,6 +84,43 @@ public final class McpPublicJsonValueConverter {
 	}
 
 	/**
+	 * Converts one bounded internal JSON value to its public representation.
+	 *
+	 * @param value internal immutable JSON value
+	 * @return equivalent public immutable JSON value
+	 * @throws NullPointerException if {@code value} is null
+	 */
+	public static com.soklet.@NonNull McpJsonValue toPublic(
+			@NonNull McpJsonValue value) {
+		requireNonNull(value);
+		if (value instanceof McpJsonString string)
+			return com.soklet.McpJsonString.fromValue(string.value());
+		if (value instanceof McpJsonNumber number)
+			return com.soklet.McpJsonNumber.fromValue(number.value());
+		if (value instanceof McpJsonBoolean bool)
+			return com.soklet.McpJsonBoolean.fromValue(
+					bool == McpJsonBoolean.TRUE);
+		if (value instanceof McpJsonNull)
+			return com.soklet.McpJsonNull.INSTANCE;
+		if (value instanceof McpJsonArray array) {
+			List<com.soklet.McpJsonValue> elements = new ArrayList<>(
+					array.values().size());
+			for (McpJsonValue element : array.values())
+				elements.add(toPublic(element));
+			return com.soklet.McpJsonArray.fromElements(elements);
+		}
+		if (value instanceof McpJsonObject object) {
+			Map<String, com.soklet.McpJsonValue> members = new LinkedHashMap<>(
+					object.members().size());
+			object.members().forEach((name, member) ->
+					members.put(name, toPublic(member)));
+			return com.soklet.McpJsonObject.fromMembers(members);
+		}
+		throw new IllegalArgumentException(
+				"Unsupported internal MCP JSON value implementation.");
+	}
+
+	/**
 	 * Performs the allocation-free production structural preflight and returns
 	 * the exact number of JSON value nodes in the public tree.
 	 *

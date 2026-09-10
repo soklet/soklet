@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
@@ -102,6 +103,26 @@ public final class McpTextResourceContents implements McpResourceContents {
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every resource-content property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpTextResourceContents contents))
+			return false;
+		return this.uri.equals(contents.uri)
+				&& this.text.equals(contents.text)
+				&& Objects.equals(this.mimeType, contents.mimeType)
+				&& this.metadata.equals(contents.metadata);
+	}
+
+	/** @return structural resource-content hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(McpTextResourceContents.class, this.uri, this.text,
+				this.mimeType, this.metadata);
 	}
 
 	/**

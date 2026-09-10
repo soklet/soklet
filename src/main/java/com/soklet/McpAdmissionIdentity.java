@@ -35,6 +35,12 @@ import static java.util.Objects.requireNonNull;
  * applications retain responsibility for the thread-safety of principal and
  * application-context objects they place inside it.
  *
+ * <p>Instances intentionally retain reference identity. Principal and
+ * application-context objects are opaque security capabilities and do not
+ * participate in framework-defined structural equality. Authorization code
+ * must compare the documented stable partition keys or apply its own
+ * principal policy explicitly.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

@@ -504,11 +504,16 @@ public final class McpEndpoint {
 		}
 
 		/**
-		 * Installs the sole custom {@code resources/list} handler.
+		 * Installs the custom {@code resources/list} handler.
 		 * <p>
 		 * A custom handler is authoritative for every returned page; exact resource
-		 * registrations are not merged automatically. Null selects the static
-		 * single-page fallback. Sequential calls are last-call-wins.
+		 * registrations are not merged automatically. Every descriptor with an
+		 * exact {@code uri} must identify either an exact-URI resource registration
+		 * or a matching URI-template registration on this endpoint. Soklet validates
+		 * the complete page after the handler returns; a violation rejects the request
+		 * with JSON-RPC error {@code -32603} and HTTP
+		 * status {@code 500}. Null selects the static single-page fallback.
+		 * Sequential calls are last-call-wins.
 		 *
 		 * @param resourceListHandler custom list handler, or null for the static
 		 *                            fallback

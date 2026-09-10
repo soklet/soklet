@@ -165,7 +165,7 @@ public final class LifecyclePolicy {
 		/**
 		 * Sets the startup timeout. Zero means an immediate boundary.
 		 *
-		 * Passing {@code null} restores the built-in default.
+		 * Passing {@code null} restores the built-in default of 30 seconds.
 		 *
 		 * @param startupTimeout startup timeout, or {@code null} to use the default
 		 * @return this builder
@@ -181,9 +181,9 @@ public final class LifecyclePolicy {
 		}
 
 		/**
-		 * Sets the startup-cancelation budget.
+		 * Sets the startup-cancelation budget. Zero means an immediate boundary.
 		 *
-		 * Passing {@code null} restores the built-in default.
+		 * Passing {@code null} restores the built-in default of 2 seconds.
 		 *
 		 * @param startupCancelationTimeout cancelation budget, or {@code null}
 		 * to use the default
@@ -202,8 +202,8 @@ public final class LifecyclePolicy {
 		}
 
 		/**
-		 * Sets the graceful shutdown timeout. Passing {@code null} restores the
-		 * built-in default.
+		 * Sets the graceful shutdown timeout. Zero means an immediate boundary.
+		 * Passing {@code null} restores the built-in default of 15 seconds.
 		 *
 		 * @param gracefulShutdownTimeout graceful shutdown timeout, or
 		 * {@code null} to use the default
@@ -222,8 +222,8 @@ public final class LifecyclePolicy {
 		}
 
 		/**
-		 * Sets the forced shutdown timeout. Passing {@code null} restores the
-		 * built-in default.
+		 * Sets the forced shutdown timeout. Zero means an immediate boundary.
+		 * Passing {@code null} restores the built-in default of 3 seconds.
 		 *
 		 * @param forcedShutdownTimeout forced shutdown timeout, or {@code null}
 		 * to use the default

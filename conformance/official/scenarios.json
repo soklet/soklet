@@ -145,7 +145,7 @@
         "tools/call error-result tool returning isError content without throwing"
       ],
       "localSupplements": [
-        "McpToolOutputSanitizerPublicRuntimeTests#typedValidationUsesSanitizedOutputAndAllowsStructuredOmission"
+        "McpToolOutputSanitizerPublicRuntimeTests#typedValidationUsesSanitizedOutputAndRequiresSuccessfulStructuredContent"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },

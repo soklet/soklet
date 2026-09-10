@@ -266,6 +266,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addPrompt(prompt)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -342,6 +343,7 @@ public class McpFinalTagGoldenWireProductionTests {
 
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addResource(textResource)
 				.addResource(blobResource)
 				.addResource(recordTemplate)
@@ -558,6 +560,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.addTool(inputResponsesTool)
 				.build();
@@ -687,6 +690,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -890,6 +894,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

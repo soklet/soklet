@@ -176,7 +176,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			try {
 				Optional<Object> valueConverterResult = valueConverter.convert(pathParameterValue);
 				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
-			} catch (Exception ignored) {
+			} catch (ValueConversionException ignored) {
 				throw new IllegalPathParameterException(
 						"A path parameter could not be converted to the resource method parameter type.",
 						pathParameterName, pathParameterValue);
@@ -270,9 +270,6 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					requestBodyObject = marshaledRequestBody == null ? null : marshaledRequestBody.orElse(null);
 				} catch (IllegalRequestBodyException e) {
 					throw e;
-				} catch (Exception ignored) {
-					throw new IllegalRequestBodyException(
-							format("Unable to marshal the request body to %s.", requestBodyType));
 				}
 
 				if (parameterType.isWrappedInOptional())

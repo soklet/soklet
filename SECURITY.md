@@ -572,7 +572,7 @@ progress/keepalive observations and the single close before terminal
 `RequestFinished`; this is FIFO record/enqueue order, not a universal
 cross-thread total order. Samples use only bounded `endpoint`, `method`, and
 lower-snake `reason`: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`.
 The 13 inclusive buckets are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600,
@@ -620,7 +620,7 @@ subscriptions`; exact terminal `SubscriptionClosed` decrements it and records
 `soklet_mcp_subscription_duration_nanos` with HELP `MCP subscription duration
 in nanoseconds`. Samples use bounded `endpoint` and lower-snake `reason`:
 `completed`, `client_disconnected`, `request_canceled`, `deadline_exceeded`,
-`write_failed`, `backpressure`, `server_stopped`,
+`write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`. The 13 inclusive
 buckets are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400

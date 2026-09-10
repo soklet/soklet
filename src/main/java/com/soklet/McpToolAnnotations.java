@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -89,6 +90,29 @@ public final class McpToolAnnotations {
 	@NonNull
 	public Optional<@NonNull Boolean> getOpenWorldHint() {
 		return Optional.ofNullable(this.openWorldHint);
+	}
+
+	/** @return whether every tool hint is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpToolAnnotations annotations))
+			return false;
+		return Objects.equals(this.title, annotations.title)
+				&& Objects.equals(this.readOnlyHint, annotations.readOnlyHint)
+				&& Objects.equals(this.destructiveHint,
+						annotations.destructiveHint)
+				&& Objects.equals(this.idempotentHint,
+						annotations.idempotentHint)
+				&& Objects.equals(this.openWorldHint, annotations.openWorldHint);
+	}
+
+	/** @return structural tool-hint hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.title, this.readOnlyHint, this.destructiveHint,
+				this.idempotentHint, this.openWorldHint);
 	}
 
 	/**

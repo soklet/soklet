@@ -25,11 +25,13 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -73,7 +75,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 
 	private final ConcurrentHashMap<IdentityKey<Request>, RequestState> requestsInFlightByIdentity;
-	private final ConcurrentHashMap<Object, RequestState> requestsInFlightById;
+	private final ConcurrentHashMap<Object, RequestIdStateBucket> requestsInFlightById;
 	private final ThreadLocal<RequestState> requestStateByThread;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> httpRequestReadFailuresByReason;
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> httpRequestRejectionsByReason;
@@ -366,8 +368,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didStartRequestHandling(@NonNull ServerType serverType,
-																			@NonNull Request request,
-																			@Nullable ResourceMethod resourceMethod) {
+																		@NonNull Request request,
+																		@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(serverType);
 		requireNonNull(request);
 
@@ -377,11 +379,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		RouteContext routeContext = routeFor(resourceMethod);
 		HttpMethod method = request.getHttpMethod();
 
-		this.activeRequests.increment();
 		RequestState state = new RequestState(new IdentityKey<>(request), request.getId(), System.nanoTime(), method,
 				routeContext.getRouteType(), routeContext.getRoute());
-		this.requestsInFlightByIdentity.put(state.getIdentityKey(), state);
-		this.requestsInFlightById.put(state.getRequestId(), state);
+		RequestState existingState = this.requestsInFlightByIdentity
+				.putIfAbsent(state.getIdentityKey(), state);
+		if (existingState != null) {
+			this.requestStateByThread.set(existingState);
+			return;
+		}
+		registerRequestStateById(state);
+
+		this.activeRequests.increment();
 		this.requestStateByThread.set(state);
 
 		long requestBodyBytes = request.getBody()
@@ -414,7 +422,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (!state.markHandlerDurationRecorded())
 			return;
 
-		long elapsedNanos = System.nanoTime() - state.getStartedAtNanos();
+		long elapsedNanos = elapsedNanosSince(state.getStartedAtNanos());
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
 		HttpServerRouteStatusKey key = new HttpServerRouteStatusKey(state.getMethod(), state.getRouteType(),
@@ -443,17 +451,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (serverType != ServerType.STANDARD_HTTP)
 			return;
 
-		this.activeRequests.decrement();
-		removeRequestState(request);
+		RequestState state = removeRequestState(request);
+		if (state == null)
+			return;
 
-		RouteContext routeContext = routeFor(resourceMethod);
-		HttpMethod method = request.getHttpMethod();
+		this.activeRequests.decrement();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
-		HttpServerRouteStatusKey key = new HttpServerRouteStatusKey(method, routeContext.getRouteType(),
-				routeContext.getRoute(), statusClass);
+		HttpServerRouteStatusKey key = new HttpServerRouteStatusKey(
+				state.getMethod(), state.getRouteType(), state.getRoute(), statusClass);
 		histogramFor(this.httpRequestDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
-				.record(duration.toNanos());
+				.record(nonNegativeNanos(duration));
 
 		long responseBodyBytes = marshaledResponse.getBodyLength();
 
@@ -468,11 +476,15 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		RouteContext routeContext = routeFor(sseConnection);
 
+		IdentityKey<SseConnection> identityKey = new IdentityKey<>(sseConnection);
+		SseConnectionState state = new SseConnectionState(
+				routeContext.getRouteType(), routeContext.getRoute(), System.nanoTime());
+		if (this.sseConnectionsByIdentity.putIfAbsent(identityKey, state) != null)
+			return;
+
 		counterFor(this.sseHandshakesAcceptedByRoute,
 				new SseEventRouteKey(routeContext.getRouteType(), routeContext.getRoute())).increment();
 		this.activeSseStreams.increment();
-		this.sseConnectionsByIdentity.put(new IdentityKey<>(sseConnection),
-				new SseConnectionState(routeContext.getRouteType(), routeContext.getRoute(), System.nanoTime()));
 	}
 
 	@Override
@@ -502,7 +514,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			return;
 
 		if (state.markFirstEventRecorded()) {
-			long elapsedNanos = System.nanoTime() - state.getEstablishedAtNanos();
+			long elapsedNanos = elapsedNanosSince(state.getEstablishedAtNanos());
 			histogramFor(this.sseTimeToFirstEventByRoute,
 					new SseEventRouteKey(state.getRouteType(), state.getRoute()),
 					SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS).record(elapsedNanos);
@@ -528,10 +540,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		histogramFor(this.sseEventWriteDurationByRoute,
 				new SseEventRouteKey(routeContext.getRouteType(), routeContext.getRoute()),
-				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(nonNegativeNanos(writeDuration));
 
 		if (deliveryLag != null) {
-			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
+			long deliveryLagNanos = nonNegativeNanos(deliveryLag);
 			histogramFor(this.sseEventDeliveryLagByRoute,
 					new SseEventRouteKey(routeContext.getRouteType(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
@@ -567,7 +579,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				routeContext.getRoute(), sseComment.getCommentType());
 
 		if (deliveryLag != null) {
-			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
+			long deliveryLagNanos = nonNegativeNanos(deliveryLag);
 			histogramFor(this.sseCommentDeliveryLagByRoute,
 					key,
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
@@ -604,10 +616,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		histogramFor(this.sseEventWriteDurationByRoute,
 				new SseEventRouteKey(routeContext.getRouteType(), routeContext.getRoute()),
-				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(nonNegativeNanos(writeDuration));
 
 		if (deliveryLag != null) {
-			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
+			long deliveryLagNanos = nonNegativeNanos(deliveryLag);
 			histogramFor(this.sseEventDeliveryLagByRoute,
 					new SseEventRouteKey(routeContext.getRouteType(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
@@ -645,7 +657,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				routeContext.getRoute(), sseComment.getCommentType());
 
 		if (deliveryLag != null) {
-			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
+			long deliveryLagNanos = nonNegativeNanos(deliveryLag);
 			histogramFor(this.sseCommentDeliveryLagByRoute,
 					key,
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
@@ -761,16 +773,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(sseConnection);
 		requireNonNull(termination);
 
+		SseConnectionState state = this.sseConnectionsByIdentity.remove(
+				new IdentityKey<>(sseConnection));
+		if (state == null)
+			return;
+
 		this.activeSseStreams.decrement();
-		this.sseConnectionsByIdentity.remove(new IdentityKey<>(sseConnection));
 
-		RouteContext routeContext = routeFor(sseConnection);
-
-		SseStreamRouteTerminationKey key = new SseStreamRouteTerminationKey(routeContext.getRouteType(),
-				routeContext.getRoute(), termination.getReason());
+		SseStreamRouteTerminationKey key = new SseStreamRouteTerminationKey(
+				state.getRouteType(), state.getRoute(), termination.getReason());
 
 		histogramFor(this.sseStreamDurationByRouteAndReason, key, SSE_STREAM_DURATION_BUCKETS_NANOS)
-				.record(termination.getDuration().toNanos());
+				.record(nonNegativeNanos(termination.getDuration()));
 	}
 
 	@Override
@@ -790,7 +804,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.mcpActiveRequests.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.RequestFinished requestFinished) {
 			this.includeMcpRequestLifecycleMetrics.set(true);
-			this.mcpActiveRequests.decrementAndGet();
+			decrementIfPositive(this.mcpActiveRequests);
 			McpMetricsSnapshot.RequestOutcomeKey key =
 					McpMetricsSnapshot.RequestOutcomeKey.fromDimensions(
 							requestFinished.getEndpointPath(),
@@ -799,13 +813,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			counterFor(this.mcpRequestsByOutcome, key).increment();
 			histogramFor(this.mcpRequestDurationsByOutcome, key,
 					HTTP_LATENCY_BUCKETS_NANOS)
-					.record(requestFinished.getDuration().toNanos());
+					.record(nonNegativeNanos(requestFinished.getDuration()));
 		} else if (event instanceof McpMetricsEvent.RequestStreamOpened) {
 			this.includeMcpRequestStreamLifecycleMetrics.set(true);
 			this.mcpActiveRequestStreams.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.RequestStreamClosed requestStreamClosed) {
 			this.includeMcpRequestStreamLifecycleMetrics.set(true);
-			this.mcpActiveRequestStreams.decrementAndGet();
+			decrementIfPositive(this.mcpActiveRequestStreams);
 			McpMetricsSnapshot.RequestStreamTerminationKey key =
 					McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 							requestStreamClosed.getEndpointPath(),
@@ -813,20 +827,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 							requestStreamClosed.getReason());
 			histogramFor(this.mcpRequestStreamDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
-					.record(requestStreamClosed.getDuration().toNanos());
+					.record(nonNegativeNanos(requestStreamClosed.getDuration()));
 		} else if (event instanceof McpMetricsEvent.SubscriptionOpened) {
 			this.includeMcpSubscriptionLifecycleMetrics.set(true);
 			this.mcpActiveSubscriptions.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.SubscriptionClosed subscriptionClosed) {
 			this.includeMcpSubscriptionLifecycleMetrics.set(true);
-			this.mcpActiveSubscriptions.decrementAndGet();
+			decrementIfPositive(this.mcpActiveSubscriptions);
 			McpMetricsSnapshot.SubscriptionTerminationKey key =
 					McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
 							subscriptionClosed.getEndpointPath(),
 							subscriptionClosed.getReason());
 			histogramFor(this.mcpSubscriptionDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
-					.record(subscriptionClosed.getDuration().toNanos());
+					.record(nonNegativeNanos(subscriptionClosed.getDuration()));
 		} else if (event instanceof McpMetricsEvent.CancelationSignaled
 				cancelationSignaled) {
 			McpMetricsSnapshot.EndpointMethodKey key =
@@ -872,13 +886,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.mcpActiveHandlerExecutions.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.HandlerExecutionFinished) {
 			this.includeMcpHandlerMetrics.set(true);
-			this.mcpActiveHandlerExecutions.decrementAndGet();
+			decrementIfPositive(this.mcpActiveHandlerExecutions);
 		} else if (event instanceof McpMetricsEvent.HandlerQueued) {
 			this.includeMcpHandlerMetrics.set(true);
 			this.mcpHandlerQueueDepth.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.HandlerDequeued) {
 			this.includeMcpHandlerMetrics.set(true);
-			this.mcpHandlerQueueDepth.decrementAndGet();
+			decrementIfPositive(this.mcpHandlerQueueDepth);
 		} else if (event instanceof McpMetricsEvent.HandlerCapacityRejected) {
 			this.includeMcpHandlerMetrics.set(true);
 			this.mcpHandlerCapacityRejections.increment();
@@ -1116,7 +1130,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	long getRequestsInFlightByIdCount() {
-		return this.requestsInFlightById.size();
+		return this.requestsInFlightById.values().stream()
+				.mapToLong(RequestIdStateBucket::size)
+				.sum();
 	}
 
 	long getActiveSseStreams() {
@@ -1357,15 +1373,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void reset() {
-		this.activeRequests.reset();
-		this.activeSseStreams.reset();
+		// Live HTTP, SSE, and MCP gauges describe current runtime state rather
+		// than cumulative observations. Preserve them and their identity
+		// bookkeeping across reset so balanced terminal transitions cannot
+		// underflow the new collection window.
 		this.httpConnectionsAccepted.reset();
 		this.httpConnectionsRejected.reset();
 		this.sseConnectionsAccepted.reset();
 		this.sseConnectionsRejected.reset();
-		// Live MCP gauges describe current runtime state rather than cumulative
-		// observations. Preserve them across reset so later balanced terminal
-		// transitions cannot underflow the new collection window.
 		this.mcpHandlerCapacityRejections.reset();
 		this.mcpServerStopsByDisposition.values().forEach(LongAdder::reset);
 		this.mcpConnectionsAccepted.reset();
@@ -1383,10 +1398,6 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpKeepAlivesEmitted.reset();
 		this.mcpProtocolErrorsByCode.clear();
 		this.mcpUnknownMirroredHeadersByEndpointAndMethod.clear();
-		this.requestsInFlightByIdentity.clear();
-		this.requestsInFlightById.clear();
-		this.requestStateByThread.remove();
-		this.sseConnectionsByIdentity.clear();
 		resetCounterMap(this.transportFailuresByServerTypeAndReason);
 		resetCounterMap(this.httpRequestReadFailuresByReason);
 		resetCounterMap(this.httpRequestRejectionsByReason);
@@ -1469,6 +1480,37 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		for (int i = 0; i < seconds.length; i++)
 			nanos[i] = seconds[i] * 1_000_000_000L;
 		return nanos;
+	}
+
+	private static long elapsedNanosSince(long startedAtNanos) {
+		return Math.max(0L, System.nanoTime() - startedAtNanos);
+	}
+
+	private static long nonNegativeNanos(@NonNull Duration duration) {
+		requireNonNull(duration);
+		if (duration.isNegative())
+			return 0L;
+
+		try {
+			return duration.toNanos();
+		} catch (ArithmeticException ignored) {
+			return Long.MAX_VALUE;
+		}
+	}
+
+	private static boolean decrementIfPositive(@NonNull AtomicLong value) {
+		requireNonNull(value);
+		long current;
+		do {
+			current = value.get();
+			if (current <= 0L) {
+				if (current < 0L && !value.compareAndSet(current, 0L))
+					continue;
+				return false;
+			}
+		} while (!value.compareAndSet(current, current - 1L));
+
+		return true;
 	}
 
 	@NonNull
@@ -1573,9 +1615,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (metricBody.length() == 0)
 			return;
 
-		sb.append("# HELP ").append(name)
+		String familyName = counterFamilyName(name, options);
+		sb.append("# HELP ").append(familyName)
 				.append(" Total low-level transport failures\n");
-		sb.append("# TYPE ").append(name).append(" counter\n");
+		sb.append("# TYPE ").append(familyName).append(" counter\n");
 		sb.append(metricBody);
 	}
 
@@ -1592,8 +1635,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (!shouldEmitSample(options, name, Map.of()))
 			return;
 
-		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
-		sb.append("# TYPE ").append(name).append(" counter\n");
+		String familyName = counterFamilyName(name, options);
+		sb.append("# HELP ").append(familyName).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(familyName).append(" counter\n");
 		appendSample(sb, name, "", value);
 	}
 
@@ -1626,9 +1670,23 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (metricBody.length() == 0)
 			return;
 
-		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
-		sb.append("# TYPE ").append(name).append(" counter\n");
+		String familyName = counterFamilyName(name, options);
+		sb.append("# HELP ").append(familyName).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(familyName).append(" counter\n");
 		sb.append(metricBody);
+	}
+
+	@NonNull
+	private static String counterFamilyName(@NonNull String sampleName,
+			@NonNull SnapshotTextOptions options) {
+		requireNonNull(sampleName);
+		requireNonNull(options);
+
+		if (options.getMetricsFormat() == MetricsFormat.OPEN_METRICS_1_0
+				&& sampleName.endsWith("_total"))
+			return sampleName.substring(0, sampleName.length() - "_total".length());
+
+		return sampleName;
 	}
 
 	private static <K> void appendHistogram(@NonNull StringBuilder sb,
@@ -1675,37 +1733,65 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		SnapshotTextOptions.HistogramFormat histogramFormat = options.getHistogramFormat();
 		boolean includeZeroBuckets = options.getIncludeZeroBuckets();
+		boolean openMetrics = options.getMetricsFormat()
+				== MetricsFormat.OPEN_METRICS_1_0;
+		int bucketCount = histogram.getBucketCount();
+		String bucketName = name + "_bucket";
+		String positiveInfinity = "+Inf";
+		boolean emitPositiveInfinity = !openMetrics || shouldEmitSample(
+				options, bucketName, labels, positiveInfinity);
 
-		if (histogramFormat == SnapshotTextOptions.HistogramFormat.FULL_BUCKETS) {
-			int bucketCount = histogram.getBucketCount();
+		// An OpenMetrics histogram point is only valid when it contains its
+		// +Inf bucket. If a per-sample filter rejects that required sample,
+		// omit the point rather than emitting a malformed partial histogram.
+		if (!emitPositiveInfinity)
+			return;
 
-			for (int i = 0; i < bucketCount; i++) {
+		if (histogramFormat == SnapshotTextOptions.HistogramFormat.FULL_BUCKETS
+				|| openMetrics) {
+			int firstBucket = histogramFormat
+					== SnapshotTextOptions.HistogramFormat.FULL_BUCKETS
+					? 0 : bucketCount - 1;
+
+			for (int i = firstBucket; i < bucketCount; i++) {
 				long cumulativeCount = histogram.getBucketCumulativeCount(i);
-				if (!includeZeroBuckets && cumulativeCount == 0L)
+				boolean overflowBucket = i == bucketCount - 1;
+				if (!includeZeroBuckets && cumulativeCount == 0L
+						&& !overflowBucket)
 					continue;
 
 				long boundary = histogram.getBucketBoundary(i);
-				String le = boundary == Long.MAX_VALUE ? "+Inf" : String.valueOf(boundary);
+				String le = boundary == Long.MAX_VALUE
+						? positiveInfinity : String.valueOf(boundary);
 				String labelsWithLe = labelsWithLe(labels.getEncoded(), le);
-				String sampleName = name + "_bucket";
 
-				if (!shouldEmitSample(options, sampleName, labels, le))
+				if (!(openMetrics && overflowBucket)
+						&& !shouldEmitSample(options, bucketName, labels, le))
 					continue;
 
-				appendSample(sb, sampleName, labelsWithLe, cumulativeCount);
+				appendSample(sb, bucketName, labelsWithLe, cumulativeCount);
 			}
 		}
 
 		if (histogramFormat != SnapshotTextOptions.HistogramFormat.NONE) {
 			String countName = name + "_count";
-			if (shouldEmitSample(options, countName, labels.getLabels())) {
-				appendSample(sb, countName, labels.getEncoded(), histogram.getCount());
+			String sumName = name + "_sum";
+			boolean emitCount = shouldEmitSample(options, countName,
+					labels.getLabels());
+			boolean emitSum = shouldEmitSample(options, sumName,
+					labels.getLabels());
+			if (openMetrics && emitCount != emitSum) {
+				// OpenMetrics requires these paired samples to remain structurally
+				// coherent. A bucket-only point remains valid.
+				emitCount = false;
+				emitSum = false;
 			}
 
-			String sumName = name + "_sum";
-			if (shouldEmitSample(options, sumName, labels.getLabels())) {
+			if (emitCount)
+				appendSample(sb, countName, labels.getEncoded(), histogram.getCount());
+
+			if (emitSum)
 				appendSample(sb, sumName, labels.getEncoded(), histogram.getSum());
-			}
 		}
 	}
 
@@ -2094,6 +2180,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		@NonNull
 		private final IdentityKey<Request> identityKey;
 		@NonNull
+		private final Set<IdentityKey<Request>> identityKeys;
+		@NonNull
 		private final Object requestId;
 		private final long startedAtNanos;
 		@NonNull
@@ -2104,6 +2192,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		private final ResourcePathDeclaration route;
 		@NonNull
 		private final AtomicBoolean handlerDurationRecorded;
+		@NonNull
+		private final AtomicBoolean finished;
 
 		private RequestState(@NonNull IdentityKey<Request> identityKey,
 												 @NonNull Object requestId,
@@ -2112,6 +2202,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 												 @NonNull RouteType routeType,
 												 @Nullable ResourcePathDeclaration route) {
 			this.identityKey = requireNonNull(identityKey);
+			this.identityKeys = new HashSet<>();
+			this.identityKeys.add(identityKey);
 			this.requestId = requireNonNull(requestId);
 			this.startedAtNanos = startedAtNanos;
 			this.method = requireNonNull(method);
@@ -2122,11 +2214,21 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 			this.route = route;
 			this.handlerDurationRecorded = new AtomicBoolean(false);
+			this.finished = new AtomicBoolean(false);
 		}
 
 		@NonNull
 		IdentityKey<Request> getIdentityKey() {
 			return this.identityKey;
+		}
+
+		void addIdentityKey(@NonNull IdentityKey<Request> identityKey) {
+			this.identityKeys.add(requireNonNull(identityKey));
+		}
+
+		@NonNull
+		Set<IdentityKey<Request>> getIdentityKeys() {
+			return this.identityKeys;
 		}
 
 		@NonNull
@@ -2155,6 +2257,51 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		boolean markHandlerDurationRecorded() {
 			return this.handlerDurationRecorded.compareAndSet(false, true);
+		}
+
+		boolean markFinished() {
+			return this.finished.compareAndSet(false, true);
+		}
+
+		boolean isFinished() {
+			return this.finished.get();
+		}
+	}
+
+	private static final class RequestIdStateBucket {
+		@NonNull
+		private final Set<RequestState> states;
+		private boolean collisionObserved;
+
+		private RequestIdStateBucket() {
+			this.states = new HashSet<>();
+		}
+
+		synchronized void add(@NonNull RequestState state) {
+			this.states.add(requireNonNull(state));
+			if (this.states.size() > 1)
+				this.collisionObserved = true;
+		}
+
+		synchronized void remove(@NonNull RequestState state) {
+			this.states.remove(requireNonNull(state));
+		}
+
+		synchronized boolean isEmpty() {
+			return this.states.isEmpty();
+		}
+
+		synchronized int size() {
+			return this.states.size();
+		}
+
+		@Nullable
+		synchronized RequestState uniqueState() {
+			if (this.collisionObserved || this.states.size() != 1)
+				return null;
+
+			RequestState state = this.states.iterator().next();
+			return state.isFinished() ? null : state;
 		}
 	}
 
@@ -2237,50 +2384,112 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		IdentityKey<Request> identityKey = new IdentityKey<>(request);
 		RequestState state = this.requestsInFlightByIdentity.get(identityKey);
 
-		if (state != null)
+		if (state != null && !state.isFinished())
 			return state;
 
-		state = this.requestsInFlightById.get(request.getId());
+		state = uniqueRequestStateForId(request.getId());
+		if (state != null)
+			return associateRequestIdentity(identityKey, state);
 
+		state = this.requestStateByThread.get();
 		if (state != null) {
-			RequestState existingState = this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
-			if (existingState != null)
-				return existingState;
+			RequestState associatedState = associateRequestIdentity(identityKey, state);
+			if (associatedState != null)
+				return associatedState;
+
+			// A finished thread-local state belongs to a prior callback. Do not
+			// fall back by a potentially reused request ID.
+			this.requestStateByThread.remove();
+			return null;
 		}
 
-		if (state == null) {
-			state = this.requestStateByThread.get();
-			if (state != null) {
-				RequestState existingState = this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
-				if (existingState != null)
-					return existingState;
-			}
-		}
-
-		return state;
+		return null;
 	}
 
-	private void removeRequestState(@NonNull Request request) {
+	@Nullable
+	private RequestState removeRequestState(@NonNull Request request) {
 		requireNonNull(request);
 
 		IdentityKey<Request> currentIdentityKey = new IdentityKey<>(request);
 		RequestState state = this.requestsInFlightByIdentity.get(currentIdentityKey);
 
 		if (state == null)
-			state = this.requestsInFlightById.get(request.getId());
+			state = uniqueRequestStateForId(request.getId());
 
-		if (state == null)
+		if (state == null) {
 			state = this.requestStateByThread.get();
+			if (state != null && state.isFinished()) {
+				this.requestStateByThread.remove();
+				return null;
+			}
+		}
 
 		if (state == null) {
 			this.requestStateByThread.remove();
-			return;
+			return null;
 		}
 
-		this.requestsInFlightByIdentity.remove(currentIdentityKey, state);
-		this.requestsInFlightByIdentity.remove(state.getIdentityKey(), state);
-		this.requestsInFlightById.remove(state.getRequestId(), state);
+		synchronized (state) {
+			if (!state.markFinished()) {
+				this.requestStateByThread.remove();
+				return null;
+			}
+
+			for (IdentityKey<Request> identityKey : state.getIdentityKeys())
+				this.requestsInFlightByIdentity.remove(identityKey, state);
+			this.requestsInFlightByIdentity.remove(currentIdentityKey, state);
+			unregisterRequestStateById(state);
+		}
+
 		this.requestStateByThread.remove();
+		return state;
+	}
+
+	private void registerRequestStateById(@NonNull RequestState state) {
+		requireNonNull(state);
+		this.requestsInFlightById.compute(state.getRequestId(), (requestId, bucket) -> {
+			RequestIdStateBucket effectiveBucket = bucket == null
+					? new RequestIdStateBucket() : bucket;
+			effectiveBucket.add(state);
+			return effectiveBucket;
+		});
+	}
+
+	private void unregisterRequestStateById(@NonNull RequestState state) {
+		requireNonNull(state);
+		this.requestsInFlightById.computeIfPresent(state.getRequestId(),
+				(requestId, bucket) -> {
+					bucket.remove(state);
+					return bucket.isEmpty() ? null : bucket;
+				});
+	}
+
+	@Nullable
+	private RequestState uniqueRequestStateForId(@NonNull Object requestId) {
+		requireNonNull(requestId);
+		RequestIdStateBucket bucket = this.requestsInFlightById.get(requestId);
+		return bucket == null ? null : bucket.uniqueState();
+	}
+
+	@Nullable
+	private RequestState associateRequestIdentity(
+			@NonNull IdentityKey<Request> identityKey,
+			@NonNull RequestState state) {
+		requireNonNull(identityKey);
+		requireNonNull(state);
+
+		synchronized (state) {
+			if (state.isFinished())
+				return null;
+
+			RequestState existingState = this.requestsInFlightByIdentity
+					.putIfAbsent(identityKey, state);
+			if (existingState != null)
+				return existingState.isFinished() ? null : existingState;
+
+			state.addIdentityKey(identityKey);
+			return state;
+		}
 	}
 
 }

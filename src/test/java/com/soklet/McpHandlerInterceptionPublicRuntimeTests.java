@@ -364,6 +364,60 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	@Test
+	public void handlerJsonRpcExceptionsArePreservedForToolsAndPrompts()
+			throws Exception {
+		McpJsonObject toolData = McpJsonObject.builder()
+				.put("kind", "tool")
+				.build();
+		McpJsonObject promptData = McpJsonObject.builder()
+				.put("kind", "prompt")
+				.build();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("intentional-tool-error")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
+							1_001, "Tool precondition failed", toolData));
+				})
+				.build();
+		McpPromptRegistration prompt = McpPromptRegistration
+				.withName("intentional-prompt-error")
+				.handler((request, promptGet, features) -> {
+					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
+							1_002, "Prompt precondition failed", promptData));
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"handler-json-rpc-error-test", "4.0.0").build())
+				.addTool(tool)
+				.addPrompt(prompt)
+				.build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet owner = managedSoklet(server);
+
+		try {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> toolResponse = callTool(port, "tool-error",
+					"intentional-tool-error", "{}");
+			HttpResponse<String> promptResponse = send(port,
+					request("prompt-error", "prompts/get",
+							",\"name\":\"intentional-prompt-error\","
+									+ "\"arguments\":{}"),
+					"prompts/get", "intentional-prompt-error");
+
+			assertApplicationError(toolResponse, "tool-error", 1_001,
+					"Tool precondition failed", "tool");
+			assertApplicationError(promptResponse, "prompt-error", 1_002,
+					"Prompt precondition failed", "prompt");
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
 	public void continuationIsOneShotThreadBoundAndCallScoped() throws Exception {
 		Map<String, AtomicInteger> handlerInvocations = new ConcurrentHashMap<>();
 		for (String toolName : List.of("one-shot", "wrong-thread", "retained"))
@@ -493,9 +547,13 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			HttpResponse<String> response = callTool(port, "late", "late", "{}");
 
 			Assertions.assertEquals(504, response.statusCode(), response.body());
-			Assertions.assertTrue(response.body().isEmpty(), response.body());
-			Assertions.assertTrue(
-					response.headers().firstValue("Content-Type").isEmpty());
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"late\","
+							+ "\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+					response.body());
+			Assertions.assertEquals("application/json",
+					response.headers().firstValue("Content-Type").orElseThrow());
 			Assertions.assertEquals(1, interceptorInvocations.get());
 			Assertions.assertTrue(lateContinuationCompleted.await(5,
 					TimeUnit.SECONDS),
@@ -608,6 +666,18 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				response.body());
 		Assertions.assertFalse(response.body().contains("\"data\""),
 				response.body());
+	}
+
+	private static void assertApplicationError(HttpResponse<String> response,
+			String expectedId, int expectedCode, String expectedMessage,
+			String expectedKind) {
+		Assertions.assertEquals(400, response.statusCode(), response.body());
+		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
+		assertContains(response.body(), "\"code\":" + expectedCode);
+		assertContains(response.body(), "\"message\":\""
+				+ expectedMessage + "\"");
+		assertContains(response.body(), "\"data\":{\"kind\":\""
+				+ expectedKind + "\"}");
 	}
 
 	private static void assertContains(String text, String expected) {

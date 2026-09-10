@@ -564,7 +564,8 @@ public class McpQueuedExecutionWinnerElectionTests {
 			if (deadlineWins) {
 				Assertions.assertEquals(1, this.queuedWrites.get(), orderString());
 				McpApplicationResponse expected = promotionFirst
-						? McpApplicationResponse.activeDeadline()
+						? McpApplicationResponse.activeDeadline(
+								this.queuedRequest.id())
 						: McpApplicationResponse.queuedDeadline(
 								this.queuedRequest.id());
 				Assertions.assertEquals(expected, this.queuedResponse.get(),

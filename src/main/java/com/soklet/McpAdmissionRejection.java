@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -96,6 +97,24 @@ public final class McpAdmissionRejection {
 	@NonNull
 	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 		return this.headers;
+	}
+
+	/** @return whether every admission-rejection property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpAdmissionRejection rejection))
+			return false;
+		return this.statusCode == rejection.statusCode
+				&& this.jsonRpcError.equals(rejection.jsonRpcError)
+				&& this.headers.equals(rejection.headers);
+	}
+
+	/** @return structural admission-rejection hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.statusCode, this.jsonRpcError, this.headers);
 	}
 
 	/**

@@ -581,6 +581,45 @@ public class McpApplicationHandlerDispatcherTests {
 	}
 
 	@Test
+	public void submission_error_releases_the_slot_before_it_propagates()
+			throws Exception {
+		RejectFirstSubmissionErrorExecutor executor =
+				new RejectFirstSubmissionErrorExecutor();
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 1, executor);
+		SubmissionError submissionError = new SubmissionError();
+		executor.failure(submissionError);
+		AtomicReference<Throwable> observedFailure = new AtomicReference<>();
+		AtomicInteger rejectedRuns = new AtomicInteger();
+		CountDownLatch survivorRan = new CountDownLatch(1);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(
+				rejectedRuns::incrementAndGet, observedFailure::set);
+		McpApplicationHandlerDispatcher.Ticket survivor = dispatcher.newTicket(
+				survivorRan::countDown, observedFailure::set);
+
+		try {
+			SubmissionError propagated = Assertions.assertThrows(
+					SubmissionError.class, () -> dispatcher.admit(rejected));
+			Assertions.assertSame(submissionError, propagated);
+			Assertions.assertSame(submissionError, observedFailure.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.REJECTED,
+					rejected.state());
+			Assertions.assertEquals(0, rejectedRuns.get());
+			Assertions.assertEquals(0, dispatcher.snapshot().activeSlots(),
+					"A fatal submission failure must not burn the dispatcher slot.");
+
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admit(survivor));
+			Assertions.assertTrue(survivorRan.await(3, TimeUnit.SECONDS));
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
+					survivor.state());
+		} finally {
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
 	public void work_failure_observer_is_contained_and_queued_work_still_runs()
 			throws Exception {
 		ExecutorService executor = singleThreadExecutor("mcp-application-failure-test");
@@ -955,5 +994,59 @@ public class McpApplicationHandlerDispatcherTests {
 		private int submissionCount() {
 			return submissionCount.get();
 		}
+	}
+
+	private static final class RejectFirstSubmissionErrorExecutor
+			extends AbstractExecutorService {
+		private final ExecutorService delegate;
+		private final AtomicReference<Error> failure;
+
+		private RejectFirstSubmissionErrorExecutor() {
+			this.delegate = singleThreadExecutor(
+					"mcp-application-error-recovery-test");
+			this.failure = new AtomicReference<>();
+		}
+
+		private void failure(Error failure) {
+			this.failure.set(failure);
+		}
+
+		@Override
+		public void shutdown() {
+			delegate.shutdown();
+		}
+
+		@Override
+		public List<Runnable> shutdownNow() {
+			return delegate.shutdownNow();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return delegate.isShutdown();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return delegate.isTerminated();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout, TimeUnit unit)
+				throws InterruptedException {
+			return delegate.awaitTermination(timeout, unit);
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			Error rejected = this.failure.getAndSet(null);
+			if (rejected != null)
+				throw rejected;
+			delegate.execute(command);
+		}
+	}
+
+	private static final class SubmissionError extends Error {
+		private static final long serialVersionUID = 1L;
 	}
 }

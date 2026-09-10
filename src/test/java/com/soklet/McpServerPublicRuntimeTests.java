@@ -61,6 +61,9 @@ public class McpServerPublicRuntimeTests {
 	private static final String OMITTED_CORS_AUTHORIZER_DIAGNOSTIC =
 			"No CorsAuthorizer is configured for the MCP server; requests carrying an "
 					+ "Origin header will be rejected.";
+	private static final String OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC =
+			"No admission controller is configured for the MCP server; every "
+					+ "request and notification will be admitted as anonymous.";
 
 	@Test
 	public void executionConfigurationValidatesAndOwnsOneExecutorPerGeneration()
@@ -173,6 +176,49 @@ public class McpServerPublicRuntimeTests {
 		} finally {
 			invalidOwner.close();
 			invalidOwner.close();
+		}
+	}
+
+	@Test
+	public void configuredRequestLimitReachesHttpAndJsonParsingLayers()
+			throws Exception {
+		String chunk = "x".repeat(900_000);
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"large-configured\","
+				+ "\"method\":\"unknown/large\",\"params\":{\"chunks\":[\""
+				+ String.join("\",\"", chunk, chunk, chunk, chunk, chunk)
+				+ "\"]}}";
+		Assertions.assertTrue(body.getBytes(StandardCharsets.UTF_8).length
+				> 4 * 1_024 * 1_024);
+
+		McpServer server = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+				.build();
+		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		try {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
+					.getPort();
+			HttpRequest request = HttpRequest.newBuilder()
+					.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+					.timeout(Duration.ofSeconds(10))
+					.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+					.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+					.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+					.header("Mcp-Method", "unknown/large")
+					.POST(HttpRequest.BodyPublishers.ofString(body,
+							StandardCharsets.UTF_8))
+					.build();
+			HttpResponse<String> response = httpClient().send(request,
+					HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+			Assertions.assertEquals(400, response.statusCode(), response.body());
+			Assertions.assertTrue(response.body().contains("\"code\":-32602"),
+					response.body());
+		} finally {
+			owner.close();
 		}
 	}
 
@@ -762,6 +808,39 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@Test
+	public void admissionCanReturnThePublicInvalidParametersError()
+			throws Exception {
+		McpAdmissionRejection rejection = McpAdmissionRejection
+				.withStatusCodeAndError(400,
+						McpJsonRpcError.fromInvalidParameters(
+								"Tenant metadata is invalid",
+								McpJsonObject.builder()
+										.put("field", "tenant")
+										.build()))
+				.build();
+		McpServer server = newMcpServer(0, newEndpoint(),
+				ignored -> McpAdmissionDecision.rejected(rejection), true);
+		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+
+		try {
+			owner.start();
+			HttpResponse<String> response = sendDiscovery(
+					server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
+					"invalid-admission-metadata", "{}");
+
+			Assertions.assertEquals(400, response.statusCode(), response.body());
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"invalid-admission-metadata\","
+							+ "\"error\":{\"code\":-32602,"
+							+ "\"message\":\"Tenant metadata is invalid\","
+							+ "\"data\":{\"field\":\"tenant\"}}}",
+					response.body());
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
 	public void failedFixedPortBindLeavesResourceAvailableToFreshOwnerAfterRelease()
 			throws Exception {
 		int port;
@@ -836,6 +915,45 @@ public class McpServerPublicRuntimeTests {
 			secondOwner.close();
 			secondOwner.close();
 		}
+	}
+
+	@Test
+	public void omittedAdmissionWarnsButExplicitAnonymousAccessDoesNot()
+			throws Exception {
+		List<LogEvent> omittedEvents = new ArrayList<>();
+		McpServer omittedServer = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.build();
+		Soklet omittedOwner = mcpOnlySoklet(omittedServer,
+				observerAddingTo(omittedEvents));
+
+		try {
+			omittedOwner.start();
+		} finally {
+			omittedOwner.close();
+		}
+		assertConfigurationDiagnostic(omittedEvents,
+				OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC, 1);
+
+		List<LogEvent> explicitEvents = new ArrayList<>();
+		McpServer explicitServer = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.build();
+		Soklet explicitOwner = mcpOnlySoklet(explicitServer,
+				observerAddingTo(explicitEvents));
+
+		try {
+			explicitOwner.start();
+		} finally {
+			explicitOwner.close();
+		}
+		assertConfigurationDiagnostic(explicitEvents,
+				OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC, 0);
 	}
 
 	@Test
@@ -1222,6 +1340,34 @@ public class McpServerPublicRuntimeTests {
 				applicationRequestStateProtectorConfigured,
 				protectionKeyringFingerprint,
 				traceCorrelationFingerprint);
+	}
+
+	@NonNull
+	private static LifecycleObserver observerAddingTo(
+			@NonNull List<@NonNull LogEvent> events) {
+		return new LifecycleObserver() {
+			@Override
+			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+				events.add(logEvent);
+			}
+		};
+	}
+
+	private static void assertConfigurationDiagnostic(
+			@NonNull List<LogEvent> events, @NonNull String message,
+			int expectedCount) {
+		List<LogEvent> matching = events.stream()
+				.filter(event -> event.getLogEventType()
+						== LogEventType.MCP_SERVER_CONFIGURATION)
+				.filter(event -> message.equals(event.getMessage()))
+				.toList();
+		Assertions.assertEquals(expectedCount, matching.size(), events.toString());
+		for (LogEvent event : matching) {
+			Assertions.assertTrue(event.getThrowable().isEmpty());
+			Assertions.assertTrue(event.getRequest().isEmpty());
+			Assertions.assertTrue(event.getResourceMethod().isEmpty());
+			Assertions.assertTrue(event.getMarshaledResponse().isEmpty());
+		}
 	}
 
 	private static void assertOmittedCorsEvents(@NonNull List<LogEvent> events,

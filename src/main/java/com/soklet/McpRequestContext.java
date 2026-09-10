@@ -53,7 +53,10 @@ public interface McpRequestContext {
 	@NonNull
 	McpEndpoint getEndpoint();
 
-	/** @return immutable endpoint path parameters */
+	/**
+	 * @return immutable endpoint path parameters; always empty for the built-in
+	 *         fixed-path MCP transport in 4.0
+	 */
 	@NonNull
 	Map<@NonNull String, @NonNull String> getEndpointPathParameters();
 

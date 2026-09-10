@@ -2015,7 +2015,7 @@ this is FIFO record/enqueue order, not a universal
 cross-thread total order. Histogram dimensions are only
 bounded `endpoint`, `method`, and lower-snake `reason`. The ten reasons are
 `completed`, `client_disconnected`, `request_canceled`, `deadline_exceeded`,
-`write_failed`, `backpressure`, `server_stopped`,
+`write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`; the 13 buckets
 are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds
@@ -2073,7 +2073,7 @@ and histogram `soklet_mcp_subscription_duration_nanos` (HELP `MCP subscription
 duration in nanoseconds`). Dimensions are only bounded `endpoint` and
 lower-snake `reason`. The ten reasons are `completed`, `client_disconnected`,
 `request_canceled`, `deadline_exceeded`, `write_failed`, `backpressure`,
-`server_stopped`, `simulator_capture_item_limit_exceeded`,
+`server_stopping`, `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`; the 13 buckets
 are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds
 plus overflow. No standalone open/close counters exist.

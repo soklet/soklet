@@ -322,9 +322,17 @@ class SimulatorConfigDerivationTests {
 				.requestRateLimiter(requestRateLimiter)
 				.rateLimiterRegistry(limiterRegistry)
 				.corsAuthorizer(corsAuthorizer)
-				.allowedHosts(Set.of(LOOPBACK))
-				.maximumCursorSizeInBytes(2048)
-				.streamQueueCapacity(17)
+					.allowedHosts(Set.of(LOOPBACK))
+					.maximumCursorSizeInBytes(2048)
+					.requestHeaderTimeout(Duration.ofSeconds(11))
+					.requestBodyTimeout(Duration.ofSeconds(12))
+					.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+					.maximumHeaderCount(41)
+					.maximumHeadersSizeInBytes(24 * 1_024)
+					.maximumRequestTargetLengthInBytes(4_096)
+					.requestReadBufferSizeInBytes(32 * 1_024)
+					.concurrentConnectionLimit(251)
+					.streamQueueCapacity(17)
 				.writeTimeout(Duration.ofSeconds(20))
 				.keepAliveInterval(Duration.ofSeconds(3))
 				.maximumSubscriptionsPerPartition(7)
@@ -373,6 +381,23 @@ class SimulatorConfigDerivationTests {
 				sourceMcpServer.getMaximumCursorSizeInBytes());
 		Assertions.assertEquals(sourceMcpServer.streamQueueCapacity(),
 				derivedMcpServer.streamQueueCapacity());
+		Assertions.assertEquals(sourceMcpServer.requestHeaderTimeout(),
+				derivedMcpServer.requestHeaderTimeout());
+		Assertions.assertEquals(sourceMcpServer.requestBodyTimeout(),
+				derivedMcpServer.requestBodyTimeout());
+		Assertions.assertEquals(sourceMcpServer.maximumRequestSizeInBytes(),
+				derivedMcpServer.maximumRequestSizeInBytes());
+		Assertions.assertEquals(sourceMcpServer.maximumHeaderCount(),
+				derivedMcpServer.maximumHeaderCount());
+		Assertions.assertEquals(sourceMcpServer.maximumHeadersSizeInBytes(),
+				derivedMcpServer.maximumHeadersSizeInBytes());
+		Assertions.assertEquals(
+				sourceMcpServer.maximumRequestTargetLengthInBytes(),
+				derivedMcpServer.maximumRequestTargetLengthInBytes());
+		Assertions.assertEquals(sourceMcpServer.requestReadBufferSizeInBytes(),
+				derivedMcpServer.requestReadBufferSizeInBytes());
+		Assertions.assertEquals(sourceMcpServer.concurrentConnectionLimit(),
+				derivedMcpServer.concurrentConnectionLimit());
 		Assertions.assertEquals(sourceMcpServer.writeTimeout(),
 				derivedMcpServer.writeTimeout());
 		Assertions.assertEquals(sourceMcpServer.keepAliveInterval(),
@@ -435,9 +460,17 @@ class SimulatorConfigDerivationTests {
 				.host("0.0.0.0")
 				.maximumCursorSizeInBytes(2001)
 				.maximumSubscriptionsPerPartition(9)
-				.requestHandlerConcurrency(4)
-				.requestHandlerQueueCapacity(13)
-				.streamQueueCapacity(23)
+					.requestHandlerConcurrency(4)
+					.requestHandlerQueueCapacity(13)
+					.requestHeaderTimeout(Duration.ofSeconds(11))
+					.requestBodyTimeout(Duration.ofSeconds(12))
+					.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+					.maximumHeaderCount(41)
+					.maximumHeadersSizeInBytes(24 * 1_024)
+					.maximumRequestTargetLengthInBytes(4_096)
+					.requestReadBufferSizeInBytes(32 * 1_024)
+					.concurrentConnectionLimit(251)
+					.streamQueueCapacity(23)
 				.keepAliveInterval(Duration.ofSeconds(2))
 				.maximumSubscriptionDuration(Duration.ofHours(3))
 				.requestTimeout(Duration.ofSeconds(7))
@@ -682,13 +715,19 @@ class SimulatorConfigDerivationTests {
 				.map(Field::getName)
 				.collect(Collectors.toUnmodifiableSet());
 		Assertions.assertEquals(Set.of(
-				"port", "maximumCursorSizeInBytes",
-				"maximumSubscriptionsPerPartition", "requestHandlerConcurrency",
-				"requestHandlerQueueCapacity", "streamQueueCapacity", "host",
-				"keepAliveInterval", "maximumSubscriptionDuration",
-				"requestTimeout", "writeTimeout",
+					"port", "maximumCursorSizeInBytes",
+					"maximumSubscriptionsPerPartition", "requestHandlerConcurrency",
+					"requestHandlerQueueCapacity", "streamQueueCapacity",
+					"maximumRequestSizeInBytes", "maximumHeaderCount",
+					"maximumHeadersSizeInBytes",
+					"maximumRequestTargetLengthInBytes",
+					"requestReadBufferSizeInBytes", "concurrentConnectionLimit", "host",
+					"keepAliveInterval", "maximumSubscriptionDuration",
+					"requestTimeout", "requestHeaderTimeout", "requestBodyTimeout",
+					"writeTimeout",
 				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
-				"admissionController", "handlerInterceptor",
+				"admissionController", "admissionControllerExplicitlyConfigured",
+				"handlerInterceptor",
 				"toolOutputSanitizer", "taskManager", "corsAuthorizer",
 				"requestRateLimiter",
 				"toolRateLimiter", "rateLimiterRegistry", "absentOriginPolicy",

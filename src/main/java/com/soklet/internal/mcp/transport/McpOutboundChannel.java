@@ -51,7 +51,8 @@ public final class McpOutboundChannel {
 		ACCEPTED,
 		FULL,
 		TOO_LARGE,
-		CLOSED
+		CLOSED,
+		NOT_IDLE
 	}
 
 	public interface Listener {
@@ -128,7 +129,7 @@ public final class McpOutboundChannel {
 		this.writeReadyCallback = McpOutboundChannel::noOp;
 	}
 
-	public void enqueue(byte @NonNull [] payload) throws InterruptedException {
+	public boolean enqueue(byte @NonNull [] payload) throws InterruptedException {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -152,13 +153,14 @@ public final class McpOutboundChannel {
 			}
 
 			if (closed || failure != null || terminalReserved)
-				throw new InterruptedException("The MCP response stream is closed.");
+				return false;
 
 			addRegularChunk(ownedPayload, null);
 			wake = reserveWakeIfNeeded();
 		}
 
 		wake.run();
+		return true;
 	}
 
 	@NonNull
@@ -178,6 +180,53 @@ public final class McpOutboundChannel {
 	public OfferResult offerCoalescing(byte @NonNull [] payload,
 			@NonNull Object coalescingKey) {
 		return offer(payload, requireNonNull(coalescingKey));
+	}
+
+	/**
+	 * Atomically offers an optional frame only when the response has no pending
+	 * regular data and has performed no socket write for the supplied interval.
+	 *
+	 * <p>The idle check and queue reservation share the channel lock with socket
+	 * writes. A write that refreshes the idle timestamp therefore cannot race a
+	 * stale timer into enqueueing an unnecessary keep-alive frame.</p>
+	 *
+	 * @param payload frame payload
+	 * @param nowNanos current monotonic time
+	 * @param idleIntervalNanos required write-idle interval
+	 * @return {@link OfferResult#NOT_IDLE} when no frame was needed
+	 */
+	@NonNull
+	public OfferResult offerIfWriteIdleExpired(byte @NonNull [] payload,
+			long nowNanos, long idleIntervalNanos) {
+		requireNonNull(payload);
+		if (idleIntervalNanos <= 0L)
+			throw new IllegalArgumentException(
+					"Write-idle interval must be positive.");
+
+		if (payload.length == 0)
+			return OfferResult.TOO_LARGE;
+
+		byte[] ownedPayload = Arrays.copyOf(payload, payload.length);
+		Runnable wake;
+		synchronized (lock) {
+			if (closed || failure != null || terminalReserved)
+				return OfferResult.CLOSED;
+			if (ownedPayload.length > byteCapacity)
+				return OfferResult.TOO_LARGE;
+			if (!started || nowNanos - saturatingAdd(
+					lastWriteAtNanos, idleIntervalNanos) < 0L)
+				return OfferResult.NOT_IDLE;
+			if (!hasRegularCapacity(ownedPayload.length))
+				return OfferResult.FULL;
+			if (bufferedFrames != 0)
+				return OfferResult.NOT_IDLE;
+
+			addRegularChunk(ownedPayload, null);
+			wake = reserveWakeIfNeeded();
+		}
+
+		wake.run();
+		return OfferResult.ACCEPTED;
 	}
 
 	@NonNull

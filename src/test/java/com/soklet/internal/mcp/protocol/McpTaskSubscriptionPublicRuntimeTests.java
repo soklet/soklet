@@ -159,6 +159,111 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
+	public void oneFailedTaskAuthorizationDoesNotRejectHealthyTaskIds()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpServer server = server(taskManager, new AtomicInteger());
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "task-authorization-healthy", ALPHA);
+			taskManager.failNextFind("task-authorization-poisoned");
+
+			client = listen(port, "\"partial-task-authorization\"", ALPHA,
+					true, "{\"taskIds\":[\"task-authorization-poisoned\","
+							+ "\"task-authorization-healthy\"]}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment(
+					"\"partial-task-authorization\"",
+					List.of("task-authorization-healthy")),
+					client.readChunkText());
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void taskAuthorizationDoesNotRenderDiscardedCompletedOutput()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpServer server = serverBuilder(taskManager, new AtomicInteger())
+				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				})
+				.build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "task-completed-authorization", ALPHA);
+			taskManager.replaceTask(completedTask(
+					taskManager.requireTask("task-completed-authorization")));
+			sanitizerInvocations.set(0);
+
+			client = listen(port, "\"lightweight-task-authorization\"", ALPHA,
+					true, "{\"taskIds\":[\"task-completed-authorization\"]}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment(
+					"\"lightweight-task-authorization\"",
+					List.of("task-completed-authorization")),
+					client.readChunkText());
+			Assertions.assertEquals(0, sanitizerInvocations.get(),
+					"Subscription authorization must not sanitize a completed result "
+							+ "that it immediately discards.");
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void transientProjectionLookupFailureKeepsSubscriptionOpen()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpServer server = server(taskManager, new AtomicInteger());
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "task-projection-transient", ALPHA);
+			seedTask(port, "task-projection-control", ALPHA);
+			client = listen(port, "\"projection-transient\"", ALPHA, true,
+					"{\"taskIds\":[\"task-projection-transient\","
+							+ "\"task-projection-control\"]}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"projection-transient\"",
+					List.of("task-projection-transient", "task-projection-control")),
+					client.readChunkText());
+
+			taskManager.resetFindInvocations();
+			taskManager.failNextFind("task-projection-transient");
+			taskManager.publishTaskChanged("task-projection-transient");
+			taskManager.awaitFindCompletions("task-projection-transient", 1);
+			taskManager.publishTaskChanged("task-projection-control");
+			Assertions.assertEquals(workingNotification("\"projection-transient\"",
+					"task-projection-control"), client.readChunkText(),
+					"An advisory lookup failure must skip one notification without "
+							+ "terminating the subscription.");
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void fullPartitionRejectsBeforeAnyAdditionalTaskAuthorizationLookup()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
@@ -1514,6 +1619,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		@NonNull
 		private final Set<@NonNull String> revokedTaskIds =
 				ConcurrentHashMap.newKeySet();
+		@NonNull
+		private final Set<@NonNull String> failNextFindTaskIds =
+				ConcurrentHashMap.newKeySet();
 		private final @Nullable McpTaskEventPublisher taskEventPublisher;
 		@NonNull
 		private final AtomicInteger findInvocations = new AtomicInteger();
@@ -1559,6 +1667,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			this.findInvocationsByTask.computeIfAbsent(taskId,
 					ignored -> new AtomicInteger()).incrementAndGet();
 			try {
+				if (this.failNextFindTaskIds.remove(taskId))
+					throw new IllegalStateException(
+							"Synthetic transient task lookup failure.");
 				awaitFindBlockBeforeSnapshot(taskId);
 				Entry entry = this.entries.get(taskId);
 				awaitTaskFindBlockAfterSnapshot(taskId);
@@ -1627,6 +1738,12 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 
 		private void revoke(@NonNull String taskId) {
 			this.revokedTaskIds.add(taskId);
+		}
+
+		private void failNextFind(@NonNull String taskId) {
+			if (!this.failNextFindTaskIds.add(taskId))
+				throw new IllegalStateException(
+						"A test lookup failure is already armed for " + taskId + '.');
 		}
 
 		private void publishTaskChanged(@NonNull String taskId) {

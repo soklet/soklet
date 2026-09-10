@@ -129,7 +129,7 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(0, http.runtime().startCalls());
 			Assertions.assertEquals(0, http.runtime().quiesceCalls());
 			Assertions.assertEquals(0, http.runtime().forceCalls());
-			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
+			assertServiceUnavailable(http.invoke("/late-startup"));
 			Assertions.assertEquals(SokletStatus.CLOSED,
 					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
@@ -458,7 +458,7 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(1, http.runtime().quiesceCalls());
 			Assertions.assertEquals(proofMode == ProofMode.GRACEFUL ? 0 : 1,
 					http.runtime().forceCalls());
-			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
+			assertServiceUnavailable(http.invoke("/late-startup"));
 			Assertions.assertEquals(SokletStatus.CLOSED,
 					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
@@ -716,8 +716,8 @@ final class SokletDirectLateStartupIntegrationTests {
 						sse.runtime().firstUnderlyingPhase());
 				Assertions.assertTrue(sse.runtime().forceSubsumedQuiesce());
 			}
-			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
-			Assertions.assertTrue(sse.invoke("/late-startup").isEmpty());
+			assertServiceUnavailable(http.invoke("/late-startup"));
+			assertServiceUnavailable(sse.invoke("/late-startup"));
 			Assertions.assertEquals(SokletStatus.CLOSED,
 					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
@@ -726,6 +726,13 @@ final class SokletDirectLateStartupIntegrationTests {
 			drainFuture(start);
 			launcher.awaitTermination();
 		}
+	}
+
+	private static void assertServiceUnavailable(
+			@NonNull Optional<HttpRequestResult> result) {
+		Assertions.assertEquals(503, result.orElseThrow()
+				.getMarshaledResponse().getStatusCode(),
+				"A closed admission fence must complete the callback with 503");
 	}
 
 	@NonNull

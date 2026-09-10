@@ -17,8 +17,10 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
 
@@ -94,5 +96,33 @@ public final class McpRequestStateProtectionContext {
 	/** @return defensive copy of the canonical associated data */
 	public byte @NonNull [] getAssociatedData() {
 		return this.associatedData.clone();
+	}
+
+	/**
+	 * Compares the exact canonical protection inputs, including associated-data
+	 * bytes by content.
+	 *
+	 * @return whether every protection-context property is structurally equal
+	 */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpRequestStateProtectionContext context))
+			return false;
+		return this.endpointPath.equals(context.endpointPath)
+				&& this.protocolVersion.equals(context.protocolVersion)
+				&& this.jsonRpcMethod.equals(context.jsonRpcMethod)
+				&& Arrays.equals(this.associatedData, context.associatedData);
+	}
+
+	/** @return structural protection-context hash code */
+	@Override
+	public int hashCode() {
+		int result = this.endpointPath.hashCode();
+		result = 31 * result + this.protocolVersion.hashCode();
+		result = 31 * result + this.jsonRpcMethod.hashCode();
+		result = 31 * result + Arrays.hashCode(this.associatedData);
+		return result;
 	}
 }

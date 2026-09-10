@@ -19,9 +19,11 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.McpLocalizer;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
+import com.soklet.McpInMemoryTaskManager;
 import com.soklet.McpImplementation;
 import com.soklet.McpServer;
 import com.soklet.McpSimulationOptions;
+import com.soklet.McpTaskManager;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -163,6 +165,11 @@ public class McpFiniteBoundInventoryTests {
 		McpHttpTransportConfiguration transport =
 				McpHttpTransportConfiguration.productionDefaults(0);
 		Object publicBuilder = publicServerBuilder();
+		put(values, "server.maximum-request-body-bytes.default",
+				(Number) fieldValue(publicBuilder, "maximumRequestSizeInBytes"));
+		put(values, "server.maximum-request-body-bytes.hard", staticNumber(
+				"com.soklet.McpServer$Builder",
+				"MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES"));
 		put(values, "transport.accept-backlog", transport.acceptBacklog());
 		put(values, "transport.read-buffer-bytes", transport.readBufferSize());
 		put(values, "transport.maximum-connections", transport.maximumConnections());
@@ -170,6 +177,14 @@ public class McpFiniteBoundInventoryTests {
 				transport.connectionWriterConcurrency());
 		put(values, "transport.maximum-header-count", transport.maximumHeaderCount());
 		put(values, "transport.maximum-header-bytes", transport.maximumHeaderBytes());
+		Assertions.assertEquals(transport.maximumHeaderCount(),
+				fieldValue(publicBuilder, "maximumHeaderCount"));
+		Assertions.assertEquals(transport.maximumHeaderBytes(),
+				fieldValue(publicBuilder, "maximumHeadersSizeInBytes"));
+		Assertions.assertEquals(transport.requestHeaderTimeout(),
+				fieldValue(publicBuilder, "requestHeaderTimeout"));
+		Assertions.assertEquals(transport.requestBodyTimeout(),
+				fieldValue(publicBuilder, "requestBodyTimeout"));
 		put(values, "headers.mirrored-maximum-decoded-bytes",
 				McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES);
 		put(values, "headers.custom-integer-maximum",
@@ -268,6 +283,12 @@ public class McpFiniteBoundInventoryTests {
 				jsonHard.maximumNodeCount());
 		putPair(values, "json.output-bytes", json.maximumOutputBytes(),
 				jsonHard.maximumOutputBytes());
+		Number taskOriginPersistedBytes = staticNumber(
+				"com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec",
+				"MAXIMUM_PERSISTED_BYTES");
+		Assertions.assertEquals(json.maximumOutputBytes(),
+				taskOriginPersistedBytes.intValue());
+		put(values, "task.origin.persisted-bytes", taskOriginPersistedBytes);
 
 		Object compiler = invokeStatic(
 				"com.soklet.internal.mcp.schema.McpSchemaCompilationLimits",
@@ -342,6 +363,9 @@ public class McpFiniteBoundInventoryTests {
 
 		put(values, "uri.request-target-bytes",
 				McpEndpointPathLimit.MAXIMUM_REQUEST_TARGET_BYTES);
+		Assertions.assertEquals(McpEndpointPathLimit.MAXIMUM_REQUEST_TARGET_BYTES,
+				fieldValue(publicBuilder,
+						"maximumRequestTargetLengthInBytes"));
 		put(values, "uri.resource-uri-bytes",
 				McpLevelOneUriTemplate.MAXIMUM_RESOURCE_URI_UTF_8_BYTES);
 		Assertions.assertEquals(
@@ -399,11 +423,32 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "queue.protocol-capacity",
 				transport.requestProcessorQueueCapacity());
 		put(values, "queue.stream-capacity", subscription.streamQueueCapacity());
+		put(values, "queue.subscription-resource-uris", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_RESOURCE_SUBSCRIPTION_URIS"));
+		put(values, "queue.subscription-task-ids", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_TASK_SUBSCRIPTION_IDS"));
 		put(values, "queue.subscriptions-per-partition",
 				subscription.maximumSubscriptionsPerPartition());
+		McpInMemoryTaskManager taskManager =
+				McpTaskManager.fromInMemoryDefaults();
+		put(values, "queue.task-manager-retained-capacity",
+				taskManager.getMaximumRetainedTasks());
+		put(values, "queue.task-notification-projection-capacity", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY"));
+		put(values, "queue.task-notification-projection-concurrency", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY"));
+		put(values, "task.manager.poll-interval-nanos.default",
+				taskManager.getPollInterval().toNanos());
 		McpSimulationOptions simulation = McpSimulationOptions.defaultInstance();
 		put(values, "queue.simulation-item-capacity",
 				simulation.getStreamItemQueueCapacity());
+		put(values, "rate-limit.partition-reclaim-probes", staticNumber(
+				"com.soklet.DefaultMcpRateLimiter",
+				"MAXIMUM_PARTITION_RECLAIM_PROBES"));
 
 		int maximumFrameBytes = McpRequestSseStream.maximumFrameBytes(json);
 		put(values, "stream.maximum-frame-bytes", maximumFrameBytes);

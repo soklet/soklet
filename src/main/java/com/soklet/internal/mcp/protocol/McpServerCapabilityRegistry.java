@@ -136,12 +136,21 @@ final class McpServerCapabilityRegistry {
 		this.inputRequestPlans = inputRequestPlans(endpoint);
 		this.toolMirroredHeaderPlans = toolMirroredHeaderPlans(endpoint);
 		this.customMirroredHeaderNames = customMirroredHeaderNames(endpoint);
-		this.toolsListResult = toolsListResult(endpoint.tools());
-		this.promptsListResult = promptsListResult(endpoint.prompts());
-		this.resourcesListResult = resourcesListResult(exactResourceDescriptors,
-				endpoint.resourceListCachePolicy());
-		this.resourceTemplatesListResult = resourceTemplatesListResult(
-				resourceTemplateDescriptors, endpoint.resourceTemplateListCachePolicy());
+		Optional<McpImplementationMetadata> serverInformation =
+				endpoint.serverInformationIncluded()
+						? Optional.of(endpoint.serverInformation())
+						: Optional.empty();
+		this.toolsListResult = McpWireResult.withServerInformation(
+				toolsListResult(endpoint.tools()), serverInformation);
+		this.promptsListResult = McpWireResult.withServerInformation(
+				promptsListResult(endpoint.prompts()), serverInformation);
+		this.resourcesListResult = McpWireResult.withServerInformation(
+				resourcesListResult(exactResourceDescriptors,
+						endpoint.resourceListCachePolicy()), serverInformation);
+		this.resourceTemplatesListResult = McpWireResult.withServerInformation(
+				resourceTemplatesListResult(resourceTemplateDescriptors,
+						endpoint.resourceTemplateListCachePolicy()),
+				serverInformation);
 
 		boolean subscriptionsSupported = endpoint.subscriptionConfig().isPresent();
 		Optional<McpCatalogCapability> toolsCapability = tools.isEmpty()
@@ -183,10 +192,6 @@ final class McpServerCapabilityRegistry {
 				toolsCapability, promptsCapability, resourcesCapability,
 				endpoint.serverExtensions());
 
-		Optional<McpImplementationMetadata> serverInformation =
-				endpoint.serverInformationIncluded()
-						? Optional.of(endpoint.serverInformation())
-						: Optional.empty();
 		McpResultMetadata resultMetadata =
 				new McpResultMetadata(serverInformation, endpoint.discoveryMetadata());
 		Optional<McpResultMetadata> optionalResultMetadata =

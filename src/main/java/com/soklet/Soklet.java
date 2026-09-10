@@ -281,7 +281,7 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(serverType);
 		requireNonNull(requestResultConsumer);
 
-		Instant processingStarted = Instant.now();
+		long processingStartedNanos = System.nanoTime();
 
 		SokletConfig sokletConfig = getSokletConfig();
 		ResourceMethodResolver resourceMethodResolver = sokletConfig.getResourceMethodResolver();
@@ -559,7 +559,8 @@ public final class Soklet implements AutoCloseable {
 											marshaledResponseHolder.get(), responseWriteDuration, t));
 						}
 					} finally {
-						Duration processingDuration = Duration.between(processingStarted, Instant.now());
+						Duration processingDuration = Duration.ofNanos(Math.max(0L,
+								System.nanoTime() - processingStartedNanos));
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
@@ -704,7 +705,8 @@ public final class Soklet implements AutoCloseable {
 				}
 			} finally {
 				if (!didFinishRequestHandlingCompleted.get()) {
-					Duration processingDuration = Duration.between(processingStarted, Instant.now());
+					Duration processingDuration = Duration.ofNanos(Math.max(0L,
+							System.nanoTime() - processingStartedNanos));
 
 					safelyCollectMetrics.accept(
 							format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
@@ -2473,7 +2475,9 @@ public final class Soklet implements AutoCloseable {
 			this.getEventConsumers().forEach((consumer, context) -> {
 				try {
 					// 2. Derive the key from the subscriber's context
-					T key = keySelector.apply(context);
+					Object clientContext = context == NULL_CONTEXT_SENTINEL
+							? null : context;
+					T key = keySelector.apply(clientContext);
 
 					// 3. Memoize: Generate the payload if we haven't seen this key yet, otherwise reuse it
 					SseEvent event = payloadCache.computeIfAbsent(key, eventProvider);
@@ -2500,7 +2504,9 @@ public final class Soklet implements AutoCloseable {
 			this.getCommentConsumers().forEach((consumer, context) -> {
 				try {
 					// 2. Derive key
-					T key = keySelector.apply(context);
+					Object clientContext = context == NULL_CONTEXT_SENTINEL
+							? null : context;
+					T key = keySelector.apply(clientContext);
 
 					// 3. Memoize
 					SseComment comment = commentCache.computeIfAbsent(key, commentProvider);
@@ -2612,6 +2618,10 @@ public final class Soklet implements AutoCloseable {
 		private volatile SokletConfig sokletConfig;
 		private volatile SseServer.@Nullable RequestHandler requestHandler;
 		@NonNull
+		private volatile Set<@NonNull ResourcePathDeclaration>
+				resourcePathDeclarations;
+		private volatile boolean started;
+		@NonNull
 		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> broadcastersByResourcePath;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
@@ -2623,6 +2633,7 @@ public final class Soklet implements AutoCloseable {
 			this.broadcastersByResourcePath = new ConcurrentHashMap<>();
 			this.broadcastErrorHandler = new AtomicReference<>();
 			this.unicastErrorHandler = new AtomicReference<>();
+			this.resourcePathDeclarations = Set.of();
 		}
 
 		@NonNull
@@ -2646,40 +2657,47 @@ public final class Soklet implements AutoCloseable {
 				@Override
 				public void start(@NonNull StartupContext context) {
 					requireNonNull(context);
+					MockSseServer.this.started = true;
 				}
 
 				@Override
 				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					requireNonNull(context);
+					MockSseServer.this.started = false;
 					signal.signalTerminated();
 				}
 
 				@Override
 				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					requireNonNull(context);
+					MockSseServer.this.started = false;
 					signal.signalTerminated();
 				}
 			};
 		}
 
 		public void start() {
-			// No-op
+			this.started = true;
 		}
 
 		public void stop() {
-			// No-op
+			this.started = false;
 		}
 
 		@NonNull
 		public Boolean isStarted() {
-			return true;
+			return this.started;
 		}
 
 		@NonNull
 		@Override
-		public Optional<? extends @NonNull SseBroadcaster> acquireBroadcaster(
+		public synchronized Optional<? extends @NonNull SseBroadcaster> acquireBroadcaster(
 				@Nullable ResourcePath resourcePath) {
-			if (resourcePath == null)
+			if (resourcePath == null || !this.started
+					|| this.sokletConfig == null)
+				return Optional.empty();
+			if (this.resourcePathDeclarations.stream().noneMatch(
+					declaration -> declaration.matches(resourcePath)))
 				return Optional.empty();
 
 			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
@@ -2757,11 +2775,18 @@ public final class Soklet implements AutoCloseable {
 
 			this.sokletConfig = sokletConfig;
 			this.requestHandler = requestHandler;
+			this.resourcePathDeclarations = Set.copyOf(sokletConfig
+					.getResourceMethodResolver().getResourceMethods().stream()
+					.filter(ResourceMethod::isSseEventSource)
+					.map(ResourceMethod::getResourcePathDeclaration)
+					.toList());
 		}
 
 		synchronized void releaseSimulationScopeState() {
+			this.started = false;
 			this.sokletConfig = null;
 			this.requestHandler = null;
+			this.resourcePathDeclarations = Set.of();
 			for (MockSseBroadcaster broadcaster
 					: this.broadcastersByResourcePath.values())
 				broadcaster.releaseSimulationScopeState();

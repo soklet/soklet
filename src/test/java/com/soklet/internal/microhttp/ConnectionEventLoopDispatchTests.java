@@ -22,6 +22,59 @@ import java.util.function.Consumer;
 
 public class ConnectionEventLoopDispatchTests {
 	@Test
+	public void oversizedClosingRequestDoesNotRetainUploadWhilePreparing413()
+			throws Exception {
+		CountDownLatch handled = new CountDownLatch(1);
+		AtomicReference<Consumer<MicrohttpResponse>> responseCallback =
+				new AtomicReference<>();
+		Handler handler = new Handler() {
+			@Override
+			public void handle(MicrohttpRequest request,
+					Consumer<MicrohttpResponse> callback) {
+				Assertions.assertTrue(request.contentTooLarge());
+				responseCallback.set(callback);
+				handled.countDown();
+			}
+
+			@Override
+			public boolean monitorClientDisconnectsBeforeResponse(
+					MicrohttpRequest request) {
+				return true;
+			}
+		};
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withMaxRequestSize(256)
+				.withReadBufferSize(64)
+				.withConcurrency(1).build();
+		EventLoop eventLoop = new EventLoop(options, handler);
+
+		try (Socket socket = new Socket()) {
+			eventLoop.start();
+			socket.connect(new java.net.InetSocketAddress(
+					"localhost", eventLoop.getPort()));
+			socket.setSoTimeout(3_000);
+			socket.getOutputStream().write(ascii(
+					"POST /large HTTP/1.1\r\nHost: localhost\r\n"
+							+ "Content-Length: 1000000\r\n\r\n"));
+			socket.getOutputStream().write(new byte[4_096]);
+			socket.getOutputStream().flush();
+			Assertions.assertTrue(handled.await(3, TimeUnit.SECONDS));
+
+			responseCallback.get().accept(new MicrohttpResponse(
+					413, "Payload Too Large", List.of(), ascii("too-large")));
+			String response = readUntil(socket.getInputStream(), "too-large");
+			Assertions.assertTrue(response.startsWith(
+					"HTTP/1.1 413 Payload Too Large"), response);
+			Assertions.assertTrue(response.endsWith("too-large"), response);
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void serverStopCancelsPendingDispatchOnceAndLateResponseIsDiscarded() throws Exception {
 		CountDownLatch handled = new CountDownLatch(1);
 		CountDownLatch canceled = new CountDownLatch(1);
@@ -793,6 +846,54 @@ public class ConnectionEventLoopDispatchTests {
 			if (socket != null) {
 				socket.close();
 			}
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void gracefulDrainKeepsCommittedStreamingDisconnectMonitorArmed()
+			throws Exception {
+		TrackingWritableSource source = new TrackingWritableSource(false);
+		Handler handler = new Handler() {
+			@Override
+			public void handle(MicrohttpRequest request,
+					Consumer<MicrohttpResponse> callback) {
+				callback.accept(StreamingMicrohttpResponses.withWritableSourceBody(
+						200, "OK", List.of(), () -> source));
+			}
+
+			@Override
+			public boolean monitorClientDisconnectsDuringStreamingResponse(
+					MicrohttpRequest request) {
+				return true;
+			}
+		};
+		EventLoop eventLoop = new EventLoop(testOptions(), handler);
+		Socket socket = null;
+
+		try {
+			eventLoop.start();
+			socket = new Socket("localhost", eventLoop.getPort());
+			socket.setSoTimeout(3_000);
+			socket.getOutputStream().write(ascii(
+					"GET /draining-stream HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+			socket.getOutputStream().flush();
+			Assertions.assertTrue(source.started.await(3, TimeUnit.SECONDS));
+			readUntil(socket.getInputStream(), "\r\n\r\n");
+
+			eventLoop.beginDrain();
+			socket.setSoLinger(true, 0);
+			socket.close();
+			socket = null;
+
+			Assertions.assertTrue(source.closed.await(3, TimeUnit.SECONDS),
+					"drain disabled committed-stream disconnect monitoring");
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
+					source.closeReason.get());
+		} finally {
+			if (socket != null)
+				socket.close();
 			eventLoop.stop();
 			eventLoop.join();
 		}

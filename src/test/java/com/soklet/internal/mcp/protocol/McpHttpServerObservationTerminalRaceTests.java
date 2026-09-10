@@ -52,6 +52,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -143,6 +145,76 @@ class McpHttpServerObservationTerminalRaceTests {
 			Assertions.assertEquals(1, releases.get());
 		} finally {
 			runtime.close();
+		}
+	}
+
+	@Test
+	@Timeout(120)
+	void reentrantCancellationDuringSseHandoffReleasesLifecycleExactlyOnce()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		AtomicInteger releases = new AtomicInteger();
+		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+		AtomicReference<Throwable> cancelationProbeFailure = new AtomicReference<>();
+		AtomicReference<McpHttpServerRuntime> runtimeReference =
+				new AtomicReference<>();
+		CountDownLatch callbackCompleted = new CountDownLatch(1);
+		CountDownLatch cancelationCallbackCompleted = new CountDownLatch(1);
+		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
+		McpHttpServerRuntime runtime = runtime(acceptingPolicy(), invocation -> {
+			invocation.cancelationToken().onCancel(() -> {
+				try {
+					probeExecutor.submit(() -> runtimeReference.get()
+							.requestExecutionSnapshot()).get(1, TimeUnit.SECONDS);
+				} catch (Throwable throwable) {
+					cancelationProbeFailure.set(throwable);
+				} finally {
+					cancelationCallbackCompleted.countDown();
+				}
+			});
+			Assertions.assertTrue(invocation.sendNotification(
+					progress("reentrant-cancel")));
+			return completeResult("must-not-be-written");
+		}, observation, McpApplicationClock.SYSTEM);
+		runtimeReference.set(runtime);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "reentrant-cancel");
+			submit(runtime, address, request, releases::incrementAndGet, response -> {
+				try {
+					Assertions.assertTrue(response.streaming());
+					// The transport can synchronously observe a disconnect while the
+					// application still owns the exchange and the SSE head is handed off.
+					cancel(runtime, request,
+							StreamTerminationReason.CLIENT_DISCONNECTED, null);
+				} catch (Throwable throwable) {
+					callbackFailure.set(throwable);
+				} finally {
+					callbackCompleted.countDown();
+				}
+			});
+
+			Assertions.assertTrue(callbackCompleted.await(5, TimeUnit.SECONDS),
+					"The streaming response callback did not complete.");
+			Assertions.assertTrue(cancelationCallbackCompleted.await(
+					5, TimeUnit.SECONDS),
+					"The application cancelation callback did not complete.");
+			Assertions.assertNull(callbackFailure.get());
+			Assertions.assertNull(cancelationProbeFailure.get(),
+					"Application cancelation ran while the request-control lock was held.");
+			awaitCondition(() -> releases.get() == 1
+					&& runtime.requestExecutionSnapshot()
+							.retainedRequestControls() == 0,
+					"Reentrant cancellation stranded the transport lifecycle lease.");
+			awaitClean(runtime);
+			Assertions.assertEquals(1, releases.get(),
+					"Terminal cleanup must remain idempotent.");
+		} finally {
+			runtime.close();
+			probeExecutor.shutdownNow();
+			Assertions.assertTrue(probeExecutor.awaitTermination(
+					5, TimeUnit.SECONDS));
 		}
 	}
 
@@ -593,7 +665,7 @@ class McpHttpServerObservationTerminalRaceTests {
 
 	@Test
 	@Timeout(120)
-	void application_stop_after_admission_cannot_strand_observation()
+	void application_stop_during_pre_observation_limiter_leaves_no_observation()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
 		CountDownLatch limiterEntered = new CountDownLatch(1);
@@ -621,10 +693,9 @@ class McpHttpServerObservationTerminalRaceTests {
 
 			application(runtime).stop();
 			releaseLimiter.countDown();
-			observation.awaitFinished();
 			awaitClean(runtime);
 
-			observation.assertExactlyOne(McpRequestOutcome.CANCELED);
+			observation.assertNeverStarted();
 			Assertions.assertEquals(0, callbacks.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
@@ -1098,6 +1169,12 @@ class McpHttpServerObservationTerminalRaceTests {
 			Assertions.assertEquals(1, starts.get());
 			Assertions.assertEquals(1, finishes.get());
 			Assertions.assertEquals(expectedOutcome, outcome.get());
+		}
+
+		private void assertNeverStarted() {
+			Assertions.assertEquals(0, starts.get());
+			Assertions.assertEquals(0, finishes.get());
+			Assertions.assertNull(outcome.get());
 		}
 
 		private void assertExactlyOneInternalError(Throwable expectedFailure) {

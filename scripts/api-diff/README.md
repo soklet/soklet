@@ -56,7 +56,10 @@ For every phase listed in `api/mcp/frozen-phases`, the gate extracts canonical
 current signatures and compares them bidirectionally with the reviewed
 `api/mcp/phase-N.signatures.jsonl` snapshot. Generated signatures are written
 under `target/mcp-api-freezes/`; reviewed snapshots are never updated
-automatically. `McpPublicApiInventoryTests` remains a fast, independent
+automatically. The aggregate also compares `api/mcp/provisional.includes`
+bidirectionally with `api/mcp/provisional.signatures.jsonl`; “provisional”
+describes the Tasks protocol/API maturity bucket, not an exemption from the
+4.0.0 signature gate. `McpPublicApiInventoryTests` remains a fast, independent
 source/class-tree guard, but it is not the authoritative baseline-derived owner
 algorithm. CI invokes the aggregate gate on JDK 17, while local runs use the
 caller's JDK.

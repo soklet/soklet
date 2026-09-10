@@ -29,6 +29,14 @@ exception constructors and structured accessors can still carry exact
 caller-supplied messages, causes, names, or values and therefore form an
 application-owned boundary.
 
+Task value diagnostics follow the same split. `McpTask`,
+`McpTaskCreatedResult`, and `McpTaskOrigin` redact task identifiers,
+application state, and result data from their diagnostic rendering while
+retaining exact values behind their documented accessors and persistence
+methods. `McpTaskNotFoundException` uses the same fixed message for an unknown
+task and an unauthorized task and retains no task ID, authorization detail, or
+application cause, so the exception does not disclose task existence.
+
 Two disabled-by-default log options deliberately expose limited
 request-derived text:
 
@@ -138,6 +146,10 @@ accessor behavior is preserved.
 provides the corresponding protocol-runtime canary. Existing log, metric,
 lifecycle, simulation, wire-error, and fallback tests supply the remaining
 per-boundary evidence named in the machine-checked inventory.
+[`McpTaskPublicApiTests`](../src/test/java/com/soklet/McpTaskPublicApiTests.java)
+and
+[`McpInMemoryTaskManagerTests`](../src/test/java/com/soklet/McpInMemoryTaskManagerTests.java)
+provide the task-value redaction and non-disclosing authorization canaries.
 
 `SOK-PRIV-001` is `RELEASE_GATED` in the final MCP-C conformance-matrix
 closure. The complete residual evidence and matrix were regenerated as one

@@ -472,8 +472,9 @@ public class McpStreamTests {
 		}
 
 		@Override
-		public void enqueue(McpRequestSseStream.@NonNull Frame frame) {
+		public boolean enqueue(McpRequestSseStream.@NonNull Frame frame) {
 			this.mutations.incrementAndGet();
+			return true;
 		}
 
 		@Override

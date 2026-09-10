@@ -89,11 +89,11 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 248;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"d6299ae37278087e7b655cb3cd1c46a7b2dca363b9bfaf39db07e84739029ec0";
+			"61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"2b4fd2a4664d9605f847132f4dd234fac9540ef274ca58cabdeceb0408e8345a";
+			"36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0";
+			"10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -395,16 +395,21 @@ public class McpPublicApiReflectionContractTests {
 		Map<Class<?>, Set<String>> expectedNullableBuilderMethods = Map.of(
 				McpServer.Builder.class, Set.of(
 						"absentOriginPolicy", "admissionController", "allowedHosts",
+						"concurrentConnectionLimit", "connectionQueueCapacity",
 						"corsAuthorizer", "endpointRegistry", "handlerInterceptor",
 						"host", "keepAliveInterval",
 						"localizer", "logRawValidatedTraceIds",
-						"maximumCursorSizeInBytes",
+						"maximumCursorSizeInBytes", "maximumHeaderCount",
+						"maximumHeadersSizeInBytes", "maximumRequestSizeInBytes",
+						"maximumRequestTargetLengthInBytes",
 						"maximumSubscriptionDuration",
 						"maximumSubscriptionsPerPartition", "protectionConfig",
 						"rateLimiterRegistry", "requestHandlerConcurrency",
 						"requestHandlerExecutorServiceSupplier",
 						"requestHandlerQueueCapacity", "requestRateLimiter",
-						"requestTimeout", "streamQueueCapacity",
+						"requestBodyTimeout", "requestHeaderTimeout",
+						"requestReadBufferSizeInBytes", "requestTimeout",
+						"streamQueueCapacity",
 						"taskManager", "toolOutputSanitizer", "toolRateLimiter",
 						"traceCorrelationKey", "unknownMirroredHeaderNameDiagnostics",
 						"unknownMirroredHeaderPolicy", "writeTimeout"),

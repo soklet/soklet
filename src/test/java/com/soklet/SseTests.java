@@ -130,6 +130,31 @@ public class SseTests {
 		}
 	}
 
+	@ThreadSafe
+	public static class LargeCatchupSseResource {
+		@SseEventSource("/catchup")
+		public SseHandshakeResult catchup() {
+			return SseHandshakeResult.Accepted.builder()
+					.clientInitializer(unicaster -> {
+						for (int index = 0; index < 6; index++)
+							unicaster.unicastEvent(SseEvent.withData(
+									"catchup-" + index).build());
+					})
+					.build();
+		}
+	}
+
+	@ThreadSafe
+	public static class UnicodeDataSseResource {
+		@SseEventSource("/unicode-data")
+		public SseHandshakeResult unicodeData() {
+			return SseHandshakeResult.Accepted.builder()
+					.clientInitializer(unicaster -> unicaster.unicastEvent(
+							SseEvent.withData("a\u2028b\u0085c\u000Bd").build()))
+					.build();
+		}
+	}
+
 	@Test
 	public void sseServerSimulator() {
 		List<SseEvent> events = new ArrayList<>();
@@ -209,6 +234,69 @@ public class SseTests {
 		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
 		Assertions.assertEquals("Unicast comment", comments.get(0).getComment().orElseThrow(), "Unexpected unicast comment");
 		Assertions.assertEquals("just a test", comments.get(1).getComment().orElseThrow(), "Unexpected broadcast comment");
+	}
+
+	@Test
+	public void simulatorBroadcasterAcquisitionMatchesConfiguredRoutesAndScope() {
+		AtomicReference<SseServer> capturedServer = new AtomicReference<>();
+
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.sseServer(capturedServer::set)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(SseEventSimulatorResource.class)))
+				.build(), simulator -> {
+			SseServer server = capturedServer.get();
+			Assertions.assertNotNull(server);
+			Assertions.assertTrue(server.acquireBroadcaster(
+					ResourcePath.fromPath("/examples/abc")).isPresent());
+			Assertions.assertTrue(server.acquireBroadcaster(
+					ResourcePath.fromPath("/examples/another")).isPresent());
+			Assertions.assertTrue(server.acquireBroadcaster(
+					ResourcePath.fromPath("/unconfigured")).isEmpty());
+		});
+
+		Assertions.assertTrue(capturedServer.get().acquireBroadcaster(
+				ResourcePath.fromPath("/examples/abc")).isEmpty(),
+				"A released simulator scope must not create new broadcasters");
+	}
+
+	@Test
+	public void targetedSimulatorBroadcastsUnwrapAbsentClientContext() {
+		AtomicReference<SseServer> capturedServer = new AtomicReference<>();
+		AtomicReference<Object> eventContext = new AtomicReference<>(new Object());
+		AtomicReference<Object> commentContext = new AtomicReference<>(new Object());
+		List<SseEvent> events = new ArrayList<>();
+		List<SseComment> comments = new ArrayList<>();
+
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.sseServer(capturedServer::set)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(SseBasicHandshakeResource.class)))
+				.build(), simulator -> {
+			HandshakeAccepted accepted = Assertions.assertInstanceOf(
+					HandshakeAccepted.class, simulator.performSseRequest(
+							Request.withPath(HttpMethod.GET, "/sse").build()));
+			accepted.registerEventConsumer(events::add);
+			accepted.registerCommentConsumer(comments::add);
+			SseBroadcaster broadcaster = capturedServer.get().acquireBroadcaster(
+					ResourcePath.fromPath("/sse")).orElseThrow();
+
+			broadcaster.broadcastEvent(context -> {
+				eventContext.set(context);
+				return "event-key";
+			}, key -> SseEvent.withData(key).build());
+			broadcaster.broadcastComment(context -> {
+				commentContext.set(context);
+				return "comment-key";
+			}, SseComment::fromComment);
+		});
+
+		Assertions.assertNull(eventContext.get());
+		Assertions.assertNull(commentContext.get());
+		Assertions.assertEquals("event-key",
+				events.get(0).getData().orElseThrow());
+		Assertions.assertEquals("comment-key",
+				comments.get(0).getComment().orElseThrow());
 	}
 
 	@Test
@@ -734,6 +822,68 @@ public class SseTests {
 				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("retry: 10000")));
 				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: hello")));
 				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: world")));
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void clientInitializerCatchupMayExceedLiveConnectionQueueCapacity()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		SseServer sse = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.connectionQueueCapacity(1)
+				.verifyConnectionOnceEstablished(false)
+				.build();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(LargeCatchupSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle()).build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/catchup", ssePort);
+				String headers = readUntil(socket, "\r\n\r\n", 8_192);
+				Assertions.assertNotNull(headers);
+				Assertions.assertTrue(headers.startsWith("HTTP/1.1 200"), headers);
+				for (int index = 0; index < 6; index++) {
+					String block = readNextEventBlock(socket, 8_192);
+					Assertions.assertNotNull(block, "Missing catch-up event " + index);
+					Assertions.assertEquals("data: catchup-" + index + "\n\n", block);
+				}
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void sseDataPreservesNonCrLfUnicodeSeparators() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		SseServer sse = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.verifyConnectionOnceEstablished(false).build();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(UnicodeDataSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle()).build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/unicode-data", ssePort);
+				Assertions.assertNotNull(readUntil(socket, "\r\n\r\n", 8_192));
+				Assertions.assertEquals("data: a\u2028b\u0085c\u000Bd\n\n",
+						readNextEventBlock(socket, 8_192));
 			}
 		}
 	}
@@ -1886,6 +2036,53 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
+	public void handshakeTimeoutApplicationCallbackDoesNotBlockSharedScheduler()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		BlockingHandshakeResource.prepare(1);
+		BlockingTimeoutLifecycle lifecycle = new BlockingTimeoutLifecycle();
+		DefaultSseServer sse = (DefaultSseServer) SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.requestHandlerTimeout(Duration.ofSeconds(1)).build();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(BlockingHandshakeResource.class)))
+				.lifecycleObserver(lifecycle).build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/sse/limit", ssePort);
+				BlockingHandshakeResource.awaitReady(5, SECONDS);
+				Assertions.assertTrue(lifecycle.entered.await(5, SECONDS),
+						"Handshake timeout callback did not start");
+
+				CountDownLatch schedulerStillRuns = new CountDownLatch(1);
+				sse.getRequestHandlerTimeoutScheduler().orElseThrow()
+						.schedule(schedulerStillRuns::countDown,
+								Duration.ofMillis(10));
+				Assertions.assertTrue(schedulerStillRuns.await(1, SECONDS),
+						"Application callback blocked the shared timeout scheduler");
+
+				lifecycle.release.countDown();
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"),
+						rawHeaders);
+			}
+		} finally {
+			lifecycle.release.countDown();
+			BlockingHandshakeResource.release();
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_read_times_out_returns_408_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2327,6 +2524,38 @@ public class SseTests {
 				X-Test: abc\r
 				\r
 				""", null));
+	}
+
+	@Test
+	public void sseHandshakeParserRedactsRequestControlledDiagnostics() {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		String requestLineSecret = "request-line-secret-7a912fe4";
+		String versionSecret = "version-secret-7a912fe4";
+		String methodSecret = "method-secret-7a912fe4";
+		String headerLineSecret = "header-line-secret-7a912fe4";
+		String headerNameSecret = "header-name-secret-7a912fe4";
+		String headerValueSecret = "header-value-secret-7a912fe4";
+
+		assertRedactedParseFailure(server,
+				"GET /" + requestLineSecret + "\r\nHost: localhost\r\n\r\n",
+				requestLineSecret);
+		assertRedactedParseFailure(server,
+				"GET /sse " + versionSecret + "\r\nHost: localhost\r\n\r\n",
+				versionSecret);
+		assertRedactedParseFailure(server,
+				methodSecret + " /sse HTTP/1.1\r\nHost: localhost\r\n\r\n",
+				methodSecret);
+		assertRedactedParseFailure(server,
+				"GET /sse HTTP/1.1\r\n" + headerLineSecret + "\r\n\r\n",
+				headerLineSecret);
+		assertRedactedParseFailure(server,
+				"GET /sse HTTP/1.1\r\nX-" + headerNameSecret
+						+ " bad: value\r\nHost: localhost\r\n\r\n",
+				headerNameSecret);
+		assertRedactedParseFailure(server,
+				"GET /sse HTTP/1.1\r\nHost: localhost\r\nCookie: "
+						+ headerValueSecret + "\u0001\r\n\r\n",
+				headerValueSecret);
 	}
 
 	@Test
@@ -3538,6 +3767,22 @@ public class SseTests {
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 	}
 
+	private static final class BlockingTimeoutLifecycle extends QuietLifecycle {
+		@NonNull private final CountDownLatch entered = new CountDownLatch(1);
+		@NonNull private final CountDownLatch release = new CountDownLatch(1);
+
+		@Override
+		public void didFailToEstablishSseConnection(@NonNull Request request,
+				@Nullable ResourceMethod resourceMethod,
+				SseConnection.@NonNull HandshakeFailureReason reason,
+				@Nullable Throwable throwable) {
+			if (reason != SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT)
+				return;
+			this.entered.countDown();
+			awaitUninterruptibly(this.release);
+		}
+	}
+
 	private static final class RecordingStartupLifecycle extends QuietLifecycle {
 		private final AtomicInteger didStartSoklet = new AtomicInteger();
 		private final AtomicInteger didFailToStartSoklet = new AtomicInteger();
@@ -3704,6 +3949,15 @@ public class SseTests {
 			int maxBytes) throws IOException {
 		return readUntil(socket, socket.getInputStream(), terminator, maxBytes,
 				readDeadlineNanos(socket));
+	}
+
+	private static void assertRedactedParseFailure(DefaultSseServer server,
+			String rawRequest, String secret) {
+		IllegalRequestException failure = Assertions.assertThrows(
+				IllegalRequestException.class,
+				() -> server.parseRequest(rawRequest, null));
+		String rendering = failure.toString();
+		Assertions.assertFalse(rendering.contains(secret), rendering);
 	}
 
 	private static String readUntil(Socket socket, InputStream in,

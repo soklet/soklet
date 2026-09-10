@@ -65,7 +65,11 @@ public class McpHttpServerApplicationExecutionTests {
 		AtomicInteger invocations = new AtomicInteger();
 		McpApplicationRequestRouter router = router(invocation -> {
 			invocations.incrementAndGet();
-			return completeResult("handled");
+			return McpWireResult.complete(new McpJsonObject(
+					Map.of("value", new McpJsonString("handled"))),
+					Optional.of(new McpResultMetadata(Optional.empty(),
+							new McpJsonObject(Map.of("com.example/trace",
+									new McpJsonString("trace-1"))))));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(2, 2),
 				McpApplicationClock.SYSTEM);
@@ -77,6 +81,13 @@ public class McpHttpServerApplicationExecutionTests {
 
 			assertSuccessfulResult(stringResponse, "\"application-string\"", "handled");
 			assertSuccessfulResult(integerResponse, "73", "handled");
+			Assertions.assertTrue(stringResponse.bodyText().contains(
+					"\"com.example/trace\":\"trace-1\""),
+					stringResponse.bodyText());
+			Assertions.assertTrue(stringResponse.bodyText().contains(
+					"\"io.modelcontextprotocol/serverInfo\":{\"name\":"
+							+ "\"application-test-server\",\"version\":\"4.0.0\"}"),
+					stringResponse.bodyText());
 			Assertions.assertFalse(integerResponse.bodyText().contains("\"id\":\"73\""),
 					integerResponse.bodyText());
 			Assertions.assertEquals(2, invocations.get());
@@ -84,6 +95,31 @@ public class McpHttpServerApplicationExecutionTests {
 					&& snapshot.queuedRequests() == 0
 					&& snapshot.activeIdentifiedRequestExchanges() == 0
 					&& snapshot.retainedExchanges() == 0);
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void application_results_omit_server_information_when_endpoint_disables_it()
+			throws Exception {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"hidden-application-server", "4.0.0"))
+				.serverInformationIncluded(false)
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+						request -> McpRequestAdmissionDecision.ACCEPT),
+				endpoint, router(invocation -> completeResult("handled")),
+				executionConfiguration(1, 1), McpApplicationClock.SYSTEM);
+
+		try {
+			RawResponse response = send(runtime.start().getPort(), "\"server-info-off\"");
+			assertSuccessfulResult(response, "\"server-info-off\"", "handled");
+			Assertions.assertFalse(response.bodyText().contains(
+					McpResultMetadata.SERVER_INFORMATION_KEY), response.bodyText());
 		} finally {
 			runtime.close();
 		}
@@ -256,7 +292,8 @@ public class McpHttpServerApplicationExecutionTests {
 
 			clock.advance(Duration.ofSeconds(2));
 			runtime.runApplicationTimerCycle();
-			assertExactEmptyDeadlineResponse(expiring.get(5, TimeUnit.SECONDS));
+			assertExactActiveDeadlineResponse(
+					expiring.get(5, TimeUnit.SECONDS), "73");
 			McpApplicationExecutionSnapshot oneSurvivor = awaitSnapshot(runtime,
 					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 1
 							&& snapshot.activeHandlerSlots() == 1
@@ -470,15 +507,17 @@ public class McpHttpServerApplicationExecutionTests {
 					runtime.applicationExecutionSnapshot().orElseThrow().activeHandlerSlots(),
 					"The noncooperative active handler must retain its slot.");
 
-			// The active-deadline wire mapping is intentionally provisional in 3B.1.
-			first.get(5, TimeUnit.SECONDS);
+			assertExactActiveDeadlineResponse(
+					first.get(5, TimeUnit.SECONDS), "\"active\"");
 			McpRuntimeObservationRecorder.Observation activeObservation =
 					observations.observation("active");
 			McpRuntimeObservationRecorder.Finish activeFinish =
 					activeObservation.awaitFinish();
 			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
 					activeFinish.outcome());
-			Assertions.assertNull(activeFinish.error());
+			Assertions.assertEquals(new McpJsonRpcError(
+					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty()),
+					activeFinish.error());
 			McpApplicationExecutionSnapshot retained =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, retained.activeHandlerSlots(),
@@ -537,7 +576,8 @@ public class McpHttpServerApplicationExecutionTests {
 			handlerClockExpired.set(true);
 			releaseHandler.countDown();
 
-			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
+			assertExactActiveDeadlineResponse(response.get(5, TimeUnit.SECONDS),
+					"\"application-completion-deadline\"");
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
 							&& value.queuedRequests() == 0
@@ -1728,6 +1768,20 @@ public class McpHttpServerApplicationExecutionTests {
 				"An empty deadline response must have no entity metadata.");
 		Assertions.assertFalse(response.hasHeader("Retry-After"),
 				"Retry-After is not part of the fixed deadline response.");
+	}
+
+	private static void assertExactActiveDeadlineResponse(
+			RawResponse response, String idJson) {
+		Assertions.assertEquals(504, response.status(), response.bodyText());
+		Assertions.assertEquals(JSON_MEDIA_TYPE,
+				response.singleHeader("Content-Type"));
+		Assertions.assertEquals("no-store",
+				response.singleHeader("Cache-Control"));
+		Assertions.assertFalse(response.hasHeader("Retry-After"),
+				"Retry-After is not part of the active deadline response.");
+		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":" + idJson
+				+ ",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
+				response.bodyText());
 	}
 
 	private static void assertExactEmptyProtocolProcessorRejection(

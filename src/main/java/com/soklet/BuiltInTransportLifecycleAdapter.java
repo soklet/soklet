@@ -128,6 +128,8 @@ final class BuiltInTransportLifecycleAdapter {
 		private volatile LifecycleRetentionAnchor retentionAnchor;
 		@Nullable
 		private volatile InternalLifecycleComponentShutdownResult finalizedParticipantResult;
+		@Nullable
+		private volatile TransportTerminationSignal delegatedTerminationSignal;
 		private volatile boolean externallyCommitted;
 		private volatile boolean externallyDiscarded;
 		private volatile long gracefulDeadlineNanos;
@@ -297,9 +299,13 @@ final class BuiltInTransportLifecycleAdapter {
 					this.generation.group, () -> {
 						try {
 							if (this.owner.operations.awaitTermination(absoluteDeadlineNanos))
-								this.generation.signal.signalTerminated();
+								this.owner.proveTermination(this.generation);
 						} catch (RuntimeException | Error throwable) {
 							this.generation.signal.signalTerminationFailure(throwable);
+							TransportTerminationSignal delegatedSignal =
+									this.generation.delegatedTerminationSignal;
+							if (delegatedSignal != null)
+								delegatedSignal.signalTerminationFailure(throwable);
 							throw throwable;
 						}
 						return null;
@@ -331,6 +337,8 @@ final class BuiltInTransportLifecycleAdapter {
 	private final AtomicBoolean externalOwnershipClaimed;
 	@NonNull
 	private final ThreadLocal<Generation> externalStartInvocation;
+	@NonNull
+	private final ThreadLocal<TransportTerminationSignal> delegatedStartSignal;
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
@@ -374,6 +382,7 @@ final class BuiltInTransportLifecycleAdapter {
 		this.externalCandidate = new AtomicReference<>();
 		this.externalOwnershipClaimed = new AtomicBoolean();
 		this.externalStartInvocation = new ThreadLocal<>();
+		this.delegatedStartSignal = new ThreadLocal<>();
 	}
 
 	@NonNull
@@ -401,6 +410,7 @@ final class BuiltInTransportLifecycleAdapter {
 			throw new IllegalStateException(
 					"Built-in transport with retained termination evidence cannot restart");
 		Generation generation = new Generation(this, new DeadlineWaiter(this.clock));
+		generation.delegatedTerminationSignal = this.delegatedStartSignal.get();
 		if (!this.current.compareAndSet(previous, generation))
 			throw new IllegalStateException("Concurrent built-in transport start is not supported");
 		return generation;
@@ -569,10 +579,85 @@ final class BuiltInTransportLifecycleAdapter {
 			return;
 		// Failure is recorded before any transport-wide lifecycle consequence.
 		Throwable exactCause = requireNonNull(cause);
+		// Keep the first failure as the member's primary event and retain one
+		// bounded competing failure by identity.  recordStartupFailure only moves
+		// STARTING to FAILED; after readiness it preserves READY while providing
+		// the same bounded evidence behavior for unexpected runtime failures.
 		recordStartupFailure(generation, exactCause);
+		TransportTerminationSignal delegatedSignal =
+				generation.delegatedTerminationSignal;
+		if (delegatedSignal != null) {
+			delegatedSignal.signalTerminationFailure(exactCause);
+			return;
+		}
 		if (generation.externallyCoordinated())
 			return;
 		requestShutdown(generation);
+	}
+
+	@NonNull
+	TransportRuntime delegatedRuntime(@NonNull TransportTerminationSignal signal,
+			@NonNull Runnable startAction) {
+		TransportTerminationSignal exactSignal = requireNonNull(signal);
+		Runnable exactStartAction = requireNonNull(startAction);
+		AtomicReference<Generation> generationRef = new AtomicReference<>();
+		AtomicBoolean startClaimed = new AtomicBoolean();
+		return new TransportRuntime() {
+			@Override
+			public void start(@NonNull StartupContext context) {
+				requireNonNull(context);
+				if (!startClaimed.compareAndSet(false, true))
+					throw new IllegalStateException("Delegated transport was already started");
+				delegatedStartSignal.set(exactSignal);
+				try {
+					exactStartAction.run();
+				} finally {
+					Generation generation = current.get();
+					if (generation != null
+							&& generation.delegatedTerminationSignal == exactSignal)
+						generationRef.compareAndSet(null, generation);
+					delegatedStartSignal.remove();
+				}
+				if (generationRef.get() == null)
+					throw new IllegalStateException(
+							"Delegated transport start did not create its lifecycle generation");
+			}
+
+			@Override
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
+				Generation generation = requireNonNull(generationRef.get(),
+						"Delegated transport was not started");
+				generation.group.recordShutdownIntent();
+				generation.runtime.shutdownGracefully(requireNonNull(context));
+			}
+
+			@Override
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
+				Generation generation = requireNonNull(generationRef.get(),
+						"Delegated transport was not started");
+				generation.group.recordShutdownIntent();
+				generation.runtime.shutdownForcibly(requireNonNull(context));
+			}
+		};
+	}
+
+	private void proveTermination(@NonNull Generation generation) {
+		TransportTerminationSignal delegatedSignal =
+				requireNonNull(generation).delegatedTerminationSignal;
+		if (delegatedSignal != null
+				&& generation.runtime.evidenceReleased.compareAndSet(false, true)) {
+			try {
+				this.operations.releaseTerminatedEvidence();
+			} catch (RuntimeException | Error failure) {
+				generation.runtime.evidenceReleased.set(false);
+				generation.signal.signalTerminationFailure(failure);
+				delegatedSignal.signalTerminationFailure(failure);
+				throw failure;
+			}
+		}
+		generation.signal.signalTerminated();
+		if (delegatedSignal != null)
+			delegatedSignal.signalTerminated();
 	}
 
 	private void recordStartupFailure(@NonNull Generation generation,

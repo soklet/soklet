@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -99,6 +100,23 @@ public final class McpCachePolicy {
 	@NonNull
 	public McpCacheScope getScope() {
 		return this.scope;
+	}
+
+	/** @return whether the cache scope and time to live are equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpCachePolicy policy
+				&& this.timeToLive.equals(policy.timeToLive)
+				&& this.scope == policy.scope;
+	}
+
+	/** @return structural cache-policy hash code */
+	@Override
+	public int hashCode() {
+		int result = this.timeToLive.hashCode();
+		result = 31 * result + this.scope.hashCode();
+		return result;
 	}
 
 	@NonNull

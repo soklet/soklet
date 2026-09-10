@@ -159,8 +159,8 @@ public class McpRequestStateBindingTests {
 		metadata.put("traceparent", new McpJsonString(traceparent));
 		metadata.put("tracestate", new McpJsonString("discarded"));
 		metadata.put("baggage", new McpJsonString("discarded"));
-		metadata.put("stable", new McpJsonString(stable));
-		metadata.put("nested", new McpJsonObject(nested));
+		metadata.put("com.acme/requestId", new McpJsonString(stable));
+		metadata.put("com.acme/nested", new McpJsonObject(nested));
 		Map<String, McpJsonValue> parameters = new LinkedHashMap<>();
 		parameters.put("inputResponses", new McpJsonString(inputResponses));
 		parameters.put("requestState", new McpJsonString(requestState));

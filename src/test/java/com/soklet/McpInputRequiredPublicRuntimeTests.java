@@ -1284,7 +1284,8 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"input-required-public-runtime-test",
-						"4.0.0").build());
+						"4.0.0").build())
+				.serverInformationIncluded(false);
 	}
 
 	private static Soklet managedSoklet(McpServer server) {

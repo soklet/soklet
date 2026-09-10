@@ -101,6 +101,49 @@ class BuiltInTransportLifecycleAdapterTests {
 	}
 
 	@Test
+	void delegatedRuntimeUsesOwnerContextsAndSignalsOwnerProofAfterForce() {
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> attempt == 2, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		AdmissionFence ownerFence = new AdmissionFence();
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				ownerFence, () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.markReady(generation);
+		});
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+
+		runtime.start(startup);
+		runtime.shutdownGracefully(graceful);
+		Assertions.assertTrue(ownerGroup.primaryEventsInSequence().isEmpty(),
+				"Graceful timeout must not invent termination proof");
+		runtime.shutdownForcibly(forced);
+
+		Assertions.assertEquals(List.of(graceful),
+				operations.gracefulContexts);
+		Assertions.assertEquals(List.of(forced), operations.forcedContexts);
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		Assertions.assertEquals(1, operations.forceCount.get(),
+				"The forced phase must remain independently actionable");
+		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.PROOF),
+				ownerGroup.primaryEventsInSequence().stream()
+						.map(InternalTerminationEvent::type).toList());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+	}
+
+	@Test
 	void positiveResidualAndUnknownBothRetainEvidenceWithoutRelease() {
 		RecordingOperations residualOperations = new RecordingOperations(
 				attempt -> false, Set.of(InternalResidualActivityType.EVENT_LOOP));
@@ -540,6 +583,8 @@ class BuiltInTransportLifecycleAdapterTests {
 		private final AtomicInteger forceCount = new AtomicInteger();
 		private final AtomicInteger releaseCount = new AtomicInteger();
 		private final List<Long> observedDeadlines = new ArrayList<>();
+		private final List<ShutdownContext> gracefulContexts = new ArrayList<>();
+		private final List<ShutdownContext> forcedContexts = new ArrayList<>();
 		private volatile Runnable onQuiesce = () -> {};
 		private volatile Runnable onAwait = () -> {};
 		private volatile Runnable onRelease = () -> {};
@@ -561,8 +606,20 @@ class BuiltInTransportLifecycleAdapterTests {
 		}
 
 		@Override
+		public void shutdownGracefully(@NonNull ShutdownContext context) {
+			this.gracefulContexts.add(context);
+			quiesce();
+		}
+
+		@Override
 		public void force() {
 			this.forceCount.incrementAndGet();
+		}
+
+		@Override
+		public void shutdownForcibly(@NonNull ShutdownContext context) {
+			this.forcedContexts.add(context);
+			force();
 		}
 
 		@Override

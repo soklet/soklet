@@ -138,14 +138,34 @@ class McpToolRegistrationTests {
 						.handler((request, arguments, features) ->
 								McpTaskCreatedResult.<Result>fromTaskId("task-2"))
 						.build();
+		McpToolRegistration<Arguments> typedInlineOperation =
+				McpToolRegistration.withName("reports.inline-operation")
+						.argumentAndOutputTypes(Arguments.class, Result.class)
+						.inlineOperationHandler((request, arguments, features) ->
+								McpCompleteResult.fromToolErrorText(
+										"report unavailable"))
+						.build();
 
 		assertFalse(alwaysComplete.isTaskRequired());
 		assertFalse(dynamic.isTaskRequired());
 		assertTrue(dynamic.getOutputType().isEmpty());
+		assertFalse(typedInlineOperation.isTaskRequired());
+		assertEquals(Result.class,
+				typedInlineOperation.getOutputType().orElseThrow());
+		assertTrue(typedInlineOperation.getOutputSchema().isPresent());
+		McpCompleteResult inlineError = assertInstanceOf(McpCompleteResult.class,
+				typedInlineOperation.invoke(requestContext(), argumentsJson(),
+						McpInvocationFeatures.fromFeatures(Map.of())));
+		assertTrue(assertInstanceOf(McpToolOutput.class,
+				inlineError.getPayload()).isError());
 		assertThrows(NullPointerException.class, () ->
 				McpToolRegistration.withName("null-task-handler")
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.operationHandler(null));
+		assertThrows(NullPointerException.class, () ->
+				McpToolRegistration.withName("null-inline-operation-handler")
+						.argumentAndOutputTypes(Arguments.class, Result.class)
+						.inlineOperationHandler(null));
 	}
 
 	@Test

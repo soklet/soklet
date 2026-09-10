@@ -181,8 +181,9 @@ public final class CorsPreflight {
 	@Override
 	@NonNull
 	public String toString() {
-		return format("%s{origin=%s, accessControlRequestMethod=%s, accessControlRequestHeaders=%s}",
-				getClass().getSimpleName(), getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
+		return format("%s{origin=<redacted>, accessControlRequestMethod=%s, "
+					+ "accessControlRequestHeaders=<redacted>}",
+				getClass().getSimpleName(), getAccessControlRequestMethod());
 	}
 
 	@Override

@@ -100,15 +100,23 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 		assertArrayEquals(runtimeOutput.schema().serializedDocument(),
 				compiled.getOutputSchemaBytes());
 		assertHeaderFailureParity(inspection, "invalidHeaderToken",
+				McpTypeMirrorTypedSchemaBridge.Reason.INVALID_MIRRORED_HEADER_NAME,
+				"$/properties/value",
 				() -> runtimeCompiler.compileToolInput(
 						HeaderRuntimeInvalidToken.class));
 		assertHeaderFailureParity(inspection, "duplicateHeaders",
+				McpTypeMirrorTypedSchemaBridge.Reason.DUPLICATE_MIRRORED_HEADER,
+				"$/properties/second",
 				() -> runtimeCompiler.compileToolInput(
 						HeaderRuntimeDuplicate.class));
 		assertHeaderFailureParity(inspection, "invalidHeaderScalar",
+				McpTypeMirrorTypedSchemaBridge.Reason.INVALID_MIRRORED_HEADER_TYPE,
+				"$/properties/ratio",
 				() -> runtimeCompiler.compileToolInput(
 						HeaderRuntimeInvalidScalar.class));
 		assertHeaderFailureParity(inspection, "outputHeader",
+				McpTypeMirrorTypedSchemaBridge.Reason.MISPLACED_MIRRORED_HEADER,
+				"$/properties/value",
 				() -> runtimeCompiler.compileToolOutput(
 						HeaderRuntimeInvalidOutput.class));
 	}
@@ -174,18 +182,19 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 	}
 
 	private static void assertHeaderFailureParity(Inspection inspection,
-			String methodName, Runnable runtimeCompilation) {
-		McpSchemaCompilationException mirrorFailure = assertInstanceOf(
-				McpSchemaCompilationException.class,
-				inspection.schemaUseFailures.get(methodName));
+			String methodName,
+			McpTypeMirrorTypedSchemaBridge.Reason expectedReason,
+			String expectedPath, Runnable runtimeCompilation) {
+		McpTypeMirrorTypedSchemaBridge.Diagnostic diagnostic = diagnostic(
+				inspection.results.get(methodName));
 		McpSchemaCompilationException runtimeFailure = assertThrows(
 				McpSchemaCompilationException.class, runtimeCompilation::run);
 
-		assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
-				mirrorFailure.kind(), methodName);
-		assertEquals(runtimeFailure.kind(), mirrorFailure.kind(), methodName);
-		assertEquals(runtimeFailure.keyword(), mirrorFailure.keyword(), methodName);
-		assertEquals(runtimeFailure.location(), mirrorFailure.location(), methodName);
+		assertEquals(expectedReason, diagnostic.reason(), methodName);
+		assertEquals(expectedPath, diagnostic.path(), methodName);
+		assertEquals(expectedPath,
+				runtimeFailure.location().map(McpTypedSchemaPath::diagnosticPath)
+						.orElse("$"), methodName);
 	}
 
 	private static Inspection inspect() {
@@ -302,8 +311,6 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 	private static final class Inspection extends AbstractProcessor {
 		private final Map<String, McpTypeMirrorTypedSchemaBridge.Result> results =
 				new LinkedHashMap<>();
-		private final Map<String, McpSchemaCompilationException> schemaUseFailures =
-				new LinkedHashMap<>();
 		private boolean complete;
 
 		@Override
@@ -362,15 +369,11 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 								"Unexpected fixture method.");
 					};
 				String methodName = method.getSimpleName().toString();
-				try {
-					results.put(methodName,
-							McpTypeMirrorTypedSchemaBridge.compileToolSchemas(
-									processingEnv.getTypeUtils(),
-									processingEnv.getElementUtils(), arguments,
-									method.getReturnType()));
-				} catch (McpSchemaCompilationException exception) {
-					schemaUseFailures.put(methodName, exception);
-				}
+				results.put(methodName,
+						McpTypeMirrorTypedSchemaBridge.compileToolSchemas(
+								processingEnv.getTypeUtils(),
+								processingEnv.getElementUtils(), arguments,
+								method.getReturnType()));
 			}
 			complete = true;
 			return false;

@@ -288,7 +288,9 @@ public class McpMultiRoundTripTerminationRaceTests {
 					McpChunkedHttpClient.HttpResponseHead head = client.readHead();
 					Assertions.assertEquals(504, head.status(), head.raw());
 					deadlineBody = client.readFixedBody(head);
-					Assertions.assertEquals("", deadlineBody);
+					Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
+							+ "\"id\":\"blocked-seal\",\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}", deadlineBody);
 				}
 				case SHUTDOWN -> {
 					runtime.stop();
@@ -520,7 +522,10 @@ public class McpMultiRoundTripTerminationRaceTests {
 				runtime.runApplicationTimerCycle();
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
 				Assertions.assertEquals(504, head.status(), head.raw());
-				Assertions.assertEquals("", client.readFixedBody(head));
+				Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
+						+ "\"id\":\"conditional-hold\",\"error\":{\"code\":-32603,"
+						+ "\"message\":\"Internal error\"}}",
+						client.readFixedBody(head));
 			}
 
 			awaitCondition(() -> cancelations.get() == 1);

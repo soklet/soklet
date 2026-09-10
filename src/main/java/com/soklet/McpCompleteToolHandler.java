@@ -34,6 +34,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * typed output contract, use
  * {@link McpToolRegistration.CompleteHandlerStage#operationHandler(
  * McpToolHandler)}.
+ * For an inline operation that needs explicit content or an {@code isError}
+ * result while retaining the typed output contract, use
+ * {@link McpToolRegistration.CompleteHandlerStage#inlineOperationHandler(
+ * McpToolHandler)}.
  *
  * <p>Implementations must be safe for concurrent invocation.
  *

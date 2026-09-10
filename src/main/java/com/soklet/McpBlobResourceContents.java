@@ -119,6 +119,26 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		return this.metadata;
 	}
 
+	/** @return whether every resource-content property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpBlobResourceContents contents))
+			return false;
+		return this.uri.equals(contents.uri)
+				&& dataEquals(contents)
+				&& java.util.Objects.equals(this.mimeType, contents.mimeType)
+				&& this.metadata.equals(contents.metadata);
+	}
+
+	/** @return structural resource-content hash code */
+	@Override
+	public int hashCode() {
+		return java.util.Objects.hash(McpBlobResourceContents.class, this.uri,
+				dataHashCode(), this.mimeType, this.metadata);
+	}
+
 	/**
 	 * Mutable builder for immutable {@link McpBlobResourceContents}.
 	 *

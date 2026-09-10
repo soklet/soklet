@@ -820,12 +820,24 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 
 			if (subscription.get() && now - nextKeepAliveNanos.get() >= 0L) {
-				nextKeepAliveNanos.set(saturatingAdd(now, configuration.keepAliveInterval().toNanos()));
-				McpOutboundChannel.OfferResult result = channel.offer(KEEP_ALIVE_EVENT);
+				long keepAliveIntervalNanos =
+						configuration.keepAliveInterval().toNanos();
+				McpOutboundChannel.OfferResult result =
+						channel.offerIfWriteIdleExpired(KEEP_ALIVE_EVENT, now,
+								keepAliveIntervalNanos);
+				if (result != McpOutboundChannel.OfferResult.CLOSED) {
+					long next = result == McpOutboundChannel.OfferResult.NOT_IDLE
+							? channel.responseWriteIdleDeadlineNanos(
+									keepAliveIntervalNanos)
+							: Long.MAX_VALUE;
+					nextKeepAliveNanos.set(next != Long.MAX_VALUE
+							&& next - now > 0L ? next
+							: saturatingAdd(now, keepAliveIntervalNanos));
+				}
 
-				if (result == McpOutboundChannel.OfferResult.FULL
-						|| result == McpOutboundChannel.OfferResult.TOO_LARGE)
-					terminateForBackpressure();
+				if (result == McpOutboundChannel.OfferResult.TOO_LARGE)
+					onTimerFailure(new IllegalStateException(
+							"The MCP keep-alive frame exceeds the outbound byte capacity."));
 			}
 		}
 

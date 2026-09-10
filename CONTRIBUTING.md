@@ -18,32 +18,28 @@ Soklet's formal microbenchmarks live in `benchmarks/` and use JMH. If a pull req
 
 #### Publishing to Maven Central
 
-Contact Mark Allen at mark@revetware.com to request publishing access for the `com.soklet` namespace. Generate a [Central Portal user token](https://central.sonatype.org/publish/generate-portal-token/) and configure its generated username and password in `~/.m2/settings.xml`:
+Publishing is a project-owner operation, not the last step of an ordinary
+contributor build. Do not run `mvn deploy` for a release: it rebuilds and
+uploads outside Soklet's candidate-validation and no-rebuild promotion chain.
 
-```xml
-<settings>
-  <servers>
-    <server>
-      <id>central-portal</id>
-      <username>YOUR_TOKEN_USERNAME</username>
-      <password>YOUR_TOKEN_PASSWORD</password>
-    </server>
-  </servers>
-</settings>
-```
+The authoritative maintainer procedure is the
+[G5 release-promotion runbook](release/G5_RELEASE_RUNBOOK.md), with the exact
+core signing, upload, recovery, and post-publication commands in
+[No-rebuild release promotion](release/PROMOTION.md). G5 requires explicit
+project-owner approval and consumes the four already-built artifacts plus the
+completed, checksum-bound release-validation evidence. Any source,
+documentation, version, pin, artifact, or receipt change requires a new
+candidate; promotion never repairs or rebuilds one.
 
-The server ID must match the `central-publishing-maven-plugin` configuration in `pom.xml`. Before uploading a release, either prime `gpg-agent` in an interactive session or securely export the GPG passphrase through the Maven GPG plugin's default `MAVEN_GPG_PASSPHRASE` environment variable. Do not put the passphrase directly in shell history or project files.
+Central credentials are supplied only through the private mode-0600 token file
+required by the promotion tooling. Unlock the exact approved signing key
+through `gpg-agent`; do not place Portal credentials or a GPG passphrase in a
+command line, environment variable, Maven settings file, project file, log, or
+release evidence. The tool uploads a `USER_MANAGED` bundle and cannot publish
+it. An authorized maintainer performs the irreversible publish action in the
+Central Portal only after validation, then runs the documented
+`verify-published` mode against the public bytes.
 
-Build and sign the complete artifact set locally:
-
-```shell
-mvn clean verify
-```
-
-Confirm that the versioned main JAR, sources JAR, Javadocs JAR, and their signatures were produced under `target/`. The GPG plugin also signs the project POM for deployment. Then upload the release bundle:
-
-```shell
-mvn clean deploy
-```
-
-The current Central plugin configuration waits for the uploaded deployment to validate but does not publish it automatically. Review the validated deployment in the [Central Publisher Portal](https://central.sonatype.com/publishing/deployments), then select **Publish**. Published coordinates are immutable, so verify the version and artifacts before completing that step.
+Snapshot publishing, if introduced, must have a separately reviewed procedure
+and must use only `-SNAPSHOT` coordinates. The commands above do not authorize
+or describe snapshot deployment.

@@ -241,7 +241,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 	}
 
 	@Test
-	public void typedValidationUsesSanitizedOutputAndAllowsStructuredOmission()
+	public void typedValidationUsesSanitizedOutputAndRequiresSuccessfulStructuredContent()
 			throws Exception {
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<TypedArguments> tool = McpToolRegistration
@@ -342,11 +342,9 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			HttpResponse<String> omittedSuccess = call(port,
 					"typed-omit-success", "typed",
 					"{\"mode\":\"omit-success\"}");
-			assertSuccess(omittedSuccess, "typed-omit-success");
-			assertContains(omittedSuccess.body(), "SANITIZED-OMITTED-SUCCESS");
-			Assertions.assertFalse(
-					omittedSuccess.body().contains("\"structuredContent\""),
-					omittedSuccess.body());
+			assertFixedInternalError(omittedSuccess, "typed-omit-success");
+			Assertions.assertFalse(omittedSuccess.body().contains(
+					"SANITIZED-OMITTED-SUCCESS"), omittedSuccess.body());
 
 			HttpResponse<String> omittedError = call(port,
 					"typed-omit-error", "typed",

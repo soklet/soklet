@@ -32,6 +32,12 @@ public enum LogEventType {
 	 */
 	CONFIGURATION_UNSUPPORTED,
 	/**
+	 * Indicates that a server lifecycle-transition callback on
+	 * {@link LifecycleObserver} threw an exception. The event message names the
+	 * callback and the event carries the original throwable.
+	 */
+	LIFECYCLE_OBSERVER_TRANSITION_FAILED,
+	/**
 	 * Indicates an MCP server configuration diagnostic, such as the use of the default reject-all CORS authorizer.
 	 */
 	MCP_SERVER_CONFIGURATION,

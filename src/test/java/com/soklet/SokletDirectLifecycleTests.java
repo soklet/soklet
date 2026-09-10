@@ -232,8 +232,10 @@ final class SokletDirectLifecycleTests {
 
 		Assertions.assertTrue(sseStartEntered.await(1, TimeUnit.SECONDS));
 		Assertions.assertEquals(1, http.startCalls());
-		Assertions.assertTrue(http.invoke("/ok").isEmpty(),
-				"HTTP admission must remain closed while SSE startup is incomplete");
+		HttpRequestResult unavailable = http.invoke("/ok").orElseThrow();
+		Assertions.assertEquals(503,
+				unavailable.getMarshaledResponse().getStatusCode(),
+				"Closed admission must complete the transport callback with 503");
 		releaseSseStart.countDown();
 		Assertions.assertNull(start.get(3, TimeUnit.SECONDS));
 
@@ -280,6 +282,49 @@ final class SokletDirectLifecycleTests {
 		Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				result.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow()
 						.disposition());
+	}
+
+	@Test
+	void coordinatorInterruptAfterReadinessPreservesReadyAndObserverOrder()
+			throws Exception {
+		ReferenceHttpEndpoint http = new ReferenceHttpEndpoint();
+		ReadinessBoundaryObserver observer = new ReadinessBoundaryObserver();
+		SokletConfig ownerConfig = directConfig(http,
+				CountingResolver.forClasses(OkResource.class))
+				.lifecycleObserver(observer).build();
+		Soklet callbackSoklet = Soklet.fromConfig(directConfig(
+				new ReferenceHttpEndpoint(),
+				CountingResolver.forClasses(OkResource.class)).build());
+		AtomicReference<Thread> coordinatorThread = new AtomicReference<>();
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> {
+			Thread thread = new Thread(runnable, name);
+			thread.setDaemon(true);
+			if ("soklet-lifecycle-coordinator".equals(name))
+				coordinatorThread.set(thread);
+			thread.start();
+		});
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig),
+				NanoClock.system(), workers);
+
+		try {
+			owner.start();
+			Thread coordinator = coordinatorThread.get();
+			Assertions.assertNotNull(coordinator);
+			coordinator.interrupt();
+
+			InternalShutdownResult result = owner.awaitCompletion();
+			Assertions.assertTrue(observer.terminal.await(2, TimeUnit.SECONDS));
+			coordinator.join(TimeUnit.SECONDS.toMillis(2));
+			Assertions.assertFalse(coordinator.isAlive());
+			Assertions.assertEquals(InternalStartupDisposition.READY,
+					result.startupDisposition());
+			Assertions.assertEquals(List.of("did-start", "did-stop"),
+					observer.events,
+					"A post-readiness failure must not emit didFailToStart");
+		} finally {
+			callbackSoklet.close();
+		}
 	}
 
 	@Test
@@ -488,6 +533,27 @@ final class SokletDirectLifecycleTests {
 		@Override public void didStopSoklet(@NonNull Soklet soklet,
 				@NonNull ShutdownResult result) {
 			this.transitions.add("did-stop-soklet");
+			this.terminal.countDown();
+		}
+	}
+
+	private static final class ReadinessBoundaryObserver
+			implements LifecycleObserver {
+		@NonNull private final List<String> events = new CopyOnWriteArrayList<>();
+		@NonNull private final CountDownLatch terminal = new CountDownLatch(1);
+
+		@Override public void didStartSoklet(@NonNull Soklet soklet) {
+			this.events.add("did-start");
+		}
+
+		@Override public void didFailToStartSoklet(@NonNull Soklet soklet,
+				@NonNull Throwable throwable) {
+			this.events.add("did-fail");
+		}
+
+		@Override public void didStopSoklet(@NonNull Soklet soklet,
+				@NonNull ShutdownResult result) {
+			this.events.add("did-stop");
 			this.terminal.countDown();
 		}
 	}

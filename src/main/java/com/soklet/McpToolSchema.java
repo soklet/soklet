@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -49,5 +50,19 @@ public final class McpToolSchema {
 	@NonNull
 	public McpJsonObject getDocument() {
 		return this.document;
+	}
+
+	/** @return whether the schema documents are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpToolSchema schema
+				&& this.document.equals(schema.document);
+	}
+
+	/** @return structural schema-document hash code */
+	@Override
+	public int hashCode() {
+		return this.document.hashCode();
 	}
 }

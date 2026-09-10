@@ -216,6 +216,9 @@ final class DefaultMultipartParser implements MultipartParser {
 
 				hasNext = multipartStream.readBoundary();
 			}
+		} catch (MultipartStream.MalformedStreamException ignored) {
+			throw new IllegalRequestBodyException(
+					"Multipart request body is malformed.");
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

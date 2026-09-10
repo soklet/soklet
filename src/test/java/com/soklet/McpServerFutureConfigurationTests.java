@@ -40,7 +40,16 @@ class McpServerFutureConfigurationTests {
 	void operationalControlsHavePositiveFiniteDefaultsAndAreRetained() {
 		DefaultMcpServer defaults = (DefaultMcpServer) serverBuilder().build();
 		DefaultMcpServer configured = (DefaultMcpServer) serverBuilder()
-				.streamQueueCapacity(7)
+				.streamQueueCapacity(6)
+				.connectionQueueCapacity(7)
+				.requestHeaderTimeout(Duration.ofSeconds(6))
+				.requestBodyTimeout(Duration.ofSeconds(7))
+				.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+				.maximumHeaderCount(17)
+				.maximumHeadersSizeInBytes(8_193)
+				.maximumRequestTargetLengthInBytes(4_097)
+				.requestReadBufferSizeInBytes(2_049)
+				.concurrentConnectionLimit(19)
 				.writeTimeout(Duration.ofSeconds(9))
 				.keepAliveInterval(Duration.ofSeconds(8))
 				.maximumSubscriptionsPerPartition(11)
@@ -49,7 +58,23 @@ class McpServerFutureConfigurationTests {
 				.build();
 		DefaultMcpServer reset = (DefaultMcpServer) serverBuilder()
 				.streamQueueCapacity(7)
-				.streamQueueCapacity(null)
+				.connectionQueueCapacity(null)
+				.requestHeaderTimeout(Duration.ofSeconds(6))
+				.requestHeaderTimeout(null)
+				.requestBodyTimeout(Duration.ofSeconds(7))
+				.requestBodyTimeout(null)
+				.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+				.maximumRequestSizeInBytes(null)
+				.maximumHeaderCount(17)
+				.maximumHeaderCount(null)
+				.maximumHeadersSizeInBytes(8_193)
+				.maximumHeadersSizeInBytes(null)
+				.maximumRequestTargetLengthInBytes(4_097)
+				.maximumRequestTargetLengthInBytes(null)
+				.requestReadBufferSizeInBytes(2_049)
+				.requestReadBufferSizeInBytes(null)
+				.concurrentConnectionLimit(19)
+				.concurrentConnectionLimit(null)
 				.writeTimeout(Duration.ofSeconds(9))
 				.writeTimeout(null)
 				.keepAliveInterval(Duration.ofSeconds(8))
@@ -63,6 +88,16 @@ class McpServerFutureConfigurationTests {
 				.build();
 
 		assertEquals(128, defaults.streamQueueCapacity());
+		assertEquals(Duration.ofSeconds(60), defaults.requestHeaderTimeout());
+		assertEquals(Duration.ofSeconds(60), defaults.requestBodyTimeout());
+		assertEquals(10 * 1_024 * 1_024,
+				defaults.maximumRequestSizeInBytes());
+		assertEquals(100, defaults.maximumHeaderCount());
+		assertEquals(64 * 1_024, defaults.maximumHeadersSizeInBytes());
+		assertEquals(8_192,
+				defaults.maximumRequestTargetLengthInBytes());
+		assertEquals(64 * 1_024, defaults.requestReadBufferSizeInBytes());
+		assertEquals(8_192, defaults.concurrentConnectionLimit());
 		assertEquals(Duration.ofSeconds(30), defaults.writeTimeout());
 		assertEquals(Duration.ofSeconds(15), defaults.keepAliveInterval());
 		assertEquals(32, defaults.maximumSubscriptionsPerPartition());
@@ -71,6 +106,16 @@ class McpServerFutureConfigurationTests {
 		assertFalse(defaults.logRawValidatedTraceIds());
 
 		assertEquals(7, configured.streamQueueCapacity());
+		assertEquals(Duration.ofSeconds(6), configured.requestHeaderTimeout());
+		assertEquals(Duration.ofSeconds(7), configured.requestBodyTimeout());
+		assertEquals(5 * 1_024 * 1_024,
+				configured.maximumRequestSizeInBytes());
+		assertEquals(17, configured.maximumHeaderCount());
+		assertEquals(8_193, configured.maximumHeadersSizeInBytes());
+		assertEquals(4_097,
+				configured.maximumRequestTargetLengthInBytes());
+		assertEquals(2_049, configured.requestReadBufferSizeInBytes());
+		assertEquals(19, configured.concurrentConnectionLimit());
 		assertEquals(Duration.ofSeconds(9), configured.writeTimeout());
 		assertEquals(Duration.ofSeconds(8), configured.keepAliveInterval());
 		assertEquals(11, configured.maximumSubscriptionsPerPartition());
@@ -80,6 +125,21 @@ class McpServerFutureConfigurationTests {
 		assertFalse(configured.getTraceCorrelationControl().isEnabled());
 
 		assertEquals(defaults.streamQueueCapacity(), reset.streamQueueCapacity());
+		assertEquals(defaults.requestHeaderTimeout(),
+				reset.requestHeaderTimeout());
+		assertEquals(defaults.requestBodyTimeout(), reset.requestBodyTimeout());
+		assertEquals(defaults.maximumRequestSizeInBytes(),
+				reset.maximumRequestSizeInBytes());
+		assertEquals(defaults.maximumHeaderCount(),
+				reset.maximumHeaderCount());
+		assertEquals(defaults.maximumHeadersSizeInBytes(),
+				reset.maximumHeadersSizeInBytes());
+		assertEquals(defaults.maximumRequestTargetLengthInBytes(),
+				reset.maximumRequestTargetLengthInBytes());
+		assertEquals(defaults.requestReadBufferSizeInBytes(),
+				reset.requestReadBufferSizeInBytes());
+		assertEquals(defaults.concurrentConnectionLimit(),
+				reset.concurrentConnectionLimit());
 		assertEquals(defaults.writeTimeout(), reset.writeTimeout());
 		assertEquals(defaults.keepAliveInterval(), reset.keepAliveInterval());
 		assertEquals(defaults.maximumSubscriptionsPerPartition(),
@@ -98,11 +158,30 @@ class McpServerFutureConfigurationTests {
 				() -> builder.streamQueueCapacity(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.streamQueueCapacity(-1));
+		for (IntegerSetter setter : List.<IntegerSetter>of(
+				McpServer.Builder::maximumRequestSizeInBytes,
+				McpServer.Builder::maximumHeaderCount,
+				McpServer.Builder::maximumHeadersSizeInBytes,
+				McpServer.Builder::maximumRequestTargetLengthInBytes,
+				McpServer.Builder::requestReadBufferSizeInBytes)) {
+			assertThrows(IllegalArgumentException.class,
+					() -> setter.set(builder, 0));
+			assertThrows(IllegalArgumentException.class,
+					() -> setter.set(builder, -1));
+		}
+		assertThrows(IllegalArgumentException.class,
+				() -> builder.maximumRequestSizeInBytes(16 * 1_024 * 1_024 + 1));
+		assertThrows(IllegalArgumentException.class,
+				() -> builder.concurrentConnectionLimit(-1));
+		assertEquals(0, ((DefaultMcpServer) serverBuilder()
+				.concurrentConnectionLimit(0).build()).concurrentConnectionLimit());
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.maximumSubscriptionsPerPartition(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.maximumSubscriptionsPerPartition(-1));
 		for (DurationSetter setter : List.<DurationSetter>of(
+				McpServer.Builder::requestHeaderTimeout,
+				McpServer.Builder::requestBodyTimeout,
 				McpServer.Builder::writeTimeout,
 				McpServer.Builder::keepAliveInterval,
 				McpServer.Builder::maximumSubscriptionDuration)) {
@@ -228,5 +307,10 @@ class McpServerFutureConfigurationTests {
 	@FunctionalInterface
 	private interface DurationSetter {
 		void set(McpServer.Builder builder, Duration duration);
+	}
+
+	@FunctionalInterface
+	private interface IntegerSetter {
+		void set(McpServer.Builder builder, Integer value);
 	}
 }

@@ -110,7 +110,8 @@ public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 	@Override
 	@NonNull
 	public String toString() {
-		return String.format("%s{httpMethod=%s, origin=%s}", getClass().getSimpleName(), requireNonNull(getHttpMethod()).name(), getOrigin());
+		return String.format("%s{httpMethod=%s, origin=<redacted>}",
+				getClass().getSimpleName(), requireNonNull(getHttpMethod()).name());
 	}
 
 	@Override

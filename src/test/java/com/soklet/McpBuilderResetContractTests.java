@@ -156,8 +156,24 @@ public class McpBuilderResetContractTests {
 					throw new AssertionError("custom supplier must have been reset");
 				})
 				.requestHandlerExecutorServiceSupplier(null)
+				.requestHeaderTimeout(Duration.ofSeconds(3))
+				.requestHeaderTimeout(null)
+				.requestBodyTimeout(Duration.ofSeconds(4))
+				.requestBodyTimeout(null)
+				.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
+				.maximumRequestSizeInBytes(null)
+				.maximumHeaderCount(17)
+				.maximumHeaderCount(null)
+				.maximumHeadersSizeInBytes(8_193)
+				.maximumHeadersSizeInBytes(null)
+				.maximumRequestTargetLengthInBytes(4_097)
+				.maximumRequestTargetLengthInBytes(null)
+				.requestReadBufferSizeInBytes(2_049)
+				.requestReadBufferSizeInBytes(null)
+				.concurrentConnectionLimit(19)
+				.concurrentConnectionLimit(null)
 				.streamQueueCapacity(5)
-				.streamQueueCapacity(null)
+				.connectionQueueCapacity(null)
 				.writeTimeout(Duration.ofSeconds(9))
 				.writeTimeout(null)
 				.keepAliveInterval(Duration.ofSeconds(8))
@@ -205,6 +221,22 @@ public class McpBuilderResetContractTests {
 				.getRequestHandlerQueueCapacity());
 		Assertions.assertEquals(defaults.streamQueueCapacity(),
 				reset.streamQueueCapacity());
+		Assertions.assertEquals(defaults.requestHeaderTimeout(),
+				reset.requestHeaderTimeout());
+		Assertions.assertEquals(defaults.requestBodyTimeout(),
+				reset.requestBodyTimeout());
+		Assertions.assertEquals(defaults.maximumRequestSizeInBytes(),
+				reset.maximumRequestSizeInBytes());
+		Assertions.assertEquals(defaults.maximumHeaderCount(),
+				reset.maximumHeaderCount());
+		Assertions.assertEquals(defaults.maximumHeadersSizeInBytes(),
+				reset.maximumHeadersSizeInBytes());
+		Assertions.assertEquals(defaults.maximumRequestTargetLengthInBytes(),
+				reset.maximumRequestTargetLengthInBytes());
+		Assertions.assertEquals(defaults.requestReadBufferSizeInBytes(),
+				reset.requestReadBufferSizeInBytes());
+		Assertions.assertEquals(defaults.concurrentConnectionLimit(),
+				reset.concurrentConnectionLimit());
 		Assertions.assertEquals(defaults.writeTimeout(), reset.writeTimeout());
 		Assertions.assertEquals(defaults.keepAliveInterval(),
 				reset.keepAliveInterval());

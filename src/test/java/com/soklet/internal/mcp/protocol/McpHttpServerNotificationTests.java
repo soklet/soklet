@@ -590,23 +590,24 @@ public class McpHttpServerNotificationTests {
 
 	@Test
 	@Timeout(240)
-	public void notification_admission_outputs_fail_closed_on_reserved_codes_and_unsafe_headers()
+	public void notification_admission_allows_invalid_params_and_fails_closed_on_unsafe_headers()
 			throws Exception {
 		List<NotificationAdmissionHardeningCase> cases = List.of(
-				new NotificationAdmissionHardeningCase("reserved JSON-RPC error code",
+				new NotificationAdmissionHardeningCase("public invalid-params error",
 						new McpJsonRpcError(McpJsonRpcError.INVALID_PARAMS,
-								"Must not escape", Optional.empty()), Map.of()),
+								"Invalid tenant", Optional.empty()),
+						Map.of(), 401),
 				new NotificationAdmissionHardeningCase("framework-owned response header",
 						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
-						Map.of("Content-Type", List.of("text/plain; secret=true"))),
+						Map.of("Content-Type", List.of("text/plain; secret=true")), 500),
 				new NotificationAdmissionHardeningCase("legacy session response header",
 						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
 						Map.of("mCp-SeSsIoN-Id",
-								List.of("legacy-session-secret"))),
+								List.of("legacy-session-secret")), 500),
 				new NotificationAdmissionHardeningCase("legacy replay response header",
 						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
 						Map.of("lAsT-EvEnT-iD",
-								List.of("legacy-replay-secret"))));
+								List.of("legacy-replay-secret")), 500));
 
 		for (NotificationAdmissionHardeningCase testCase : cases) {
 			AtomicInteger limiterInvocations = new AtomicInteger();
@@ -628,7 +629,8 @@ public class McpHttpServerNotificationTests {
 				int port = runtime.start().getPort();
 				FixedResponse response = send(port, notification("future/event", null),
 						List.of(versionHeader()));
-				Assertions.assertEquals(500, response.head().status(),
+				Assertions.assertEquals(testCase.expectedStatus(),
+						response.head().status(),
 						testCase.description() + ": " + response.head().raw());
 				Assertions.assertEquals("no-store",
 						response.head().singleHeader("Cache-Control"),
@@ -720,6 +722,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	private record NotificationAdmissionHardeningCase(String description,
-			McpJsonRpcError error, Map<String, List<String>> headers) {
+			McpJsonRpcError error, Map<String, List<String>> headers,
+			int expectedStatus) {
 	}
 }

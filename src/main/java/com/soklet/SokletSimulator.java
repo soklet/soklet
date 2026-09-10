@@ -79,6 +79,9 @@ public final class SokletSimulator {
 	 * providers or other objects that captured a source transport. Supply
 	 * test-scoped collaborators through
 	 * {@link SimulatorConfig#withSokletConfig(SokletConfig)} when needed.
+	 * A caller interrupt status left set by the simulation body is temporarily
+	 * cleared while bounded teardown runs and is restored before this method
+	 * returns or throws.
 	 *
 	 * @param sokletConfig source application configuration
 	 * @param simulation simulation work
@@ -100,6 +103,9 @@ public final class SokletSimulator {
 
 	/**
 	 * Runs one prebuilt, single-use off-network simulation configuration.
+	 * A caller interrupt status left set by the simulation body is temporarily
+	 * cleared while bounded teardown runs and is restored before this method
+	 * returns or throws.
 	 *
 	 * @param simulatorConfig simulator configuration; it is claimed by this call
 	 * before lifecycle work begins and cannot be reused
@@ -496,7 +502,7 @@ public final class SokletSimulator {
 				@NonNull InternalStartupDisposition startupDisposition) {
 			InternalShutdownResult result = null;
 			List<Throwable> failures = new ArrayList<>();
-			boolean restoreTeardownInterrupt = false;
+			boolean restoreTeardownInterrupt = Thread.interrupted();
 			boolean startupCallActiveAtIntent = setupAttempt.startupCallActive()
 					|| participants.stream().anyMatch(
 							ScopeParticipant::startupCallActive);
@@ -1235,6 +1241,8 @@ public final class SokletSimulator {
 		private void applyShutdownPhase(
 				@NonNull ShutdownContext context) {
 			if (this.kind != InternalLifecycleComponentType.MCP) {
+				if (this.kind == InternalLifecycleComponentType.SSE)
+					this.scope.sseServer.stop();
 				this.terminationSignal.signalTerminated();
 				return;
 			}
@@ -1320,8 +1328,12 @@ public final class SokletSimulator {
 			@Override
 			public void start(@NonNull StartupContext context) {
 				requireNonNull(context);
-				// HTTP and SSE have no off-network listener to start. MCP owns one
-				// fresh application/executor/subscription generation before readiness.
+				if (kind == InternalLifecycleComponentType.SSE) {
+					scope.sseServer.start();
+					return;
+				}
+				// HTTP has no off-network listener to start. MCP owns one fresh
+				// application/executor/subscription generation before readiness.
 				if (kind == InternalLifecycleComponentType.MCP) {
 					McpTransportLifecycleAdapter adapter = requireNonNull(
 							mcpLifecycleAdapter);

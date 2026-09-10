@@ -113,6 +113,15 @@ public class MultipartEdgeCaseTests {
 		return body.getBytes(StandardCharsets.US_ASCII);
 	}
 
+	private static byte[] truncatedMultipartBody(String boundary) {
+		String body = ""
+				+ "--" + boundary + "\r\n"
+				+ "Content-Disposition: form-data; name=\"b\"\r\n"
+				+ "\r\n"
+				+ "unterminated";
+		return body.getBytes(StandardCharsets.US_ASCII);
+	}
+
 	@Test
 	public void missing_required_field_yields_400() {
 		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
@@ -132,6 +141,36 @@ public class MultipartEdgeCaseTests {
 							.body(body)
 							.build());
 			Assertions.assertEquals(400, r.getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	public void truncated_multipart_body_yields_redacted_400() {
+		String boundary = "----AaB03x-truncated";
+		byte[] body = truncatedMultipartBody(boundary);
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of(
+						"multipart/form-data; boundary=" + boundary)))
+				.body(body)
+				.build();
+
+		IllegalRequestBodyException direct = Assertions.assertThrows(
+				IllegalRequestBodyException.class, request::getMultipartFields);
+		Assertions.assertEquals("Multipart request body is malformed.",
+				direct.getMessage());
+
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(UploadResource.class)))
+				.build(), simulator -> {
+			HttpRequestResult result = simulator.performHttpRequest(request);
+			Assertions.assertEquals(400,
+					result.getMarshaledResponse().getStatusCode());
+			String responseBody = new String(
+					result.getMarshaledResponse().bodyBytesOrEmpty(),
+					StandardCharsets.UTF_8);
+			Assertions.assertEquals("HTTP 400: Bad Request", responseBody);
+			Assertions.assertFalse(responseBody.contains("unterminated"));
 		});
 	}
 

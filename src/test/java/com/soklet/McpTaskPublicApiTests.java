@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Proxy;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
@@ -61,6 +62,49 @@ public class McpTaskPublicApiTests {
 		Assertions.assertFalse(first.toString().contains("secret-argument"));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpTaskOrigin.fromPersistedState(null));
+	}
+
+	@Test
+	public void taskOriginHasBoundedDurableTextRoundTrip() {
+		McpTaskOrigin source = McpTaskOrigin.fromPersistedState(
+				McpJsonObject.builder()
+						.put("version", 1)
+						.put("arguments", McpJsonObject.builder()
+								.put("amount", new BigDecimal("1.50"))
+								.put("secret", "secret-argument")
+								.build())
+						.build());
+
+		String persisted = source.toPersistedString();
+		McpTaskOrigin restored = McpTaskOrigin.fromPersistedString(persisted);
+
+		Assertions.assertEquals(source, restored);
+		Assertions.assertEquals(source.hashCode(), restored.hashCode());
+		Assertions.assertEquals(persisted, restored.toPersistedString());
+		Assertions.assertTrue(persisted.contains("secret-argument"));
+		Assertions.assertFalse(restored.toString().contains("secret-argument"));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpTaskOrigin.fromPersistedString(null));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpTaskOrigin.fromPersistedString("[]"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpTaskOrigin.fromPersistedString("not-json"));
+	}
+
+	@Test
+	public void taskOriginEqualityUsesJsonNumericValue() {
+		McpTaskOrigin first = McpTaskOrigin.fromPersistedState(
+				McpJsonObject.builder()
+						.put("amount", new BigDecimal("1.50"))
+						.put("zero", new BigDecimal("0.000"))
+						.build());
+		McpTaskOrigin equal = McpTaskOrigin.fromPersistedString(
+				"{ \"zero\" : 0, \"amount\" : 1.5 }");
+
+		Assertions.assertEquals(first, equal);
+		Assertions.assertEquals(first.hashCode(), equal.hashCode());
+		Assertions.assertEquals("{\"amount\":1.5,\"zero\":0}",
+				first.toPersistedString());
 	}
 
 	@Test

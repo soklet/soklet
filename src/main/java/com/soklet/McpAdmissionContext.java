@@ -37,7 +37,10 @@ public interface McpAdmissionContext {
 	/** @return the selected MCP endpoint */
 	@NonNull McpEndpoint getEndpoint();
 
-	/** @return immutable endpoint-path parameters, empty for a fixed path */
+	/**
+	 * @return immutable endpoint-path parameters; always empty for the built-in
+	 *         fixed-path MCP transport in 4.0
+	 */
 	@NonNull Map<@NonNull String, @NonNull String> getEndpointPathParameters();
 
 	/** @return the validated JSON-RPC method */

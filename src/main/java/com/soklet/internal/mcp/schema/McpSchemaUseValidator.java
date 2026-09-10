@@ -64,17 +64,23 @@ final class McpSchemaUseValidator {
 				continue;
 
 			if (!reachableProperties.contains(node.id()))
-				throw invalidHeader(node,
+				throw invalidHeader(
+						McpSchemaCompilationException.Kind.MISPLACED_MIRRORED_HEADER,
+						node,
 						"x-mcp-header is allowed only on a property reached from the schema root solely through properties chains.");
 			if (header.isEmpty() || !isHttpToken(header))
-				throw invalidHeader(node,
+				throw invalidHeader(
+						McpSchemaCompilationException.Kind.INVALID_MIRRORED_HEADER_NAME,
+						node,
 						"x-mcp-header must contain a non-empty RFC 9110 field-name token.");
 
 			McpSchemaType directType = node.directType().orElse(null);
 			if (directType != McpSchemaType.STRING
 					&& directType != McpSchemaType.BOOLEAN
 					&& directType != McpSchemaType.INTEGER)
-				throw invalidHeader(node,
+				throw invalidHeader(
+						McpSchemaCompilationException.Kind.INVALID_MIRRORED_HEADER_TYPE,
+						node,
 						"x-mcp-header requires the direct type string, boolean, or integer.");
 			// Integer safety constrains the argument value that is eventually
 			// mirrored, so invocation processing enforces it rather than requiring
@@ -84,7 +90,9 @@ final class McpSchemaUseValidator {
 					locationsByLowercaseHeader.putIfAbsent(lowercaseHeader,
 							node.location());
 			if (previous != null)
-				throw invalidHeader(node,
+				throw invalidHeader(
+						McpSchemaCompilationException.Kind.DUPLICATE_MIRRORED_HEADER,
+						node,
 						"x-mcp-header names must be unique case-insensitively within one tool input schema.");
 			declarations.add(new McpMirroredHeaderDeclaration(header,
 					argumentPropertyPath(node.location()), switch (directType) {
@@ -116,7 +124,9 @@ final class McpSchemaUseValidator {
 		for (McpToolSchemaProfileNode node : program.nodes()) {
 			if (program.declaredHeadersBySchemaPointer().containsKey(
 					node.location().jsonPointer()))
-				throw invalidHeader(node, message);
+				throw invalidHeader(
+						McpSchemaCompilationException.Kind.MISPLACED_MIRRORED_HEADER,
+						node, message);
 		}
 	}
 
@@ -174,10 +184,10 @@ final class McpSchemaUseValidator {
 
 	@NonNull
 	private McpSchemaCompilationException invalidHeader(
+			McpSchemaCompilationException.@NonNull Kind kind,
 			@NonNull McpToolSchemaProfileNode node,
 			@NonNull String message) {
-		return failure(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
-				message, node.location(), "x-mcp-header");
+		return failure(kind, message, node.location(), "x-mcp-header");
 	}
 
 	@NonNull

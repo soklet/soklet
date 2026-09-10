@@ -121,7 +121,13 @@ public interface HttpServer {
 	@NonNull
 	static Builder withPort(@NonNull Integer port) {
 		requireNonNull(port);
+		validatePort(port);
 		return new Builder(port);
+	}
+
+	private static void validatePort(@NonNull Integer port) {
+		if (port < 0 || port > 65_535)
+			throw new IllegalArgumentException("Port must be between 0 and 65535");
 	}
 
 	/**
@@ -201,6 +207,7 @@ public interface HttpServer {
 
 		private Builder(@NonNull Integer port) {
 			requireNonNull(port);
+			HttpServer.validatePort(port);
 			this.port = port;
 		}
 
@@ -213,13 +220,14 @@ public interface HttpServer {
 		@NonNull
 		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
+			HttpServer.validatePort(port);
 			this.port = port;
 			return this;
 		}
 
 		/**
 		 * Sets the local host or address on which the server will listen. Passing
-		 * {@code null} restores the built-in wildcard-address default.
+		 * {@code null} restores the built-in wildcard address, {@code 0.0.0.0}.
 		 *
 		 * @param host local host or address, or {@code null} for the default
 		 * @return this builder
@@ -232,7 +240,8 @@ public interface HttpServer {
 
 		/**
 		 * Sets the transport event-loop concurrency. Passing {@code null} restores
-		 * the built-in processor-derived default.
+		 * the built-in default of
+		 * {@link Runtime#availableProcessors() available processors}.
 		 *
 		 * @param concurrency event-loop concurrency, or {@code null} for the default
 		 * @return this builder
@@ -246,7 +255,7 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum duration for reading the HTTP request line and headers.
 		 * <p>
-		 * Passing {@code null} restores the built-in server default.
+		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
 		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
 		 * @return this builder
@@ -261,7 +270,7 @@ public interface HttpServer {
 		 * Sets the maximum duration for reading the HTTP request body after the request
 		 * line and headers have been received.
 		 * <p>
-		 * Passing {@code null} restores the built-in server default.
+		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
 		 * @param requestBodyTimeout the request body timeout, or {@code null} for the default
 		 * @return this builder
@@ -278,7 +287,7 @@ public interface HttpServer {
 		 * The timeout is reset each time response bytes are written to the socket.
 		 * Use {@link Duration#ZERO} to disable this timeout.
 		 * <p>
-		 * Passing {@code null} restores the built-in server default.
+		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
 		 * @param responseWriteIdleTimeout the response write idle timeout, or {@code null} for the default
 		 * @return this builder
@@ -296,7 +305,8 @@ public interface HttpServer {
 		 * Soklet invokes this policy only after its own HTTP protocol checks pass. For example,
 		 * {@code Accept-Encoding} must permit {@code gzip}, and Soklet will skip streaming, file,
 		 * range, already-encoded, transfer-encoded, bodyless, and otherwise ineligible responses.
-		 * Passing {@code null} restores the built-in disabled policy.
+		 * Passing {@code null} restores
+		 * {@link ResponseGzipPolicy#disabledInstance() the built-in disabled policy}.
 		 *
 		 * @param responseGzipPolicy the response gzip policy to use, or {@code null} for the default
 		 * @return this builder
@@ -311,9 +321,11 @@ public interface HttpServer {
 		 * Sets the policy used by the standard HTTP server to decide whether and how gzip-compressed
 		 * request bodies are transparently decompressed before request handling.
 		 * <p>
-		 * Passing {@code null} restores the built-in disabled policy, under which request bodies are passed
-		 * to handlers exactly as received. See {@link RequestDecompressionPolicy} for enabled-mode behavior,
-		 * including decompression-bomb limits and rejection status codes.
+		 * Passing {@code null} restores
+		 * {@link RequestDecompressionPolicy#disabledInstance() the built-in disabled policy},
+		 * under which request bodies are passed to handlers exactly as received. See
+		 * {@link RequestDecompressionPolicy} for enabled-mode behavior, including
+		 * decompression-bomb limits and rejection status codes.
 		 *
 		 * @param requestDecompressionPolicy the request decompression policy to use, or {@code null} for the default
 		 * @return this builder
@@ -326,7 +338,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum duration of application request handling. Passing
-		 * {@code null} restores the built-in timeout.
+		 * {@code null} restores the built-in timeout of 60 seconds.
 		 *
 		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
 		 * the default
@@ -340,7 +352,9 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum number of application request handlers that may execute
-		 * concurrently. Passing {@code null} restores the transport-derived default.
+		 * concurrently. Passing {@code null} restores the transport-derived default:
+		 * the effective event-loop concurrency when virtual threads are unavailable,
+		 * or 16 times it when they are available, with a minimum of one.
 		 *
 		 * @param requestHandlerConcurrency request-handler concurrency, or
 		 * {@code null} for the default
@@ -354,7 +368,8 @@ public interface HttpServer {
 
 		/**
 		 * Sets the request-handler executor queue capacity. Passing {@code null}
-		 * restores the default derived from request-handler concurrency.
+		 * restores the default of 64 times the effective request-handler concurrency,
+		 * with a minimum of one.
 		 *
 		 * @param requestHandlerQueueCapacity queue capacity, or {@code null} for the
 		 * default
@@ -368,7 +383,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum duration of one socket-selection wait. Passing
-		 * {@code null} restores the built-in default.
+		 * {@code null} restores the built-in default of 100 milliseconds.
 		 *
 		 * @param socketSelectTimeout socket-selection timeout, or {@code null} for
 		 * the default
@@ -382,7 +397,8 @@ public interface HttpServer {
 
 		/**
 		 * Sets the pending TCP connection limit supplied to the listening socket.
-		 * Passing {@code null} restores the built-in default.
+		 * Passing {@code null} restores the built-in value {@code 0}, which requests
+		 * the platform's implementation-specific default backlog.
 		 *
 		 * @param socketPendingConnectionLimit pending connection limit, or
 		 * {@code null} for the default
@@ -396,7 +412,8 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum number of concurrent client connections. Passing
-		 * {@code null} restores the built-in default.
+		 * {@code null} restores the built-in default of 8,192. An explicit value of
+		 * {@code 0} disables Soklet's connection cap.
 		 *
 		 * @param concurrentConnectionLimit concurrent connection limit, or
 		 * {@code null} for the default
@@ -414,6 +431,7 @@ public interface HttpServer {
 		 * This limit applies to the whole received HTTP request, including request line,
 		 * headers, transfer framing, and body bytes. Applications that think in terms of
 		 * payload size should leave room for request metadata and protocol framing.
+		 * Passing {@code null} restores the built-in default of 10 MiB.
 		 *
 		 * @param maximumRequestSizeInBytes the maximum request size, or {@code null} for the default
 		 * @return this builder
@@ -426,6 +444,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum number of HTTP header fields accepted in one request.
+		 * Passing {@code null} restores the built-in default of 100 fields.
 		 *
 		 * @param maximumHeaderCount the maximum header count, or {@code null} for the default
 		 * @return this builder
@@ -441,6 +460,7 @@ public interface HttpServer {
 		 * <p>
 		 * This limit applies to the header bytes after the request line, including
 		 * header-field line endings and the terminating blank line.
+		 * Passing {@code null} restores the built-in default of 64 KiB.
 		 *
 		 * @param maximumHeadersSizeInBytes the maximum headers size, or {@code null} for the default
 		 * @return this builder
@@ -453,6 +473,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum request-target length accepted in bytes.
+		 * Passing {@code null} restores the built-in default of 8,192 bytes.
 		 *
 		 * @param maximumRequestTargetLengthInBytes the maximum request-target length, or {@code null} for the default
 		 * @return this builder
@@ -465,7 +486,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the socket request-read buffer size in bytes. Passing {@code null}
-		 * restores the built-in default.
+		 * restores the built-in default of 64 KiB.
 		 *
 		 * @param requestReadBufferSizeInBytes request-read buffer size, or
 		 * {@code null} for the default
@@ -479,7 +500,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the multipart parser. Passing {@code null} restores
-		 * {@link MultipartParser#defaultInstance()}.
+		 * {@link MultipartParser#defaultInstance() the built-in default parser}.
 		 *
 		 * @param multipartParser multipart parser, or {@code null} for the default
 		 * @return this builder
@@ -497,7 +518,8 @@ public interface HttpServer {
 		 * supplied executor and calls {@link ExecutorService#shutdown()} during
 		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
-		 * framework-managed executor default.
+		 * framework-managed fixed-size executor with the effective
+		 * request-handler concurrency and queue capacity.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
 		 * {@code null} for the default
@@ -518,8 +540,11 @@ public interface HttpServer {
 		 * server lifecycle; it must not return a shared executor. The server owns the
 		 * supplied executor and calls {@link ExecutorService#shutdown()} during
 		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
-		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
-		 * framework-managed executor default.
+		 * shutdown, which may interrupt its tasks. Passing {@code null} restores a
+		 * framework-managed fixed-size executor. Its concurrency is 16 times the
+		 * effective event-loop concurrency when virtual threads are available and four
+		 * times it otherwise, with a minimum of one; its task queue holds 64 times
+		 * that concurrency, also with a minimum of one.
 		 *
 		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
 		 * @return this builder
@@ -534,6 +559,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the per-stream producer queue capacity in bytes.
+		 * Passing {@code null} restores the built-in default of 1 MiB per stream.
 		 *
 		 * @param streamingQueueCapacityInBytes the queue capacity, or {@code null} for the default
 		 * @return this builder
@@ -546,6 +572,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum payload chunk size used for HTTP/1.1 chunked streaming.
+		 * Passing {@code null} restores the built-in default of 16 KiB.
 		 *
 		 * @param streamingChunkSizeInBytes the payload chunk size, or {@code null} for the default
 		 * @return this builder
@@ -559,7 +586,8 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum total duration for a streaming response.
 		 * <p>
-		 * Use {@link Duration#ZERO} to disable the timeout.
+		 * Use {@link Duration#ZERO} to disable the timeout. Passing {@code null}
+		 * restores that built-in disabled default.
 		 *
 		 * @param streamingResponseTimeout the streaming response timeout, or {@code null} for the default
 		 * @return this builder
@@ -573,7 +601,9 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum idle duration between bytes produced for a streaming response.
 		 * <p>
-		 * Use {@link Duration#ZERO} to disable the timeout.
+		 * Use {@link Duration#ZERO} to disable the timeout. Passing {@code null}
+		 * derives the default from the effective request-body timeout, which is 60
+		 * seconds when that setting is also left at its default.
 		 *
 		 * @param streamingResponseIdleTimeout the streaming response idle timeout, or {@code null} for the default
 		 * @return this builder
@@ -586,7 +616,7 @@ public interface HttpServer {
 
 		/**
 		 * Sets the request ID generator. Passing {@code null} restores
-		 * {@link IdGenerator#defaultInstance()}.
+		 * {@link IdGenerator#defaultInstance() the built-in default generator}.
 		 *
 		 * @param idGenerator request ID generator, or {@code null} for the default
 		 * @return this builder

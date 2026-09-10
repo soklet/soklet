@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -150,6 +151,28 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every input-required result property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpInputRequiredResult result))
+			return false;
+		return this.inputRequests.equals(result.inputRequests)
+				&& Objects.equals(this.frameworkRequestState,
+						result.frameworkRequestState)
+				&& Objects.equals(this.applicationRequestState,
+						result.applicationRequestState)
+				&& this.metadata.equals(result.metadata);
+	}
+
+	/** @return structural input-required result hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.inputRequests, this.frameworkRequestState,
+				this.applicationRequestState, this.metadata);
 	}
 
 	/**

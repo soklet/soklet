@@ -115,6 +115,25 @@ public final class McpTokenBucketConfig {
 		return this.refillInterval;
 	}
 
+	/** @return whether every token-bucket setting is equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpTokenBucketConfig configuration
+				&& this.capacity == configuration.capacity
+				&& this.refillTokens == configuration.refillTokens
+				&& this.refillInterval.equals(configuration.refillInterval);
+	}
+
+	/** @return structural token-bucket configuration hash code */
+	@Override
+	public int hashCode() {
+		int result = Long.hashCode(this.capacity);
+		result = 31 * result + Long.hashCode(this.refillTokens);
+		result = 31 * result + this.refillInterval.hashCode();
+		return result;
+	}
+
 	private static long requirePositive(long value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive");

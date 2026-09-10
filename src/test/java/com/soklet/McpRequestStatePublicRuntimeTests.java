@@ -468,6 +468,203 @@ public class McpRequestStatePublicRuntimeTests {
 	}
 
 	@Test
+	public void requestLimiterChargesTamperedFrameworkStateBeforeOpeningIt()
+			throws Exception {
+		RecordingProtector protector = new RecordingProtector();
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger limiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(FRAMEWORK_TOOL)
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("must not run");
+				})
+				.addInputRequestDeclarations(roots)
+				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+				.build();
+		McpEndpoint endpoint = endpointBuilder("state-rate-limit-runtime-test")
+				.addTool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint)
+				.admissionController(context -> {
+					admissionInvocations.incrementAndGet();
+					return McpAdmissionDecision.accepted();
+				})
+				.requestRateLimiter(context -> limiterInvocations.incrementAndGet() == 1
+						? McpRateLimitDecision.denied(Duration.ofSeconds(3))
+						: McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.protectionConfig(McpProtectionConfig
+						.withRequestStateProtector(protector).build())
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			HttpResponse<String> denied = callTool(port, "tampered-denied",
+					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
+					ROOTS_CAPABILITY);
+			Assertions.assertEquals(429, denied.statusCode(), denied.body());
+			Assertions.assertEquals("3", denied.headers()
+					.firstValue("Retry-After").orElseThrow());
+			assertContains(denied.body(), "\"code\":-31999");
+			Assertions.assertEquals(0, protector.opens.get(),
+					"A denied request must not invoke the request-state protector.");
+			Assertions.assertEquals(0, toolLimiterInvocations.get(),
+					"A request denial must precede and skip the tool limiter.");
+
+			HttpResponse<String> allowed = callTool(port, "tampered-allowed",
+					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
+					ROOTS_CAPABILITY);
+			assertError(allowed, 400, -32602, "tampered-allowed");
+			Assertions.assertEquals(2, admissionInvocations.get());
+			Assertions.assertEquals(2, limiterInvocations.get());
+			Assertions.assertEquals(1, toolLimiterInvocations.get());
+			Assertions.assertEquals(1, protector.opens.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void toolLimiterChargesTamperedFrameworkStateBeforeOpeningIt()
+			throws Exception {
+		RecordingProtector protector = new RecordingProtector();
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(FRAMEWORK_TOOL)
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("must not run");
+				})
+				.addInputRequestDeclarations(roots)
+				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+				.build();
+		McpEndpoint endpoint = endpointBuilder("state-tool-rate-limit-runtime-test")
+				.addTool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint)
+				.admissionController(context -> {
+					admissionInvocations.incrementAndGet();
+					return McpAdmissionDecision.accepted();
+				})
+				.requestRateLimiter(null)
+				.toolRateLimiter(context ->
+						toolLimiterInvocations.incrementAndGet() == 1
+								? McpRateLimitDecision.denied(Duration.ofSeconds(5))
+								: McpRateLimitDecision.allowed())
+				.protectionConfig(McpProtectionConfig
+						.withRequestStateProtector(protector).build())
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			HttpResponse<String> denied = callTool(port, "tool-tampered-denied",
+					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
+					ROOTS_CAPABILITY);
+			Assertions.assertEquals(429, denied.statusCode(), denied.body());
+			Assertions.assertEquals("5", denied.headers()
+					.firstValue("Retry-After").orElseThrow());
+			assertContains(denied.body(), "\"code\":-31999");
+			Assertions.assertEquals(0, protector.opens.get(),
+					"A tool denial must not invoke the request-state protector.");
+
+			HttpResponse<String> allowed = callTool(port, "tool-tampered-allowed",
+					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
+					ROOTS_CAPABILITY);
+			assertError(allowed, 400, -32602, "tool-tampered-allowed");
+			Assertions.assertEquals(2, admissionInvocations.get());
+			Assertions.assertEquals(2, toolLimiterInvocations.get());
+			Assertions.assertEquals(1, protector.opens.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void nullToolLimiterFailsClosedBeforeOpeningFrameworkState()
+			throws Exception {
+		assertToolLimiterFailurePrecedesFrameworkState(false);
+	}
+
+	@Test
+	public void throwingToolLimiterFailsClosedBeforeOpeningFrameworkState()
+			throws Exception {
+		assertToolLimiterFailurePrecedesFrameworkState(true);
+	}
+
+	private static void assertToolLimiterFailurePrecedesFrameworkState(
+			boolean throwFailure) throws Exception {
+		String caseName = throwFailure ? "throwing" : "null";
+		String failureCanary = "tool-limiter-secret-" + caseName;
+		RecordingProtector protector = new RecordingProtector();
+		AtomicInteger limiterInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(FRAMEWORK_TOOL)
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("must not run");
+				})
+				.addInputRequestDeclarations(roots)
+				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+				.build();
+		McpEndpoint endpoint = endpointBuilder(
+				"state-tool-rate-limit-" + caseName + "-runtime-test")
+				.addTool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint)
+				.requestRateLimiter(null)
+				.toolRateLimiter(context -> {
+					limiterInvocations.incrementAndGet();
+					if (throwFailure)
+						throw new IllegalStateException(failureCanary);
+					return null;
+				})
+				.protectionConfig(McpProtectionConfig
+						.withRequestStateProtector(protector).build())
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			String requestId = caseName + "-tool-limiter";
+			HttpResponse<String> response = callTool(boundPort(server), requestId,
+					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
+					ROOTS_CAPABILITY);
+			assertError(response, 500, -32603, requestId);
+			Assertions.assertFalse(response.body().contains(failureCanary));
+			Assertions.assertEquals(1, limiterInvocations.get());
+			Assertions.assertEquals(0, protector.opens.get(),
+					"A failed tool limiter must not invoke the request-state protector.");
+			Assertions.assertEquals(0, handlerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void onlyFrameworkProtectedRegistrationsRequireProtectionConfig() {
 		McpEndpoint frameworkEndpoint = endpointBuilder(
 				"framework-config-runtime-test")

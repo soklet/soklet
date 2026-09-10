@@ -263,6 +263,18 @@ final class DefaultHttpServer implements HttpServer {
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
 
+		if (this.port < 0 || this.port > 65_535)
+			throw new IllegalArgumentException("Port must be between 0 and 65535");
+
+		if (this.concurrency < 1)
+			throw new IllegalArgumentException("Concurrency must be > 0");
+
+		if (this.requestReadBufferSizeInBytes < 1)
+			throw new IllegalArgumentException("Request read buffer size must be > 0");
+
+		if (this.socketSelectTimeout.isNegative() || this.socketSelectTimeout.isZero())
+			throw new IllegalArgumentException("Socket select timeout must be > 0");
+
 		int defaultRequestHandlerConcurrency = Utilities.virtualThreadsAvailable()
 				? Math.max(1, this.concurrency * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)
 				: Math.max(1, this.concurrency);
@@ -420,27 +432,8 @@ final class DefaultHttpServer implements HttpServer {
 				attachmentContext);
 		initialize(exactContext.getSokletConfig(),
 				exactContext.getAdmissionFencedRequestHandler());
-		TransportTerminationSignal signal = exactContext.getTerminationSignal();
-		AtomicBoolean stopObserverStarted = new AtomicBoolean();
-		return new TransportRuntime() {
-			@Override
-			public void start(@NonNull StartupContext context) {
-				requireNonNull(context);
-				DefaultHttpServer.this.start();
-			}
-
-			@Override
-			public void shutdownGracefully(@NonNull ShutdownContext context) {
-				requireNonNull(context);
-				observeStop(signal, stopObserverStarted);
-			}
-
-			@Override
-			public void shutdownForcibly(@NonNull ShutdownContext context) {
-				requireNonNull(context);
-				observeStop(signal, stopObserverStarted);
-			}
-		};
+		return getLifecycleAdapter().delegatedRuntime(
+				exactContext.getTerminationSignal(), DefaultHttpServer.this::start);
 	}
 
 	public void start() {
@@ -628,7 +621,7 @@ final class DefaultHttpServer implements HttpServer {
 
 									httpMethod = HttpMethod.valueOf(normalizedMethod);
 								} catch (IllegalArgumentException e) {
-									throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
+									throw new IllegalRequestException("Unsupported HTTP method specified");
 								}
 
 								request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
@@ -692,9 +685,11 @@ final class DefaultHttpServer implements HttpServer {
 								} else if (t instanceof URISyntaxException) {
 									failsafeStatusCode = 400;
 									failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
-									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
-											.throwable(t)
-											.build());
+									// URISyntaxException renders its request-controlled input in its message.
+									// The typed failure callback below still receives both the raw target and
+									// original exception so applications may apply their own disclosure policy.
+									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST,
+											"Unable to parse request URI").build());
 								} else if (t instanceof RequestBodyDecompressionException requestBodyDecompressionException) {
 									failsafeStatusCode = requestBodyDecompressionException.getReason().getStatusCode();
 									failureReason = RequestReadFailureReason.REQUEST_BODY_DECOMPRESSION_FAILED;
@@ -941,22 +936,6 @@ final class DefaultHttpServer implements HttpServer {
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.lifecyclePolicy = sokletConfig.getLifecyclePolicy();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
-	}
-
-	private void observeStop(@NonNull TransportTerminationSignal signal,
-			@NonNull AtomicBoolean observerStarted) {
-		if (!requireNonNull(observerStarted).compareAndSet(false, true))
-			return;
-		Thread observer = new Thread(() -> {
-			try {
-				stop();
-				requireNonNull(signal).signalTerminated();
-			} catch (RuntimeException | Error failure) {
-				requireNonNull(signal).signalTerminationFailure(failure);
-			}
-		}, "soklet-http-delegate-stop");
-		observer.setDaemon(true);
-		observer.start();
 	}
 
 	@NonNull
@@ -1427,7 +1406,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (!singleGzipCoding)
 			throw new RequestBodyDecompressionException(RequestBodyDecompressionException.Reason.UNSUPPORTED_CONTENT_ENCODING,
-					format("Unsupported request Content-Encoding: '%s'", String.join(", ", contentEncodings)));
+					"Unsupported request Content-Encoding");
 
 		// A Content-Encoding header with no body to decode: pass through unchanged
 		if (body == null)

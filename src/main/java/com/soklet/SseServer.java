@@ -152,7 +152,13 @@ public interface SseServer {
 	@NonNull
 	static Builder withPort(@NonNull Integer port) {
 		requireNonNull(port);
+		validatePort(port);
 		return new Builder(port);
+	}
+
+	private static void validatePort(@NonNull Integer port) {
+		if (port < 0 || port > 65_535)
+			throw new IllegalArgumentException("Port must be between 0 and 65535");
 	}
 
 	/**
@@ -218,6 +224,7 @@ public interface SseServer {
 
 		protected Builder(@NonNull Integer port) {
 			requireNonNull(port);
+			SseServer.validatePort(port);
 			this.port = port;
 		}
 
@@ -230,13 +237,14 @@ public interface SseServer {
 		@NonNull
 		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
+			SseServer.validatePort(port);
 			this.port = port;
 			return this;
 		}
 
 		/**
 		 * Sets the local host or address on which the server will listen. Passing
-		 * {@code null} restores the built-in wildcard-address default.
+		 * {@code null} restores the built-in wildcard address, {@code 0.0.0.0}.
 		 *
 		 * @param host local host or address, or {@code null} for the default
 		 * @return this builder
@@ -250,7 +258,7 @@ public interface SseServer {
 		/**
 		 * Sets the maximum duration for reading the SSE handshake request line and headers.
 		 * <p>
-		 * Passing {@code null} restores the built-in server default.
+		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
 		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
 		 * @return this builder
@@ -263,7 +271,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum duration of application handshake handling. Passing
-		 * {@code null} restores the built-in timeout.
+		 * {@code null} restores the built-in timeout of 60 seconds.
 		 *
 		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
 		 * the default
@@ -278,7 +286,9 @@ public interface SseServer {
 		/**
 		 * Sets the maximum number of application handshake handlers that may
 		 * execute concurrently. Passing {@code null} restores the
-		 * processor-derived default.
+		 * processor-derived default of 16 times
+		 * {@link Runtime#availableProcessors() available processors}, with a minimum
+		 * of one.
 		 *
 		 * @param requestHandlerConcurrency request-handler concurrency, or
 		 * {@code null} for the default
@@ -292,7 +302,8 @@ public interface SseServer {
 
 		/**
 		 * Sets the handshake-handler executor queue capacity. Passing {@code null}
-		 * restores the default derived from request-handler concurrency.
+		 * restores the default of 64 times the effective request-handler concurrency,
+		 * with a minimum of one.
 		 *
 		 * @param requestHandlerQueueCapacity queue capacity, or {@code null} for the
 		 * default
@@ -307,7 +318,7 @@ public interface SseServer {
 		/**
 		 * Sets the transport write timeout for established SSE streams.
 		 * <p>
-		 * If this value is not specified, Soklet uses the server default. Use
+		 * Passing {@code null} restores the built-in default of 30 seconds. Use
 		 * {@link Duration#ZERO} to disable SSE stream write timeouts.
 		 *
 		 * @param writeTimeout the write timeout, or {@code null} for the default
@@ -321,7 +332,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the interval between SSE heartbeat comments. Passing {@code null}
-		 * restores the built-in interval.
+		 * restores the built-in interval of 15 seconds.
 		 *
 		 * @param heartbeatInterval heartbeat interval, or {@code null} for the
 		 * default
@@ -339,6 +350,7 @@ public interface SseServer {
 		 * This limit applies to the whole received handshake request, including request line
 		 * and headers. Established SSE stream writes are governed by the write timeout and
 		 * connection queue capacity settings instead.
+		 * Passing {@code null} restores the built-in default of 64 KiB.
 		 *
 		 * @param maximumRequestSizeInBytes the maximum handshake request size, or {@code null} for the default
 		 * @return this builder
@@ -351,6 +363,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum number of HTTP header fields accepted in one SSE handshake.
+		 * Passing {@code null} restores the built-in default of 100 fields.
 		 *
 		 * @param maximumHeaderCount the maximum header count, or {@code null} for the default
 		 * @return this builder
@@ -366,6 +379,7 @@ public interface SseServer {
 		 * <p>
 		 * This limit applies to the header bytes after the request line, including
 		 * header-field line endings and the terminating blank line.
+		 * Passing {@code null} restores the built-in default of 64 KiB.
 		 *
 		 * @param maximumHeadersSizeInBytes the maximum headers size, or {@code null} for the default
 		 * @return this builder
@@ -378,6 +392,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum SSE handshake request-target length accepted in bytes.
+		 * Passing {@code null} restores the built-in default of 8,192 bytes.
 		 *
 		 * @param maximumRequestTargetLengthInBytes the maximum request-target length, or {@code null} for the default
 		 * @return this builder
@@ -390,7 +405,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the socket handshake-read buffer size in bytes. Passing {@code null}
-		 * restores the built-in default.
+		 * restores the built-in default of 1,024 bytes.
 		 *
 		 * @param requestReadBufferSizeInBytes request-read buffer size, or
 		 * {@code null} for the default
@@ -409,7 +424,8 @@ public interface SseServer {
 		 * supplied executor and calls {@link ExecutorService#shutdown()} during
 		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
-		 * framework-managed executor default.
+		 * framework-managed fixed-size executor with the effective
+		 * request-handler concurrency and queue capacity.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
 		 * {@code null} for the default
@@ -425,7 +441,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum number of concurrent SSE connections. Zero disables the
-		 * cap. Passing {@code null} restores the built-in default.
+		 * cap. Passing {@code null} restores the built-in default of 8,192.
 		 *
 		 * @param concurrentConnectionLimit concurrent connection limit, or
 		 * {@code null} for the default
@@ -438,8 +454,9 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the capacity used for active and idle broadcaster lookup. Passing
-		 * {@code null} restores the built-in default.
+		 * Sets the initial active-broadcaster registry capacity and the maximum
+		 * idle-broadcaster cache capacity. Passing {@code null} restores the built-in
+		 * default of 1,024 entries.
 		 *
 		 * @param broadcasterCacheCapacity broadcaster cache capacity, or
 		 * {@code null} for the default
@@ -453,7 +470,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the Resource Path declaration cache capacity. Passing {@code null}
-		 * restores the built-in default.
+		 * restores the built-in default of 8,192 entries.
 		 *
 		 * @param resourcePathCacheCapacity Resource Path cache capacity, or
 		 * {@code null} for the default
@@ -467,7 +484,8 @@ public interface SseServer {
 
 		/**
 		 * Sets each established connection's pending-write queue capacity. Passing
-		 * {@code null} restores the built-in default.
+		 * {@code null} restores the built-in default of 128 pending writes per
+		 * connection.
 		 *
 		 * @param connectionQueueCapacity connection queue capacity, or {@code null}
 		 * for the default
@@ -481,7 +499,8 @@ public interface SseServer {
 
 		/**
 		 * Sets whether Soklet verifies that an SSE connection remains usable after
-		 * its handshake. Passing {@code null} restores the built-in enabled default.
+		 * its handshake. Passing {@code null} restores the built-in default of
+		 * {@code true} (verification enabled).
 		 *
 		 * @param verifyConnectionOnceEstablished whether to verify established
 		 * connections, or {@code null} for the default
@@ -495,7 +514,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the request ID generator. Passing {@code null} restores
-		 * {@link IdGenerator#defaultInstance()}.
+		 * {@link IdGenerator#defaultInstance() the built-in default generator}.
 		 *
 		 * @param idGenerator request ID generator, or {@code null} for the default
 		 * @return this builder

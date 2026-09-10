@@ -76,7 +76,9 @@ record McpHttpTransportConfiguration(@NonNull String host, int port,
 		positive(maximumHeaderCount, "Maximum header count");
 		positive(maximumHeaderBytes, "Maximum header bytes");
 		positive(maximumRequestTargetBytes, "Maximum request-target bytes");
-		positive(maximumConnections, "Maximum connections");
+		if (maximumConnections < 0)
+			throw new IllegalArgumentException(
+					"Maximum connections must not be negative.");
 		positive(connectionWriterConcurrency, "Connection-writer concurrency");
 		positive(requestProcessorConcurrency, "Request-processor concurrency");
 		positive(requestProcessorQueueCapacity, "Request-processor queue capacity");

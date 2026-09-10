@@ -171,7 +171,7 @@ public class McpHttpServerRequestScopedSseTests {
 
 	@Test
 	@Timeout(120)
-	public void keep_alive_write_does_not_extend_the_absolute_request_deadline()
+	public void keep_alive_write_does_not_extend_or_hide_the_active_deadline()
 			throws Exception {
 		ControllableClock clock = new ControllableClock();
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
@@ -211,8 +211,13 @@ public class McpHttpServerRequestScopedSseTests {
 
 				clock.advance(Duration.ofSeconds(4));
 				runtime.runApplicationTimerCycle();
-				Assertions.assertTrue(client.awaitTransportClosure(),
-						"The absolute deadline did not close the committed stream.");
+				Assertions.assertEquals(
+						"data: {\"jsonrpc\":\"2.0\",\"id\":\"deadline\","
+								+ "\"error\":{\"code\":-32603,"
+								+ "\"message\":\"Internal error\"}}\n\n",
+						client.readChunkText());
+				Assertions.assertNull(client.readChunk(),
+						"The active-deadline error must terminate the SSE stream.");
 				Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 						"The absolute deadline did not interrupt the handler.");
 				Assertions.assertEquals(
@@ -372,6 +377,7 @@ public class McpHttpServerRequestScopedSseTests {
 	@Timeout(120)
 	public void slow_reader_applies_bounded_backpressure_without_blocking_other_requests()
 			throws Exception {
+		ControllableClock clock = new ControllableClock();
 		CountDownLatch secondNotificationAttempted = new CountDownLatch(1);
 		CountDownLatch secondNotificationFinished = new CountDownLatch(1);
 		McpApplicationRequestHandler handler = invocation -> {
@@ -388,8 +394,8 @@ public class McpHttpServerRequestScopedSseTests {
 			}
 			return completeResult("slow");
 		};
-		McpHttpServerRuntime runtime = runtime(handler, McpApplicationClock.SYSTEM,
-				transportConfiguration(Duration.ofSeconds(15),
+		McpHttpServerRuntime runtime = runtime(handler, clock,
+				transportConfiguration(Duration.ofSeconds(1),
 						Duration.ofSeconds(60), 1),
 				new McpApplicationExecutionConfiguration(
 						2, 2, Duration.ofSeconds(30), Duration.ofMillis(10)));
@@ -413,6 +419,15 @@ public class McpHttpServerRequestScopedSseTests {
 					"The large frame did not remain bounded in the outbound lane.");
 			Assertions.assertEquals(1L, secondNotificationFinished.getCount(),
 					"The producer bypassed the configured one-frame bound.");
+
+			clock.advance(Duration.ofSeconds(1));
+			runtime.runApplicationTimerCycle();
+			Assertions.assertEquals(1,
+					runtime.requestExecutionSnapshot().activeResponseStreams(),
+					"A full queue must only skip the optional keep-alive.");
+			Assertions.assertFalse(secondNotificationFinished.await(
+					100, TimeUnit.MILLISECONDS),
+					"The keep-alive timer terminated the backpressured stream.");
 
 			try (McpChunkedHttpClient fast = McpChunkedHttpClient.postMcp(
 					port, "\"fast\"", APPLICATION_METHOD)) {
@@ -721,6 +736,7 @@ public class McpHttpServerRequestScopedSseTests {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"request-scoped-sse-test", "4.0.0"))
+				.serverInformationIncluded(false)
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));
@@ -739,6 +755,7 @@ public class McpHttpServerRequestScopedSseTests {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"request-scoped-sse-test", "4.0.0"))
+				.serverInformationIncluded(false)
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));
@@ -763,6 +780,7 @@ public class McpHttpServerRequestScopedSseTests {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"request-scoped-sse-test", "4.0.0"))
+				.serverInformationIncluded(false)
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));

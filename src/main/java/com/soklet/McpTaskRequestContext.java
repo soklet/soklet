@@ -30,6 +30,11 @@ import static java.util.Objects.requireNonNull;
  * selected endpoint, and its application-owned task binding to authorize the
  * operation atomically. Possession of the task ID is not authorization.
  *
+ * <p>Instances intentionally retain reference identity. The nested request
+ * context represents one independently admitted invocation and may carry
+ * application principal and context objects; structurally equal-looking
+ * carriers must not be treated as the same authorization decision.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

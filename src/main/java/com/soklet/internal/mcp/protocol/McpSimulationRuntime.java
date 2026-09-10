@@ -292,9 +292,9 @@ final class McpSimulationRuntime implements McpSimulation,
 	}
 
 	@Override
-	public void enqueue(McpRequestSseStream.@NonNull Frame frame)
+	public boolean enqueue(McpRequestSseStream.@NonNull Frame frame)
 			throws InterruptedException {
-		offer(frame);
+		return offer(frame) == McpOutboundChannel.OfferResult.ACCEPTED;
 	}
 
 	@Override

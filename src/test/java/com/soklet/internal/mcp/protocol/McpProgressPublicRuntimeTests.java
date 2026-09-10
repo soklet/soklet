@@ -628,9 +628,9 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertNull(lateReportFailure.get());
 			Assertions.assertEquals(1, enqueueAttempts.get(),
 					"Only the late report traverses the existing-stream enqueue path.");
-			Assertions.assertEquals(!progressWins,
-					lateReporterInterrupted.get(),
-					"Only a terminal-owned late enqueue restores interruption.");
+			Assertions.assertFalse(lateReporterInterrupted.get(),
+					"A terminal-owned late report is inert and must not synthesize "
+							+ "thread interruption.");
 			Assertions.assertNull(client.readChunk(),
 					"No progress frame may follow the mapped terminal error.");
 
@@ -767,6 +767,7 @@ public class McpProgressPublicRuntimeTests {
 			List<McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"progress-public-runtime-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTools(tools)
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

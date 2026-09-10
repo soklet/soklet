@@ -9,6 +9,8 @@ API_DIRECTORY="$PROJECT_ROOT/api/mcp"
 API_FREEZE_REPORT="$PROJECT_ROOT/target/japicmp/mcp-api-freeze.xml"
 GENERATED_DIRECTORY="$PROJECT_ROOT/target/mcp-api-freezes"
 FROZEN_PHASES="$API_DIRECTORY/frozen-phases"
+PROVISIONAL_INVENTORY="$API_DIRECTORY/provisional.includes"
+PROVISIONAL_SIGNATURES="$API_DIRECTORY/provisional.signatures.jsonl"
 
 [ "$#" -eq 0 ] || {
   echo "Usage: scripts/verify-mcp-api-freezes.sh" >&2
@@ -38,6 +40,15 @@ while IFS= read -r phase || [ -n "$phase" ]; do
   expected_phase=$((expected_phase + 1))
   frozen_phase_count=$((frozen_phase_count + 1))
 done < "$FROZEN_PHASES"
+
+[ -f "$PROVISIONAL_INVENTORY" ] || {
+  echo "Missing provisional MCP API inventory: $PROVISIONAL_INVENTORY" >&2
+  exit 1
+}
+[ -f "$PROVISIONAL_SIGNATURES" ] || {
+  echo "Missing reviewed provisional MCP signature snapshot: $PROVISIONAL_SIGNATURES" >&2
+  exit 1
+}
 
 [ "$frozen_phase_count" -gt 0 ] || {
   echo "Frozen-phase inventory must contain at least one phase" >&2
@@ -79,6 +90,14 @@ while IFS= read -r phase || [ -n "$phase" ]; do
     "$reviewed_signatures"
 done < "$FROZEN_PHASES"
 
+generated_provisional_signatures="$GENERATED_DIRECTORY/provisional.signatures.jsonl"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/api-diff/japicmp-symbols.mjs" \
+  --extract-signatures "$API_FREEZE_REPORT" "$PROVISIONAL_INVENTORY" \
+  "$generated_provisional_signatures"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/api-diff/japicmp-symbols.mjs" \
+  --verify-signatures "$API_FREEZE_REPORT" "$PROVISIONAL_INVENTORY" \
+  "$PROVISIONAL_SIGNATURES"
+
 "$NODE_EXECUTABLE" \
   "$PROJECT_ROOT/conformance/official/verify-profile-evidence-self-test.mjs"
 "$NODE_EXECUTABLE" \
@@ -92,4 +111,4 @@ done < "$FROZEN_PHASES"
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness-self-test.mjs"
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness.mjs"
 
-echo "Verified frozen MCP API phases against reviewed signature snapshots"
+echo "Verified frozen MCP API phases and provisional Tasks API against reviewed signature snapshots"

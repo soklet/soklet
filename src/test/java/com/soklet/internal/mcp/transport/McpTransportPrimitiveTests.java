@@ -37,6 +37,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class McpTransportPrimitiveTests {
@@ -275,6 +276,55 @@ public class McpTransportPrimitiveTests {
 		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
 				deadlineListener.terminationReason.get());
 		Assertions.assertEquals(0, deadline.snapshot().terminalBytes());
+	}
+
+	@Test
+	public void optional_idle_offers_follow_actual_writes_and_skip_full_queues()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		RecordingChannelListener idleListener = new RecordingChannelListener();
+		McpOutboundChannel idle = new McpOutboundChannel(
+				2, 32, 32, now::get, idleListener);
+		WritableSource idleSource = idle.newWritableSource();
+		idleSource.writeReadyCallback(() -> {
+			// The test drives writes directly.
+		});
+		idleSource.start();
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				idle.offer(ascii("message")));
+		now.set(5L);
+		idleSource.writeTo(new PartialWriteSocketChannel(64), 64L);
+
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.NOT_IDLE,
+				idle.offerIfWriteIdleExpired(ascii("keepalive"), 14L, 10L),
+				"A recent socket write must suppress a stale keep-alive timer.");
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				idle.offerIfWriteIdleExpired(ascii("keepalive"), 15L, 10L),
+				"Equality at the true write-idle deadline must permit the offer.");
+		idleSource.close(StreamTerminationReason.SERVER_STOPPING, null);
+
+		RecordingChannelListener fullListener = new RecordingChannelListener();
+		McpOutboundChannel full = new McpOutboundChannel(
+				2, 32, 32, now::get, fullListener);
+		WritableSource fullSource = full.newWritableSource();
+		fullSource.writeReadyCallback(() -> {
+			// Retain the queued frame to prove the optional offer is skipped.
+		});
+		now.set(20L);
+		fullSource.start();
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				full.offer(ascii("application-frame")));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.NOT_IDLE,
+				full.offerIfWriteIdleExpired(ascii("keepalive"), 30L, 10L),
+				"Queued application data means the stream is not truly idle.");
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				full.offer(ascii("second-frame")));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.FULL,
+				full.offerIfWriteIdleExpired(ascii("keepalive"), 30L, 10L));
+		Assertions.assertFalse(full.snapshot().closed());
+		Assertions.assertEquals(0, fullListener.terminationCount.get(),
+				"A full queue must not turn an optional keep-alive into termination.");
+		fullSource.close(StreamTerminationReason.SERVER_STOPPING, null);
 	}
 
 	private static void awaitCondition(Condition condition) throws Exception {

@@ -550,7 +550,9 @@ public interface MetricsCollector {
 		 */
 		PROMETHEUS,
 		/**
-		 * OpenMetrics text exposition format (1.0), including the {@code # EOF} trailer.
+		 * OpenMetrics text exposition format (1.0), including OpenMetrics
+		 * counter-family naming, structurally complete histogram points, and the
+		 * {@code # EOF} trailer.
 		 */
 		OPEN_METRICS_1_0
 	}
@@ -658,7 +660,8 @@ public interface MetricsCollector {
 			 */
 			FULL_BUCKETS,
 			/**
-			 * Emit only {@code _count} and {@code _sum} samples (omit buckets).
+			 * Emit only {@code _count} and {@code _sum} samples. OpenMetrics
+			 * output additionally retains the required {@code le="+Inf"} bucket.
 			 */
 			COUNT_SUM_ONLY,
 			/**
@@ -673,6 +676,9 @@ public interface MetricsCollector {
 		 * Filters receive these instances for each rendered sample. For histogram buckets,
 		 * the sample name includes {@code _bucket} and the labels include {@code le}.
 		 * Label maps are immutable and preserve insertion order.
+		 * When rendering OpenMetrics, rejecting a histogram's required
+		 * {@code le="+Inf"} bucket omits that label-set's entire histogram point;
+		 * rejecting exactly one of its {@code _count}/{@code _sum} pair omits both.
 		 */
 		@ThreadSafe
 		public static final class MetricSample {
@@ -1826,7 +1832,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final LongAdder count;
 		@NonNull
-		private final LongAdder sum;
+		private final AtomicLong sum;
 		@NonNull
 		private final AtomicLong min;
 		@NonNull
@@ -1846,7 +1852,7 @@ public interface MetricsCollector {
 			for (int i = 0; i < this.bucketCounts.length; i++)
 				this.bucketCounts[i] = new LongAdder();
 			this.count = new LongAdder();
-			this.sum = new LongAdder();
+			this.sum = new AtomicLong();
 			this.min = new AtomicLong(Long.MAX_VALUE);
 			this.max = new AtomicLong(Long.MIN_VALUE);
 		}
@@ -1861,7 +1867,7 @@ public interface MetricsCollector {
 				return;
 
 			this.count.increment();
-			this.sum.add(value);
+			saturatingAdd(this.sum, value);
 			updateMin(value);
 			updateMax(value);
 
@@ -1887,7 +1893,7 @@ public interface MetricsCollector {
 			}
 
 			long countSnapshot = this.count.sum();
-			long sumSnapshot = this.sum.sum();
+			long sumSnapshot = this.sum.get();
 			long minSnapshot = this.min.get();
 			long maxSnapshot = this.max.get();
 
@@ -1904,7 +1910,7 @@ public interface MetricsCollector {
 		 */
 		public void reset() {
 			this.count.reset();
-			this.sum.reset();
+			this.sum.set(0L);
 			this.min.set(Long.MAX_VALUE);
 			this.max.set(Long.MIN_VALUE);
 			for (LongAdder bucket : this.bucketCounts)
@@ -1933,6 +1939,20 @@ public interface MetricsCollector {
 				if (this.max.compareAndSet(current, value))
 					break;
 			}
+		}
+
+		private static void saturatingAdd(@NonNull AtomicLong accumulator,
+				long value) {
+			long current;
+			long updated;
+			do {
+				current = accumulator.get();
+				if (current == Long.MAX_VALUE)
+					return;
+				updated = value > Long.MAX_VALUE - current
+						? Long.MAX_VALUE
+						: current + value;
+			} while (!accumulator.compareAndSet(current, updated));
 		}
 	}
 
@@ -2025,7 +2045,8 @@ public interface MetricsCollector {
 		/**
 		 * Sum of all recorded values.
 		 *
-		 * @return the sum
+		 * @return the sum, saturated at {@link Long#MAX_VALUE} if the exact
+		 * sum exceeds the signed {@code long} range
 		 */
 		public long getSum() {
 			return this.sum;
@@ -2065,9 +2086,13 @@ public interface MetricsCollector {
 
 			long threshold = (long) Math.ceil((percentile / 100.0) * this.count);
 
-			for (int i = 0; i < this.bucketCumulativeCounts.length; i++)
-				if (this.bucketCumulativeCounts[i] >= threshold)
-					return this.bucketBoundaries[i];
+			for (int i = 0; i < this.bucketCumulativeCounts.length; i++) {
+				if (this.bucketCumulativeCounts[i] < threshold)
+					continue;
+
+				long boundary = this.bucketBoundaries[i];
+				return boundary == Long.MAX_VALUE ? this.max : boundary;
+			}
 
 			return this.bucketBoundaries[this.bucketBoundaries.length - 1];
 		}

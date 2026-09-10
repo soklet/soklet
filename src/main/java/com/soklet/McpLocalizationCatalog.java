@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
@@ -68,5 +69,19 @@ public final class McpLocalizationCatalog {
 	@NonNull
 	public List<@NonNull McpLocalizableText> getTexts() {
 		return this.texts;
+	}
+
+	/** @return whether the extracted text lists are structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpLocalizationCatalog catalog
+				&& this.texts.equals(catalog.texts);
+	}
+
+	/** @return structural localization-catalog hash code */
+	@Override
+	public int hashCode() {
+		return this.texts.hashCode();
 	}
 }

@@ -79,6 +79,7 @@ public class McpTaskInputUpdateRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"task-input-update-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpAdmissionIdentity identity = McpAdmissionIdentity

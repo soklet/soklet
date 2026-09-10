@@ -305,6 +305,14 @@ public final class ValueConverterRegistry {
 	@Immutable
 	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
 		@NonNull
+		private static final Type REFLEXIVE_TYPE =
+				ReflexiveValueConverter.class.getTypeParameters()[0];
+
+		private ReflexiveValueConverter() {
+			super(REFLEXIVE_TYPE, REFLEXIVE_TYPE);
+		}
+
+		@NonNull
 		@Override
 		public Optional<T> performConversion(@Nullable T from) throws Exception {
 			return Optional.ofNullable(from);

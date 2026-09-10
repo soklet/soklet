@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletApplicationTriggerTests {
 	@Test
-	void unavailableStdinWarnsOnceWithoutRegisteringOrPublishingIntent() {
+	void unavailableStdinWarnsEachRegistrationWithoutPublishingIntent() {
 		RecordingProcessAccess processAccess = RecordingProcessAccess.unavailable();
 		QueuedLauncher launcher = new QueuedLauncher();
 		SokletApplicationInputManager manager =
@@ -53,6 +53,7 @@ final class SokletApplicationTriggerTests {
 		second.unregister();
 
 		Assertions.assertEquals(List.of(
+				"Ignoring ENTER_KEY shutdown because stdin is unavailable",
 				"Ignoring ENTER_KEY shutdown because stdin is unavailable"),
 				processAccess.warnings());
 		Assertions.assertEquals(0, intentCalls.get());
@@ -62,7 +63,7 @@ final class SokletApplicationTriggerTests {
 	}
 
 	@Test
-	void stdinEofWarnsOnceWithoutPublishingIntentAndResetsListener() {
+	void stdinEofWarnsEachRegistrationWithoutPublishingIntentAndResetsListener() {
 		RecordingProcessAccess processAccess =
 				RecordingProcessAccess.withInput(InputStream.nullInputStream());
 		QueuedLauncher launcher = new QueuedLauncher();
@@ -83,6 +84,7 @@ final class SokletApplicationTriggerTests {
 			launcher.runNext();
 
 			Assertions.assertEquals(List.of(
+					"Ignoring ENTER_KEY shutdown because stdin reached EOF",
 					"Ignoring ENTER_KEY shutdown because stdin reached EOF"),
 					processAccess.warnings());
 			Assertions.assertEquals(0, intentCalls.get());
@@ -95,6 +97,37 @@ final class SokletApplicationTriggerTests {
 		}
 
 		Assertions.assertEquals(0, manager.registrationCount());
+	}
+
+	@Test
+	void registrationSpecificWarningSinkOwnsUnavailableStdinDiagnostic() {
+		RecordingProcessAccess processAccess = RecordingProcessAccess.unavailable();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(
+				processAccess, new QueuedLauncher());
+		List<String> firstWarnings = new CopyOnWriteArrayList<>();
+		List<String> secondWarnings = new CopyOnWriteArrayList<>();
+
+		manager.register(() -> { }, firstWarnings::add).unregister();
+		manager.register(() -> { }, secondWarnings::add).unregister();
+
+		Assertions.assertEquals(List.of(
+				"Ignoring ENTER_KEY shutdown because stdin is unavailable"),
+				firstWarnings);
+		Assertions.assertEquals(firstWarnings, secondWarnings);
+		Assertions.assertTrue(processAccess.warnings().isEmpty(),
+				"The process fallback must remain unused when the registration sink succeeds");
+	}
+
+	@Test
+	void systemProcessTreatsNullStandardInputAsUnavailable() {
+		InputStream original = System.in;
+		try {
+			System.setIn(null);
+			Assertions.assertTrue(new SystemLifecycleProcessAccess()
+					.standardInput().isEmpty());
+		} finally {
+			System.setIn(original);
+		}
 	}
 
 	@Test
@@ -225,7 +258,9 @@ final class SokletApplicationTriggerTests {
 			Assertions.assertEquals(List.of("first", "second", "third"), calls,
 					"The newline snapshot must be fixed before any intent callback runs");
 			Assertions.assertNotNull(late.get());
-			Assertions.assertFalse(manager.isListenerStarted());
+			Assertions.assertTrue(manager.isListenerStarted(),
+					"A registration created during delivery needs a fresh listener");
+			Assertions.assertEquals(1, launcher.queuedCount());
 		} finally {
 			first.unregister();
 			second.get().unregister();
@@ -438,9 +473,8 @@ final class SokletApplicationTriggerTests {
 
 			Assertions.assertEquals(2, laterCalls.get());
 			Assertions.assertFalse(manager.isListenerStarted());
-			Assertions.assertEquals(List.of(
-					"Ignoring ENTER_KEY shutdown because stdin reached EOF"),
-					processAccess.warnings());
+			Assertions.assertTrue(processAccess.warnings().isEmpty(),
+					"A valid ENTER_KEY trigger must retire without probing stdin again");
 		} finally {
 			first.unregister();
 			second.unregister();

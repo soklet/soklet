@@ -32,6 +32,11 @@ import static java.util.Objects.requireNonNull;
  * messages. Applications remain responsible for generating key material with
  * a cryptographically secure random source and at least 256 bits of entropy.
  *
+ * <p>Instances intentionally retain reference identity so secret key material
+ * never participates in public equality or hash-code operations. Use
+ * {@link McpProtectionKeyringSnapshot#getFingerprint()} when comparing
+ * complete non-secret keyring configurations across instances.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

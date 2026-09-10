@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -35,10 +36,13 @@ import static java.util.Objects.requireNonNull;
  *
  * <p>An application that returns a task handle must store this complete value
  * atomically with its durable work description. Its configured
- * {@link McpTaskManager} must return the structurally equal origin with every
- * snapshot of that task. Soklet compares the origin before returning the task
- * handle and uses it to apply the original tool's output protections when the
- * task completes.
+ * {@link McpTaskManager} must return a semantically equal origin with every
+ * snapshot of that task. The safest persistence boundary is
+ * {@link #toPersistedString()} and {@link #fromPersistedString(String)}; the
+ * canonical representation tolerates JSON member reordering and equivalent
+ * decimal scales. Soklet compares the origin before returning the task handle
+ * and uses it to apply the original tool's output protections when the task
+ * completes.
  *
  * <p>Origin state may contain tool arguments or other sensitive application
  * data. Store it with the same confidentiality and integrity protections as
@@ -52,19 +56,22 @@ import static java.util.Objects.requireNonNull;
 public final class McpTaskOrigin {
 	@NonNull
 	private final McpJsonObject persistedState;
+	@NonNull
+	private final String persistedString;
 
 	/**
-	 * Reconstructs an origin from the exact framework state previously supplied
-	 * by Soklet.
+	 * Reconstructs an origin from framework state previously supplied by Soklet.
 	 *
-	 * <p>Applications must preserve every member without interpretation or
-	 * rewriting. Soklet validates the supported version and semantics when the
-	 * origin is used; construction establishes only an immutable structural
-	 * copy boundary.
+	 * <p>Applications must preserve every member and value. Soklet canonicalizes
+	 * object-member order and decimal scale for durable equality, then validates
+	 * the supported version and semantics when the origin is used; construction
+	 * establishes an immutable copy boundary.
 	 *
-	 * @param persistedState exact persisted origin state
+	 * @param persistedState complete persisted origin state
 	 * @return immutable task origin
 	 * @throws NullPointerException if {@code persistedState} is null
+	 * @throws IllegalArgumentException if the value cannot be represented by the
+	 *                                  bounded canonical origin codec
 	 */
 	@NonNull
 	public static McpTaskOrigin fromPersistedState(
@@ -72,12 +79,35 @@ public final class McpTaskOrigin {
 		return new McpTaskOrigin(persistedState);
 	}
 
+	/**
+	 * Reconstructs an origin from its bounded durable JSON representation.
+	 *
+	 * <p>The representation may be stored as an opaque text value. Parsing
+	 * accepts equivalent JSON object representations, including insignificant
+	 * whitespace, member reordering, and numerically equivalent decimal scales.
+	 * {@link #toPersistedString()} always returns Soklet's canonical form.</p>
+	 *
+	 * @param persistedString persisted origin JSON
+	 * @return immutable task origin
+	 * @throws NullPointerException if {@code persistedString} is null
+	 * @throws IllegalArgumentException if the value is not a bounded JSON object
+	 */
+	@NonNull
+	public static McpTaskOrigin fromPersistedString(
+			@NonNull String persistedString) {
+		return new McpTaskOrigin(
+				McpTaskOriginPersistedStateCodec.decode(
+						requireNonNull(persistedString)));
+	}
+
 	private McpTaskOrigin(@NonNull McpJsonObject persistedState) {
 		this.persistedState = requireNonNull(persistedState);
+		this.persistedString = McpTaskOriginPersistedStateCodec.encode(
+				persistedState);
 	}
 
 	/**
-	 * Returns the exact opaque state that must be durably preserved.
+	 * Returns the complete opaque state that must be durably preserved.
 	 *
 	 * <p>The returned object may contain sensitive operation arguments. It is
 	 * not MCP response metadata and must never be sent to a client.
@@ -89,20 +119,34 @@ public final class McpTaskOrigin {
 		return this.persistedState;
 	}
 
-	/** @return whether the other origin contains structurally equal state */
+	/**
+	 * Returns the bounded canonical JSON form for durable storage.
+	 *
+	 * <p>The returned text may contain sensitive operation arguments. Store it
+	 * with the same confidentiality and integrity protections as the task, and
+	 * do not log or expose it to clients.</p>
+	 *
+	 * @return canonical persisted origin JSON
+	 */
+	@NonNull
+	public String toPersistedString() {
+		return this.persistedString;
+	}
+
+	/** @return whether the other origin contains semantically equal JSON state */
 	@Override
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
 			return true;
 		if (!(other instanceof McpTaskOrigin origin))
 			return false;
-		return this.persistedState.equals(origin.persistedState);
+		return this.persistedString.equals(origin.persistedString);
 	}
 
-	/** @return structural persisted-state hash code */
+	/** @return semantic persisted-state hash code */
 	@Override
 	public int hashCode() {
-		return this.persistedState.hashCode();
+		return this.persistedString.hashCode();
 	}
 
 	/** @return a diagnostic rendering that does not expose origin state */

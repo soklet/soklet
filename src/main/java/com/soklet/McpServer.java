@@ -53,7 +53,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 	/**
 	 * Returns the effective admission controller. When omitted during
-	 * construction this is {@link McpAdmissionController#acceptAllInstance()}.
+	 * construction this is {@link McpAdmissionController#acceptAllInstance()}
+	 * and Soklet emits a startup configuration diagnostic.
 	 *
 	 * @return admission controller
 	 */
@@ -218,6 +219,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
 		private static final int DEFAULT_STREAM_QUEUE_CAPACITY = 128;
+		private static final int DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES =
+				10 * 1_024 * 1_024;
+		private static final int MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES =
+				16 * 1_024 * 1_024;
+		private static final int DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		private static final int DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES = 64 * 1_024;
+		private static final int DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
+		private static final int DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 64 * 1_024;
+		private static final int DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		@NonNull
 		private static final Duration DEFAULT_KEEP_ALIVE_INTERVAL =
 				Duration.ofSeconds(15);
@@ -226,6 +236,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 				Duration.ofHours(24);
 		@NonNull
 		private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		@NonNull
+		private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT =
+				Duration.ofSeconds(60);
+		@NonNull
+		private static final Duration DEFAULT_REQUEST_BODY_TIMEOUT =
+				Duration.ofSeconds(60);
 		private static final Duration DEFAULT_WRITE_TIMEOUT =
 				Duration.ofSeconds(30);
 		private int port;
@@ -234,6 +250,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private int requestHandlerConcurrency;
 		private int requestHandlerQueueCapacity;
 		private int streamQueueCapacity;
+		private int maximumRequestSizeInBytes;
+		private int maximumHeaderCount;
+		private int maximumHeadersSizeInBytes;
+		private int maximumRequestTargetLengthInBytes;
+		private int requestReadBufferSizeInBytes;
+		private int concurrentConnectionLimit;
 		@NonNull
 		private String host;
 		@NonNull
@@ -243,6 +265,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private Duration requestTimeout;
 		@NonNull
+		private Duration requestHeaderTimeout;
+		@NonNull
+		private Duration requestBodyTimeout;
+		@NonNull
 		private Duration writeTimeout;
 		@Nullable
 		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -250,6 +276,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private McpEndpointRegistry endpointRegistry;
 		@NonNull
 		private McpAdmissionController admissionController;
+		private boolean admissionControllerExplicitlyConfigured;
 		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
 		@NonNull
@@ -285,6 +312,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.port = port;
 			this.admissionController =
 					McpAdmissionController.acceptAllInstance();
+			this.admissionControllerExplicitlyConfigured = false;
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.maximumSubscriptionsPerPartition =
@@ -293,11 +321,24 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.requestHandlerQueueCapacity =
 					DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
 			this.streamQueueCapacity = DEFAULT_STREAM_QUEUE_CAPACITY;
+			this.maximumRequestSizeInBytes =
+					DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+			this.maximumHeaderCount = DEFAULT_MAXIMUM_HEADER_COUNT;
+			this.maximumHeadersSizeInBytes =
+					DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
+			this.maximumRequestTargetLengthInBytes =
+					DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
+			this.requestReadBufferSizeInBytes =
+					DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
+			this.concurrentConnectionLimit =
+					DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 			this.host = DEFAULT_HOST;
 			this.keepAliveInterval = DEFAULT_KEEP_ALIVE_INTERVAL;
 			this.maximumSubscriptionDuration =
 					DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION;
 			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
+			this.requestHeaderTimeout = DEFAULT_REQUEST_HEADER_TIMEOUT;
+			this.requestBodyTimeout = DEFAULT_REQUEST_BODY_TIMEOUT;
 			this.writeTimeout = DEFAULT_WRITE_TIMEOUT;
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.unknownMirroredHeaderPolicy =
@@ -323,16 +364,28 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.requestHandlerQueueCapacity =
 					exactSource.requestHandlerQueueCapacity;
 			this.streamQueueCapacity = exactSource.streamQueueCapacity;
+			this.maximumRequestSizeInBytes = exactSource.maximumRequestSizeInBytes;
+			this.maximumHeaderCount = exactSource.maximumHeaderCount;
+			this.maximumHeadersSizeInBytes = exactSource.maximumHeadersSizeInBytes;
+			this.maximumRequestTargetLengthInBytes =
+					exactSource.maximumRequestTargetLengthInBytes;
+			this.requestReadBufferSizeInBytes =
+					exactSource.requestReadBufferSizeInBytes;
+			this.concurrentConnectionLimit = exactSource.concurrentConnectionLimit;
 			this.host = exactSource.host;
 			this.keepAliveInterval = exactSource.keepAliveInterval;
 			this.maximumSubscriptionDuration =
 					exactSource.maximumSubscriptionDuration;
 			this.requestTimeout = exactSource.requestTimeout;
+			this.requestHeaderTimeout = exactSource.requestHeaderTimeout;
+			this.requestBodyTimeout = exactSource.requestBodyTimeout;
 			this.writeTimeout = exactSource.writeTimeout;
 			this.requestHandlerExecutorServiceSupplier =
 					exactSource.requestHandlerExecutorServiceSupplier;
 			this.endpointRegistry = requireNonNull(endpointRegistry);
 			this.admissionController = exactSource.admissionController;
+			this.admissionControllerExplicitlyConfigured =
+					exactSource.admissionControllerExplicitlyConfigured;
 			this.handlerInterceptor = exactSource.handlerInterceptor;
 			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
 			this.taskManager = exactSource.taskManager;
@@ -406,6 +459,182 @@ public sealed interface McpServer permits DefaultMcpServer {
 				throw new IllegalArgumentException("MCP bind host must not be blank.");
 			this.host = host;
 			return this;
+		}
+
+		/**
+		 * Sets the maximum duration for reading the HTTP request line and headers.
+		 * The default is 60 seconds.
+		 *
+		 * @param requestHeaderTimeout positive finite timeout, or null to restore the
+		 *                             default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the timeout is not positive or cannot
+		 *                                  be represented as signed nanoseconds
+		 */
+		@NonNull
+		public Builder requestHeaderTimeout(
+				@Nullable Duration requestHeaderTimeout) {
+			this.requestHeaderTimeout = requestHeaderTimeout == null
+					? DEFAULT_REQUEST_HEADER_TIMEOUT
+					: requirePositiveDuration(requestHeaderTimeout,
+							"MCP request-header timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the maximum duration for reading the HTTP request body after its
+		 * headers have been received. The default is 60 seconds.
+		 *
+		 * @param requestBodyTimeout positive finite timeout, or null to restore the
+		 *                           default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the timeout is not positive or cannot
+		 *                                  be represented as signed nanoseconds
+		 */
+		@NonNull
+		public Builder requestBodyTimeout(@Nullable Duration requestBodyTimeout) {
+			this.requestBodyTimeout = requestBodyTimeout == null
+					? DEFAULT_REQUEST_BODY_TIMEOUT
+					: requirePositiveDuration(requestBodyTimeout,
+							"MCP request-body timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted MCP request-body size. The default is 10 MiB;
+		 * the reviewed JSON implementation supports values through 16 MiB.
+		 *
+		 * @param maximumRequestSizeInBytes positive byte limit no greater than
+		 *                                  16 MiB, or null to restore the default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the limit is outside the supported range
+		 */
+		@NonNull
+		public Builder maximumRequestSizeInBytes(
+				@Nullable Integer maximumRequestSizeInBytes) {
+			if (maximumRequestSizeInBytes == null) {
+				this.maximumRequestSizeInBytes =
+						DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+				return this;
+			}
+			if (maximumRequestSizeInBytes < 1
+					|| maximumRequestSizeInBytes
+					> MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES)
+				throw new IllegalArgumentException(
+						"MCP maximum request size must be between 1 and "
+								+ MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES + " bytes.");
+			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum number of HTTP header fields in one MCP request. The
+		 * default is 100.
+		 *
+		 * @param maximumHeaderCount positive header count, or null to restore the
+		 *                           default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
+			this.maximumHeaderCount = maximumHeaderCount == null
+					? DEFAULT_MAXIMUM_HEADER_COUNT
+					: requirePositiveInteger(maximumHeaderCount,
+							"MCP maximum header count");
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted HTTP header-section size. The default is 64 KiB.
+		 *
+		 * @param maximumHeadersSizeInBytes positive byte limit, or null to restore
+		 *                                  the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeadersSizeInBytes(
+				@Nullable Integer maximumHeadersSizeInBytes) {
+			this.maximumHeadersSizeInBytes = maximumHeadersSizeInBytes == null
+					? DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES
+					: requirePositiveInteger(maximumHeadersSizeInBytes,
+							"MCP maximum headers size");
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted HTTP request-target length. The default is
+		 * 8192 bytes.
+		 *
+		 * @param maximumRequestTargetLengthInBytes positive byte limit, or null to
+		 *                                          restore the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumRequestTargetLengthInBytes(
+				@Nullable Integer maximumRequestTargetLengthInBytes) {
+			this.maximumRequestTargetLengthInBytes =
+					maximumRequestTargetLengthInBytes == null
+							? DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES
+							: requirePositiveInteger(
+									maximumRequestTargetLengthInBytes,
+									"MCP maximum request-target length");
+			return this;
+		}
+
+		/**
+		 * Sets the buffer size used while reading MCP requests. The default is
+		 * 64 KiB.
+		 *
+		 * @param requestReadBufferSizeInBytes positive byte size, or null to restore
+		 *                                     the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestReadBufferSizeInBytes(
+				@Nullable Integer requestReadBufferSizeInBytes) {
+			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes == null
+					? DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES
+					: requirePositiveInteger(requestReadBufferSizeInBytes,
+							"MCP request read-buffer size");
+			return this;
+		}
+
+		/**
+		 * Sets the concurrent TCP connection limit. The default is 8192; zero
+		 * disables Soklet's connection cap and should be used only when another
+		 * deployment layer supplies an effective bound.
+		 *
+		 * @param concurrentConnectionLimit nonnegative connection limit, or null to
+		 *                                  restore the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder concurrentConnectionLimit(
+				@Nullable Integer concurrentConnectionLimit) {
+			if (concurrentConnectionLimit == null) {
+				this.concurrentConnectionLimit = DEFAULT_CONCURRENT_CONNECTION_LIMIT;
+				return this;
+			}
+			if (concurrentConnectionLimit < 0)
+				throw new IllegalArgumentException(
+						"MCP concurrent connection limit must not be negative.");
+			this.concurrentConnectionLimit = concurrentConnectionLimit;
+			return this;
+		}
+
+		/**
+		 * Historical name for the per-stream outbound queue capacity. This setting
+		 * and {@link #streamQueueCapacity(Integer)} address the same value; the most
+		 * recent call wins. The default is 128.
+		 *
+		 * @param connectionQueueCapacity positive queue capacity, or null to restore
+		 *                                the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder connectionQueueCapacity(
+				@Nullable Integer connectionQueueCapacity) {
+			return streamQueueCapacity(connectionQueueCapacity);
 		}
 
 		/**
@@ -663,7 +892,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the authentication, authorization, and admission controller. The
-		 * default is {@link McpAdmissionController#acceptAllInstance()}.
+		 * default is {@link McpAdmissionController#acceptAllInstance()}; using the
+		 * default emits a startup configuration diagnostic.
 		 *
 		 * @param admissionController admission controller, or null to restore the
 		 *                            accept-all default
@@ -675,6 +905,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.admissionController = admissionController == null
 					? McpAdmissionController.acceptAllInstance()
 					: admissionController;
+			this.admissionControllerExplicitlyConfigured =
+					admissionController != null;
 			return this;
 		}
 
@@ -1008,12 +1240,21 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.requestHandlerConcurrency,
 					this.requestHandlerQueueCapacity, this.requestTimeout,
 					this.requestHandlerExecutorServiceSupplier,
+					this.requestHeaderTimeout, this.requestBodyTimeout,
+					this.maximumRequestSizeInBytes,
+					this.maximumHeaderCount,
+					this.maximumHeadersSizeInBytes,
+					this.maximumRequestTargetLengthInBytes,
+					this.requestReadBufferSizeInBytes,
+					this.concurrentConnectionLimit,
 					this.streamQueueCapacity, this.writeTimeout,
 					this.keepAliveInterval,
 					this.maximumSubscriptionsPerPartition,
 					this.maximumSubscriptionDuration,
 					endpointRegistry,
-					this.admissionController, this.handlerInterceptor,
+					this.admissionController,
+					this.admissionControllerExplicitlyConfigured,
+					this.handlerInterceptor,
 					this.toolOutputSanitizer, this.taskManager,
 					this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
@@ -1051,6 +1292,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 						description + " must fit in a signed nanosecond duration.",
 						exception);
 			}
+			return value;
+		}
+
+		private static int requirePositiveInteger(int value,
+				@NonNull String description) {
+			if (value < 1)
+				throw new IllegalArgumentException(description + " must be positive.");
 			return value;
 		}
 	}

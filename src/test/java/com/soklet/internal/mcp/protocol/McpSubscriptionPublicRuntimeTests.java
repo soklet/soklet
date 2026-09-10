@@ -212,6 +212,15 @@ public class McpSubscriptionPublicRuntimeTests {
 		try {
 			owner.start();
 			int port = boundPort(server);
+			StringBuilder tooManyResourceUris = new StringBuilder(
+					",\"notifications\":{\"resourceSubscriptions\":[");
+			for (int index = 0; index < 257; index++) {
+				if (index > 0)
+					tooManyResourceUris.append(',');
+				tooManyResourceUris.append("\"test://subscription/limit/")
+						.append(index).append("\"");
+			}
+			tooManyResourceUris.append("]}");
 			List<InvalidSubscriptionParams> invalidCases = List.of(
 					new InvalidSubscriptionParams("missing-notifications", ""),
 					new InvalidSubscriptionParams("null-notifications",
@@ -232,7 +241,9 @@ public class McpSubscriptionPublicRuntimeTests {
 							",\"notifications\":{\"resourceSubscriptions\":[\"resources/1\"]}"),
 					new InvalidSubscriptionParams("nonnormalized-uri",
 							",\"notifications\":{\"resourceSubscriptions\":["
-									+ "\"https://example.com/a/../resources/1\"]}"));
+									+ "\"https://example.com/a/../resources/1\"]}"),
+					new InvalidSubscriptionParams("too-many-resource-uris",
+							tooManyResourceUris.toString()));
 			for (InvalidSubscriptionParams invalidCase : invalidCases)
 				assertInvalidFilter(port, invalidCase);
 			Assertions.assertEquals(0, admissionCalls.get(),
@@ -924,12 +935,17 @@ public class McpSubscriptionPublicRuntimeTests {
 					"timerThread");
 			McpApplicationClock clock = (McpApplicationClock) field(runtime,
 					"applicationClock");
+			Object responseStream = field(requestControl, "responseStream");
+			Object channel = field(responseStream, "channel");
+			Object outboundChannel = field(channel, "delegate");
 			McpChunkedHttpClient activeClient = client;
 			keepAliveRead = readerExecutor.submit(activeClient::readChunkText);
 
 			synchronized (transitionLock) {
-				setLongField(requestControl, "nextKeepAliveNanos",
-						clock.nanoTime());
+				long nowNanos = clock.nanoTime();
+				setLongField(outboundChannel, "lastWriteAtNanos",
+						nowNanos - Duration.ofHours(1).toNanos());
+				setLongField(requestControl, "nextKeepAliveNanos", nowNanos);
 				LockSupport.unpark(timerThread);
 				awaitBlocked(timerThread);
 				Assertions.assertEquals(0L, observations.keepAliveCount(),

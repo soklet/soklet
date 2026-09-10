@@ -718,6 +718,34 @@ public class McpResourceProtocolTests {
 	}
 
 	@Test
+	public void template_resource_routes_use_rfc3986_syntax_equivalence() {
+		McpApplicationResourceReadRoute route =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromResourceRoutes(Map.of(), List.of(
+						new McpApplicationResourceTemplateRoute(
+								"CATALOG://ITEMS/Reports/{itemId}", route)),
+						Optional.empty());
+
+		McpApplicationResourceTemplateMatch match = router
+				.resolveResourceTemplate("catalog://items/Reports/42")
+				.orElseThrow();
+		Assertions.assertSame(route, match.readRoute());
+		Assertions.assertEquals(Map.of("itemId", "42"),
+				match.templateVariables());
+		Assertions.assertEquals(Optional.empty(),
+				router.resolveResourceTemplate("catalog://items/reports/42"),
+				"RFC 3986 case folding must not extend from the host into the path.");
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpApplicationRequestRouter.fromResourceRoutes(Map.of(),
+						List.of(new McpApplicationResourceTemplateRoute(
+								"CATALOG://ITEMS/Reports/{itemId}", route),
+								new McpApplicationResourceTemplateRoute(
+										"catalog://items/Reports/{value}", route)),
+						Optional.empty()));
+	}
+
+	@Test
 	public void exact_resource_routes_preserve_large_uri_compatibility_beyond_template_limit() {
 		String largeUri = "test:///exact/" + "a".repeat(900_000);
 		McpApplicationResourceReadRoute exactRoute =

@@ -326,7 +326,9 @@ public final class SokletApplication {
 			try {
 				inputRegistration = exactEnvironment.triggerRegistry()
 						.register(() -> attempt.requestShutdown(
-								TriggerSource.ENTER_KEY));
+								TriggerSource.ENTER_KEY),
+								message -> reportConfigurationUnsupported(
+										exactEnvironment.processAccess(), message));
 			} catch (Throwable failure) {
 				processOwnershipFailure = failure;
 				finalization.notePrimary(
@@ -414,6 +416,24 @@ public final class SokletApplication {
 					processReleaseFailure);
 		}
 		return coreSnapshot;
+	}
+
+	private void reportConfigurationUnsupported(
+			@NonNull LifecycleProcessAccess processAccess,
+			@NonNull String message) {
+		LifecycleProcessAccess exactProcessAccess = requireNonNull(processAccess);
+		String exactMessage = requireNonNull(message);
+		try {
+			this.config.getAggregateLifecycleObserver().didReceiveLogEvent(
+					LogEvent.with(LogEventType.CONFIGURATION_UNSUPPORTED,
+							exactMessage).build());
+		} catch (Throwable observerFailure) {
+			try {
+				exactProcessAccess.reportConfigurationWarning(exactMessage);
+			} catch (Throwable ignored) {
+				// A warning channel cannot control process ownership.
+			}
+		}
 	}
 
 	@NonNull
@@ -642,6 +662,14 @@ interface SokletApplicationTriggerRegistry {
 	@NonNull
 	SokletApplicationTriggerRegistration register(
 			@NonNull Runnable shutdownIntent);
+
+	@NonNull
+	default SokletApplicationTriggerRegistration register(
+			@NonNull Runnable shutdownIntent,
+			@NonNull Consumer<@NonNull String> configurationWarningSink) {
+		requireNonNull(configurationWarningSink);
+		return register(requireNonNull(shutdownIntent));
+	}
 }
 
 @FunctionalInterface
@@ -663,13 +691,11 @@ final class SokletApplicationInputManager
 	@NonNull
 	private final DaemonLauncher launcher;
 	@NonNull
-	private final Set<Runnable> registrations;
+	private final Set<Registration> registrations;
 	@NonNull
 	private final Object listenerMonitor;
 	@NonNull
 	private final AtomicBoolean listenerStarted;
-	@NonNull
-	private final AtomicBoolean warningEmitted;
 	private long nextListenerGeneration;
 	private long activeListenerGeneration;
 	private long registrationEpoch;
@@ -683,29 +709,40 @@ final class SokletApplicationInputManager
 		this.registrations = new CopyOnWriteArraySet<>();
 		this.listenerMonitor = new Object();
 		this.listenerStarted = new AtomicBoolean();
-		this.warningEmitted = new AtomicBoolean();
 	}
 
 	@NonNull
 	@Override
 	public SokletApplicationTriggerRegistration register(
 			@NonNull Runnable shutdownIntent) {
-		Runnable exactIntent = requireNonNull(shutdownIntent);
+		return register(requireNonNull(shutdownIntent),
+				this.processAccess::reportConfigurationWarning);
+	}
+
+	@NonNull
+	@Override
+	public SokletApplicationTriggerRegistration register(
+			@NonNull Runnable shutdownIntent,
+			@NonNull Consumer<@NonNull String> configurationWarningSink) {
+		Registration registration = new Registration(
+				requireNonNull(shutdownIntent),
+				requireNonNull(configurationWarningSink));
 		Optional<InputStream> input = this.processAccess.standardInput();
 		if (input.isEmpty()) {
-			warnOnce("Ignoring ENTER_KEY shutdown because stdin is unavailable");
+			registration.warnOnce(
+					"Ignoring ENTER_KEY shutdown because stdin is unavailable");
 			return () -> { };
 		}
 		InputStream exactInput = input.orElseThrow();
 		synchronized (this.listenerMonitor) {
-			this.registrations.add(exactIntent);
+			this.registrations.add(registration);
 			this.registrationEpoch++;
 			this.latestInput = exactInput;
 			if (!this.listenerStarted.get()) {
 				try {
 					launchListenerWhileLocked(exactInput);
 				} catch (RuntimeException | Error launchFailure) {
-					this.registrations.remove(exactIntent);
+					this.registrations.remove(registration);
 					throw launchFailure;
 				}
 			}
@@ -713,7 +750,7 @@ final class SokletApplicationInputManager
 		AtomicBoolean registered = new AtomicBoolean(true);
 		return () -> {
 			if (registered.compareAndSet(true, false))
-				this.registrations.remove(exactIntent);
+				this.registrations.remove(registration);
 		};
 	}
 
@@ -745,6 +782,7 @@ final class SokletApplicationInputManager
 
 	private void runListener(@NonNull InputStream input, long generation) {
 		String warning = null;
+		List<Registration> warningRegistrations = List.of();
 		long observedRegistrationEpoch = registrationEpoch();
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(
 				new NonClosingInputStream(requireNonNull(input)),
@@ -754,16 +792,27 @@ final class SokletApplicationInputManager
 				String line = reader.readLine();
 				if (line == null) {
 					warning = "Ignoring ENTER_KEY shutdown because stdin reached EOF";
+					warningRegistrations = List.copyOf(this.registrations);
 					break;
 				}
 				broadcastShutdownIntent();
+				// ENTER_KEY registrations are one-shot for a completed run.  Retire
+				// this reader after the triggering line so it cannot consume input
+				// belonging to code that runs after Soklet shuts down.  If a new
+				// registration arrived during a callback, retireListener's epoch
+				// handoff starts a fresh listener generation for it.
+				break;
 			}
 		} catch (IOException | RuntimeException failure) {
 			warning = "Ignoring ENTER_KEY shutdown because stdin became unusable";
+			warningRegistrations = List.copyOf(this.registrations);
 		} finally {
 			retireListener(generation, observedRegistrationEpoch);
 		}
-		warnOnce(requireNonNull(warning));
+		if (warning != null) {
+			for (Registration registration : warningRegistrations)
+				registration.warnOnce(warning);
+		}
 	}
 
 	/** Closes decoder buffers without taking ownership of process stdin. */
@@ -805,23 +854,45 @@ final class SokletApplicationInputManager
 	}
 
 	private void broadcastShutdownIntent() {
-		List<Runnable> snapshot = List.copyOf(this.registrations);
-		for (Runnable shutdownIntent : snapshot) {
+		List<Registration> snapshot = List.copyOf(this.registrations);
+		for (Registration registration : snapshot) {
 			try {
-				shutdownIntent.run();
+				registration.shutdownIntent().run();
 			} catch (Throwable ignored) {
 				// Every other runner still receives nonblocking intent.
 			}
 		}
 	}
 
-	private void warnOnce(@NonNull String message) {
-		if (!this.warningEmitted.compareAndSet(false, true))
-			return;
-		try {
-			this.processAccess.reportConfigurationWarning(requireNonNull(message));
-		} catch (Throwable ignored) {
-			// A warning channel cannot control process ownership.
+	private static final class Registration {
+		@NonNull
+		private final Runnable shutdownIntent;
+		@NonNull
+		private final Consumer<@NonNull String> configurationWarningSink;
+		@NonNull
+		private final AtomicBoolean warningEmitted;
+
+		private Registration(@NonNull Runnable shutdownIntent,
+				@NonNull Consumer<@NonNull String> configurationWarningSink) {
+			this.shutdownIntent = requireNonNull(shutdownIntent);
+			this.configurationWarningSink = requireNonNull(
+					configurationWarningSink);
+			this.warningEmitted = new AtomicBoolean();
+		}
+
+		@NonNull
+		private Runnable shutdownIntent() {
+			return this.shutdownIntent;
+		}
+
+		private void warnOnce(@NonNull String message) {
+			if (!this.warningEmitted.compareAndSet(false, true))
+				return;
+			try {
+				this.configurationWarningSink.accept(requireNonNull(message));
+			} catch (Throwable ignored) {
+				// A warning channel cannot control process ownership.
+			}
 		}
 	}
 
@@ -837,7 +908,7 @@ final class SystemLifecycleProcessAccess implements LifecycleProcessAccess {
 	@NonNull
 	@Override
 	public Optional<InputStream> standardInput() {
-		return Optional.of(System.in);
+		return Optional.ofNullable(System.in);
 	}
 
 	@Override

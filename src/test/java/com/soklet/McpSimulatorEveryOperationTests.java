@@ -74,9 +74,7 @@ public class McpSimulatorEveryOperationTests {
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
 	private static final List<OperationCase> OPERATIONS = List.of(
 			new OperationCase("server/discover", "every-discover", null, "",
-					List.of("\"capabilities\":",
-							"\"io.modelcontextprotocol/serverInfo\":{",
-							"\"name\":\"simulator-every-operation-test\""),
+					List.of("\"capabilities\":"),
 					List.of()),
 			new OperationCase("tools/list", "every-tools-list", null, "",
 					List.of("\"tools\":[{", "\"name\":\"" + TOOL_NAME + "\"",
@@ -116,7 +114,8 @@ public class McpSimulatorEveryOperationTests {
 		return OPERATIONS.stream().map(operation -> DynamicTest.dynamicTest(
 				operation.method(), () -> Assertions.assertTimeoutPreemptively(
 						DYNAMIC_TEST_TIMEOUT, () -> {
-							Fixture fixture = new Fixture(1, false);
+							Fixture fixture = new Fixture(1, false,
+									operation.method().equals("server/discover"));
 							SokletSimulator.run(fixture.config(), simulator -> {
 								fixture.captureServer(simulator);
 								String transcript = replay(simulator, fixture, operation);
@@ -133,7 +132,7 @@ public class McpSimulatorEveryOperationTests {
 
 	@Test
 	public void cancellationNotificationIsAcceptedAndIgnoredWithoutTerminatingItsTargetSimulation() {
-		Fixture fixture = new Fixture(2, true);
+		Fixture fixture = new Fixture(2, true, false);
 
 		try {
 			SokletSimulator.run(fixture.config(), simulator -> {
@@ -199,7 +198,7 @@ public class McpSimulatorEveryOperationTests {
 	@Timeout(120)
 	public void concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained()
 			throws Exception {
-		Fixture fixture = new Fixture(OPERATIONS.size(), false);
+		Fixture fixture = new Fixture(OPERATIONS.size(), false, false);
 		ExecutorService executor = Executors.newFixedThreadPool(OPERATIONS.size());
 		CountDownLatch ready = new CountDownLatch(OPERATIONS.size());
 		CountDownLatch start = new CountDownLatch(1);
@@ -279,7 +278,8 @@ public class McpSimulatorEveryOperationTests {
 			Assertions.assertTrue(json.contains(fragment), json);
 		for (String fragment : operation.forbiddenFragments())
 			Assertions.assertFalse(json.contains(fragment), json);
-		Assertions.assertEquals(expectedJson(operation), json);
+		Assertions.assertEquals(expectedJson(operation,
+				fixture.serverInformationIncluded()), json);
 		McpSimulationCompletion completion = awaitCompletion(simulation);
 		Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 				completion.getReason());
@@ -290,17 +290,21 @@ public class McpSimulatorEveryOperationTests {
 	}
 
 	@NonNull
-	private static String expectedJson(@NonNull OperationCase operation) {
+	private static String expectedJson(@NonNull OperationCase operation,
+			boolean serverInformationIncluded) {
 		String prefix = "{\"jsonrpc\":\"2.0\",\"id\":\"" + operation.id()
 				+ "\",\"result\":";
 		String result = switch (operation.method()) {
 			case "server/discover" -> "{\"supportedVersions\":[\"2026-07-28\"],"
 					+ "\"capabilities\":{\"tools\":{},\"prompts\":{},"
 					+ "\"resources\":{\"listChanged\":true}},\"ttlMs\":0,"
-					+ "\"cacheScope\":\"private\",\"resultType\":\"complete\","
-					+ "\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{"
-					+ "\"name\":\"simulator-every-operation-test\","
-					+ "\"version\":\"4.0.0\"}}}";
+					+ "\"cacheScope\":\"private\",\"resultType\":\"complete\""
+					+ (serverInformationIncluded
+							? ",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{"
+									+ "\"name\":\"simulator-every-operation-test\","
+									+ "\"version\":\"4.0.0\"}}"
+							: "")
+					+ "}";
 			case "tools/list" -> "{\"tools\":[{\"name\":\"" + TOOL_NAME
 					+ "\",\"inputSchema\":{\"type\":\"object\"}}],\"ttlMs\":0,"
 					+ "\"cacheScope\":\"private\",\"resultType\":\"complete\"}";
@@ -544,6 +548,7 @@ public class McpSimulatorEveryOperationTests {
 		private final RecordingMetrics metrics;
 		private final RecordingLifecycle lifecycle;
 		private final boolean blockingTool;
+		private final boolean serverInformationIncluded;
 		private final AtomicInteger handlerCalls = new AtomicInteger();
 		private final AtomicInteger interceptorCalls = new AtomicInteger();
 		private final CountDownLatch blockingToolEntered = new CountDownLatch(1);
@@ -555,10 +560,12 @@ public class McpSimulatorEveryOperationTests {
 		private final CountDownLatch releaseConcurrentAdmissions;
 		private final AtomicReference<McpServer> server = new AtomicReference<>();
 
-		private Fixture(int expectedFinishes, boolean blockingTool) {
+		private Fixture(int expectedFinishes, boolean blockingTool,
+				boolean serverInformationIncluded) {
 			this.metrics = new RecordingMetrics(expectedFinishes);
 			this.lifecycle = new RecordingLifecycle(expectedFinishes);
 			this.blockingTool = blockingTool;
+			this.serverInformationIncluded = serverInformationIncluded;
 			this.concurrentAdmissions = expectedFinishes == OPERATIONS.size()
 					? new CountDownLatch(expectedFinishes) : null;
 			this.releaseConcurrentAdmissions = this.concurrentAdmissions == null
@@ -609,6 +616,7 @@ public class McpSimulatorEveryOperationTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-every-operation-test",
 						"4.0.0").build())
+				.serverInformationIncluded(this.serverInformationIncluded)
 				.addTool(tool)
 				.addPrompt(prompt)
 				.addResource(exact)
@@ -760,6 +768,10 @@ public class McpSimulatorEveryOperationTests {
 
 		private RecordingMetrics metrics() {
 			return this.metrics;
+		}
+
+		private boolean serverInformationIncluded() {
+			return this.serverInformationIncluded;
 		}
 
 		private AtomicInteger handlerCalls() {

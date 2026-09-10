@@ -894,7 +894,9 @@ public class McpSimulatorPublicRuntimeTests {
 				McpMetricsEvent.HandlerExecutionFinished.class), events.toString());
 		Assertions.assertEquals(1, countEvents(events,
 				McpMetricsEvent.RequestStreamOpened.class), events.toString());
-		Assertions.assertEquals(2, countEvents(events,
+		// Only the retained frame was accepted for delivery; the frame that
+		// crossed the simulator capture limit is not an emitted-progress event.
+		Assertions.assertEquals(1, countEvents(events,
 				McpMetricsEvent.ProgressEmitted.class), events.toString());
 		Assertions.assertEquals(1, countEvents(events,
 				McpMetricsEvent.CancelationSignaled.class), events.toString());
@@ -918,7 +920,7 @@ public class McpSimulatorPublicRuntimeTests {
 				.filter(finished -> finished.getOutcome()
 						== McpRequestOutcome.COMPLETE)
 				.count(), events.toString());
-		Assertions.assertEquals(15, events.size(), events.toString());
+		Assertions.assertEquals(14, events.size(), events.toString());
 		Assertions.assertTrue(events.stream().noneMatch(event ->
 				event instanceof McpMetricsEvent.RequestRejected
 						|| event instanceof McpMetricsEvent.HandlerQueued
@@ -1229,6 +1231,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-public-runtime-test",
 							"4.0.0").build())
+					.serverInformationIncluded(false)
 					.addTools(tools)
 					.build();
 			return List.of(endpoint);

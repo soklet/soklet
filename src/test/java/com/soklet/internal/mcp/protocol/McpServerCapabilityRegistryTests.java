@@ -271,6 +271,42 @@ public class McpServerCapabilityRegistryTests {
 	}
 
 	@Test
+	public void every_framework_catalog_result_carries_server_information_unless_disabled() {
+		McpServerCapabilityRegistry included = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder()
+						.tool(McpNormalizedOperation.named("lookup"))
+						.prompt(McpNormalizedOperation.named("summarize"))
+						.exactResource("catalog://items/1")
+						.resourceTemplate("catalog://items/{id}")
+						.build());
+		McpServerCapabilityRegistry omitted = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder()
+						.serverInformationIncluded(false)
+						.tool(McpNormalizedOperation.named("lookup"))
+						.prompt(McpNormalizedOperation.named("summarize"))
+						.exactResource("catalog://items/1")
+						.resourceTemplate("catalog://items/{id}")
+						.build());
+
+		List<McpWireResult> includedResults = List.of(
+				included.toolsListResult(), included.promptsListResult(),
+				included.resourcesListResult(), included.resourceTemplatesListResult());
+		List<McpWireResult> omittedResults = List.of(
+				omitted.toolsListResult(), omitted.promptsListResult(),
+				omitted.resourcesListResult(), omitted.resourceTemplatesListResult());
+
+		for (McpWireResult result : includedResults) {
+			McpJsonObject metadata = (McpJsonObject) result.toJsonObject()
+					.members().get("_meta");
+			Assertions.assertNotNull(metadata);
+			Assertions.assertTrue(metadata.members().containsKey(
+					McpResultMetadata.SERVER_INFORMATION_KEY));
+		}
+		for (McpWireResult result : omittedResults)
+			Assertions.assertFalse(result.toJsonObject().members().containsKey("_meta"));
+	}
+
+	@Test
 	public void operation_capability_plans_include_tools_prompts_and_resource_reads() {
 		McpInputRequestDeclaration declaration =
 				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL);

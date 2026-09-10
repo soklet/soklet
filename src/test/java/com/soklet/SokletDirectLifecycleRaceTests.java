@@ -144,8 +144,9 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertEquals(0, http.startCalls());
 
 		Assertions.assertTrue(attachReturned.await(2, TimeUnit.SECONDS));
-		Assertions.assertTrue(http.invoke("/race").isEmpty(),
-				"A handler returned by an abandoned attachment must remain inadmissible");
+		Assertions.assertEquals(503, http.invoke("/race").orElseThrow()
+				.getMarshaledResponse().getStatusCode(),
+				"A handler returned by an abandoned attachment must reject with 503");
 		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 		Assertions.assertSame(terminal,
 				soklet.getDirectLifecycle().result().orElseThrow(),

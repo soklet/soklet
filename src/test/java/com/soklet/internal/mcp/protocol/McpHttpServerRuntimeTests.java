@@ -997,6 +997,27 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void ipv4_loopback_bind_authorizes_reserved_loopback_aliases()
+			throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			for (String authority : List.of(
+					"localhost:" + port, "127.0.0.1:" + port,
+					"[::1]:" + port)) {
+				RawResponse response = send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+								"Host", authority),
+						discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(200, response.status(), authority);
+			}
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void ipv6_loopback_bind_authorizes_its_effective_authority()
 			throws Exception {
 		Assumptions.assumeTrue(ipv6LoopbackAvailable(), "IPv6 loopback is unavailable.");
@@ -1006,6 +1027,7 @@ public class McpHttpServerRuntimeTests {
 		try {
 			int port = runtime.start().getPort();
 			for (String authority : List.of(
+					"localhost:" + port, "127.0.0.1:" + port,
 					"[::1]:" + port, "[0:0:0:0:0:0:0:1]:" + port)) {
 				RawResponse response = send("::1", port, "POST", "/mcp",
 						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
@@ -1019,9 +1041,31 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void nonloopback_and_wildcard_binds_require_explicit_allowed_hosts() {
+		for (String host : List.of(
+				"0.0.0.0", "::", "192.0.2.1", "example.test")) {
+			IllegalArgumentException exception = Assertions.assertThrows(
+					IllegalArgumentException.class,
+					() -> runtime(configurationWithHost(0, host), defaultPolicy()),
+					host);
+			Assertions.assertEquals(
+					"A non-loopback MCP bind host requires at least one explicitly allowed host.",
+					exception.getMessage(), host);
+		}
+
+		McpHttpEndpointPolicy explicitPolicy = new McpHttpEndpointPolicy(
+				"/mcp", Set.of("mcp.example.test"),
+				McpAbsentOriginPolicy.ALLOW, CorsAuthorizer.rejectAllInstance(),
+				ignored -> McpRequestAdmissionDecision.ACCEPT);
+		Assertions.assertDoesNotThrow(() -> runtime(
+				configurationWithHost(0, "0.0.0.0"), explicitPolicy));
+	}
+
+	@Test
 	public void invalid_configured_hosts_fail_before_the_listener_is_created() {
 		for (String invalidHost : List.of(
-				"example.com:443", "https://example.com", " example.com", "exa_mple")) {
+				"*", "example.com:443", "https://example.com", " example.com",
+				"exa_mple")) {
 			McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy("/mcp",
 					Set.of(invalidHost), McpAbsentOriginPolicy.ALLOW,
 					CorsAuthorizer.rejectAllInstance(),

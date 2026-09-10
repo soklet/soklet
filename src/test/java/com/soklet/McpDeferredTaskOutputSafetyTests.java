@@ -141,7 +141,8 @@ public class McpDeferredTaskOutputSafetyTests {
 			assertSuccess(createTask(port));
 
 			for (SanitizerMode mode : List.of(SanitizerMode.PASS_THROUGH,
-					SanitizerMode.SCHEMA_MISMATCH, SanitizerMode.NULL,
+					SanitizerMode.SCHEMA_MISMATCH,
+					SanitizerMode.OMIT_SUCCESS, SanitizerMode.NULL,
 					SanitizerMode.THROW, SanitizerMode.DEPTH_LIMIT,
 					SanitizerMode.NODE_LIMIT, SanitizerMode.SIZE_LIMIT)) {
 				sanitizerMode.set(mode);
@@ -159,7 +160,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			HttpResponse<String> recovered = getTask(port, "recovered");
 			assertSuccess(recovered);
 			assertContains(recovered.body(), "\"message\":\"sanitized\"");
-			Assertions.assertEquals(8, sanitizerInvocations.get());
+			Assertions.assertEquals(9, sanitizerInvocations.get());
 		} finally {
 			soklet.close();
 		}
@@ -241,6 +242,8 @@ public class McpDeferredTaskOutputSafetyTests {
 								.put("count", "not-an-integer")
 								.put("chunks", McpJsonArray.emptyInstance())
 								.build());
+				case OMIT_SUCCESS -> McpToolOutput.fromText(
+						"DEFERRED-OMITTED-STRUCTURED-CONTENT");
 				case NULL -> null;
 				case THROW -> throw new IllegalStateException(THROW_CANARY);
 				case DEPTH_LIMIT -> McpToolOutput.fromStructuredContent(
@@ -389,6 +392,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		ERROR,
 		PASS_THROUGH,
 		SCHEMA_MISMATCH,
+		OMIT_SUCCESS,
 		NULL,
 		THROW,
 		DEPTH_LIMIT,

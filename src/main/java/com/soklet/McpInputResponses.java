@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.converter.TypeReference;
 import com.soklet.internal.mcp.schema.McpRuntimeTypedSchemaBridge;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -166,6 +167,20 @@ public final class McpInputResponses {
 	@NonNull
 	public Map<@NonNull String, @NonNull McpJsonValue> asMap() {
 		return this.responses;
+	}
+
+	/** @return whether every keyed input response is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpInputResponses responses
+				&& this.responses.equals(responses.responses);
+	}
+
+	/** @return structural input-response hash code */
+	@Override
+	public int hashCode() {
+		return this.responses.hashCode();
 	}
 
 	@NonNull

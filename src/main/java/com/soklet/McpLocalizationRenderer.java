@@ -129,6 +129,23 @@ final class McpLocalizationRenderer {
 		if (terminalBoundary.isTerminal())
 			return failed(canonicalDocument, failurePolicy);
 
+		// A later localized slot may be shorter than its canonical text. Track the
+		// greatest possible suffix saving so an oversized running prefix is rejected
+		// only when no legal later replacement could bring the response back under
+		// the ceiling. The shortest legal nonblank JSON string is three bytes: one
+		// ASCII character and its two quotes.
+		long[] maximumSuffixSavings = new long[slots.size() + 1];
+		try {
+			for (int index = slots.size() - 1; index >= 0; --index) {
+				long defaultBytes = McpLocalizationByteAccounting
+						.encodedStringBytes(slots.get(index).text().getDefaultText());
+				maximumSuffixSavings[index] = maximumSuffixSavings[index + 1]
+						+ Math.max(0L, defaultBytes - 3L);
+			}
+		} catch (RuntimeException exception) {
+			return failed(canonicalDocument, failurePolicy);
+		}
+
 		// The selected locale is provider data: it must be canonical and non-root.
 		Locale selectedLocale;
 
@@ -147,7 +164,8 @@ final class McpLocalizationRenderer {
 
 		List<McpLocalizationOverlay.Replacement> replacements = new ArrayList<>();
 
-		for (McpCanonicalLocalizationPlan.Slot slot : slots) {
+		for (int slotIndex = 0; slotIndex < slots.size(); ++slotIndex) {
+			McpCanonicalLocalizationPlan.Slot slot = slots.get(slotIndex);
 			if (terminalBoundary.isTerminal())
 				return failed(canonicalDocument, failurePolicy);
 
@@ -173,6 +191,9 @@ final class McpLocalizationRenderer {
 			if (result instanceof McpLocalizationResult.Localized localized) {
 				replacementText = localized.getText();
 			} else if (result instanceof McpLocalizationResult.UseDefaultText) {
+				if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
+						> maximumResponseBytes)
+					return failed(canonicalDocument, failurePolicy);
 				continue;
 			} else {
 				// A Failure result, or a null the contract forbids.
@@ -194,8 +215,12 @@ final class McpLocalizationRenderer {
 			String defaultText = slot.text().getDefaultText();
 
 			// An identical replacement keeps the canonical subtree shared.
-			if (replacementText.equals(defaultText))
+			if (replacementText.equals(defaultText)) {
+				if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
+						> maximumResponseBytes)
+					return failed(canonicalDocument, failurePolicy);
 				continue;
+			}
 
 			long delta;
 
@@ -208,8 +233,10 @@ final class McpLocalizationRenderer {
 
 			projectedBytes += delta;
 
-			// Abandon the candidate before retaining an over-ceiling replacement.
-			if (projectedBytes > maximumResponseBytes)
+			// Abandon before retention only when even the shortest legal replacements
+			// for every remaining slot cannot make the aggregate candidate fit.
+			if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
+					> maximumResponseBytes)
 				return failed(canonicalDocument, failurePolicy);
 
 			replacements.add(new McpLocalizationOverlay.Replacement(

@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Set;
@@ -61,5 +62,24 @@ public final class McpProtectionKeyringSnapshot {
 	@NonNull
 	public McpProtectionKeyringFingerprint getFingerprint() {
 		return this.fingerprint;
+	}
+
+	/** @return whether every captured keyring property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpProtectionKeyringSnapshot snapshot
+				&& this.activeKeyId.equals(snapshot.activeKeyId)
+				&& this.verificationKeyIds.equals(snapshot.verificationKeyIds)
+				&& this.fingerprint.equals(snapshot.fingerprint);
+	}
+
+	/** @return structural keyring-snapshot hash code */
+	@Override
+	public int hashCode() {
+		int result = this.activeKeyId.hashCode();
+		result = 31 * result + this.verificationKeyIds.hashCode();
+		result = 31 * result + this.fingerprint.hashCode();
+		return result;
 	}
 }

@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -84,6 +85,25 @@ public final class McpIcon {
 	@NonNull
 	public Optional<@NonNull McpIconTheme> getTheme() {
 		return Optional.ofNullable(this.theme);
+	}
+
+	/** @return whether every icon property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpIcon icon))
+			return false;
+		return this.source.equals(icon.source)
+				&& Objects.equals(this.mimeType, icon.mimeType)
+				&& this.sizes.equals(icon.sizes)
+				&& Objects.equals(this.theme, icon.theme);
+	}
+
+	/** @return structural icon hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.source, this.mimeType, this.sizes, this.theme);
 	}
 
 	/**

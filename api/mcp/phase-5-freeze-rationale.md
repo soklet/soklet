@@ -18,6 +18,8 @@ MCP value-contract amendment reviewed: 2026-09-03
 
 Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
+Final public-value amendment reviewed: 2026-09-10
+
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -45,8 +47,9 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 134 Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 234
-MCP owners; the 51-owner non-MCP allowlist brings current-side coverage to 285.
+partition is 134 Phase 4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks
+owners, for 248 MCP owners; the 51-owner non-MCP allowlist brings current-side
+coverage to 299.
 
 The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
@@ -63,9 +66,10 @@ records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
 The 2026-08-18 public-record elimination amendment retained the owner partition
 and advanced that checkpoint to 565 records. Typed request state then removed
-three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections leave
-Phase 5 byte-identical while the current released-3.5.1 comparison contains
-658 records with SHA-256 `f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections left
+Phase 5 byte-identical at that checkpoint. The final current released-3.5.1
+comparison contains 646 records with SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 
 ## Frozen Phase 5 snapshot
 
@@ -444,3 +448,22 @@ has SHA-256
 The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. These are local development checks, not
 release-candidate provenance or publication evidence.
+
+## 2026-09-10 final public-value amendment
+
+The final release review adds deliberate structural `equals(Object)` and
+`hashCode()` contracts to `McpInputRequiredResult`, `McpInputResponses`,
+`McpProgressUpdate`, `McpProtectionKeyringSnapshot`, and
+`McpRequestStateProtectionContext`. The additions complete the public immutable
+value contract and do not add or remove Phase 5 owners.
+
+The final Phase 5 snapshot contains 200 records: 36 classes, no public
+constructors, 19 fields, and 145 methods. Its signature SHA-256 is
+`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`;
+the reviewed reflection/nullability SHA-256 is
+`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`;
+and the unchanged include-inventory SHA-256 is
+`0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
+The shared final released-3.5.1 compatibility ledger contains 646 records with
+SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.

@@ -132,6 +132,85 @@ public final class McpServerRuntimeBridge {
 	private final List<@NonNull EndpointPlan> executableEndpointPlans;
 
 	/**
+	 * Internal public-package projection of the legacy MCP listener hardening
+	 * controls. It is carried as one value so compatibility constructors can keep
+	 * using the reviewed transport defaults.
+	 */
+	public record HttpTransportPlan(@NonNull Duration requestHeaderTimeout,
+			@NonNull Duration requestBodyTimeout, int readBufferSize,
+			int maximumRequestBodyBytes, int maximumHeaderCount,
+			int maximumHeaderBytes, int maximumRequestTargetBytes,
+			int maximumConnections) {
+		private static final int HTTP_FRAMING_ALLOWANCE_BYTES = 1_024;
+
+		public HttpTransportPlan {
+			requireNonNull(requestHeaderTimeout);
+			requireNonNull(requestBodyTimeout);
+			if (requestHeaderTimeout.isZero() || requestHeaderTimeout.isNegative()
+					|| requestBodyTimeout.isZero() || requestBodyTimeout.isNegative())
+				throw new IllegalArgumentException(
+						"MCP transport read timeouts must be positive.");
+			try {
+				requestHeaderTimeout.toNanos();
+				requestBodyTimeout.toNanos();
+			} catch (ArithmeticException exception) {
+				throw new IllegalArgumentException(
+						"MCP transport read timeouts must fit in signed nanoseconds.",
+						exception);
+			}
+			if (readBufferSize < 1 || maximumRequestBodyBytes < 1
+					|| maximumHeaderCount < 1 || maximumHeaderBytes < 1
+					|| maximumRequestTargetBytes < 1 || maximumConnections < 0)
+				throw new IllegalArgumentException(
+						"MCP transport byte and count limits must be positive; maximum connections may be zero.");
+			if (maximumRequestBodyBytes
+					> McpJsonLimits.maximumSupported().maximumInputBytes())
+				throw new IllegalArgumentException(
+						"MCP maximum request size exceeds the reviewed JSON input ceiling.");
+			maximumAggregateRequestBytes(maximumRequestBodyBytes,
+					maximumHeaderBytes, maximumRequestTargetBytes);
+		}
+
+		@NonNull
+		static HttpTransportPlan productionDefaults() {
+			McpHttpTransportConfiguration defaults =
+					McpHttpTransportConfiguration.productionDefaults(0);
+			return new HttpTransportPlan(defaults.requestHeaderTimeout(),
+					defaults.requestBodyTimeout(), defaults.readBufferSize(),
+					defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+					defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+					defaults.maximumConnections());
+		}
+
+		int maximumAggregateRequestBytes() {
+			return maximumAggregateRequestBytes(maximumRequestBodyBytes,
+					maximumHeaderBytes, maximumRequestTargetBytes);
+		}
+
+		@NonNull
+		McpJsonLimits jsonLimits() {
+			McpJsonLimits defaults = McpJsonLimits.productionDefaults();
+			return new McpJsonLimits(maximumRequestBodyBytes,
+					defaults.maximumNestingDepth(),
+					defaults.maximumTokenLengthInCharacters(),
+					defaults.maximumStringLengthInCharacters(),
+					defaults.maximumNumberLengthInCharacters(),
+					defaults.maximumExponentMagnitude(),
+					defaults.maximumNodeCount(), defaults.maximumOutputBytes());
+		}
+
+		private static int maximumAggregateRequestBytes(int requestBytes,
+				int headerBytes, int requestTargetBytes) {
+			long aggregate = (long) requestBytes + headerBytes
+					+ requestTargetBytes + HTTP_FRAMING_ALLOWANCE_BYTES;
+			if (aggregate > Integer.MAX_VALUE)
+				throw new IllegalArgumentException(
+						"The combined MCP request limits exceed the supported aggregate size.");
+			return (int) aggregate;
+		}
+	}
+
+	/**
 	 * Internal public-package bridge for method-specific input-request parameter
 	 * validation.
 	 */
@@ -596,6 +675,60 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Creates one production listener projection with common lifecycle signaling
+	 * and the exact public HTTP hardening controls.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval,
+			int maximumSubscriptionsPerPartition,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
+			@NonNull LifecycleAdapter lifecycleAdapter,
+			@NonNull HttpTransportPlan httpTransportPlan) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
+						unknownMirroredHeaderNameDiagnosticConsumer),
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				requireNonNull(requestStateProtectionPlan),
+				new McpSubscriptionRuntimeConfiguration(streamQueueCapacity,
+						writeTimeout, keepAliveInterval,
+						McpSubscriptionRuntimeConfiguration.productionDefaults()
+								.shutdownTimeout(),
+						maximumSubscriptionsPerPartition,
+						maximumSubscriptionDuration),
+				requireNonNull(applicationExecutionObserver),
+				requireNonNull(lifecycleAdapter),
+				requireNonNull(httpTransportPlan));
+	}
+
+	/**
 	 * Deterministic compatibility seam for direct internal runtime tests.  The
 	 * explicit timeout is not consulted by common-lifecycle quiesce, force, or
 	 * proof observation, which receive the owner's fixed absolute boundaries.
@@ -643,7 +776,8 @@ public final class McpServerRuntimeBridge {
 						maximumSubscriptionsPerPartition,
 						maximumSubscriptionDuration),
 				requireNonNull(applicationExecutionObserver),
-				requireNonNull(lifecycleAdapter));
+				requireNonNull(lifecycleAdapter),
+				HttpTransportPlan.productionDefaults());
 	}
 
 	/** One localization-enabled endpoint's invalidation publication handle. */
@@ -789,7 +923,8 @@ public final class McpServerRuntimeBridge {
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				requestObservationAdapter, requestStateProtectionPlan,
 				subscriptionRuntimeConfiguration, applicationExecutionObserver,
-				LifecycleAdapter.disabledInstance());
+				LifecycleAdapter.disabledInstance(),
+				HttpTransportPlan.productionDefaults());
 	}
 
 	private McpServerRuntimeBridge(@NonNull String host, int port,
@@ -816,7 +951,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpSubscriptionRuntimeConfiguration
 					subscriptionRuntimeConfiguration,
 			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
-			@NonNull LifecycleAdapter lifecycleAdapter) {
+			@NonNull LifecycleAdapter lifecycleAdapter,
+			@NonNull HttpTransportPlan httpTransportPlan) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
@@ -835,6 +971,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(requestStateProtectionPlan);
 		requireNonNull(subscriptionRuntimeConfiguration);
 		requireNonNull(applicationExecutionObserver);
+		requireNonNull(httpTransportPlan);
 		McpFrameworkRequestStateRuntime requestStateRuntime =
 				new McpFrameworkRequestStateRuntime(requestStateProtectionPlan,
 						Clock.systemUTC());
@@ -855,16 +992,20 @@ public final class McpServerRuntimeBridge {
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(port);
 		McpHttpTransportConfiguration transport = new McpHttpTransportConfiguration(
-				host, port, defaults.selectorResolution(), defaults.requestHeaderTimeout(),
-				defaults.requestBodyTimeout(),
+				host, port, defaults.selectorResolution(),
+				httpTransportPlan.requestHeaderTimeout(),
+				httpTransportPlan.requestBodyTimeout(),
 				subscriptionRuntimeConfiguration.writeTimeout(),
 				subscriptionRuntimeConfiguration.keepAliveInterval(),
 				subscriptionRuntimeConfiguration.shutdownTimeout(),
-				defaults.readBufferSize(), defaults.acceptBacklog(),
-				defaults.maximumAggregateRequestBytes(),
-				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
-				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
-				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				httpTransportPlan.readBufferSize(), defaults.acceptBacklog(),
+				httpTransportPlan.maximumAggregateRequestBytes(),
+				httpTransportPlan.maximumRequestBodyBytes(),
+				httpTransportPlan.maximumHeaderCount(),
+				httpTransportPlan.maximumHeaderBytes(),
+				httpTransportPlan.maximumRequestTargetBytes(),
+				httpTransportPlan.maximumConnections(),
+				defaults.connectionWriterConcurrency(),
 				defaults.requestProcessorConcurrency(),
 				defaults.requestProcessorQueueCapacity(),
 				subscriptionRuntimeConfiguration.streamQueueCapacity());
@@ -880,7 +1021,7 @@ public final class McpServerRuntimeBridge {
 										supplier.get()))
 						.orElseGet(McpApplicationHandlerExecutorFactory::production);
 		this.runtime = new McpHttpServerRuntime(transport, endpointBindings,
-				McpJsonLimits.productionDefaults(), applicationConfiguration,
+				httpTransportPlan.jsonLimits(), applicationConfiguration,
 				McpApplicationClock.SYSTEM, applicationExecutorFactory,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				unknownMirroredHeaderNameDiagnosticConsumer,
@@ -954,10 +1095,37 @@ public final class McpServerRuntimeBridge {
 		resourceSubscriptionEventSource.ifPresent(
 				subscriptionEventSources::add);
 		taskSubscriptionEventSource.ifPresent(subscriptionEventSources::add);
+		if (endpointPlan.catalogLocalizer().isPresent()) {
+			// The framework publisher is an endpoint-local supplemental source that
+			// rides the same generation, filter, coalescing, and shutdown machinery as
+			// application resource and task publishers.
+			Set<McpRuntimeCatalogLocalizer.ResponseKind> localizedKinds =
+					endpointPlan.catalogLocalizer().orElseThrow()
+							.localizedResponseKinds();
+			McpLocalizationCatalogEventPublisher frameworkPublisher =
+					new McpLocalizationCatalogEventPublisher();
+			subscriptionEventSources.add(new McpSubscriptionEventSource(
+					frameworkPublisher,
+					McpSubscriptionEventSource.SourceType.FRAMEWORK,
+					frameworkPublisher::subscribe));
+			localizedEndpointInvalidations.add(new LocalizedEndpointInvalidation(
+					frameworkPublisher,
+					new McpSubscriptionEventSource.Event.LocalizationCatalogsChanged(
+							localizedKinds.contains(McpRuntimeCatalogLocalizer
+									.ResponseKind.TOOLS_LIST),
+							localizedKinds.contains(McpRuntimeCatalogLocalizer
+									.ResponseKind.PROMPTS_LIST),
+							localizedKinds.contains(McpRuntimeCatalogLocalizer
+									.ResponseKind.RESOURCES_LIST)
+									|| localizedKinds.contains(
+											McpRuntimeCatalogLocalizer.ResponseKind
+													.RESOURCE_TEMPLATES_LIST))));
+		}
 		if (!subscriptionEventSources.isEmpty())
 			endpointBuilder.subscriptionConfig(
 					new McpNormalizedSubscriptionConfiguration(notificationTypes,
-							taskSubscriptionEventSource.isPresent()));
+							taskSubscriptionEventSource.isPresent(),
+							endpointPlan.catalogLocalizer().isPresent()));
 
 		Map<String, McpApplicationToolRoute> toolRoutes = new LinkedHashMap<>();
 		for (ToolPlan toolPlan : endpointPlan.toolPlans()) {
@@ -1119,33 +1287,6 @@ public final class McpServerRuntimeBridge {
 					endpointPlan.catalogLocalizer().orElseThrow());
 		if (endpointPlan.localizationEnabled())
 			endpointPolicy = endpointPolicy.withLocalizationEnabled();
-		if (endpointPlan.catalogLocalizer().isPresent()
-				&& !subscriptionEventSources.isEmpty()) {
-			// The framework publisher is an endpoint-local supplemental source that
-			// rides the same generation, filter, coalescing, and shutdown machinery as
-			// application resource and task publishers.
-			Set<McpRuntimeCatalogLocalizer.ResponseKind> localizedKinds =
-					endpointPlan.catalogLocalizer().orElseThrow()
-							.localizedResponseKinds();
-			McpLocalizationCatalogEventPublisher frameworkPublisher =
-					new McpLocalizationCatalogEventPublisher();
-			subscriptionEventSources.add(new McpSubscriptionEventSource(
-					frameworkPublisher,
-					McpSubscriptionEventSource.SourceType.FRAMEWORK,
-					frameworkPublisher::subscribe));
-			localizedEndpointInvalidations.add(new LocalizedEndpointInvalidation(
-					frameworkPublisher,
-					new McpSubscriptionEventSource.Event.LocalizationCatalogsChanged(
-							localizedKinds.contains(McpRuntimeCatalogLocalizer
-									.ResponseKind.TOOLS_LIST),
-							localizedKinds.contains(McpRuntimeCatalogLocalizer
-									.ResponseKind.PROMPTS_LIST),
-							localizedKinds.contains(McpRuntimeCatalogLocalizer
-									.ResponseKind.RESOURCES_LIST)
-									|| localizedKinds.contains(
-											McpRuntimeCatalogLocalizer.ResponseKind
-													.RESOURCE_TEMPLATES_LIST))));
-		}
 		if (requestRateLimitAdapter.isPresent()) {
 			RateLimitAdapter adapter = requestRateLimitAdapter.orElseThrow();
 			endpointPolicy = endpointPolicy.withRequestRateLimiter(context ->
@@ -1670,6 +1811,19 @@ public final class McpServerRuntimeBridge {
 		Optional<@NonNull TaskSnapshot> findTask(
 				@NonNull McpRequestContext requestContext,
 				@NonNull String taskId) throws Exception;
+
+		/**
+		 * Finds the authorized task state needed to decide whether a subscription
+		 * may be acknowledged. Implementations may omit a completed result because
+		 * authorization consumes only task identity, status, and input requests.
+		 */
+		@NonNull
+		default Optional<@NonNull TaskSnapshot>
+				findTaskForSubscriptionAuthorization(
+						@NonNull McpRequestContext requestContext,
+						@NonNull String taskId) throws Exception {
+			return findTask(requestContext, taskId);
+		}
 
 		/** Delivers validated client input responses. */
 		void updateTask(@NonNull McpRequestContext requestContext,
@@ -2589,7 +2743,8 @@ public final class McpServerRuntimeBridge {
 			ToolInvocationResult.Structured, ToolInvocationResult.InputRequired,
 			ToolInvocationResult.TaskCreated,
 			ToolInvocationResult.TaskCapabilityRequired,
-			ToolInvocationResult.InvalidInput {
+			ToolInvocationResult.InvalidInput,
+			ToolInvocationResult.JsonRpcError {
 		@NonNull
 		static Complete complete(@NonNull McpJsonObject resultFields,
 				@NonNull McpJsonObject metadata) {
@@ -2623,6 +2778,13 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		static InvalidInput invalidInput() {
 			return InvalidInput.INSTANCE;
+		}
+
+		/** @return intentional client-visible JSON-RPC error */
+		@NonNull
+		static JsonRpcError jsonRpcError(int code, @NonNull String message,
+				@NonNull Optional<@NonNull McpJsonValue> data) {
+			return new JsonRpcError(code, message, data);
 		}
 
 		/**
@@ -2702,6 +2864,23 @@ public final class McpServerRuntimeBridge {
 		enum InvalidInput implements ToolInvocationResult {
 			INSTANCE
 		}
+
+		/**
+		 * Intentional client-visible JSON-RPC error.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record JsonRpcError(int code, @NonNull String message,
+				@NonNull Optional<@NonNull McpJsonValue> data)
+				implements ToolInvocationResult {
+			/** Validates the error projection. */
+			public JsonRpcError {
+				message = McpProtocolSupport.requireNonBlank(message,
+						"JSON-RPC error message");
+				requireNonNull(data);
+			}
+		}
 	}
 
 	/**
@@ -2713,7 +2892,8 @@ public final class McpServerRuntimeBridge {
 	public sealed interface PromptInvocationResult
 			permits PromptInvocationResult.Complete,
 			PromptInvocationResult.InputRequired,
-			PromptInvocationResult.InvalidInput {
+			PromptInvocationResult.InvalidInput,
+			PromptInvocationResult.JsonRpcError {
 		/**
 		 * Creates a completed prompt result.
 		 *
@@ -2737,6 +2917,13 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		static InvalidInput invalidInput() {
 			return InvalidInput.INSTANCE;
+		}
+
+		/** @return intentional client-visible JSON-RPC error */
+		@NonNull
+		static JsonRpcError jsonRpcError(int code, @NonNull String message,
+				@NonNull Optional<@NonNull McpJsonValue> data) {
+			return new JsonRpcError(code, message, data);
 		}
 
 		/**
@@ -2780,6 +2967,23 @@ public final class McpServerRuntimeBridge {
 		enum InvalidInput implements PromptInvocationResult {
 			/** Shared invalid-input marker. */
 			INSTANCE
+		}
+
+		/**
+		 * Intentional client-visible JSON-RPC error.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record JsonRpcError(int code, @NonNull String message,
+				@NonNull Optional<@NonNull McpJsonValue> data)
+				implements PromptInvocationResult {
+			/** Validates the error projection. */
+			public JsonRpcError {
+				message = McpProtocolSupport.requireNonBlank(message,
+						"JSON-RPC error message");
+				requireNonNull(data);
+			}
 		}
 	}
 
@@ -3419,6 +3623,8 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof ToolInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof ToolInvocationResult.JsonRpcError error)
+			throw new McpApplicationJsonRpcException(toInternal(error));
 		if (result instanceof ToolInvocationResult.TaskCapabilityRequired)
 			throw new McpProtocolJsonRpcException(
 					McpJsonRpcError.missingRequiredClientExtension(
@@ -3437,28 +3643,15 @@ public final class McpServerRuntimeBridge {
 		if (result instanceof ToolInvocationResult.Complete complete) {
 			resultFields = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.resultFields());
-			if (toolPlan.structuredContentMirroredAsText())
-				resultFields = withStructuredContentTextMirror(resultFields);
 			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.metadata());
 		} else if (result instanceof ToolInvocationResult.Structured structured) {
 			com.soklet.internal.mcp.protocol.McpJsonValue structuredContent =
 					toInternal(structured.structuredContent());
-			List<com.soklet.internal.mcp.protocol.McpJsonValue> content =
-					new ArrayList<>();
-			if (toolPlan.structuredContentMirroredAsText()) {
-				Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> textBlock =
-						new LinkedHashMap<>();
-				textBlock.put("type",
-						new com.soklet.internal.mcp.protocol.McpJsonString("text"));
-				textBlock.put("text", new com.soklet.internal.mcp.protocol.McpJsonString(
-						CANONICAL_JSON_CODEC.toJson(structuredContent)));
-				content.add(new com.soklet.internal.mcp.protocol.McpJsonObject(textBlock));
-			}
 			Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
 					new LinkedHashMap<>();
 			fields.put("content",
-					new com.soklet.internal.mcp.protocol.McpJsonArray(content));
+					new com.soklet.internal.mcp.protocol.McpJsonArray(List.of()));
 			fields.put("structuredContent", structuredContent);
 			resultFields = new com.soklet.internal.mcp.protocol.McpJsonObject(fields);
 			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
@@ -3469,8 +3662,18 @@ public final class McpServerRuntimeBridge {
 
 		McpResultMetadata metadata = new McpResultMetadata(
 				Optional.empty(), resultMetadata);
-		return McpWireResult.complete(resultFields,
-				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata));
+		Optional<McpResultMetadata> optionalMetadata = metadata.isEmpty()
+				? Optional.empty() : Optional.of(metadata);
+		if (!toolPlan.structuredContentMirroredAsText())
+			return McpWireResult.complete(resultFields, optionalMetadata);
+		com.soklet.internal.mcp.protocol.McpJsonObject unmirroredFields =
+				resultFields;
+		com.soklet.internal.mcp.protocol.McpJsonObject mirroredFields =
+				withStructuredContentTextMirror(unmirroredFields);
+		if (mirroredFields == unmirroredFields)
+			return McpWireResult.complete(unmirroredFields, optionalMetadata);
+		return McpWireResult.completeWithCompatibilityMirror(mirroredFields,
+				unmirroredFields, optionalMetadata);
 	}
 
 	@NonNull
@@ -3584,10 +3787,19 @@ public final class McpServerRuntimeBridge {
 				Optional.empty(), internalMetadata);
 		Optional<McpResultMetadata> optionalMetadata = metadata.isEmpty()
 				? Optional.empty() : Optional.of(metadata);
-		return creation
-				? McpWireResult.extension(McpResultType.extension("task"),
-						internalFields, optionalMetadata)
-				: McpWireResult.complete(internalFields, optionalMetadata);
+		if (creation)
+			return McpWireResult.extension(McpResultType.extension("task"),
+					internalFields, optionalMetadata);
+		if (snapshot.task().getTaskStatus() == com.soklet.McpTaskStatus.COMPLETED
+				&& snapshot.structuredContentMirroredAsText()) {
+			com.soklet.internal.mcp.protocol.McpJsonObject unmirroredFields =
+					(com.soklet.internal.mcp.protocol.McpJsonObject) toInternal(
+							taskFields(snapshot, true, false));
+			if (!internalFields.equals(unmirroredFields))
+				return McpWireResult.completeWithCompatibilityMirror(internalFields,
+						unmirroredFields, optionalMetadata);
+		}
+		return McpWireResult.complete(internalFields, optionalMetadata);
 	}
 
 	static com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
@@ -3595,10 +3807,20 @@ public final class McpServerRuntimeBridge {
 			@NonNull TaskSnapshot taskSnapshot,
 			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
 					subscriptionMetadata) {
+		return taskNotificationParams(taskSnapshot, subscriptionMetadata, true);
+	}
+
+	static com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
+	taskNotificationParams(
+			@NonNull TaskSnapshot taskSnapshot,
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
+					subscriptionMetadata,
+			boolean includeStructuredContentTextMirror) {
 		TaskSnapshot snapshot = requireNonNull(taskSnapshot);
 		com.soklet.internal.mcp.protocol.McpJsonObject taskFields =
 				(com.soklet.internal.mcp.protocol.McpJsonObject) toInternal(
-						taskFields(snapshot, true));
+						taskFields(snapshot, true,
+								includeStructuredContentTextMirror));
 		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> params =
 				new LinkedHashMap<>(taskFields.members());
 		com.soklet.internal.mcp.protocol.McpJsonObject taskMetadata =
@@ -3615,6 +3837,12 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static McpJsonObject taskFields(@NonNull TaskSnapshot taskSnapshot,
 			boolean detailed) {
+		return taskFields(taskSnapshot, detailed, true);
+	}
+
+	@NonNull
+	private static McpJsonObject taskFields(@NonNull TaskSnapshot taskSnapshot,
+			boolean detailed, boolean includeStructuredContentTextMirror) {
 		TaskSnapshot snapshot = requireNonNull(taskSnapshot);
 		McpTask task = snapshot.task();
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
@@ -3654,7 +3882,8 @@ public final class McpServerRuntimeBridge {
 			case INPUT_REQUIRED -> fields.put("inputRequests",
 					inputRequests(task.getInputRequests()));
 			case COMPLETED -> fields.put("result",
-					completedTaskResult(snapshot));
+					completedTaskResult(snapshot,
+							includeStructuredContentTextMirror));
 			case FAILED -> fields.put("error", taskFailure(
 					task.getFailure().orElseThrow()));
 		}
@@ -3682,10 +3911,12 @@ public final class McpServerRuntimeBridge {
 
 	@NonNull
 	private static McpJsonObject completedTaskResult(
-			@NonNull TaskSnapshot taskSnapshot) {
+			@NonNull TaskSnapshot taskSnapshot,
+			boolean includeStructuredContentTextMirror) {
 		McpJsonObject publicResultFields = taskSnapshot.completedResultFields()
 				.orElseThrow();
-		if (taskSnapshot.structuredContentMirroredAsText()) {
+		if (includeStructuredContentTextMirror
+				&& taskSnapshot.structuredContentMirroredAsText()) {
 			com.soklet.internal.mcp.protocol.McpJsonObject internalResultFields =
 					(com.soklet.internal.mcp.protocol.McpJsonObject)
 							toInternal(publicResultFields);
@@ -3728,6 +3959,16 @@ public final class McpServerRuntimeBridge {
 			throw new IllegalArgumentException(
 					"MCP tool output content must be an array.");
 
+		String mirrorText;
+		try {
+			mirrorText = CANONICAL_JSON_CODEC.toJson(structuredContent);
+		} catch (IllegalArgumentException exception) {
+			return resultFields;
+		}
+		if (mirrorText.length() > CANONICAL_JSON_CODEC.limits()
+				.maximumStringLengthInCharacters())
+			return resultFields;
+
 		List<com.soklet.internal.mcp.protocol.McpJsonValue> content =
 				new ArrayList<>(contentArray.values());
 		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> textBlock =
@@ -3735,14 +3976,21 @@ public final class McpServerRuntimeBridge {
 		textBlock.put("type",
 				new com.soklet.internal.mcp.protocol.McpJsonString("text"));
 		textBlock.put("text", new com.soklet.internal.mcp.protocol.McpJsonString(
-				CANONICAL_JSON_CODEC.toJson(structuredContent)));
+				mirrorText));
 		content.add(new com.soklet.internal.mcp.protocol.McpJsonObject(textBlock));
 
 		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
 				new LinkedHashMap<>(resultFields.members());
 		fields.put("content",
 				new com.soklet.internal.mcp.protocol.McpJsonArray(content));
-		return new com.soklet.internal.mcp.protocol.McpJsonObject(fields);
+		com.soklet.internal.mcp.protocol.McpJsonObject mirrored =
+				new com.soklet.internal.mcp.protocol.McpJsonObject(fields);
+		try {
+			CANONICAL_JSON_CODEC.toUtf8Bytes(mirrored);
+		} catch (IllegalArgumentException exception) {
+			return resultFields;
+		}
+		return mirrored;
 	}
 
 	@NonNull
@@ -3786,6 +4034,8 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof PromptInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof PromptInvocationResult.JsonRpcError error)
+			throw new McpApplicationJsonRpcException(toInternal(error));
 		if (result instanceof PromptInvocationResult.InputRequired inputRequired)
 			return inputRequiredResult(inputRequired.result(),
 					inputRequestPlan,
@@ -4100,6 +4350,22 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static McpJsonRpcError toInternal(
 			ResourceInvocationResult.@NonNull JsonRpcError error) {
+		return new McpJsonRpcError(
+				error.code(), error.message(), error.data().map(
+						McpServerRuntimeBridge::toInternal));
+	}
+
+	@NonNull
+	private static McpJsonRpcError toInternal(
+			ToolInvocationResult.@NonNull JsonRpcError error) {
+		return new McpJsonRpcError(
+				error.code(), error.message(), error.data().map(
+						McpServerRuntimeBridge::toInternal));
+	}
+
+	@NonNull
+	private static McpJsonRpcError toInternal(
+			PromptInvocationResult.@NonNull JsonRpcError error) {
 		return new McpJsonRpcError(
 				error.code(), error.message(), error.data().map(
 						McpServerRuntimeBridge::toInternal));

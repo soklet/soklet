@@ -22,11 +22,27 @@
   `SokletApplication`. Embedders continue to own direct `Soklet` lifecycle and
   must not mix the two ownership models. See
   [standalone applications](MIGRATING_TO_4_0.md#standalone-applications-use-the-runner).
-- **Transport SPI and injection:** custom HTTP/SSE/MCP implementations migrate
+- **Transport SPI and injection:** custom HTTP/SSE implementations migrate
   to stable transport identity, attachment/runtime, lifecycle context, and
   termination-proof contracts. `HttpServer` is no longer injectable into
-  resource methods; `SseServer` broadcaster access remains supported. See
+  resource methods; `SseServer` broadcaster access remains supported.
+  `McpServer` is now sealed to Soklet's built-in HTTP/1.1 implementation and
+  has no custom transport SPI, so a 3.5.1 custom `McpServer` implementation has
+  no direct 4.0 replacement. See
   [HTTP, SSE, and custom transports](MIGRATING_TO_4_0.md#http-sse-and-custom-transports).
+- **MCP listener hardening controls:** restored all nine 3.5.1
+  `McpServer.Builder` transport-limit setters on the sealed built-in listener.
+  Existing defaults remain 10 MiB per request body, 60 seconds per header/body
+  read phase, 100 headers, 64 KiB aggregate headers, an 8,192-byte request
+  target, a 64 KiB read buffer, 8,192 concurrent connections, and a 128-item
+  stream queue. Configured request bodies are bounded by the reviewed 16 MiB
+  production-JSON ceiling; `connectionQueueCapacity` is an alias of
+  `streamQueueCapacity`.
+- **Fixed MCP endpoint paths:** templated endpoint HTTP paths and
+  `@McpEndpointPathParameter` have no 4.0 replacement. Register separate fixed
+  endpoints for a bounded tenant set, or use application-authenticated
+  admission/header tenancy. Resource URI templates remain supported; the
+  retained request/admission endpoint-path-parameter maps are always empty.
 - **Simulator:** the static `Soklet.runSimulator` entry points are removed.
   `SokletSimulator.run` now supplies a scope-bound `SimulatorConfig.Builder`
   for fresh off-network HTTP, SSE, and MCP transports and returns the
@@ -78,7 +94,11 @@ maintenance or security fixes afterward. See the explicit
   application-provided manager, and simulator parity. The
   explicit in-memory manager is bounded and process-local; it is intended for
   development, tests, and deliberately ephemeral single-process use, not as a
-  production durability or worker system.
+  production durability or worker system. The pinned official conformance gate
+  remains on the pre-Tasks `0.2.0-alpha.10` suite; the separately recorded
+  alpha.11 Tasks run is useful local evidence but is not a release-gate result.
+  The 14 public Tasks types retain a provisional maturity label, while their
+  exact 4.0.0 signatures are covered by a mandatory reviewed snapshot.
 - Added one lifecycle coordinator and immutable result model across HTTP, SSE,
   MCP, direct embedders, the standalone runner, and the off-network simulator.
 - Added a copy/paste [MCP quickstart](MCP_QUICKSTART.md), prose
@@ -659,7 +679,7 @@ maintenance or security fixes afterward. See the explicit
   universal cross-thread total order. Histogram samples use only bounded
   `endpoint`, `method`, and lower-snake `reason`: `completed`,
   `client_disconnected`, `request_canceled`, `deadline_exceeded`,
-  `write_failed`, `backpressure`, `server_stopped`,
+  `write_failed`, `backpressure`, `server_stopping`,
   `simulator_capture_item_limit_exceeded`,
   `simulator_capture_byte_limit_exceeded`, and `internal_error`. The 13 buckets
   are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600,
@@ -702,7 +722,7 @@ maintenance or security fixes afterward. See the explicit
   and `soklet_mcp_subscription_duration_nanos` (HELP `MCP subscription duration
   in nanoseconds`). Samples use only bounded `endpoint` and lower-snake
   `reason`: `completed`, `client_disconnected`, `request_canceled`,
-  `deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+  `deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
   `simulator_capture_item_limit_exceeded`,
   `simulator_capture_byte_limit_exceeded`, and `internal_error`. The 13 buckets
   are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds

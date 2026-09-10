@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -76,6 +77,24 @@ public final class McpProgressUpdate {
 	@NonNull
 	public Optional<@NonNull String> getMessage() {
 		return Optional.ofNullable(this.message);
+	}
+
+	/** @return whether every progress property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpProgressUpdate update))
+			return false;
+		return Double.compare(this.progress, update.progress) == 0
+				&& Objects.equals(this.total, update.total)
+				&& Objects.equals(this.message, update.message);
+	}
+
+	/** @return structural progress-update hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.progress, this.total, this.message);
 	}
 
 	private static double requireFinite(double value, @NonNull String description) {

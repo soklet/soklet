@@ -1038,7 +1038,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel',
     'enqueue');
   requireStructural(transportEnqueue,
-    /^\s*this\s*\.\s*delegate\s*\.\s*enqueue\s*\([\s\S]*\)\s*;\s*$/u,
+    /^\s*return\s+this\s*\.\s*delegate\s*\.\s*enqueue\s*\([\s\S]*\)\s*;\s*$/u,
     'TransportChannel.enqueue must use the shared delegate');
   const transportOffer = oneMethod(request.lexed, requestPath,
     'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel',

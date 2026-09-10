@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -133,6 +134,32 @@ public final class McpResourceDescriptor {
 	@NonNull
 	public McpJsonObject getMetadata() {
 		return this.metadata;
+	}
+
+	/** @return whether every descriptor property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpResourceDescriptor descriptor))
+			return false;
+		return this.uri.equals(descriptor.uri)
+				&& this.name.equals(descriptor.name)
+				&& Objects.equals(this.title, descriptor.title)
+				&& Objects.equals(this.description, descriptor.description)
+				&& Objects.equals(this.mimeType, descriptor.mimeType)
+				&& this.icons.equals(descriptor.icons)
+				&& Objects.equals(this.annotations, descriptor.annotations)
+				&& Objects.equals(this.sizeInBytes, descriptor.sizeInBytes)
+				&& this.metadata.equals(descriptor.metadata);
+	}
+
+	/** @return structural descriptor hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.uri, this.name, this.title, this.description,
+				this.mimeType, this.icons, this.annotations, this.sizeInBytes,
+				this.metadata);
 	}
 
 	@NonNull

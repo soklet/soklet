@@ -641,7 +641,7 @@ final class SokletApplicationObservationTests {
 	}
 
 	@Test
-	void coordinatorLifecycleFactsNeverUseLogCallback() throws Exception {
+	void coordinatorLifecycleObserverFailureIsNonfatalAndLogged() throws Exception {
 		IllegalStateException observerFailure = new IllegalStateException(
 				"expected transition observer failure");
 		List<LogEvent> logEvents = new CopyOnWriteArrayList<>();
@@ -680,7 +680,18 @@ final class SokletApplicationObservationTests {
 					snapshot.firstFailureSummary().orElseThrow());
 			Assertions.assertFalse(snapshot.firstFailureSummary().orElseThrow()
 					.contains("expected transition observer failure"));
-			Assertions.assertTrue(logEvents.isEmpty(), logEvents::toString);
+			Assertions.assertEquals(1, logEvents.size(), logEvents::toString);
+			LogEvent event = logEvents.get(0);
+			Assertions.assertEquals(
+					LogEventType.LIFECYCLE_OBSERVER_TRANSITION_FAILED,
+					event.getLogEventType());
+			Assertions.assertEquals("An exception occurred while invoking "
+					+ "LifecycleObserver::willStartSoklet", event.getMessage());
+			Assertions.assertSame(observerFailure,
+					event.getThrowable().orElseThrow());
+			Assertions.assertTrue(event.getRequest().isEmpty());
+			Assertions.assertTrue(event.getResourceMethod().isEmpty());
+			Assertions.assertTrue(event.getMarshaledResponse().isEmpty());
 		} finally {
 			soklet.getDirectLifecycle().shutdown();
 			soklet.getDirectLifecycle().awaitCompletion();

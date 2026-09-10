@@ -114,7 +114,7 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	private record SubmissionFailure(@NonNull Ticket ticket,
-			@NonNull RuntimeException exception) {
+			@NonNull Throwable throwable) {
 	}
 
 	@NonNull
@@ -300,6 +300,7 @@ final class McpApplicationHandlerDispatcher {
 	private void dispatch(@NonNull Ticket ticket) {
 		List<SubmissionFailure> submissionFailures = new ArrayList<>();
 		Ticket ticketToSubmit = ticket;
+		Error fatalFailure = null;
 
 		while (ticketToSubmit != null) {
 			Ticket submittedTicket = ticketToSubmit;
@@ -307,14 +308,18 @@ final class McpApplicationHandlerDispatcher {
 			try {
 				executorService.execute(() -> run(submittedTicket));
 				ticketToSubmit = null;
-			} catch (RuntimeException exception) {
-				submissionFailures.add(new SubmissionFailure(submittedTicket, exception));
+			} catch (RuntimeException | Error failure) {
+				submissionFailures.add(new SubmissionFailure(submittedTicket, failure));
 				ticketToSubmit = onSubmissionFailure(submittedTicket);
+				if (failure instanceof Error error && fatalFailure == null)
+					fatalFailure = error;
 			}
 		}
 
 		for (SubmissionFailure submissionFailure : submissionFailures)
-			notifyFailure(submissionFailure.ticket(), submissionFailure.exception());
+			notifyFailure(submissionFailure.ticket(), submissionFailure.throwable());
+		if (fatalFailure != null)
+			throw fatalFailure;
 	}
 
 	private void run(@NonNull Ticket ticket) {

@@ -214,6 +214,8 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicBoolean handshakeResponseWritten;
 		@NonNull
+		private final AtomicBoolean timeoutResponseOwned;
+		@NonNull
 		private final AtomicBoolean acceptanceFinalized;
 		@NonNull
 		private final AtomicBoolean establishmentFailureNotified;
@@ -231,6 +233,7 @@ final class DefaultSseServer implements SseServer {
 		private HandshakeContext(@Nullable InetSocketAddress remoteAddress) {
 			this.channelLock = new Object();
 			this.handshakeResponseWritten = new AtomicBoolean(false);
+			this.timeoutResponseOwned = new AtomicBoolean(false);
 			this.acceptanceFinalized = new AtomicBoolean(false);
 			this.establishmentFailureNotified = new AtomicBoolean(false);
 			this.handshakeTimeoutFutureRef = new AtomicReference<>();
@@ -761,6 +764,9 @@ final class DefaultSseServer implements SseServer {
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
+		if (this.port < 0 || this.port > 65_535)
+			throw new IllegalArgumentException("Port must be between 0 and 65535");
+
 		if (this.maximumRequestSizeInBytes <= 0)
 			throw new IllegalArgumentException("Maximum request size must be > 0");
 
@@ -923,27 +929,8 @@ final class DefaultSseServer implements SseServer {
 				attachmentContext);
 		initialize(exactContext.getSokletConfig(),
 				exactContext.getAdmissionFencedRequestHandler());
-		TransportTerminationSignal signal = exactContext.getTerminationSignal();
-		AtomicBoolean stopObserverStarted = new AtomicBoolean();
-		return new TransportRuntime() {
-			@Override
-			public void start(@NonNull StartupContext context) {
-				requireNonNull(context);
-				DefaultSseServer.this.start();
-			}
-
-			@Override
-			public void shutdownGracefully(@NonNull ShutdownContext context) {
-				requireNonNull(context);
-				observeStop(signal, stopObserverStarted);
-			}
-
-			@Override
-			public void shutdownForcibly(@NonNull ShutdownContext context) {
-				requireNonNull(context);
-				observeStop(signal, stopObserverStarted);
-			}
-		};
+		return getLifecycleAdapter().delegatedRuntime(
+				exactContext.getTerminationSignal(), DefaultSseServer.this::start);
 	}
 
 	public void initialize(@NonNull SokletConfig sokletConfig,
@@ -1441,18 +1428,56 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void handleHandshakeTimeout(@NonNull SocketChannel clientSocketChannel,
-																			@NonNull HandshakeContext handshakeContext) {
+															@NonNull HandshakeContext handshakeContext) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(handshakeContext);
 
-		if (!handshakeContext.handshakeResponseWritten.compareAndSet(false, true))
+		// Publish timeout ownership before publishing the response claim. Any
+		// handler path that observes the claimed response must also observe that
+		// it no longer owns channel close. Roll the advisory bit back if the
+		// application response won first.
+		handshakeContext.timeoutResponseOwned.set(true);
+		if (!handshakeContext.handshakeResponseWritten.compareAndSet(false, true)) {
+			handshakeContext.timeoutResponseOwned.set(false);
 			return;
+		}
+
+		// Claim the handler-thread reference before interrupting it.  The handler
+		// clears this reference with the same CAS when it finishes, so a timeout
+		// can never interrupt a pooled worker after ownership has moved to another
+		// handshake.
+		Thread handlerThread = handshakeContext.handlerThreadRef.get();
+		if (handlerThread != null
+				&& handshakeContext.handlerThreadRef.compareAndSet(handlerThread, null))
+			handlerThread.interrupt();
 
 		handshakeContext.acceptanceFinalized.compareAndSet(false, true);
 
 		Request request = handshakeContext.requestRef.get();
 		ResourceMethod resourceMethod = handshakeContext.resourceMethodRef.get();
 		InetSocketAddress remoteAddress = handshakeContext.remoteAddressRef.get();
+		ExecutorService timeoutExecutor = getConnectionExecutorService().orElse(null);
+
+		if (timeoutExecutor == null || timeoutExecutor.isShutdown()) {
+			closeSocketChannel(clientSocketChannel, handshakeContext.channelLock);
+			return;
+		}
+
+		try {
+			timeoutExecutor.submit(() -> finishTimedOutHandshake(clientSocketChannel,
+					handshakeContext, request, resourceMethod, remoteAddress));
+		} catch (RejectedExecutionException ignored) {
+			closeSocketChannel(clientSocketChannel, handshakeContext.channelLock);
+		}
+	}
+
+	private void finishTimedOutHandshake(@NonNull SocketChannel clientSocketChannel,
+			@NonNull HandshakeContext handshakeContext,
+			@Nullable Request request,
+			@Nullable ResourceMethod resourceMethod,
+			@Nullable InetSocketAddress remoteAddress) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(handshakeContext);
 
 		if (request == null) {
 			notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR,
@@ -1499,9 +1524,6 @@ final class DefaultSseServer implements SseServer {
 			}
 		}
 
-		Thread handlerThread = handshakeContext.handlerThreadRef.get();
-		if (handlerThread != null)
-			handlerThread.interrupt();
 	}
 
 	protected void handleClientSocketChannel(@NonNull SocketChannel clientSocketChannel,
@@ -1527,7 +1549,8 @@ final class DefaultSseServer implements SseServer {
 		InetSocketAddress remoteAddress = handshakeContext.remoteAddressRef.get();
 
 		if (handshakeResponseWritten.get()) {
-			closeSocketChannel(clientSocketChannel, channelLock);
+			closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+					handshakeContext);
 			completeHandshake(clientSocketChannel);
 			return;
 		}
@@ -1552,7 +1575,8 @@ final class DefaultSseServer implements SseServer {
 				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestHeadersTooLargeIOException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1578,7 +1602,8 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (RequestTargetTooLongIOException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1604,7 +1629,8 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (RequestTooLargeIOException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1615,7 +1641,8 @@ final class DefaultSseServer implements SseServer {
 				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
 			} catch (RequestReadRejectedException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1645,7 +1672,8 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (IllegalRequestException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1674,7 +1702,8 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (SocketTimeoutException e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1705,7 +1734,8 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (Exception e) {
 				if (handshakeResponseWritten.get()) {
-					closeSocketChannel(clientSocketChannel, channelLock);
+					closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+							handshakeContext);
 					return;
 				}
 
@@ -1725,7 +1755,8 @@ final class DefaultSseServer implements SseServer {
 			notifyDidReadRequest(remoteAddress, request.getRawPathAndQuery());
 
 			if (handshakeResponseWritten.get()) {
-				closeSocketChannel(clientSocketChannel, channelLock);
+				closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
+						handshakeContext);
 				return;
 			}
 
@@ -1768,7 +1799,7 @@ final class DefaultSseServer implements SseServer {
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 
 				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
-						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+						format("Rejecting request: Concurrent connection limit (%d) reached", getConcurrentConnectionLimit())).build());
 
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
@@ -1816,7 +1847,7 @@ final class DefaultSseServer implements SseServer {
 								notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 
 							safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
-									format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+									format("Rejecting request: Concurrent connection limit (%d) reached", getConcurrentConnectionLimit())).build());
 
 							MarshaledResponse response = requiredResponseMarshaler().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
 
@@ -1890,6 +1921,13 @@ final class DefaultSseServer implements SseServer {
 
 			// Happy path: register the channel for future SseEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
+			// A timeout winner owns both the response and the establishment-failure
+			// classification.  The interrupted handler may return before the timeout's
+			// offloaded completion runs; do not let that return misclassify the timeout
+			// as an ordinary HANDSHAKE_REJECTED event.
+			if (handshakeContext.timeoutResponseOwned.get())
+				return;
+
 			SseHandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
 
 			if (handshakeAccepted != null) {
@@ -1969,11 +2007,20 @@ final class DefaultSseServer implements SseServer {
 					maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
 				}
 
-				closeSocketChannel(clientSocketChannel, channelLock);
+				if (!handshakeContext.timeoutResponseOwned.get())
+					closeSocketChannel(clientSocketChannel, channelLock);
 				releaseReservedSlot(connectionSlotReserved);
 			}
 			completeHandshake(clientSocketChannel);
 		}
+	}
+
+	private void closeHandshakeChannelUnlessTimeoutOwned(
+			@NonNull SocketChannel clientSocketChannel,
+			@NonNull HandshakeContext handshakeContext) {
+		if (!requireNonNull(handshakeContext).timeoutResponseOwned.get())
+			closeSocketChannel(requireNonNull(clientSocketChannel),
+					handshakeContext.channelLock);
 	}
 
 	private boolean startConnectionProcessing(@NonNull ClientSocketChannelRegistration registration,
@@ -2034,17 +2081,25 @@ final class DefaultSseServer implements SseServer {
 		try {
 			BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue =
 					sseConnection.getWriteQueue();
+			List<DefaultSseConnection.WriteQueueElement> initialWriteQueueElements =
+					sseConnection.takeInitialWriteQueueElements();
+			int initialWriteQueueElementIndex = 0;
 
 			while (true) {
 				DefaultSseConnection.WriteQueueElement writeQueueElement;
 
-				try {
-					// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
-					writeQueueElement = writeQueue.poll(getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
-				} catch (InterruptedException e) {
-					// Interrupted during shutdown - exit cleanly
-					Thread.currentThread().interrupt();
-					break;
+				if (initialWriteQueueElementIndex < initialWriteQueueElements.size()) {
+					writeQueueElement = initialWriteQueueElements.get(
+							initialWriteQueueElementIndex++);
+				} else {
+					try {
+						// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
+						writeQueueElement = writeQueue.poll(getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
+					} catch (InterruptedException e) {
+						// Interrupted during shutdown - exit cleanly
+						Thread.currentThread().interrupt();
+						break;
+					}
 				}
 
 				// Idle heartbeat
@@ -2543,7 +2598,10 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private static boolean isLineBreakChar(char c) {
-		return c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C' || c == '\u0085' || c == '\u2028' || c == '\u2029';
+		// The EventSource wire grammar recognizes only CR, LF and CRLF as line
+		// endings.  Java's broader notion of a line separator would corrupt valid
+		// payload characters such as U+0085, U+2028 and U+2029.
+		return c == '\n' || c == '\r';
 	}
 
 	private static void writeFully(@NonNull SocketChannel socketChannel,
@@ -2779,6 +2837,8 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicReference<StreamTerminationReason> terminationReason;
 		@NonNull
+		private final AtomicReference<List<WriteQueueElement>> initialWriteQueueElements;
+		@NonNull
 		private final SseConnectionSnapshot snapshot;
 
 		@ThreadSafe
@@ -2887,6 +2947,7 @@ final class DefaultSseServer implements SseServer {
 			this.socketChannel = socketChannel;
 			this.closing = new AtomicBoolean(false);
 			this.terminationReason = new AtomicReference<>();
+			this.initialWriteQueueElements = new AtomicReference<>(List.of());
 
 			// Cache off an immutable data-only snapshot.
 			// This can be safely exposed to client code without worrying about holding onto internal state (e.g. write queue)
@@ -2906,6 +2967,16 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		public BlockingQueue<WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
+		}
+
+		public void setInitialWriteQueueElements(
+				@NonNull List<WriteQueueElement> elements) {
+			this.initialWriteQueueElements.set(List.copyOf(requireNonNull(elements)));
+		}
+
+		@NonNull
+		public List<WriteQueueElement> takeInitialWriteQueueElements() {
+			return this.initialWriteQueueElements.getAndSet(List.of());
 		}
 
 		@NonNull
@@ -2973,17 +3044,21 @@ final class DefaultSseServer implements SseServer {
 		);
 
 		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
-		SseUnicaster sseUnicaster =
-				new DefaultSseUnicaster(resourcePath, sseConnection.getWriteQueue());
+		DefaultSseUnicaster sseUnicaster = new DefaultSseUnicaster(resourcePath);
 
 		handshakeAccepted.getClientInitializer().ifPresent((clientInitializer) -> {
 			clientInitializer.accept(sseUnicaster);
 		});
 
+		List<DefaultSseConnection.WriteQueueElement> initialWriteQueueElements =
+				new ArrayList<>(sseUnicaster.activate(sseConnection.getWriteQueue()));
+
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
-			sseConnection.getWriteQueue()
-					.offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(HEARTBEAT_PRE_SERIALIZED_COMMENT, System.nanoTime()));
+			initialWriteQueueElements.add(DefaultSseConnection.WriteQueueElement
+					.withPreSerializedPayload(HEARTBEAT_PRE_SERIALIZED_COMMENT,
+							System.nanoTime()));
+		sseConnection.setInitialWriteQueueElements(initialWriteQueueElements);
 
 		DefaultSseBroadcaster broadcaster =
 				registerConnectionWithBroadcaster(resourcePath, resourceMethod, sseConnection);
@@ -3003,15 +3078,19 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final ResourcePath resourcePath;
 		@NonNull
-		private final BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue;
+		private final List<DefaultSseConnection.WriteQueueElement> initialElements;
+		@Nullable
+		private BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue;
+
+		private DefaultSseUnicaster(@NonNull ResourcePath resourcePath) {
+			this.resourcePath = requireNonNull(resourcePath);
+			this.initialElements = new ArrayList<>();
+		}
 
 		public DefaultSseUnicaster(@NonNull ResourcePath resourcePath,
-																					 @NonNull BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue) {
-			requireNonNull(resourcePath);
-			requireNonNull(writeQueue);
-
-			this.resourcePath = resourcePath;
-			this.writeQueue = writeQueue;
+																		 @NonNull BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue) {
+			this(resourcePath);
+			this.writeQueue = requireNonNull(writeQueue);
 		}
 
 		@Override
@@ -3020,16 +3099,16 @@ final class DefaultSseServer implements SseServer {
 
 			DefaultSseConnection.PreSerializedPayload preSerializedPayload = preSerializeSseEvent(sseEvent);
 
-			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(preSerializedPayload, System.nanoTime())))
-				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
+			enqueue(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(
+					preSerializedPayload, System.nanoTime()));
 		}
 
 		@Override
 		public void unicastComment(@NonNull SseComment sseComment) {
 			requireNonNull(sseComment);
 
-			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(preSerializeSseComment(sseComment), System.nanoTime())))
-				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
+			enqueue(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(
+					preSerializeSseComment(sseComment), System.nanoTime()));
 		}
 
 		@NonNull
@@ -3038,9 +3117,39 @@ final class DefaultSseServer implements SseServer {
 			return this.resourcePath;
 		}
 
+		/**
+		 * Returns the active connection queue for compatibility with subclasses
+		 * constructed through the protected extension seam.
+		 */
 		@NonNull
-		protected BlockingQueue<DefaultSseConnection.WriteQueueElement> getWriteQueue() {
-			return this.writeQueue;
+		protected synchronized BlockingQueue<DefaultSseConnection.WriteQueueElement>
+				getWriteQueue() {
+			return requireNonNull(this.writeQueue,
+					"The SSE unicaster is not active yet");
+		}
+
+		private synchronized void enqueue(
+				DefaultSseConnection.WriteQueueElement element) {
+			requireNonNull(element);
+			BlockingQueue<DefaultSseConnection.WriteQueueElement> queue = this.writeQueue;
+			if (queue == null) {
+				this.initialElements.add(element);
+				return;
+			}
+			if (!queue.offer(element))
+				throw new IllegalStateException("SSE connection write queue is at capacity");
+		}
+
+		@NonNull
+		private synchronized List<DefaultSseConnection.WriteQueueElement> activate(
+				@NonNull BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue) {
+			if (this.writeQueue != null)
+				throw new IllegalStateException("SSE unicaster is already active");
+			this.writeQueue = requireNonNull(writeQueue);
+			List<DefaultSseConnection.WriteQueueElement> snapshot =
+					List.copyOf(this.initialElements);
+			this.initialElements.clear();
+			return snapshot;
 		}
 	}
 
@@ -3129,7 +3238,7 @@ final class DefaultSseServer implements SseServer {
 
 				String[] components = line.trim().split("\\s+", -1);
 				if (components.length != 3)
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Expected '<METHOD> <request-target> HTTP/1.1'", line));
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
 
 				String rawHttpMethod = components[0];
 				String rawUrl = components[1];
@@ -3143,7 +3252,7 @@ final class DefaultSseServer implements SseServer {
 					throw new RequestTargetTooLongIOException(format("Request target exceeds maximum length of %d bytes", getMaximumRequestTargetLengthInBytes()));
 
 				if (!"HTTP/1.1".equalsIgnoreCase(rawVersion))
-					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for Server-Sent Event requests", rawVersion));
+					throw new IllegalRequestException(format("Unsupported HTTP version for Server-Sent Event request (%d characters)", rawVersion.length()));
 
 				HttpMethod httpMethod;
 				String normalizedMethod = rawHttpMethod.toUpperCase(Locale.ENGLISH);
@@ -3151,7 +3260,8 @@ final class DefaultSseServer implements SseServer {
 				try {
 					httpMethod = HttpMethod.valueOf(normalizedMethod);
 				} catch (IllegalArgumentException e) {
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method.", line), e);
+					// Enum.valueOf includes the rejected method in its exception message.
+					throw new IllegalRequestException(format("Unable to parse HTTP method in Server-Sent Event request line (%d characters)", rawHttpMethod.length()));
 				}
 
 				requestBuilder = Request.withRawUrl(httpMethod, rawUrl);
@@ -3172,13 +3282,13 @@ final class DefaultSseServer implements SseServer {
 			int indexOfFirstColon = rawLine.indexOf(':');
 
 			if (indexOfFirstColon <= 0)
-				throw new IllegalRequestException(format("Malformed Server-Sent Event request header line '%s'. Expected 'Header-Name: Value'", rawLine));
+				throw new IllegalRequestException(format("Malformed Server-Sent Event request header line (%d characters). Expected 'Header-Name: Value'", rawLine.length()));
 
 			String headerName = rawLine.substring(0, indexOfFirstColon);
 			validateHeaderName(headerName);
 
 			String headerValue = rawLine.substring(indexOfFirstColon + 1);
-			validateHeaderValue(headerName, headerValue);
+			validateHeaderValue(headerValue);
 
 			if ("Host".equalsIgnoreCase(headerName)) {
 				hostHeaderCount++;
@@ -3223,7 +3333,7 @@ final class DefaultSseServer implements SseServer {
 		for (int i = 0; i < name.length(); i++) {
 			char c = name.charAt(i);
 			if (c > 0x7F || !isTchar(c))
-				throw new IllegalRequestException(format("Illegal header name '%s'. Offending character: '%s'", name, Utilities.printableChar(c)));
+				throw new IllegalRequestException(format("Illegal Server-Sent Event request header name character at index %d (name length %d)", i, name.length()));
 		}
 	}
 
@@ -3233,15 +3343,14 @@ final class DefaultSseServer implements SseServer {
 				Character.isLetterOrDigit(c);
 	}
 
-	private static void validateHeaderValue(@NonNull String name, @NonNull String value) {
-		requireNonNull(name);
+	private static void validateHeaderValue(@NonNull String value) {
 		requireNonNull(value);
 
 		// Reject control characters; obs-text (0x80-0xFF) is allowed.
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
 			if (c == '\r' || c == '\n' || c == 0x00 || (c < 0x20 && c != '\t') || c == 0x7F)
-				throw new IllegalRequestException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, Utilities.printableChar(c)));
+				throw new IllegalRequestException(format("Illegal Server-Sent Event request header value character at index %d (value length %d)", i, value.length()));
 		}
 	}
 
@@ -3766,7 +3875,8 @@ final class DefaultSseServer implements SseServer {
 		return new SseRuntimeSnapshot(this.lifecycleGeneration.get(), this.eventLoopThread,
 				this.serverSocketChannel, this.requestHandlerExecutorService,
 				this.requestHandlerTimeoutScheduler, this.requestReaderExecutorService,
-				this.connectionExecutorService);
+				this.connectionExecutorService,
+				List.copyOf(new ArrayList<>(getGlobalConnections().keySet())));
 	}
 
 	private static boolean joinUntil(@Nullable Thread thread,
@@ -3810,7 +3920,11 @@ final class DefaultSseServer implements SseServer {
 			@Nullable ExecutorService requestHandlerExecutor,
 			@Nullable TimeoutScheduler requestTimeoutScheduler,
 			@Nullable ExecutorService requestReaderExecutor,
-			@Nullable ExecutorService connectionExecutor) {
+			@Nullable ExecutorService connectionExecutor,
+			@NonNull List<DefaultSseConnection> establishedConnections) {
+		private SseRuntimeSnapshot {
+			establishedConnections = List.copyOf(establishedConnections);
+		}
 	}
 
 	private final class SseLifecycleOperations
@@ -3842,8 +3956,7 @@ final class DefaultSseServer implements SseServer {
 					new ArrayList<>(DefaultSseServer.this.activeHandshakes.keySet()))
 				closePendingHandshake(pendingHandshake);
 
-			for (DefaultSseConnection connection :
-					new ArrayList<>(getGlobalConnections().keySet()))
+			for (DefaultSseConnection connection : snapshot.establishedConnections())
 				connection.setTerminationReason(StreamTerminationReason.SERVER_STOPPING);
 			for (DefaultSseBroadcaster broadcaster :
 					new ArrayList<>(getBroadcastersByResourcePath().values())) {
@@ -3869,7 +3982,7 @@ final class DefaultSseServer implements SseServer {
 		public void force() {
 			quiesce();
 			SseRuntimeSnapshot snapshot = retained();
-			forceCloseConnections(new ArrayList<>(getGlobalConnections().keySet()));
+			forceCloseConnections(snapshot.establishedConnections());
 			if (snapshot.eventLoopThread() != null)
 				snapshot.eventLoopThread().interrupt();
 			if (snapshot.requestHandlerExecutor() != null)
@@ -3980,22 +4093,6 @@ final class DefaultSseServer implements SseServer {
 		} finally {
 			getLock().unlock();
 		}
-	}
-
-	private void observeStop(@NonNull TransportTerminationSignal signal,
-			@NonNull AtomicBoolean observerStarted) {
-		if (!requireNonNull(observerStarted).compareAndSet(false, true))
-			return;
-		Thread observer = new Thread(() -> {
-			try {
-				stop();
-				requireNonNull(signal).signalTerminated();
-			} catch (RuntimeException | Error failure) {
-				requireNonNull(signal).signalTerminationFailure(failure);
-			}
-		}, "soklet-sse-delegate-stop");
-		observer.setDaemon(true);
-		observer.start();
 	}
 
 	@NonNull

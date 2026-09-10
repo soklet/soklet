@@ -426,6 +426,7 @@ public class McpTaskCancelationLifecycleTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion(
 						"task-cancelation-lifecycle-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		return McpServer.withPort(0)

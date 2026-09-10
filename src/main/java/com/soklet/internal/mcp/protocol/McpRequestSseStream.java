@@ -71,12 +71,17 @@ final class McpRequestSseStream {
 		@NonNull
 		MicrohttpResponse response(@NonNull List<@NonNull Header> headers);
 
-		void enqueue(@NonNull Frame frame) throws InterruptedException;
+		boolean enqueue(@NonNull Frame frame) throws InterruptedException;
 
 		McpOutboundChannel.@NonNull OfferResult offer(@NonNull Frame frame);
 
 		McpOutboundChannel.@NonNull OfferResult offerCoalescing(
 				@NonNull Frame frame, @NonNull Object coalescingKey);
+
+		default McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
+				@NonNull Frame frame, long nowNanos, long idleIntervalNanos) {
+			return offer(requireNonNull(frame));
+		}
 
 		boolean complete(@NonNull Frame terminalFrame);
 
@@ -171,9 +176,10 @@ final class McpRequestSseStream {
 		return channel.response(List.copyOf(headers));
 	}
 
-	void enqueueMessage(@NonNull McpJsonRpcMessage message) throws InterruptedException {
+	boolean enqueueMessage(@NonNull McpJsonRpcMessage message)
+			throws InterruptedException {
 		testHooks.beforeMessageEnqueue();
-		channel.enqueue(frame(requireNonNull(message)));
+		return channel.enqueue(frame(requireNonNull(message)));
 	}
 
 	McpOutboundChannel.@NonNull OfferResult offerMessage(
@@ -201,6 +207,17 @@ final class McpRequestSseStream {
 	McpOutboundChannel.@NonNull OfferResult offerKeepAlive() {
 		return channel.offer(new Frame(FrameType.KEEP_ALIVE_COMMENT, null,
 				KEEP_ALIVE));
+	}
+
+	McpOutboundChannel.@NonNull OfferResult offerKeepAliveIfWriteIdleExpired(
+			long nowNanos, long idleIntervalNanos) {
+		return channel.offerIfWriteIdleExpired(
+				new Frame(FrameType.KEEP_ALIVE_COMMENT, null, KEEP_ALIVE),
+				nowNanos, idleIntervalNanos);
+	}
+
+	long responseWriteIdleDeadlineNanos(long timeoutNanos) {
+		return channel.responseWriteIdleDeadlineNanos(timeoutNanos);
 	}
 
 	boolean fail(@NonNull StreamTerminationReason reason,
@@ -277,8 +294,8 @@ final class McpRequestSseStream {
 		}
 
 		@Override
-		public void enqueue(@NonNull Frame frame) throws InterruptedException {
-			this.delegate.enqueue(requireNonNull(frame).encodedBytes());
+		public boolean enqueue(@NonNull Frame frame) throws InterruptedException {
+			return this.delegate.enqueue(requireNonNull(frame).encodedBytes());
 		}
 
 		@Override
@@ -292,6 +309,14 @@ final class McpRequestSseStream {
 				@NonNull Frame frame, @NonNull Object coalescingKey) {
 			return this.delegate.offerCoalescing(
 					requireNonNull(frame).encodedBytes(), requireNonNull(coalescingKey));
+		}
+
+		@Override
+		public McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
+				@NonNull Frame frame, long nowNanos, long idleIntervalNanos) {
+			return this.delegate.offerIfWriteIdleExpired(
+					requireNonNull(frame).encodedBytes(), nowNanos,
+					idleIntervalNanos);
 		}
 
 		@Override

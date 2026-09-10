@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
@@ -115,6 +116,20 @@ public final class McpClientCapabilities {
 	@NonNull
 	public McpJsonObject toJson() {
 		return this.json;
+	}
+
+	/** @return whether every advertised capability is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpClientCapabilities capabilities
+				&& this.json.equals(capabilities.json);
+	}
+
+	/** @return structural capability hash code */
+	@Override
+	public int hashCode() {
+		return this.json.hashCode();
 	}
 
 	@NonNull

@@ -393,9 +393,9 @@ public class McpApplicationExecutionTests {
 			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
 					cancelationReason.get());
 			Assertions.assertTrue(token.get().isCanceled());
-			Assertions.assertEquals(504, terminalResponse.get().status());
-			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
-					terminalResponse.get().outcome());
+			Assertions.assertEquals(McpApplicationResponse.activeDeadline(
+					new McpJsonRpcId.StringId("deadline-progress")),
+					terminalResponse.get());
 			Assertions.assertEquals(1, cleanups.get());
 			Assertions.assertEquals(1,
 					execution.snapshot().deadlineExpirations());

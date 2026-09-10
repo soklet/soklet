@@ -297,6 +297,24 @@ public class McpResultEnvelopeGoldenProductionTests {
 							"handler resource complete", "handler-resource");
 				})
 				.build();
+		McpEndpoint discoveryEndpoint = endpointBuilder(
+				"result-envelope-complete")
+				.serverInformationIncluded(true)
+				.addTool(tool)
+				.addPrompt(prompt)
+				.addResource(resource)
+				.build();
+		McpServer discoveryServer = serverBuilder(discoveryEndpoint).build();
+		Soklet discoveryOwner = managedSoklet(discoveryServer);
+		try {
+			discoveryOwner.start();
+			assertJsonGolden(boundPort(discoveryServer),
+					"complete-server-discover-string.json",
+					"\"discover-complete\"", "server/discover", "", "", null,
+					"complete");
+		} finally {
+			discoveryOwner.close();
+		}
 		McpEndpoint endpoint = endpointBuilder("result-envelope-complete")
 				.addTool(tool)
 				.addPrompt(prompt)
@@ -317,9 +335,6 @@ public class McpResultEnvelopeGoldenProductionTests {
 		try {
 			owner.start();
 			int port = boundPort(server);
-			assertJsonGolden(port, "complete-server-discover-string.json",
-					"\"discover-complete\"", "server/discover", "", "", null,
-					"complete");
 			assertJsonGolden(port, "complete-tools-list-integer.json",
 					"101", "tools/list", "", "", null, "complete");
 			assertJsonGolden(port, "complete-prompts-list-string.json",
@@ -395,6 +410,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 		McpEndpoint localizedEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-discovery")
+				.serverInformationIncluded(true)
 				.instructions("Canonical result instructions")
 				.build();
 		McpServer localizedServer = serverBuilder(localizedEndpoint)
@@ -604,6 +620,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint subscriptionEndpoint = endpointBuilder(
 				"result-envelope-subscription")
+				.serverInformationIncluded(true)
 				.addResource(resource)
 				.subscriptionConfig(subscriptions)
 				.build();
@@ -613,6 +630,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 		McpEndpoint localizedSubscriptionEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-subscription")
+				.serverInformationIncluded(true)
 				.addResource(resource)
 				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
@@ -984,7 +1002,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static McpEndpoint.Builder endpointBuilder(String name) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						name, "4.0.0").build());
+						name, "4.0.0").build())
+				.serverInformationIncluded(false);
 	}
 
 	private static McpEndpoint.Builder localizedEndpointBuilder(String name) {
@@ -992,7 +1011,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 						name, "4.0.0")
 						.title("Canonical result title")
 						.description("Canonical result description")
-						.build());
+						.build())
+				.serverInformationIncluded(false);
 	}
 
 	private static McpLocalizer frenchLocalizer() {

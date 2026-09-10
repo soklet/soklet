@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -85,6 +86,26 @@ public final class McpPromptArgumentDeclaration {
 	@NonNull
 	public Boolean isRequired() {
 		return this.required;
+	}
+
+	/** @return whether every argument-declaration property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpPromptArgumentDeclaration declaration))
+			return false;
+		return this.required == declaration.required
+				&& this.name.equals(declaration.name)
+				&& Objects.equals(this.title, declaration.title)
+				&& Objects.equals(this.description, declaration.description);
+	}
+
+	/** @return structural argument-declaration hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.name, this.title, this.description,
+				this.required);
 	}
 
 	@NonNull

@@ -187,14 +187,15 @@ class McpLocalizationRendererTests {
 		McpJsonObject canonical = catalog();
 		long canonicalBytes = CODEC.toUtf8Bytes(canonical).length;
 
-		// Exactly enough headroom for a four byte growth, then ask for more.
+		// Even the shortest legal second replacement cannot reclaim this growth.
 		McpLocalizationRenderer.Outcome outcome = render(canonical,
 				canonicalBytes + ENVELOPE_BYTES + 4,
 				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
 				text -> {
 					observed.add(text.getDefaultText());
 					return McpLocalizationResult.localized(
-							text.getDefaultText() + "0123456789");
+							text.getDefaultText()
+									+ "01234567890123456789");
 				});
 
 		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
@@ -202,6 +203,33 @@ class McpLocalizationRendererTests {
 		assertSame(canonical, outcome.document());
 		assertEquals(1, observed.size(),
 				"Budget exhaustion must stop scheduling every later slot.");
+	}
+
+	@Test
+	void aGrowingPrefixCanStillFitAfterALaterReplacementShrinks() {
+		McpJsonObject canonical = catalog();
+		long canonicalBytes = CODEC.toUtf8Bytes(canonical).length;
+		List<String> observed = new ArrayList<>();
+
+		// The first replacement crosses the ceiling by ten bytes. The second
+		// replacement then saves fourteen, so the aggregate candidate fits.
+		McpLocalizationRenderer.Outcome outcome = render(canonical,
+				canonicalBytes + ENVELOPE_BYTES,
+				McpLocalizationFailurePolicy.FAIL_REQUEST, () -> false,
+				text -> {
+					observed.add(text.getDefaultText());
+					return McpLocalizationResult.localized(
+							"Canonical instructions".equals(text.getDefaultText())
+									? text.getDefaultText() + "0123456789"
+									: "x");
+				});
+
+		assertEquals(McpLocalizationRenderer.Disposition.LOCALIZED,
+				outcome.disposition());
+		assertEquals(List.of("Canonical instructions", "Canonical title"),
+				observed);
+		assertTrue(CODEC.toUtf8Bytes(outcome.document()).length + ENVELOPE_BYTES
+				<= canonicalBytes + ENVELOPE_BYTES);
 	}
 
 	@Test

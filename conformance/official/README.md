@@ -42,6 +42,17 @@ its profile evidence.
 `RUN` rows are the active Soklet 4.0.0 run set; `completion-complete` is the
 only `NOT_APPLICABLE` row because Soklet does not advertise Completion.
 
+That release gate is pinned to `@modelcontextprotocol/conformance`
+`0.2.0-alpha.10` at commit
+`49103de6ed70804e940637bf3e9e29e4a3f54e64`, whose inventory predates the
+official Tasks scenarios. It therefore supplies no gated conformance coverage
+for `io.modelcontextprotocol/tasks`. A separate local alpha.11 run of the nine
+runnable Tasks scenarios is recorded in
+[`release/MCP_CLIENT_COMPATIBILITY.md`](../../release/MCP_CLIENT_COMPATIBILITY.md),
+but it is neither replayed by candidate conformance nor a release PASS receipt.
+Repinning and reviewing those scenario profiles is tracked explicitly under
+DF-01 in `roadmap-readiness-deferred-features.json`.
+
 `earliestPhase` means the first phase in which a scenario is mandatory as part
 of that phase's full gate. The 23 applicable non-MRTR scenarios other than
 `server-stateless` and `tools-call-with-progress` are mandatory in Phase 4.

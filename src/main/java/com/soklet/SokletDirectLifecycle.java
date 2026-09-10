@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -810,7 +811,8 @@ final class SokletDirectLifecycle {
 			}
 			this.startupDisposition.set(InternalStartupDisposition.READY);
 			this.readyPublished.set(true);
-			dispatch(() -> this.config.getAggregateLifecycleObserver()
+			dispatch("didStartSoklet",
+					() -> this.config.getAggregateLifecycleObserver()
 					.didStartSoklet(this.soklet));
 			for (DirectParticipant participant : installed) {
 				try {
@@ -828,6 +830,16 @@ final class SokletDirectLifecycle {
 					InternalStartupDisposition.READY,
 					this.shutdownIntentFailure.get(), false);
 		} catch (Throwable failure) {
+			if (this.readyPublished.get()) {
+				// Readiness is a one-way publication boundary.  A coordinator
+				// failure after it must remain shutdown evidence; it must never
+				// rewrite READY or emit didFailToStart after didStart.
+				retainShutdownIntentFailureSafely(failure);
+				requestShutdownIntent();
+				return coordinateShutdown(this.installedParticipants.get(),
+						InternalStartupDisposition.READY,
+						this.shutdownIntentFailure.get(), false);
+			}
 			Throwable normalizedFailure = normalizeStartupFailure(failure);
 			Throwable exactFailure = this.controllingEventElection.firstEvent()
 					.isPresent()
@@ -866,7 +878,8 @@ final class SokletDirectLifecycle {
 					addSuppressedIfDistinct(exactFailure, shutdownFailure);
 				}
 			}
-			dispatch(() -> this.config.getAggregateLifecycleObserver()
+			dispatch("didFailToStartSoklet",
+					() -> this.config.getAggregateLifecycleObserver()
 					.didFailToStartSoklet(this.soklet, exactFailure));
 
 			List<InternalLifecycleCoordinator.Participant> shutdownParticipants =
@@ -1584,13 +1597,15 @@ final class SokletDirectLifecycle {
 	}
 
 	private void dispatchStartIntent() {
-		dispatch(() -> this.config.getAggregateLifecycleObserver()
+		dispatch("willStartSoklet",
+				() -> this.config.getAggregateLifecycleObserver()
 				.willStartSoklet(this.soklet));
 	}
 
 	private void dispatchParticipantStartIntent(
 			@NonNull InternalLifecycleComponentType kind) {
-		dispatch(() -> {
+		dispatch(participantCallbackName(kind, "willStartHttpServer",
+				"willStartSseServer", "willStartMcpServer"), () -> {
 			LifecycleObserver observer = this.config.getAggregateLifecycleObserver();
 			switch (kind) {
 				case HTTP -> observer.willStartHttpServer(
@@ -1606,7 +1621,8 @@ final class SokletDirectLifecycle {
 
 	private void dispatchParticipantStarted(
 			@NonNull InternalLifecycleComponentType kind) {
-		dispatch(() -> {
+		dispatch(participantCallbackName(kind, "didStartHttpServer",
+				"didStartSseServer", "didStartMcpServer"), () -> {
 			LifecycleObserver observer = this.config.getAggregateLifecycleObserver();
 			switch (kind) {
 				case HTTP -> observer.didStartHttpServer(
@@ -1622,7 +1638,8 @@ final class SokletDirectLifecycle {
 
 	private void dispatchParticipantStartFailure(
 			@NonNull InternalLifecycleComponentType kind, @NonNull Throwable failure) {
-		dispatch(() -> {
+		dispatch(participantCallbackName(kind, "didFailToStartHttpServer",
+				"didFailToStartSseServer", "didFailToStartMcpServer"), () -> {
 			LifecycleObserver observer = this.config.getAggregateLifecycleObserver();
 			switch (kind) {
 				case HTTP -> observer.didFailToStartHttpServer(
@@ -1639,10 +1656,13 @@ final class SokletDirectLifecycle {
 	private void submitShutdownTransitions() {
 		if (!this.shutdownTransitionsSubmitted.compareAndSet(false, true))
 			return;
-		dispatch(() -> this.config.getAggregateLifecycleObserver()
+		dispatch("willStopSoklet",
+				() -> this.config.getAggregateLifecycleObserver()
 				.willStopSoklet(this.soklet));
 		for (ParticipantControl control : this.controls)
-			dispatch(() -> {
+			dispatch(participantCallbackName(control.kind(),
+					"willStopHttpServer", "willStopSseServer",
+					"willStopMcpServer"), () -> {
 				LifecycleObserver observer = this.config.getAggregateLifecycleObserver();
 				switch (control.kind()) {
 					case HTTP -> observer.willStopHttpServer(
@@ -1663,9 +1683,12 @@ final class SokletDirectLifecycle {
 			ShutdownComponentType kind = ShutdownComponentType.valueOf(control.kind().name());
 			ShutdownComponentResult participant = publicResult
 					.getShutdownComponentResult(kind).orElseThrow();
-			dispatch(() -> dispatchTerminal(kind, participant));
+			dispatch(participantCallbackName(kind, "didStopHttpServer",
+					"didStopSseServer", "didStopMcpServer"),
+					() -> dispatchTerminal(kind, participant));
 		}
-		dispatch(() -> this.config.getAggregateLifecycleObserver()
+		dispatch("didStopSoklet",
+				() -> this.config.getAggregateLifecycleObserver()
 				.didStopSoklet(this.soklet, publicResult));
 	}
 
@@ -1683,13 +1706,65 @@ final class SokletDirectLifecycle {
 		}
 	}
 
-	private void dispatch(@NonNull Runnable callback) {
+	@NonNull
+	private static String participantCallbackName(
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull String httpName, @NonNull String sseName,
+			@NonNull String mcpName) {
+		return switch (requireNonNull(kind)) {
+			case HTTP -> requireNonNull(httpName);
+			case SSE -> requireNonNull(sseName);
+			case MCP -> requireNonNull(mcpName);
+			case FRAMEWORK -> "frameworkLifecycleTransition";
+		};
+	}
+
+	@NonNull
+	private static String participantCallbackName(
+			@NonNull ShutdownComponentType kind,
+			@NonNull String httpName, @NonNull String sseName,
+			@NonNull String mcpName) {
+		return switch (requireNonNull(kind)) {
+			case HTTP -> requireNonNull(httpName);
+			case SSE -> requireNonNull(sseName);
+			case MCP -> requireNonNull(mcpName);
+			case FRAMEWORK -> "frameworkLifecycleTransition";
+		};
+	}
+
+	private void dispatch(@NonNull String callbackName,
+			@NonNull Runnable callback) {
 		if (!this.transitionObservationEnabled)
 			return;
+		String exactCallbackName = requireNonNull(callbackName);
+		Runnable exactCallback = requireNonNull(callback);
 		try {
-			this.transitions.dispatch(requireNonNull(callback));
+			this.transitions.dispatch(() -> {
+				try {
+					exactCallback.run();
+				} catch (RuntimeException | Error failure) {
+					reportTransitionObserverFailure(exactCallbackName, failure);
+					throw failure;
+				}
+			});
 		} catch (RuntimeException | Error ignored) {
 			// Observation and its infrastructure never control core lifecycle.
+		}
+	}
+
+	private void reportTransitionObserverFailure(@NonNull String callbackName,
+			@NonNull Throwable failure) {
+		try {
+			this.config.getAggregateLifecycleObserver().didReceiveLogEvent(
+					LogEvent.with(
+							LogEventType.LIFECYCLE_OBSERVER_TRANSITION_FAILED,
+							format("An exception occurred while invoking %s::%s",
+									LifecycleObserver.class.getSimpleName(),
+									requireNonNull(callbackName)))
+							.throwable(requireNonNull(failure))
+							.build());
+		} catch (Throwable observerFailure) {
+			LifecycleObserverLogFallback.report(observerFailure);
 		}
 	}
 
@@ -2474,8 +2549,10 @@ final class SokletDirectLifecycle {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: generation.admissionFence().tryAdmit().orElse(null);
-			if (generation != null && admission == null)
+			if (generation != null && admission == null) {
+				consumer.accept(serviceUnavailableResult(request));
 				return;
+			}
 			try (AdmissionFence.Admission ignoredAdmission = admission;
 				 LifecycleExecutionContext.Scope ignoredExecution = enterExecution()) {
 				this.soklet.handleRequest(request, ServerType.STANDARD_HTTP, consumer);
@@ -2487,13 +2564,29 @@ final class SokletDirectLifecycle {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: generation.admissionFence().tryAdmit().orElse(null);
-			if (generation != null && admission == null)
+			if (generation != null && admission == null) {
+				consumer.accept(serviceUnavailableResult(request));
 				return;
+			}
 			try (AdmissionFence.Admission ignoredAdmission = admission;
 				 LifecycleExecutionContext.Scope ignoredExecution = enterExecution()) {
 				this.soklet.handleRequest(request, ServerType.SSE, consumer);
 			}
 		};
+	}
+
+	@NonNull
+	private HttpRequestResult serviceUnavailableResult(@NonNull Request request) {
+		MarshaledResponse response;
+		try {
+			response = this.config.getResponseMarshaler()
+					.forServiceUnavailable(requireNonNull(request), null);
+		} catch (Throwable failure) {
+			LifecycleObserverLogFallback.report(failure);
+			response = ResponseMarshaler.defaultInstance()
+					.forServiceUnavailable(request, null);
+		}
+		return HttpRequestResult.withMarshaledResponse(response).build();
 	}
 
 }

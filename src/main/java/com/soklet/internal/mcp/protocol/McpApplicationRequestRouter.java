@@ -1140,6 +1140,42 @@ record McpApplicationResponse(int status, @NonNull String reason,
 						McpJsonObject.empty())), outcome, List.of());
 	}
 
+	/** Returns this response with framework-owned server identity on a result. */
+	@NonNull
+	McpApplicationResponse withServerInformation(
+			@NonNull Optional<@NonNull McpImplementationMetadata>
+					serverInformation) {
+		requireNonNull(serverInformation);
+		if (message.orElse(null)
+				instanceof McpJsonRpcMessage.ResultResponse resultResponse) {
+			McpJsonRpcMessage.ResultResponse identified =
+					new McpJsonRpcMessage.ResultResponse(resultResponse.id(),
+							McpWireResult.withServerInformation(
+									resultResponse.result(), serverInformation),
+							resultResponse.extensionFields());
+			return new McpApplicationResponse(status, reason,
+					Optional.of(identified), outcome, throwables);
+		}
+		return this;
+	}
+
+	/** Returns this response without an optional structured-content text mirror. */
+	@NonNull
+	Optional<@NonNull McpApplicationResponse> withoutCompatibilityMirror() {
+		if (!(message.orElse(null)
+				instanceof McpJsonRpcMessage.ResultResponse resultResponse))
+			return Optional.empty();
+		Optional<McpWireResult> fallback = resultResponse.result()
+				.withoutCompatibilityMirror();
+		if (fallback.isEmpty())
+			return Optional.empty();
+		McpJsonRpcMessage.ResultResponse unmirrored =
+				new McpJsonRpcMessage.ResultResponse(resultResponse.id(),
+						fallback.orElseThrow(), resultResponse.extensionFields());
+		return Optional.of(new McpApplicationResponse(status, reason,
+				Optional.of(unmirrored), outcome, throwables));
+	}
+
 	@NonNull
 	static McpApplicationResponse internalError(@NonNull McpJsonRpcId id,
 			int status, @NonNull String reason) {
@@ -1192,11 +1228,9 @@ record McpApplicationResponse(int status, @NonNull String reason,
 	}
 
 	@NonNull
-	static McpApplicationResponse activeDeadline() {
-		// Phase 3B.1 has no frozen pre-commit active-handler timeout wire mapping.
-		// An empty 504 closes the JSON-only response lifetime without claiming one.
-		return new McpApplicationResponse(504, "Gateway Timeout", Optional.empty(),
-				McpRequestOutcome.DEADLINE_EXCEEDED, List.of());
+	static McpApplicationResponse activeDeadline(@NonNull McpJsonRpcId id) {
+		return error(id, 504, "Gateway Timeout", McpJsonRpcError.INTERNAL_ERROR,
+				"Internal error", McpRequestOutcome.DEADLINE_EXCEEDED, List.of());
 	}
 
 	@NonNull
@@ -1631,9 +1665,21 @@ final class McpApplicationExecution {
 	void cancel(@NonNull MicrohttpRequest request,
 			@NonNull StreamTerminationReason reason,
 			@Nullable Throwable cause) {
+		reserveCancellation(request, reason, cause).run();
+	}
+
+	/**
+	 * Fixes application cancellation ownership without invoking application
+	 * callbacks or transport cleanup. The returned action completes those effects
+	 * exactly once and may safely run after a caller releases its own lock.
+	 */
+	@NonNull
+	Runnable reserveCancellation(@NonNull MicrohttpRequest request,
+			@NonNull StreamTerminationReason reason,
+			@Nullable Throwable cause) {
 		Exchange exchange = requestsByIdentity.get(requireNonNull(request));
-		if (exchange != null)
-			exchange.cancel(reason, cause);
+		return exchange == null ? () -> {}
+				: exchange.reserveCancellation(reason, cause);
 	}
 
 	void runTimerCycle() {
@@ -2190,13 +2236,20 @@ final class McpApplicationExecution {
 
 		private void cancel(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable ignored) {
+			reserveCancellation(reason, ignored).run();
+		}
+
+		@NonNull
+		private Runnable reserveCancellation(
+				@NonNull StreamTerminationReason reason,
+				@Nullable Throwable ignored) {
 			boolean cancelBeforeDispatch;
 			boolean releaseCancellationCallbacks;
 			dispatcher.beginObserverDeferral();
 			try {
 				synchronized (terminalLock) {
 					if (terminalState != TerminalState.OPEN)
-						return;
+						return () -> {};
 					// Retain only the application-visible reason. Transport exceptions can
 					// retain connection internals and are detached with the response lease.
 					releaseCancellationCallbacks = cancellation.fixReason(
@@ -2208,12 +2261,17 @@ final class McpApplicationExecution {
 				dispatcher.endObserverDeferral();
 			}
 
-			if (releaseCancellationCallbacks)
-				cancellation.releaseCallbacks();
-			if (!cancelBeforeDispatch)
-				ticket().requestInterrupt();
-			abandonedResponses.incrementAndGet();
-			releaseResponseOwnership();
+			AtomicBoolean completionClaimed = new AtomicBoolean();
+			return () -> {
+				if (!completionClaimed.compareAndSet(false, true))
+					return;
+				if (releaseCancellationCallbacks)
+					cancellation.releaseCallbacks();
+				if (!cancelBeforeDispatch)
+					ticket().requestInterrupt();
+				abandonedResponses.incrementAndGet();
+				releaseResponseOwnership();
+			};
 		}
 
 		private void onTimer(long now) {
@@ -2245,12 +2303,13 @@ final class McpApplicationExecution {
 							lease = requireNonNull(transportLease.get(),
 									"An open exchange must retain its transport lease.");
 							terminalState = TerminalState.RESPONSE_OFFERED;
-							response = canceledBeforeDispatch
-									? profiledFrameworkError(
-											McpProfileErrorKind.CONTROL,
-											McpApplicationResponse.queuedDeadline(
-													request.id()))
-									: McpApplicationResponse.activeDeadline();
+							response = profiledFrameworkError(
+									McpProfileErrorKind.CONTROL,
+									canceledBeforeDispatch
+											? McpApplicationResponse.queuedDeadline(
+													request.id())
+											: McpApplicationResponse.activeDeadline(
+													request.id()));
 						}
 					} else {
 						canceledBeforeDispatch = false;

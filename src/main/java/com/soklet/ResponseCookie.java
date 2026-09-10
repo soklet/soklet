@@ -428,7 +428,15 @@ public final class ResponseCookie {
 	@Override
 	@NonNull
 	public String toString() {
-		return toSetCookieHeaderRepresentation();
+		return format("%s{name=<redacted>, value=<redacted>, maxAge=%s, "
+					+ "expires=%s, domain=%s, path=%s, secure=%s, httpOnly=%s, "
+					+ "sameSite=%s, priority=%s, partitioned=%s}",
+				getClass().getSimpleName(), getMaxAge().orElse(null),
+				getExpires().orElse(null),
+				getDomain().isPresent() ? "<redacted>" : null,
+				getPath().isPresent() ? "<redacted>" : null, getSecure(),
+				getHttpOnly(), getSameSite().orElse(null),
+				getPriority().orElse(null), getPartitioned());
 	}
 
 	/**

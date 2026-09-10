@@ -24,6 +24,8 @@ MCP value-contract amendment reviewed: 2026-09-03
 
 Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
+Final public-value amendment reviewed: 2026-09-10
+
 This record approves the Phase 6 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -39,16 +41,16 @@ the current full japicmp report.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 658 canonical
+The reviewed current incompatibility set contains exactly 646 canonical
 symbols and has SHA-256
-`f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 The matching full japicmp report establishes an exact owner universe of:
 
 - 134 Phase 4 owners;
 - 36 Phase 5 owners;
 - 64 Phase 6 owners;
-- zero provisional owners; and
-- 234 MCP owners, plus 51 reviewed non-MCP owners for 285 current-side owners.
+- 14 provisional Tasks owners; and
+- 248 MCP owners, plus 51 reviewed non-MCP owners for 299 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory is 134, while its signature snapshot includes the
@@ -56,8 +58,9 @@ compatible `LogEventType.MCP_TRACE_CORRELATION` field and the restored
 `McpOperationType` classification. Among the reviewed Phase 4 host
 localization amendments, only `McpServer.getLocalizationControl()` added a
 source incompatibility at that amendment checkpoint; it was one of exactly
-three localization-host amendments. `provisional.includes` is intentionally
-empty after the telemetry amendment described below.
+three localization-host amendments. `provisional.includes` now contains the
+14 Tasks owners and is covered by its own mandatory signature snapshot; its
+earlier empty state remains recorded in the telemetry amendment below.
 
 The later greenfield admission-controller naming amendment replaces one
 Phase 4 owner name and the corresponding server getter and builder input. It
@@ -603,3 +606,21 @@ reviewed current-side owners. The released-3.5.1 compatibility ledger remains
 The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. These are local development checks, not
 release-candidate provenance or publication evidence.
+
+## 2026-09-10 final public-value amendment
+
+The final release review adds deliberate structural `equals(Object)` and
+`hashCode()` contracts to `McpLocalizationCatalog`. The addition completes the
+catalog's immutable value contract without changing the 64-owner Phase 6
+inventory.
+
+The final Phase 6 snapshot contains 425 records: 64 classes, no public
+constructors, 41 fields, and 320 methods. Its signature SHA-256 is
+`06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`;
+the reviewed reflection/nullability SHA-256 is
+`10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`;
+and the unchanged include-inventory SHA-256 is
+`29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
+The shared final released-3.5.1 compatibility ledger contains 646 records with
+SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.

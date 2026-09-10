@@ -131,6 +131,28 @@ the normalized exact request path. Tool, prompt, and resource names may repeat
 on different endpoint paths without leaking across them, while handler slots,
 the admitted queue, and the server lifecycle remain server-wide.
 
+Endpoint paths are fixed in 4.0.0. Both annotated and programmatic endpoint
+registration reject `{...}` path templates, and `McpServer` exposes only its
+built-in HTTP/1.1 listener rather than a public MCP transport or routing SPI.
+For a bounded, startup-known tenant set, register one fixed endpoint path per
+tenant. For dynamic tenancy, carry the tenant through application-owned
+admission identity or register a required `Mcp-Param-*` header and have
+application admission authenticate and authorize its value; do not treat a
+self-reported header as an authorization decision. Because every endpoint path
+is fixed, `McpRequestContext.getEndpointPathParameters()` and
+`McpAdmissionContext.getEndpointPathParameters()` are always empty in 4.0.0.
+
+The built-in listener retains the 3.5.1 hardening controls on
+`McpServer.Builder`. Request-header and request-body read timeouts each default
+to 60 seconds; the request-body limit defaults to 10 MiB and may be configured
+only from 1 byte through the reviewed 16 MiB production-JSON ceiling. The
+defaults are 100 headers, 64 KiB of aggregate headers, an 8,192-byte request
+target, a 64 KiB request-read buffer, and 8,192 concurrent connections. A
+zero concurrent-connection limit disables Soklet's cap and therefore requires
+an effective external bound. `connectionQueueCapacity(...)` is the historical
+name for `streamQueueCapacity(...)`; both configure the same per-stream
+outbound queue, whose default is 128, and the most recent call wins.
+
 JSON-RPC requires a sender not to reuse an ID while an earlier request from
 that sender is still in flight. That is a sender obligation, not a receiver-
 side global namespace. Because this protocol is stateless, Soklet cannot
@@ -189,8 +211,10 @@ values, mode-defining values, and additive elements remain non-null.
 Security-sensitive resets remain secure: for example, a null CORS authorizer
 restores reject-all behavior for present origins, and null allowed hosts
 restores the empty deployment-specific set. A null admission controller
-restores the documented accept-all development default and therefore must not
-be used as a production authentication policy.
+restores the documented accept-all development default and emits a startup
+configuration diagnostic; it must not be used as a production authentication
+policy. Supplying `McpAdmissionController.acceptAllInstance()` explicitly
+records a deliberate anonymous-access decision and suppresses that diagnostic.
 
 `McpTokenBucketConfig.withCapacity(capacity)` is a complete builder entrypoint.
 Without overrides it replenishes 60 tokens every one minute; passing null to
@@ -237,6 +261,15 @@ matches the programmatic surface: `rateLimiterName`, `toolRateLimiterName`,
 `cacheTimeToLiveInMilliseconds` family. The time-to-live elements use whole
 milliseconds because Java annotations cannot accept `Duration` values.
 
+For 4.0.0, `@McpTool` declarations cannot publish tool icons or the
+`readOnly`, `destructive`, `idempotent`, and `openWorld` behavioral hints.
+Those values are intentionally deferred on the annotation surface until 4.1.
+When a client needs them for presentation or approval policy, declare that
+tool with `McpToolRegistration`, which supports `icons(...)` and
+`annotations(...)`, and add the registration to a programmatic endpoint.
+Annotations on inherited methods are not MCP operations: place each MCP
+operation annotation directly on a method declared by the endpoint class.
+
 ### Programmatic registration
 
 Programmatic endpoints use the same immutable runtime model. Start with
@@ -276,6 +309,15 @@ runtime.
 
 `McpToolOutput` structured content remains typed as `McpJsonValue`, not
 `McpJsonObject`, because the target protocol schema permits every JSON value.
+
+Structured-content text mirroring is a compatibility aid, not the authoritative
+typed result. It is enabled by default and can be disabled with
+`structuredContentMirroredAsText(false)`. When enabled, Soklet appends the
+canonical JSON text only when adding it fits the production JSON-string and
+serialized-response-byte ceilings. If adding the mirror would exceed either
+ceiling, Soklet omits it and still returns the valid `structuredContent`;
+clients must therefore consume `structuredContent` rather than require the
+optional text mirror.
 
 ## Tools and typed schemas
 
@@ -405,6 +447,16 @@ handler is the sole authority for every `McpResourcePage`—Soklet never merges
 static registrations into the handler result. The handler reads the optional
 cursor from `McpResourceListContext` and places any following cursor on the
 returned page.
+
+Every descriptor URI returned by a custom list handler must be readable
+through an exact resource or URI-template read route registered on that same
+endpoint. This is a reachability invariant: a custom-list-only endpoint may
+return an empty page, but it cannot return a nonempty page until a matching
+read route is registered. Soklet rejects the complete page if any listed URI
+does not match a route; the invariant violation is reported as HTTP 500 with
+JSON-RPC `-32603`, not as a partially filtered page. Applications should
+validate database-backed or otherwise dynamic catalog entries against their
+registered templates before returning them.
 
 `list.getRegisteredResourceDescriptors()` is only an immutable convenience
 view of exact registrations. It excludes templates and is not automatically
@@ -640,7 +692,12 @@ endpoint path, protocol version, JSON-RPC method, admitted authorization
 partition, and stable request parameters. The parameter digest excludes only
 the retry's `inputResponses` and `requestState` plus transient `_meta`
 progress/trace/baggage fields, allowing those fields to change without moving
-state to a different operation or authorization partition.
+state to a different operation or authorization partition. Every other
+`_meta` member, including namespaced vendor extensions and client identity or
+capability metadata, is deliberately part of the stable binding and must be
+identical on a retry. Applications should use the excluded progress, trace, or
+baggage fields for per-attempt correlation rather than varying another
+extension member during a multi-round operation.
 
 The first emission records round 1, issuance/expiry, and the emitting request
 ID. Re-emission preserves the original expiry, increments the round, and
@@ -727,8 +784,9 @@ public McpTaskCreatedResult<GeneratedReport> generateReport(
     @McpToolArgument(name = "accountId") String accountId,
     McpTaskControl taskControl) {
   String ownerKey = ownerKey(taskControl.getRequestContext());
+  String persistedOrigin = taskControl.getTaskOrigin().toPersistedString();
   String taskId = reportJobs.persistAndPublish(
-      accountId, ownerKey, taskControl.getTaskOrigin());
+      accountId, ownerKey, persistedOrigin);
   return McpTaskCreatedResult.fromTaskId(taskId);
 }
 ```
@@ -743,6 +801,37 @@ returned origin to match. Returning a Java callback, retaining the request
 context, or publishing work before it can be recovered does not satisfy this
 contract.
 
+Store the string returned by `toPersistedString()` as opaque sensitive JSON.
+When any manager node reads the row, reconstruct the origin before building
+the authoritative task snapshot:
+
+```java
+McpTaskOrigin taskOrigin =
+    McpTaskOrigin.fromPersistedString(row.persistedOrigin());
+
+McpTask.Builder taskBuilder = McpTask.withTaskId(
+        row.taskId(), taskOrigin, row.status(),
+        row.createdAt(), row.lastUpdatedAt());
+restorePersistedTaskFields(taskBuilder, row);
+McpTask task = taskBuilder.build();
+```
+
+When task creation has a selected locale, Soklet 4.0 persists that locale
+inside this framework-owned origin. The locale remains opaque: no current
+application API exposes it. Later `tasks/get`, `tasks/update`, and
+`tasks/cancel` requests, and task-subscription projections, do not construct,
+expose, or enforce an `McpLocalizationContext` from it. An application that
+needs localized task fields must separately persist its locale choice in
+application-owned task data and use that choice when rendering those fields
+on every node.
+
+The codec accepts semantically equivalent JSON objects, including insignificant
+whitespace, member reordering, and decimal-scale normalization, and emits one
+canonical form. Do not parse and selectively rebuild the origin, depend on its
+members, or use `toString()` for persistence; `toString()` is deliberately
+redacted. Protect the stored text with the same confidentiality and integrity
+controls as the task row.
+
 The type argument on `McpTaskCreatedResult<R>` is operational. Soklet retains
 the original tool's output schema and, when a later `tasks/get` observes a
 completed task, applies the configured
@@ -755,8 +844,12 @@ log it or send it to the client.
 Programmatic typed registration uses
 [`McpToolRegistration.CompleteHandlerStage::operationHandler`](<https://javadoc.soklet.com/com/soklet/McpToolRegistration.CompleteHandlerStage.html#operationHandler(com.soklet.McpToolHandler)>).
 That path is statically task-required and preserves its eventual output type.
-An advanced handler that may complete inline or create a task uses the ordinary
-operation-result handler and first inspects
+Use
+[`inlineOperationHandler`](<https://javadoc.soklet.com/com/soklet/McpToolRegistration.CompleteHandlerStage.html#inlineOperationHandler(com.soklet.McpToolHandler)>)
+when the same typed-output tool always completes inline but needs to return
+explicit content or an `isError` tool result. An advanced handler that may
+complete inline or create a task uses the ordinary operation-result handler
+and first inspects
 [`McpInvocationFeatures::getTaskControl`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getTaskControl()>).
 
 ### Manager and state contract
@@ -1173,6 +1266,12 @@ message. Every subscription message carries the listen request's exact string
 or integer ID as `io.modelcontextprotocol/subscriptionId`. That reuse does not
 make the ID listener-global: independent subscriptions with equal IDs remain
 separate streams and may coexist, including across authorization partitions.
+
+One filter may contain at most 256 distinct normalized resource-subscription
+URIs and, when Tasks is negotiated, at most 256 distinct task IDs. Duplicate
+values are deduplicated before the bound is applied. Exceeding either limit is
+invalid parameters and fails before application admission or task-manager
+lookup.
 
 A valid listen request traverses admission and the optional request limiter;
 it does not invoke an application handler, `McpHandlerInterceptor`, a tool
@@ -1670,7 +1769,7 @@ The HELP text is respectively `Currently active MCP request streams` and `MCP
 request-stream duration in nanoseconds`. Histogram samples use only bounded
 `endpoint`, `method`, and lower-snake `reason` labels for the ten fixed
 termination reasons: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`. Inclusive
 boundaries are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and
@@ -1725,7 +1824,7 @@ decrements it and records `soklet_mcp_subscription_duration_nanos`. Their HELP
 text is respectively `Currently active MCP subscriptions` and `MCP
 subscription duration in nanoseconds`. Samples use only bounded `endpoint` and
 lower-snake `reason`: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
 `simulator_capture_item_limit_exceeded`,
 `simulator_capture_byte_limit_exceeded`, and `internal_error`. Inclusive
 boundaries are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and
@@ -2818,8 +2917,10 @@ unfrozen.
 ## Current Phase 6 and release state
 
 The current MCP API universe is 248 owners: 134 Phase 4, 36 Phase 5, and all 64
-Phase 6 owners are frozen, while 14 Tasks owners remain provisional; 51 non-MCP
-owners bring current-side coverage to 299. The
+Phase 6 owners are frozen. The 14 Tasks owners retain their provisional
+maturity classification, but their 4.0.0 signatures are also frozen through
+the dedicated `provisional.signatures.jsonl` gate. Fifty-one non-MCP owners
+bring current-side coverage to 299. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed

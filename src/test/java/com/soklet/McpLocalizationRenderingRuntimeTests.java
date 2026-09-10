@@ -362,7 +362,7 @@ class McpLocalizationRenderingRuntimeTests {
 		assertTrue(bodies.get(0).contains("FR:Endpoint instructions"),
 				bodies.get(0));
 
-		String canonical = capture(richEndpoint(), null, "server/discover",
+		String canonical = capture(richEndpoint(), localizer, "server/discover",
 				Set.of()).body();
 		assertEquals(canonical, bodies.get(1),
 				"A localized render must not contaminate the shared canonical "

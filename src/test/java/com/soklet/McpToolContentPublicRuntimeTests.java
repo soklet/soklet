@@ -26,6 +26,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -44,6 +45,10 @@ public class McpToolContentPublicRuntimeTests {
 	private static final String AUDIO_TOOL = "test_audio_content";
 	private static final String EMBEDDED_RESOURCE_TOOL = "test_embedded_resource";
 	private static final String MIXED_CONTENT_TOOL = "test_multiple_content_types";
+	private static final String LARGE_STRUCTURED_TOOL =
+			"test_large_structured_content";
+	private static final String NODE_BOUNDARY_STRUCTURED_TOOL =
+			"test_node_boundary_structured_content";
 
 	@Test
 	public void toolContentBlocksPreserveExactWireValuesAndOrderThroughPublicListener()
@@ -82,12 +87,29 @@ public class McpToolContentPublicRuntimeTests {
 								new byte[] { 9, 8, 7 }, "image/gif").build())
 						.addContent(McpEmbeddedResource.withResource(mixedResource).build())
 						.build());
+		McpJsonArray largeRows = McpJsonArray.fromElements(
+				Collections.nCopies(60_000,
+						McpJsonString.fromValue("abcdefghijklmnopqrst")));
+		McpToolRegistration<McpJsonObject> largeStructuredTool = tool(
+				LARGE_STRUCTURED_TOOL,
+				McpToolOutput.fromStructuredContent(McpJsonObject.builder()
+						.put("rows", largeRows)
+						.build()));
+		McpJsonArray nodeBoundaryRows = McpJsonArray.fromElements(
+				Collections.nCopies(99_988, McpJsonString.fromValue("")));
+		McpToolRegistration<McpJsonObject> nodeBoundaryStructuredTool = tool(
+				NODE_BOUNDARY_STRUCTURED_TOOL,
+				McpToolOutput.fromStructuredContent(McpJsonObject.builder()
+						.put("rows", nodeBoundaryRows)
+						.build()));
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"tool-content-public-runtime-test", "4.0.0").build())
 				.addTool(imageTool)
 				.addTool(audioTool)
 				.addTool(embeddedResourceTool)
 				.addTool(mixedContentTool)
+				.addTool(largeStructuredTool)
+				.addTool(nodeBoundaryStructuredTool)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
@@ -131,6 +153,24 @@ public class McpToolContentPublicRuntimeTests {
 					+ imageBlock + "," + resourceBlock + "]");
 			assertInOrder(mixed, textBlock, imageBlock, resourceBlock);
 			assertSuccessfulToolOutput(mixed);
+
+			String largeStructured = call(port, "large-structured",
+					LARGE_STRUCTURED_TOOL);
+			assertContains(largeStructured,
+					"\"structuredContent\":{\"rows\":[");
+			Assertions.assertTrue(largeStructured.length() > 1_048_576,
+					largeStructured.length() + " characters");
+			Assertions.assertFalse(largeStructured.contains("\"text\":"),
+					"Oversized compatibility mirror must be omitted.");
+			assertSuccessfulToolOutput(largeStructured);
+
+			String nodeBoundaryStructured = call(port, "node-boundary",
+					NODE_BOUNDARY_STRUCTURED_TOOL);
+			assertContains(nodeBoundaryStructured,
+					"\"structuredContent\":{\"rows\":[");
+			Assertions.assertFalse(nodeBoundaryStructured.contains("\"text\":"),
+					"A compatibility mirror that crosses the JSON node limit must be omitted.");
+			assertSuccessfulToolOutput(nodeBoundaryStructured);
 		} finally {
 			owner.close();
 		}

@@ -226,6 +226,44 @@ public class McpRateLimiterTests {
 	}
 
 	@Test
+	public void fullPartitionTableUsesABoundedRotatingReclaimProbe()
+			throws Exception {
+		MutableClock clock = new MutableClock(0);
+		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
+						.refillInterval(Duration.ofNanos(10))
+						.build(), clock, 5, 2);
+
+		for (int partition = 0; partition < 5; partition++)
+			Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
+					limiter.acquire(context("/one", "partition-" + partition,
+							McpRateLimitTarget.REQUEST)));
+
+		clock.set(10);
+		// Keep only the first two insertion slots non-reclaimable. Fully scanning
+		// the table would find partition-2, but the first bounded probe must stop.
+		for (int partition = 0; partition < 2; partition++)
+			Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
+					limiter.acquire(context("/one", "partition-" + partition,
+							McpRateLimitTarget.REQUEST)));
+		McpRateLimitDecision.Denied boundedDenial = Assertions.assertInstanceOf(
+				McpRateLimitDecision.Denied.class,
+				limiter.acquire(context("/one", "first-new-partition",
+						McpRateLimitTarget.REQUEST)));
+		Assertions.assertEquals(Duration.ofNanos(10),
+				boundedDenial.getRetryAfter());
+		Assertions.assertEquals(5, limiter.retainedPartitionCount());
+
+		// The cursor resumes at the next slot, so a later request can reclaim the
+		// full partition without ever making one admission scan the entire table.
+		Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
+				limiter.acquire(context("/one", "second-new-partition",
+						McpRateLimitTarget.REQUEST)));
+		Assertions.assertEquals(5, limiter.retainedPartitionCount());
+	}
+
+	@Test
 	public void samePartitionAcquisitionsAreLinearizableUnderConcurrency()
 			throws Exception {
 		MutableClock clock = new MutableClock(0);

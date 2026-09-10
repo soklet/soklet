@@ -114,4 +114,55 @@ class DiagnosticRedactionTests {
 		assertFalse(rendering.contains(headerValue));
 		assertFalse(rendering.contains(body));
 	}
+
+	@Test
+	void responseCookieDiagnosticsRequireExplicitWireRenderingForRawValues() {
+		String name = "cookie-name-secret-7a912fe4";
+		String value = "cookie-value-secret-7a912fe4";
+		String domain = "cookie-domain-secret-7a912fe4.example";
+		String path = "/cookie-path-secret-7a912fe4";
+		ResponseCookie cookie = ResponseCookie.with(name, value)
+				.domain(domain)
+				.path(path)
+				.httpOnly(true)
+				.secure(true)
+				.build();
+
+		String diagnostic = cookie.toString();
+
+		assertFalse(diagnostic.contains(name));
+		assertFalse(diagnostic.contains(value));
+		assertFalse(diagnostic.contains(domain));
+		assertFalse(diagnostic.contains(path));
+		assertEquals("ResponseCookie{name=<redacted>, value=<redacted>, "
+				+ "maxAge=null, expires=null, domain=<redacted>, path=<redacted>, "
+				+ "secure=true, httpOnly=true, sameSite=null, priority=null, "
+				+ "partitioned=false}", diagnostic);
+		String wire = cookie.toSetCookieHeaderRepresentation();
+		assertFalse(wire.equals(diagnostic));
+		assertEquals(true, wire.contains(name));
+		assertEquals(true, wire.contains(value));
+	}
+
+	@Test
+	void corsDiagnosticsRedactRequestControlledHeaderValues() {
+		String origin = "https://origin-secret-7a912fe4.example";
+		String requestedHeader = "X-Header-Secret-7a912fe4";
+		Cors cors = Cors.fromHeaders(HttpMethod.GET,
+				Map.of("Origin", Set.of(origin))).orElseThrow();
+		CorsPreflight preflight = CorsPreflight.fromHeaders(Map.of(
+				"Origin", Set.of(origin),
+				"Access-Control-Request-Method", Set.of("PATCH"),
+				"Access-Control-Request-Headers", Set.of(requestedHeader)))
+				.orElseThrow();
+
+		assertEquals("Cors{httpMethod=GET, origin=<redacted>}", cors.toString());
+		assertEquals("CorsPreflight{origin=<redacted>, "
+				+ "accessControlRequestMethod=PATCH, "
+				+ "accessControlRequestHeaders=<redacted>}",
+				preflight.toString());
+		assertFalse(cors.toString().contains(origin));
+		assertFalse(preflight.toString().contains(origin));
+		assertFalse(preflight.toString().contains(requestedHeader));
+	}
 }

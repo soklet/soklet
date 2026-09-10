@@ -118,6 +118,15 @@ record McpTypedSchemaPath(@NonNull List<@NonNull Segment> segments) {
 	}
 
 	@NonNull
+	static String diagnosticPath(@NonNull McpSchemaLocation location) {
+		requireNonNull(location);
+		StringBuilder result = new StringBuilder("$");
+		for (String segment : location.pointerSegments())
+			result.append('/').append(escapePointerSegment(segment));
+		return result.toString();
+	}
+
+	@NonNull
 	private static String escapePointerSegment(@NonNull String value) {
 		StringBuilder result = new StringBuilder(value.length());
 		for (int index = 0; index < value.length();) {

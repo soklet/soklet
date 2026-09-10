@@ -98,12 +98,18 @@ public final class McpTypeMirrorTypedSchemaBridge {
 		} catch (McpTypedSchemaException exception) {
 			return new RejectedSchemas(diagnostic(Direction.TOOL_INPUT,
 					exception));
+		} catch (McpSchemaCompilationException exception) {
+			return new RejectedSchemas(diagnostic(Direction.TOOL_INPUT,
+					exception));
 		}
 
 		McpCompiledTypedSchema outputSchema;
 		try {
 			outputSchema = compiler.compileToolOutput(outputType);
 		} catch (McpTypedSchemaException exception) {
+			return new RejectedSchemas(diagnostic(Direction.TOOL_OUTPUT,
+					exception));
+		} catch (McpSchemaCompilationException exception) {
 			return new RejectedSchemas(diagnostic(Direction.TOOL_OUTPUT,
 					exception));
 		}
@@ -155,6 +161,9 @@ public final class McpTypeMirrorTypedSchemaBridge {
 		} catch (McpTypedSchemaException exception) {
 			return new RejectedSchemas(diagnostic(Direction.TOOL_INPUT,
 					exception));
+		} catch (McpSchemaCompilationException exception) {
+			return new RejectedSchemas(diagnostic(Direction.TOOL_INPUT,
+					exception));
 		}
 	}
 
@@ -163,6 +172,42 @@ public final class McpTypeMirrorTypedSchemaBridge {
 			@NonNull McpTypedSchemaException exception) {
 		return new Diagnostic(direction, reason(exception.reason()),
 				exception.path().toString());
+	}
+
+	@NonNull
+	private static Diagnostic diagnostic(@NonNull Direction direction,
+			@NonNull McpSchemaCompilationException exception) {
+		return new Diagnostic(direction, reason(exception),
+				exception.location()
+						.map(McpTypedSchemaPath::diagnosticPath)
+						.orElse("$"));
+	}
+
+	@NonNull
+	private static Reason reason(
+			@NonNull McpSchemaCompilationException exception) {
+		if (exception.limit().isPresent())
+			return Reason.LIMIT_EXCEEDED;
+		return switch (exception.kind()) {
+			case INVALID_SCHEMA -> Reason.INVALID_SCHEMA;
+			case INVALID_KEYWORD_VALUE -> Reason.INVALID_KEYWORD_VALUE;
+			case INVALID_MIRRORED_HEADER_NAME ->
+					Reason.INVALID_MIRRORED_HEADER_NAME;
+			case INVALID_MIRRORED_HEADER_TYPE ->
+					Reason.INVALID_MIRRORED_HEADER_TYPE;
+			case DUPLICATE_MIRRORED_HEADER ->
+					Reason.DUPLICATE_MIRRORED_HEADER;
+			case MISPLACED_MIRRORED_HEADER ->
+					Reason.MISPLACED_MIRRORED_HEADER;
+			case MISPLACED_DIALECT -> Reason.MISPLACED_DIALECT;
+			case UNSUPPORTED_DIALECT -> Reason.UNSUPPORTED_DIALECT;
+			case UNSUPPORTED_KEYWORD -> Reason.UNSUPPORTED_KEYWORD;
+			case INVALID_ANCHOR -> Reason.INVALID_ANCHOR;
+			case DUPLICATE_ANCHOR -> Reason.DUPLICATE_ANCHOR;
+			case INVALID_REFERENCE -> Reason.INVALID_REFERENCE;
+			case UNRESOLVED_REFERENCE -> Reason.UNRESOLVED_REFERENCE;
+			case LIMIT_EXCEEDED -> Reason.LIMIT_EXCEEDED;
+		};
 	}
 
 	@NonNull
@@ -375,6 +420,19 @@ public final class McpTypeMirrorTypedSchemaBridge {
 	 */
 	public enum Reason {
 		INVALID_DESCRIPTOR,
+		INVALID_SCHEMA,
+		INVALID_KEYWORD_VALUE,
+		INVALID_MIRRORED_HEADER_NAME,
+		INVALID_MIRRORED_HEADER_TYPE,
+		DUPLICATE_MIRRORED_HEADER,
+		MISPLACED_MIRRORED_HEADER,
+		MISPLACED_DIALECT,
+		UNSUPPORTED_DIALECT,
+		UNSUPPORTED_KEYWORD,
+		INVALID_ANCHOR,
+		DUPLICATE_ANCHOR,
+		INVALID_REFERENCE,
+		UNRESOLVED_REFERENCE,
 		UNSUPPORTED_TYPE,
 		RAW_GENERIC,
 		WILDCARD,

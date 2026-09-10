@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -512,6 +513,21 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
+	public void bodyInterruptStatusDoesNotAbortScopeTeardown() {
+		try {
+			ShutdownResult result = SokletSimulator.run(
+					httpConfig(SimulatorConfig.builder()),
+					simulator -> Thread.currentThread().interrupt());
+
+			Assertions.assertTrue(result.isComplete());
+			Assertions.assertTrue(Thread.currentThread().isInterrupted(),
+					"The body's interrupt status must be restored after teardown");
+		} finally {
+			Thread.interrupted();
+		}
+	}
+
+	@Test
 	public void completedRunReleasesConfigOwnedTransportState() {
 		ResourcePath resourcePath = ResourcePath.fromPath("/events");
 		AtomicInteger eventDeliveries = new AtomicInteger();
@@ -521,7 +537,9 @@ public class SokletSimulatorIsolationTests {
 		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
 				.httpServer()
 				.sseServer()
-				.resourceMethodResolver(resourceMethods())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(IsolationResource.class,
+								SimulatorEventResource.class)))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 		Soklet.MockHttpServer httpServer = simulatorConfig.simulatedHttpServer();
@@ -1636,6 +1654,13 @@ public class SokletSimulatorIsolationTests {
 		@GET("/isolation")
 		public String isolation() {
 			return "isolated";
+		}
+	}
+
+	public static class SimulatorEventResource {
+		@SseEventSource("/events")
+		public SseHandshakeResult events() {
+			return SseHandshakeResult.accept();
 		}
 	}
 

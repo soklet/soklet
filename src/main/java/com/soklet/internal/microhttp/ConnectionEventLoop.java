@@ -755,6 +755,14 @@ class ConnectionEventLoop {
                 }
             }
 
+            // The synthetic request dispatched for an oversized body cannot be
+            // followed by another request. Re-arming the retaining monitor here
+            // would only let the peer fill ByteTokenizer and abort the 413 that
+            // is being prepared. An ordinary `Connection: close` request still
+            // needs pre-response disconnect monitoring for handler cancelation.
+            monitorClientDisconnects = monitorClientDisconnects
+                    && !request.contentTooLarge();
+
             InFlightDispatch dispatch = new InFlightDispatch(request, monitorClientDisconnects);
             inFlightDispatch = dispatch;
 
@@ -1491,7 +1499,8 @@ class ConnectionEventLoop {
 
             if (writableSource != null) {
                 closeAfterResponse = true;
-                disableReadInterest();
+                if (!monitorClientDisconnectsDuringStreamingResponse)
+                    disableReadInterest();
                 return;
             }
 

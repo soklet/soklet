@@ -979,6 +979,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<McpPromptModel> prompts = new ArrayList<>();
 		List<McpResourceModel> resources = new ArrayList<>();
 		McpResourceListModel resourceList = null;
+		rejectInheritedMcpOperations(endpointType, toolAnnotation,
+				promptAnnotation, resourceAnnotation, listResourcesAnnotation);
 		for (Element enclosed : endpointType.getEnclosedElements()) {
 			if (enclosed.getKind() != ElementKind.METHOD)
 				continue;
@@ -1113,6 +1115,38 @@ public final class SokletProcessor extends AbstractProcessor {
 				resourceTemplateListCacheTimeToLiveInMilliseconds,
 				resourceTemplateListCacheScope, List.copyOf(tools),
 				List.copyOf(prompts), List.copyOf(resources), resourceList);
+	}
+
+	private void rejectInheritedMcpOperations(
+			@NonNull TypeElement endpointType,
+			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement promptAnnotation,
+			@NonNull TypeElement resourceAnnotation,
+			@NonNull TypeElement listResourcesAnnotation) {
+		for (Element member : elements.getAllMembers(endpointType)) {
+			if (member.getKind() != ElementKind.METHOD
+					|| member.getEnclosingElement().equals(endpointType))
+				continue;
+			List<String> annotations = new ArrayList<>(4);
+			if (findAnnotation(member, toolAnnotation) != null)
+				annotations.add("@McpTool");
+			if (findAnnotation(member, promptAnnotation) != null)
+				annotations.add("@McpPrompt");
+			if (findAnnotation(member, resourceAnnotation) != null)
+				annotations.add("@McpResource");
+			if (findAnnotation(member, listResourcesAnnotation) != null)
+				annotations.add("@McpResourceList");
+			if (annotations.isEmpty())
+				continue;
+			Element owner = member.getEnclosingElement();
+			String ownerName = owner instanceof TypeElement ownerType
+					? ownerType.getQualifiedName().toString()
+					: owner.toString();
+			mcpError(endpointType,
+					"Soklet: Inherited MCP operation %s method %s from supertype %s is not supported; MCP operation annotations must be declared directly on the @McpServerEndpoint class.",
+					String.join("/", annotations), member.getSimpleName(),
+					ownerName);
+		}
 	}
 
 	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
@@ -3538,14 +3572,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		// would let an older cache resurrect a row deliberately removed by a newer
 		// compilation.
 		boolean existingSnapshotRead = classOutputIndexPath != null
-				&& readMcpEndpointIndexFromPath(classOutputIndexPath, merged);
+				&& readMcpEndpointIndexFromPath(classOutputIndexPath, merged,
+						false);
 		if (!existingSnapshotRead)
 			existingSnapshotRead = readMcpEndpointIndexFromLocation(merged);
 		if (!existingSnapshotRead && sideCarIndexPath != null)
 			existingSnapshotRead = readMcpEndpointIndexFromPath(
-					sideCarIndexPath, merged);
+					sideCarIndexPath, merged, true);
 		if (!existingSnapshotRead && persistentIndexPath != null)
-			readMcpEndpointIndexFromPath(persistentIndexPath, merged);
+			readMcpEndpointIndexFromPath(persistentIndexPath, merged, true);
 		if (mcpProcessingErrorDetected)
 			return;
 
@@ -3616,25 +3651,29 @@ public final class SokletProcessor extends AbstractProcessor {
 	private boolean readMcpEndpointIndexFromLocation(
 			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
 		boolean opened = false;
+		String location = McpGeneratedEndpointProviderIndex.RESOURCE_PATH;
 		try {
 			FileObject resource = filer.getResource(StandardLocation.CLASS_OUTPUT,
 					"", McpGeneratedEndpointProviderIndex.RESOURCE_PATH);
+			location = mcpEndpointIndexLocation(resource);
 			try (BufferedReader reader = new BufferedReader(new InputStreamReader(
 					resource.openInputStream(), StandardCharsets.UTF_8))) {
 				opened = true;
 				Map<String, McpEndpointProviderDeclaration> parsed =
 						new LinkedHashMap<>(output);
-				int errorsBefore = mcpProcessingErrorCount;
-				readMcpEndpointIndex(reader, parsed);
-				if (mcpProcessingErrorCount == errorsBefore) {
+				McpEndpointIndexReadProblem problem =
+						readMcpEndpointIndex(reader, parsed);
+				if (problem == null) {
 					output.clear();
 					output.putAll(parsed);
-				}
+				} else
+					reportMcpEndpointIndexProblem(location, problem);
 				return true;
 			}
 		} catch (IOException exception) {
 			if (opened)
-				mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index.");
+				mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index at %s; delete it and rebuild.",
+						location);
 			// Failure to open normally means the resource does not exist during a
 			// clean compilation. Once opened, any read failure is fatal so a
 			// partial prior index can never replace the durable one.
@@ -3643,47 +3682,96 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean readMcpEndpointIndexFromPath(@NonNull Path path,
-			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
+			@NonNull Map<String, McpEndpointProviderDeclaration> output,
+			boolean invalidatableCache) {
 		if (!Files.isRegularFile(path))
 			return false;
 		try (BufferedReader reader = Files.newBufferedReader(path,
 				StandardCharsets.UTF_8)) {
 			Map<String, McpEndpointProviderDeclaration> parsed =
 					new LinkedHashMap<>(output);
-			int errorsBefore = mcpProcessingErrorCount;
-			readMcpEndpointIndex(reader, parsed);
-			if (mcpProcessingErrorCount == errorsBefore) {
+			McpEndpointIndexReadProblem problem =
+					readMcpEndpointIndex(reader, parsed);
+			if (problem == null) {
 				output.clear();
 				output.putAll(parsed);
-			}
+			} else if (invalidatableCache)
+				return !invalidateMcpEndpointIndexCache(path,
+						"malformed row " + problem.lineNumber());
+			else
+				reportMcpEndpointIndexProblem(mcpEndpointIndexLocation(path),
+						problem);
 			return true;
 		} catch (IOException exception) {
-			mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index.");
+			if (invalidatableCache)
+				return !invalidateMcpEndpointIndexCache(path, "read failure");
+			mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index at %s; delete it and rebuild.",
+					mcpEndpointIndexLocation(path));
 			return true;
 		}
 	}
 
-	private void readMcpEndpointIndex(@NonNull BufferedReader reader,
+	@Nullable
+	private McpEndpointIndexReadProblem readMcpEndpointIndex(
+			@NonNull BufferedReader reader,
 			@NonNull Map<String, McpEndpointProviderDeclaration> output)
 			throws IOException {
+		long lineNumber = 0;
 		for (String line; (line = reader.readLine()) != null; ) {
+			lineNumber++;
 			String stripped = line.strip();
 			if (stripped.isEmpty() || stripped.startsWith("#"))
 				continue;
 			McpEndpointProviderDeclaration declaration =
 					parseMcpEndpointIndexLine(stripped);
-			if (declaration == null) {
-				mcpError("Soklet: The existing generated MCP endpoint-provider index is malformed.");
-				return;
-			}
+			if (declaration == null)
+				return new McpEndpointIndexReadProblem(lineNumber, false);
 			McpEndpointProviderDeclaration previous = output.putIfAbsent(
 					declaration.endpointBinaryName(), declaration);
-			if (previous != null && !previous.equals(declaration)) {
-				mcpError("Soklet: Conflicting generated MCP endpoint providers exist for %s.",
-						declaration.endpointBinaryName());
-				return;
+			if (previous != null && !previous.equals(declaration))
+				return new McpEndpointIndexReadProblem(lineNumber, true);
+		}
+		return null;
+	}
+
+	private void reportMcpEndpointIndexProblem(@NonNull String location,
+			@NonNull McpEndpointIndexReadProblem problem) {
+		mcpError(problem.conflicting()
+				? "Soklet: The existing generated MCP endpoint-provider index at %s:%d contains conflicting rows; delete it and rebuild."
+				: "Soklet: The existing generated MCP endpoint-provider index at %s:%d is malformed; delete it and rebuild.",
+				location, problem.lineNumber());
+	}
+
+	private boolean invalidateMcpEndpointIndexCache(@NonNull Path path,
+			@NonNull String reason) {
+		try {
+			Files.deleteIfExists(path);
+			debug("SokletProcessor: invalidated MCP cache index %s after %s",
+					path, reason);
+			return true;
+		} catch (IOException exception) {
+			mcpError("Soklet: The generated MCP endpoint-provider cache index at %s could not be invalidated; delete it and rebuild.",
+					mcpEndpointIndexLocation(path));
+			return false;
+		}
+	}
+
+	@NonNull
+	private String mcpEndpointIndexLocation(@NonNull FileObject resource) {
+		URI uri = resource.toUri();
+		if ("file".equalsIgnoreCase(uri.getScheme())) {
+			try {
+				return mcpEndpointIndexLocation(Path.of(uri));
+			} catch (IllegalArgumentException ignored) {
+				// Fall through to an ASCII URI that is safe in diagnostics.
 			}
 		}
+		return uri.toASCIIString();
+	}
+
+	@NonNull
+	private String mcpEndpointIndexLocation(@NonNull Path path) {
+		return path.toAbsolutePath().normalize().toString();
 	}
 
 	private static McpEndpointProviderDeclaration parseMcpEndpointIndexLine(
@@ -4242,6 +4330,15 @@ public final class SokletProcessor extends AbstractProcessor {
 	private record McpEndpointProviderDeclaration(String endpointBinaryName,
 			String providerBinaryName, String topLevelBinaryName,
 			String endpointPath) {}
+
+	private record McpEndpointIndexReadProblem(long lineNumber,
+			boolean conflicting) {
+		private McpEndpointIndexReadProblem {
+			if (lineNumber < 1)
+				throw new IllegalArgumentException(
+						"MCP endpoint index line number must be positive.");
+		}
+	}
 
 	private record McpEndpointModel(String packageName,
 			String endpointQualifiedName, String endpointBinaryName,

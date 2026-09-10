@@ -111,7 +111,7 @@ class McpTypedSchemaCompilerTests {
 				McpSchemaCompilationException.class,
 				() -> compiler(model, new McpJsonCodec(productionJsonLimits()))
 						.compileToolInput("arguments"));
-		assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
+		assertEquals(McpSchemaCompilationException.Kind.INVALID_MIRRORED_HEADER_NAME,
 				exception.kind());
 		assertEquals(Optional.of("x-mcp-header"), exception.keyword());
 	}
@@ -163,7 +163,7 @@ class McpTypedSchemaCompilerTests {
 				() -> compiler.compileToolOutput("arguments"))) {
 			McpSchemaCompilationException exception = assertThrows(
 					McpSchemaCompilationException.class, compilation::run);
-			assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
+			assertEquals(McpSchemaCompilationException.Kind.MISPLACED_MIRRORED_HEADER,
 					exception.kind());
 			assertEquals(Optional.of("x-mcp-header"), exception.keyword());
 		}

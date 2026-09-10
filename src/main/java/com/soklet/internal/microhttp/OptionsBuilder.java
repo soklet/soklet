@@ -56,6 +56,14 @@ public class OptionsBuilder {
     }
 
     public Options build() {
+        if (this.port < 0 || this.port > 65_535)
+            throw new IllegalArgumentException("Port must be between 0 and 65535.");
+        if (this.resolution == null || this.resolution.isNegative() || this.resolution.isZero())
+            throw new IllegalArgumentException("Resolution must be positive.");
+        if (this.readBufferSize < 1)
+            throw new IllegalArgumentException("Read buffer size must be positive.");
+        if (this.concurrency < 1)
+            throw new IllegalArgumentException("Concurrency must be positive.");
         if (this.maxRequestSize < 1)
             throw new IllegalArgumentException("Maximum aggregate request size must be positive.");
         if (this.maxRequestBodySize < 1)

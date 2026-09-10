@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -77,6 +78,24 @@ public final class McpContentAnnotations {
 	@NonNull
 	public Optional<@NonNull Instant> getLastModified() {
 		return Optional.ofNullable(this.lastModified);
+	}
+
+	/** @return whether every annotation property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpContentAnnotations annotations))
+			return false;
+		return this.audience.equals(annotations.audience)
+				&& Objects.equals(this.priority, annotations.priority)
+				&& Objects.equals(this.lastModified, annotations.lastModified);
+	}
+
+	/** @return structural annotation hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.audience, this.priority, this.lastModified);
 	}
 
 	/**

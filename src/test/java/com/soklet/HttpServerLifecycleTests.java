@@ -154,6 +154,38 @@ public class HttpServerLifecycleTests {
 	}
 
 	@Test
+	void unexpectedBuiltInDelegateTerminationClosesTransparentOwner()
+			throws Exception {
+		DefaultHttpServer delegate = (DefaultHttpServer) HttpServer
+				.withPort(findFreePort()).host("127.0.0.1").build();
+		HttpServer server = new TransparentHttpDecorator(delegate);
+		Soklet soklet = Soklet.fromConfig(configuration(server,
+				HealthResource.class));
+		soklet.start();
+
+		EventLoop eventLoop = delegate.getEventLoop().orElseThrow();
+		Field selectorField = EventLoop.class.getDeclaredField("selector");
+		selectorField.setAccessible(true);
+		((Selector) selectorField.get(eventLoop)).close();
+
+		ShutdownResult result = soklet.awaitShutdown();
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
+		Assertions.assertEquals(StartupDisposition.READY,
+				result.getStartupDisposition());
+		Assertions.assertEquals(ShutdownComponentType.HTTP,
+				result.getUnexpectedShutdownComponentTermination().orElseThrow()
+						.getShutdownComponentType());
+		Assertions.assertEquals(
+				ShutdownComponentDisposition.UNEXPECTED_TERMINATION,
+				result.getShutdownComponentResult(ShutdownComponentType.HTTP)
+						.orElseThrow().getShutdownComponentDisposition());
+		Assertions.assertFalse(delegate.isStarted());
+		SokletUnexpectedTerminationException replay = Assertions.assertThrows(
+				SokletUnexpectedTerminationException.class, soklet::close);
+		Assertions.assertSame(result, replay.getShutdownResult());
+	}
+
+	@Test
 	void ownerShutdownDrainsInFlightResponseBeforeClosingConnection()
 			throws Exception {
 		int port = findFreePort();
@@ -470,6 +502,30 @@ public class HttpServerLifecycleTests {
 	private static final class SlowInvocation {
 		@NonNull private final CountDownLatch started = new CountDownLatch(1);
 		@NonNull private final CountDownLatch release = new CountDownLatch(1);
+	}
+
+	private static final class TransparentHttpDecorator implements HttpServer {
+		@NonNull
+		private final HttpServer delegate;
+
+		private TransparentHttpDecorator(@NonNull HttpServer delegate) {
+			this.delegate = requireNonNull(delegate);
+		}
+
+		@Override
+		@NonNull
+		public TransportIdentity getTransportIdentity() {
+			return this.delegate.getTransportIdentity();
+		}
+
+		@Override
+		@NonNull
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			return context.attachTransparentDelegate(this.delegate,
+					context.getAdmissionFencedRequestHandler());
+		}
 	}
 
 	private static boolean currentThreadIsVirtual() {

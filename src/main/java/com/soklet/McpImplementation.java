@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -120,6 +121,27 @@ public final class McpImplementation {
 	@NonNull
 	public Optional<@NonNull URI> getWebsiteUrl() {
 		return Optional.ofNullable(this.websiteUrl);
+	}
+
+	/** @return whether every implementation property is structurally equal */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpImplementation implementation))
+			return false;
+		return this.name.equals(implementation.name)
+				&& this.version.equals(implementation.version)
+				&& Objects.equals(this.title, implementation.title)
+				&& Objects.equals(this.description, implementation.description)
+				&& Objects.equals(this.websiteUrl, implementation.websiteUrl);
+	}
+
+	/** @return structural implementation hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.name, this.version, this.title, this.description,
+				this.websiteUrl);
 	}
 
 	@NonNull

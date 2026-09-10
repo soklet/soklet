@@ -113,9 +113,9 @@ class McpLocalizationReloadRuntimeTests {
 	}
 
 	@Test
-	void familiesWithoutALocalizedCatalogAreNeitherAcknowledgedNorDelivered() {
+	void localizedPromptPublisherNeedsNoUnrelatedApplicationPublisher() {
 		// Only the prompt carries localizable text: no tools, and the resource
-		// has no title or description.
+		// surface and application publishers are deliberately absent.
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("reload-prompts-only", "1.0").build())
 				.addPrompt(McpPromptRegistration.withName("reload.prompt")
@@ -123,17 +123,6 @@ class McpLocalizationReloadRuntimeTests {
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
-						.build())
-				.addResource(bareResource())
-				// RESOURCE_UPDATED-only support: the application does not offer
-				// the resources list-change family, and neither does the
-				// localizer for this endpoint, so the flag must not be accepted.
-				.subscriptionConfig(McpSubscriptionConfig
-						.withEventPublisher(
-								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
-								EnumSet.of(
-										McpSubscriptionNotificationType
-												.RESOURCE_UPDATED))
 						.build())
 				.build();
 		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
@@ -178,12 +167,14 @@ class McpLocalizationReloadRuntimeTests {
 		assertTrue(unlocalized.contains("\"tools\":{}"), unlocalized);
 		assertTrue(unlocalized.contains("\"prompts\":{}"), unlocalized);
 
-		// Without subscriptions/listen there is no delivery channel, so a
-		// localized catalog still advertises nothing.
+		// The framework-owned localization publisher supplies the delivery channel;
+		// no unrelated application publisher is required.
 		String noSubscriptions = discoveryBody(false, localizer(
 				text -> McpLocalizationResult.useDefaultText()));
-		assertTrue(noSubscriptions.contains("\"tools\":{}"), noSubscriptions);
-		assertTrue(noSubscriptions.contains("\"prompts\":{}"), noSubscriptions);
+		assertTrue(noSubscriptions.contains("\"tools\":{\"listChanged\":true}"),
+				noSubscriptions);
+		assertTrue(noSubscriptions.contains("\"prompts\":{\"listChanged\":true}"),
+				noSubscriptions);
 	}
 
 	@Test

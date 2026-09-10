@@ -354,6 +354,7 @@ class McpTasksFleetPublicRuntimeTests {
 		McpToolRegistration<FleetArguments> tool = toolBuilder.build();
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
 				McpImplementation.withNameAndVersion(node, "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		return server(node, taskManager, mainEndpoint);
@@ -364,6 +365,7 @@ class McpTasksFleetPublicRuntimeTests {
 			@NonNull DurableFleetTaskManager taskManager) {
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
 				McpImplementation.withNameAndVersion(node, "4.0.0").build())
+				.serverInformationIncluded(false)
 				.build();
 		return server(node, taskManager, mainEndpoint);
 	}
@@ -375,6 +377,7 @@ class McpTasksFleetPublicRuntimeTests {
 		McpEndpoint otherEndpoint = McpEndpoint.withPath(OTHER_PATH,
 				McpImplementation.withNameAndVersion(node + "-other", "4.0.0")
 						.build())
+				.serverInformationIncluded(false)
 				.build();
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
@@ -615,7 +618,11 @@ class McpTasksFleetPublicRuntimeTests {
 				@NonNull String taskId, @NonNull String outputMember,
 				@NonNull String outputValue) {
 			McpRequestContext requestContext = taskControl.getRequestContext();
-			McpTask task = completedTask(taskId, taskControl.getTaskOrigin(),
+			String durableOrigin = taskControl.getTaskOrigin()
+					.toPersistedString();
+			McpTaskOrigin restoredOrigin = McpTaskOrigin.fromPersistedString(
+					durableOrigin);
+			McpTask task = completedTask(taskId, restoredOrigin,
 					outputMember, outputValue, Duration.ofSeconds(30),
 					LAST_UPDATED_AT);
 			Entry entry = new Entry(task, requestContext.getEndpoint().getPath(),

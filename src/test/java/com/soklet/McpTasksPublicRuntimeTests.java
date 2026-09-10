@@ -114,6 +114,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-required-preflight-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpLocalizer localizer = McpLocalizer
@@ -212,6 +213,10 @@ public class McpTasksPublicRuntimeTests {
 			Assertions.assertEquals(McpJsonBoolean.fromValue(false),
 					persistedState.find("structuredContentMirroredAsText")
 							.orElseThrow());
+			Assertions.assertEquals(McpJsonString.fromValue("en"),
+					persistedState.find("selectedLocale").orElseThrow(),
+					"The durable task origin must preserve the locale selected before "
+							+ "the task-capable handler runs.");
 		} finally {
 			soklet.close();
 		}
@@ -229,6 +234,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-manager-required-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 
@@ -614,6 +620,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-typed-interceptor-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) ->
@@ -678,6 +685,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-sanitizer-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
@@ -768,6 +776,7 @@ public class McpTasksPublicRuntimeTests {
 		return McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-public-runtime-test", "4.0.0").build())
+				.serverInformationIncluded(false)
 				.addTool(tool)
 				.build();
 	}

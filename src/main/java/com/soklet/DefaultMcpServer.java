@@ -30,6 +30,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DiagnosticsState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HandlerEntryGuard;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HttpTransportPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptArgumentPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocationResult;
@@ -106,6 +107,10 @@ final class DefaultMcpServer implements McpServer {
 					+ "protected state is process-local and will not survive restarts "
 					+ "or work across server instances.";
 	@NonNull
+	static final String OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC =
+			"No admission controller is configured for the MCP server; every "
+					+ "request and notification will be admitted as anonymous.";
+	@NonNull
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
@@ -125,17 +130,28 @@ final class DefaultMcpServer implements McpServer {
 	private final int maximumCursorSizeInBytes;
 	private final int maximumSubscriptionsPerPartition;
 	private final int streamQueueCapacity;
+	private final int maximumRequestSizeInBytes;
+	private final int maximumHeaderCount;
+	private final int maximumHeadersSizeInBytes;
+	private final int maximumRequestTargetLengthInBytes;
+	private final int requestReadBufferSizeInBytes;
+	private final int concurrentConnectionLimit;
 	@NonNull
 	private final Duration keepAliveInterval;
 	@NonNull
 	private final Duration maximumSubscriptionDuration;
 	@NonNull
 	private final Duration writeTimeout;
+	@NonNull
+	private final Duration requestHeaderTimeout;
+	@NonNull
+	private final Duration requestBodyTimeout;
 	private final boolean logRawValidatedTraceIds;
 	@NonNull
 	private final McpEndpointRegistry endpointRegistry;
 	@NonNull
 	private final McpAdmissionController admissionController;
+	private final boolean admissionControllerExplicitlyConfigured;
 	@NonNull
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
@@ -193,12 +209,19 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Duration requestTimeout,
 			@Nullable Supplier<@NonNull ExecutorService>
 					requestHandlerExecutorServiceSupplier,
+			@NonNull Duration requestHeaderTimeout,
+			@NonNull Duration requestBodyTimeout,
+			int maximumRequestSizeInBytes, int maximumHeaderCount,
+			int maximumHeadersSizeInBytes,
+			int maximumRequestTargetLengthInBytes,
+			int requestReadBufferSizeInBytes, int concurrentConnectionLimit,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval,
 			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpEndpointRegistry endpointRegistry,
 			@NonNull McpAdmissionController admissionController,
+			boolean admissionControllerExplicitlyConfigured,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable McpTaskManager taskManager,
@@ -220,13 +243,24 @@ final class DefaultMcpServer implements McpServer {
 		this.maximumSubscriptionsPerPartition =
 				maximumSubscriptionsPerPartition;
 		this.streamQueueCapacity = streamQueueCapacity;
+		this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+		this.maximumHeaderCount = maximumHeaderCount;
+		this.maximumHeadersSizeInBytes = maximumHeadersSizeInBytes;
+		this.maximumRequestTargetLengthInBytes =
+				maximumRequestTargetLengthInBytes;
+		this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
+		this.concurrentConnectionLimit = concurrentConnectionLimit;
 		this.keepAliveInterval = requireNonNull(keepAliveInterval);
 		this.maximumSubscriptionDuration = requireNonNull(
 				maximumSubscriptionDuration);
 		this.writeTimeout = requireNonNull(writeTimeout);
+		this.requestHeaderTimeout = requireNonNull(requestHeaderTimeout);
+		this.requestBodyTimeout = requireNonNull(requestBodyTimeout);
 		this.logRawValidatedTraceIds = logRawValidatedTraceIds;
 		this.endpointRegistry = requireNonNull(endpointRegistry);
 		this.admissionController = requireNonNull(admissionController);
+		this.admissionControllerExplicitlyConfigured =
+				admissionControllerExplicitlyConfigured;
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.taskManager = taskManager;
@@ -294,7 +328,15 @@ final class DefaultMcpServer implements McpServer {
 				this.keepAliveInterval,
 				this.maximumSubscriptionsPerPartition,
 				this.maximumSubscriptionDuration,
-				applicationExecutionObserver(), this.lifecycleAdapter);
+				applicationExecutionObserver(), this.lifecycleAdapter,
+				new HttpTransportPlan(this.requestHeaderTimeout,
+						this.requestBodyTimeout,
+						this.requestReadBufferSizeInBytes,
+						this.maximumRequestSizeInBytes,
+						this.maximumHeaderCount,
+						this.maximumHeadersSizeInBytes,
+						this.maximumRequestTargetLengthInBytes,
+						this.concurrentConnectionLimit));
 		this.lifecycleAdapter.bindRuntime(this.runtimeBridge);
 	}
 
@@ -541,6 +583,23 @@ final class DefaultMcpServer implements McpServer {
 			public Optional<@NonNull TaskSnapshot> findTask(
 					@NonNull McpRequestContext requestContext,
 					@NonNull String taskId) throws Exception {
+				return findTask(requestContext, taskId, true);
+			}
+
+			@Override
+			@NonNull
+			public Optional<@NonNull TaskSnapshot>
+					findTaskForSubscriptionAuthorization(
+							@NonNull McpRequestContext requestContext,
+							@NonNull String taskId) throws Exception {
+				return findTask(requestContext, taskId, false);
+			}
+
+			@NonNull
+			private Optional<@NonNull TaskSnapshot> findTask(
+					@NonNull McpRequestContext requestContext,
+					@NonNull String taskId,
+					boolean includeDetailedResult) throws Exception {
 				Optional<McpTask> task = requireNonNull(
 						configuredTaskManager.findTask(new McpTaskRequestContext(
 								requestContext, taskId)),
@@ -550,7 +609,7 @@ final class DefaultMcpServer implements McpServer {
 				McpTask snapshot = task.orElseThrow();
 				requireTaskIdMatches(taskId, snapshot);
 				return Optional.of(taskSnapshot(endpoint, requestContext, snapshot,
-						true));
+						includeDetailedResult));
 			}
 
 			@Override
@@ -876,6 +935,9 @@ final class DefaultMcpServer implements McpServer {
 					== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
 				safelyLogStartupDiagnostic(
 						DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
+			if (!this.admissionControllerExplicitlyConfigured)
+				safelyLogStartupDiagnostic(
+						OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC);
 			provisionalServerStarted = this.mcpMetricEventDelivery.record(
 					McpMetricsEvent.serverStarted());
 			this.runtimeBridge.start(requireNonNull(lifecycleGeneration));
@@ -1030,6 +1092,40 @@ final class DefaultMcpServer implements McpServer {
 
 	int streamQueueCapacity() {
 		return this.streamQueueCapacity;
+	}
+
+	int maximumRequestSizeInBytes() {
+		return this.maximumRequestSizeInBytes;
+	}
+
+	int maximumHeaderCount() {
+		return this.maximumHeaderCount;
+	}
+
+	int maximumHeadersSizeInBytes() {
+		return this.maximumHeadersSizeInBytes;
+	}
+
+	int maximumRequestTargetLengthInBytes() {
+		return this.maximumRequestTargetLengthInBytes;
+	}
+
+	int requestReadBufferSizeInBytes() {
+		return this.requestReadBufferSizeInBytes;
+	}
+
+	int concurrentConnectionLimit() {
+		return this.concurrentConnectionLimit;
+	}
+
+	@NonNull
+	Duration requestHeaderTimeout() {
+		return this.requestHeaderTimeout;
+	}
+
+	@NonNull
+	Duration requestBodyTimeout() {
+		return this.requestBodyTimeout;
 	}
 
 	@NonNull
@@ -1239,16 +1335,29 @@ final class DefaultMcpServer implements McpServer {
 				invocation.pastDeadline(), invocation.continuationLocale(),
 				invocation.selectedLocaleSlot(), Optional.empty(),
 				taskControl.map(control -> (McpTaskControl) control));
+		taskControl.ifPresent(control -> control.pinSelectedLocale(
+				invocation.selectedLocaleSlot().get()));
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext,
 					invocation.handlerEntryGuard(), invocationFeatures,
-					() -> taskControl.isPresent()
-							? tool.invokeDecoded(requestContext,
-									taskControl.orElseThrow().decodedArguments(),
-									invocationFeatures)
-							: tool.invoke(requestContext,
-									invocation.rawArguments(), invocationFeatures));
+					() -> {
+						try {
+							return taskControl.isPresent()
+									? tool.invokeDecoded(requestContext,
+											taskControl.orElseThrow().decodedArguments(),
+											invocationFeatures)
+									: tool.invoke(requestContext,
+											invocation.rawArguments(), invocationFeatures);
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(
+									exception.getError());
+						}
+					});
+		} catch (ApplicationHandlerJsonRpcException exception) {
+			McpJsonRpcError error = exception.getError();
+			return ToolInvocationResult.jsonRpcError(error.getCode(),
+					error.getMessage(), error.getData());
 		} catch (McpInvalidToolArgumentsException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
@@ -1300,8 +1409,12 @@ final class DefaultMcpServer implements McpServer {
 		Optional<McpJsonValue> structuredContent =
 				sanitizedOutput.getStructuredContent();
 		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
-				completeResult.getMetadata(),
-				tool.isStructuredContentMirroredAsText());
+				completeResult.getMetadata());
+		if (tool.getOutputSchema().isPresent()
+				&& !sanitizedOutput.isError()
+				&& structuredContent.isEmpty())
+			throw new IllegalArgumentException(
+					"A successful MCP tool result with an output schema must include structured content.");
 		if (structuredContent.isPresent()
 				&& !tool.isStructuredOutputValid(structuredContent.orElseThrow()))
 			throw new IllegalArgumentException(
@@ -1347,10 +1460,14 @@ final class DefaultMcpServer implements McpServer {
 						origin.toolName(), origin.rawArguments(), output),
 				"The MCP tool-output sanitizer returned null.");
 		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
-				completedResult.getMetadata(),
-				origin.structuredContentMirroredAsText());
+				completedResult.getMetadata());
 		Optional<McpJsonValue> structuredContent =
 				sanitizedOutput.getStructuredContent();
+		if (origin.outputSchemaBridge().isPresent()
+				&& !sanitizedOutput.isError()
+				&& structuredContent.isEmpty())
+			throw new IllegalArgumentException(
+					"A successful deferred MCP tool result with an output schema must include structured content.");
 		if (structuredContent.isPresent()
 				&& origin.outputSchemaBridge().isPresent()
 				&& !origin.outputSchemaBridge().orElseThrow().isValid(
@@ -1551,9 +1668,19 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					invocationFeatures,
-					() -> prompt.invoke(
-							requestContext, invocation.rawArguments(),
-							invocationFeatures));
+					() -> {
+						try {
+							return prompt.invoke(requestContext,
+									invocation.rawArguments(), invocationFeatures);
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(
+									exception.getError());
+						}
+					});
+		} catch (ApplicationHandlerJsonRpcException exception) {
+			McpJsonRpcError error = exception.getError();
+			return PromptInvocationResult.jsonRpcError(error.getCode(),
+					error.getMessage(), error.getData());
 		} catch (McpInvalidPromptArgumentsException exception) {
 			return PromptInvocationResult.invalidInput();
 		}
@@ -1901,7 +2028,7 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private final McpJsonObject rawArguments;
 		@NonNull
-		private final McpTaskOrigin taskOrigin;
+		private volatile McpTaskOrigin taskOrigin;
 		@Nullable
 		private volatile McpToolArguments<A> decodedArguments;
 		private volatile boolean argumentDecodingFailed;
@@ -1928,6 +2055,19 @@ final class DefaultMcpServer implements McpServer {
 		public McpTaskOrigin getTaskOrigin() {
 			decodedArguments();
 			return this.taskOrigin;
+		}
+
+		private void pinSelectedLocale(@Nullable String selectedLocale) {
+			if (selectedLocale == null)
+				return;
+			synchronized (this) {
+				Map<String, McpJsonValue> persistedState = new LinkedHashMap<>(
+						this.taskOrigin.getPersistedState().getMembers());
+				persistedState.put("selectedLocale",
+						McpJsonString.fromValue(selectedLocale));
+				this.taskOrigin = McpTaskOrigin.fromPersistedState(
+						McpJsonObject.fromMembers(persistedState));
+			}
 		}
 
 		@NonNull
@@ -2220,8 +2360,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private static void requireToolResultFitsJsonNodeBudget(
-			@NonNull McpToolOutput output, @NonNull McpJsonObject metadata,
-			boolean structuredContentMirroredAsText) {
+			@NonNull McpToolOutput output, @NonNull McpJsonObject metadata) {
 		requireNonNull(output);
 		JsonNodeBudget budget = new JsonNodeBudget("MCP tool result", 6L);
 		for (McpContentBlock content : output.getContent())
@@ -2230,8 +2369,6 @@ final class DefaultMcpServer implements McpServer {
 		structuredContent.ifPresent(budget::add);
 		budget.add(output.isError() ? 1L : 0L);
 		addMetadataNodes(budget, metadata);
-		if (structuredContentMirroredAsText && structuredContent.isPresent())
-			budget.add(3L);
 	}
 
 	private static void requirePromptResultFitsJsonNodeBudget(

@@ -82,8 +82,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -267,6 +267,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final int SOKLET_RATE_LIMITED = -31999;
 	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	private static final int MAXIMUM_RESOURCE_SUBSCRIPTION_URIS = 256;
 	private static final int MAXIMUM_TASK_SUBSCRIPTION_IDS = 256;
 	private static final int MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY = 4;
 	private static final int MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY =
@@ -783,6 +784,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		for (McpHttpEndpointBinding binding : bindings) {
 			McpHttpEndpointPolicy endpointPolicy = binding.endpointPolicy();
 			validateConfiguredAllowedHosts(endpointPolicy);
+			validateHostAuthorizationConfiguration(endpointPolicy);
 			McpServerCapabilityRegistry capabilityRegistry =
 					McpServerCapabilityRegistry.fromEndpoint(binding.endpoint(),
 							endpointPolicy.catalogLocalizer()
@@ -3312,6 +3314,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
+		@Override
+		protected void afterExecute(@NonNull Runnable runnable,
+				@Nullable Throwable failure) {
+			try {
+				this.taskNotificationProjectionScheduler.executorMayAcceptWorker();
+			} finally {
+				super.afterExecute(requireNonNull(runnable), failure);
+			}
+		}
+
 		private void runAfterTermination() {
 			Runnable action = this.afterTermination.get();
 			if (action != null && this.terminationObserved.compareAndSet(false, true))
@@ -3325,7 +3337,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	 * the tail of that queue before it may perform another.
 	 */
 	@ThreadSafe
-	private static final class TaskNotificationProjectionScheduler {
+	static final class TaskNotificationProjectionScheduler {
 		@NonNull
 		private final Executor executor;
 		private final int maximumWorkers;
@@ -3337,7 +3349,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private int workersScheduled;
 		private boolean shutdown;
 
-		private TaskNotificationProjectionScheduler(@NonNull Executor executor,
+		TaskNotificationProjectionScheduler(@NonNull Executor executor,
 				int maximumWorkers, int queueCapacity) {
 			this.executor = requireNonNull(executor);
 			if (maximumWorkers < 1)
@@ -3351,22 +3363,58 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.lock = new Object();
 		}
 
-		private void execute(@NonNull TaskNotificationProjectionJob job) {
+		void execute(@NonNull TaskNotificationProjectionJob job) {
 			TaskNotificationProjectionJob requiredJob = requireNonNull(job);
 			boolean scheduleWorker = false;
-			boolean reject = false;
+			List<TaskNotificationProjectionJob> rejected = new ArrayList<>();
 			synchronized (this.lock) {
-				if (this.shutdown || !this.jobs.offer(requiredJob))
-					reject = true;
-				else if (this.workersScheduled < this.maximumWorkers) {
+				if (this.shutdown)
+					rejected.add(requiredJob);
+				else if (!this.jobs.offer(requiredJob)) {
+					int currentOwnerCount = queuedOwnerCountWhileLocked(
+							requiredJob.owner());
+					Object victim = currentOwnerCount > 0 ? requiredJob.owner()
+							: mostRepresentedOwnerWhileLocked();
+					if (victim == null || (currentOwnerCount == 0
+							&& queuedOwnerCountWhileLocked(victim) <= 1)) {
+						rejected.add(requiredJob);
+					} else {
+						rejected.addAll(removeOwnerJobsWhileLocked(victim));
+						if (victim == requiredJob.owner())
+							rejected.add(requiredJob);
+						else if (!this.jobs.offer(requiredJob))
+							throw new IllegalStateException(
+									"A task-notification projection slot was not reclaimed.");
+					}
+				}
+				if (!this.jobs.isEmpty()
+						&& this.workersScheduled < this.maximumWorkers) {
 					this.workersScheduled++;
 					scheduleWorker = true;
 				}
 			}
-			if (reject)
-				requiredJob.reject();
-			else if (scheduleWorker)
+			reject(rejected);
+			if (scheduleWorker)
 				submitWorker();
+		}
+
+		void executorMayAcceptWorker() {
+			boolean scheduleWorker = false;
+			synchronized (this.lock) {
+				if (!this.shutdown && !this.jobs.isEmpty()
+						&& this.workersScheduled < this.maximumWorkers) {
+					this.workersScheduled++;
+					scheduleWorker = true;
+				}
+			}
+			if (scheduleWorker)
+				submitWorker();
+		}
+
+		int queuedJobCount() {
+			synchronized (this.lock) {
+				return this.jobs.size();
+			}
 		}
 
 		private void submitWorker() {
@@ -3376,13 +3424,62 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				List<TaskNotificationProjectionJob> rejected = List.of();
 				synchronized (this.lock) {
 					this.workersScheduled--;
-					if (this.workersScheduled == 0)
+					if (!(failure instanceof RejectedExecutionException)
+							&& this.workersScheduled == 0)
 						rejected = drainJobsWhileLocked();
 				}
 				reject(rejected);
 				if (!(failure instanceof RejectedExecutionException))
 					throw failure;
 			}
+		}
+
+		@Nullable
+		private Object mostRepresentedOwnerWhileLocked() {
+			if (!Thread.holdsLock(this.lock))
+				throw new IllegalStateException(
+						"The task-notification scheduler lock is required.");
+			Map<Object, Integer> counts = new IdentityHashMap<>();
+			Object mostRepresented = null;
+			int greatestCount = 0;
+			for (TaskNotificationProjectionJob job : this.jobs) {
+				int count = counts.merge(job.owner(), 1, Integer::sum);
+				if (count > greatestCount) {
+					greatestCount = count;
+					mostRepresented = job.owner();
+				}
+			}
+			return mostRepresented;
+		}
+
+		private int queuedOwnerCountWhileLocked(@NonNull Object owner) {
+			if (!Thread.holdsLock(this.lock))
+				throw new IllegalStateException(
+						"The task-notification scheduler lock is required.");
+			int count = 0;
+			for (TaskNotificationProjectionJob job : this.jobs)
+				if (job.owner() == requireNonNull(owner))
+					count++;
+			return count;
+		}
+
+		@NonNull
+		private List<@NonNull TaskNotificationProjectionJob>
+		removeOwnerJobsWhileLocked(@NonNull Object owner) {
+			if (!Thread.holdsLock(this.lock))
+				throw new IllegalStateException(
+						"The task-notification scheduler lock is required.");
+			Object requiredOwner = requireNonNull(owner);
+			List<TaskNotificationProjectionJob> queued = drainJobsWhileLocked();
+			List<TaskNotificationProjectionJob> removed = new ArrayList<>();
+			for (TaskNotificationProjectionJob job : queued) {
+				if (job.owner() == requiredOwner)
+					removed.add(job);
+				else if (!this.jobs.offer(job))
+					throw new IllegalStateException(
+							"A retained task-notification projection could not be restored.");
+			}
+			return List.copyOf(removed);
 		}
 
 		private void runOne() {
@@ -3442,9 +3539,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
-	private record TaskNotificationProjectionJob(@NonNull Runnable task,
+	record TaskNotificationProjectionJob(@NonNull Object owner,
+			@NonNull Runnable task,
 			@NonNull Runnable rejection) {
-		private TaskNotificationProjectionJob {
+		TaskNotificationProjectionJob {
+			requireNonNull(owner);
 			requireNonNull(task);
 			requireNonNull(rejection);
 		}
@@ -4546,34 +4645,72 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Optional<McpRuntimeRequestState> requestState = Optional.empty();
 		Optional<McpFrameworkRequestStateContinuation>
 				frameworkRequestStateContinuation = Optional.empty();
-		if (suppliedRequestState.isPresent()) {
-			String protectedState = suppliedRequestState.orElseThrow();
-			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
-				requestState = Optional.of(
-						new McpRuntimeApplicationRequestState(protectedState));
-			} else if (requestStateMode
-					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
-				McpFrameworkRequestStateRuntime.OpenedState openedState;
-				try {
-					openedState = requestStateRuntime.open(endpointPolicy.path(),
-							requestedProtocolVersion, mappedRequest.method(),
-							effectiveIdentity.authorizationPartition().applicationKey(),
-							mappedRequest.params().toJsonObject(), mappedRequest.id(),
-							protectedState);
-				} catch (McpInvalidRequestStateException exception) {
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-				} catch (McpRequestStateUnavailableException exception) {
-					return requestStateUnavailable(protocolProfile, mappedRequest.id(), corsHeaders);
-				} catch (Throwable throwable) {
-					return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
-				}
-				requestState = Optional.of(
-						new McpRuntimeFrameworkRequestState(openedState.state()));
-				frameworkRequestStateContinuation = Optional.of(
-						openedState.continuation());
-			} else {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		if (suppliedRequestState.isPresent()
+				&& requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED)
+			requestState = Optional.of(new McpRuntimeApplicationRequestState(
+					suppliedRequestState.orElseThrow()));
+
+		boolean requestLimiterConfigured =
+				endpointPolicy.requestRateLimiter().isPresent();
+		McpRateLimitDecision requestRateLimitDecision = null;
+		Throwable requestRateLimitFailure = null;
+		if (requestLimiterConfigured) {
+			try {
+				requestRateLimitDecision = endpointPolicy.requestRateLimiter()
+						.orElseThrow().acquire(new McpRateLimitContext(
+								sokletRequest, endpoint, effectiveIdentity,
+								McpRateLimitTarget.REQUEST, mappedRequest.method(),
+								operationName));
+			} catch (Throwable throwable) {
+				requestRateLimitFailure = throwable;
 			}
+			if (!requestControl.protocolProcessingAllowed())
+				return null;
+		}
+
+		boolean requestRateLimitAllowed = !requestLimiterConfigured
+				|| requestRateLimitDecision instanceof McpRateLimitDecision.Allowed;
+		boolean toolLimiterConfigured = requestRateLimitAllowed
+				&& toolRoute.isPresent();
+		McpRateLimitDecision toolRateLimitDecision = null;
+		Throwable toolRateLimitFailure = null;
+		if (toolLimiterConfigured) {
+			try {
+				toolRateLimitDecision = toolRoute.orElseThrow().rateLimiter().acquire(
+						new McpRateLimitContext(sokletRequest, endpoint,
+								effectiveIdentity, McpRateLimitTarget.TOOL,
+								mappedRequest.method(), operationName));
+			} catch (Throwable throwable) {
+				toolRateLimitFailure = throwable;
+			}
+			if (!requestControl.protocolProcessingAllowed())
+				return null;
+		}
+
+		boolean toolRateLimitAllowed = !toolLimiterConfigured
+				|| toolRateLimitDecision instanceof McpRateLimitDecision.Allowed;
+		if (requestRateLimitAllowed && toolRateLimitAllowed
+				&& suppliedRequestState.isPresent()
+				&& requestStateMode == McpRequestStateMode.FRAMEWORK_PROTECTED) {
+			String protectedState = suppliedRequestState.orElseThrow();
+			McpFrameworkRequestStateRuntime.OpenedState openedState;
+			try {
+				openedState = requestStateRuntime.open(endpointPolicy.path(),
+						requestedProtocolVersion, mappedRequest.method(),
+						effectiveIdentity.authorizationPartition().applicationKey(),
+						mappedRequest.params().toJsonObject(), mappedRequest.id(),
+						protectedState);
+			} catch (McpInvalidRequestStateException exception) {
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			} catch (McpRequestStateUnavailableException exception) {
+				return requestStateUnavailable(protocolProfile, mappedRequest.id(), corsHeaders);
+			} catch (Throwable throwable) {
+				return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
+			}
+			requestState = Optional.of(
+					new McpRuntimeFrameworkRequestState(openedState.state()));
+			frameworkRequestStateContinuation = Optional.of(
+					openedState.continuation());
 		}
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
@@ -4591,47 +4728,25 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					effectiveIdentity.admittedIdentity())))
 			return null;
 
-		if (endpointPolicy.requestRateLimiter().isPresent()) {
-			McpRateLimitDecision rateLimitDecision;
-			try {
-				rateLimitDecision = endpointPolicy.requestRateLimiter().orElseThrow().acquire(
-						new McpRateLimitContext(sokletRequest, endpoint, effectiveIdentity,
-								McpRateLimitTarget.REQUEST, mappedRequest.method(),
-								operationName));
-			} catch (Throwable throwable) {
-				return observedPolicyHookInternalError(requestControl,
-						mappedRequest.id(), corsHeaders, throwable);
-			}
-			if (!requestControl.protocolProcessingAllowed())
-				return null;
-			if (rateLimitDecision == null)
-				return observedPolicyHookInternalError(requestControl,
-						mappedRequest.id(), corsHeaders, null);
-			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
-				return observedRateLimited(requestControl, mappedRequest.id(),
-						denied.retryAfter(), corsHeaders);
-		}
+		if (requestRateLimitFailure != null)
+			return observedPolicyHookInternalError(requestControl,
+					mappedRequest.id(), corsHeaders, requestRateLimitFailure);
+		if (requestLimiterConfigured && requestRateLimitDecision == null)
+			return observedPolicyHookInternalError(requestControl,
+					mappedRequest.id(), corsHeaders, null);
+		if (requestRateLimitDecision instanceof McpRateLimitDecision.Denied denied)
+			return observedRateLimited(requestControl, mappedRequest.id(),
+					denied.retryAfter(), corsHeaders);
 
-		if (toolRoute.isPresent()) {
-			McpRateLimitDecision rateLimitDecision;
-			try {
-				rateLimitDecision = toolRoute.orElseThrow().rateLimiter().acquire(
-						new McpRateLimitContext(sokletRequest, endpoint, effectiveIdentity,
-								McpRateLimitTarget.TOOL, mappedRequest.method(),
-								operationName));
-			} catch (Throwable throwable) {
-				return observedPolicyHookInternalError(requestControl,
-						mappedRequest.id(), corsHeaders, throwable);
-			}
-			if (!requestControl.protocolProcessingAllowed())
-				return null;
-			if (rateLimitDecision == null)
-				return observedPolicyHookInternalError(requestControl,
-						mappedRequest.id(), corsHeaders, null);
-			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
-				return observedRateLimited(requestControl, mappedRequest.id(),
-						denied.retryAfter(), corsHeaders);
-		}
+		if (toolRateLimitFailure != null)
+			return observedPolicyHookInternalError(requestControl,
+					mappedRequest.id(), corsHeaders, toolRateLimitFailure);
+		if (toolLimiterConfigured && toolRateLimitDecision == null)
+			return observedPolicyHookInternalError(requestControl,
+					mappedRequest.id(), corsHeaders, null);
+		if (toolRateLimitDecision instanceof McpRateLimitDecision.Denied denied)
+			return observedRateLimited(requestControl, mappedRequest.id(),
+					denied.retryAfter(), corsHeaders);
 
 		if (subscriptionListenRequest) {
 			SubscriptionCapReservation cap = requestControl.reserveSubscriptionCap(
@@ -4732,7 +4847,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					new McpApplicationResponseWriter() {
 					@Override
 					public boolean write(@NonNull McpApplicationResponse response) {
-						return requestControl.writeApplicationResponse(response,
+						Optional<McpImplementationMetadata> serverInformation =
+								endpoint.serverInformationIncluded()
+										? Optional.of(endpoint.serverInformation())
+										: Optional.empty();
+						return requestControl.writeApplicationResponse(
+								response.withServerInformation(serverInformation),
 								mappedRequest.id(), corsHeaders);
 					}
 
@@ -4795,13 +4915,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				fields, "resourcesListChanged");
 		boolean resourceSubscriptionsRequested =
 				fields.containsKey("resourceSubscriptions");
-		List<SubscriptionResource> requestedResources = new ArrayList<>();
+		Map<URI, SubscriptionResource> requestedResources = new LinkedHashMap<>();
 		if (resourceSubscriptionsRequested) {
 			McpJsonValue resourceSubscriptions = fields.get("resourceSubscriptions");
 			if (!(resourceSubscriptions instanceof McpJsonArray resources))
 				throw new IllegalArgumentException(
 						"Resource subscriptions must be an array.");
-			Map<URI, SubscriptionResource> distinctResources = new LinkedHashMap<>();
 			for (McpJsonValue value : resources.values()) {
 				if (!(value instanceof McpJsonString string))
 					throw new IllegalArgumentException(
@@ -4809,10 +4928,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				String wireUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
 						string.value(), "Resource subscription URI");
 				URI uri = URI.create(wireUri);
-				distinctResources.putIfAbsent(uri,
+				requestedResources.putIfAbsent(uri,
 						new SubscriptionResource(uri, wireUri));
+				if (requestedResources.size()
+						> MAXIMUM_RESOURCE_SUBSCRIPTION_URIS)
+					throw new IllegalArgumentException(
+							"Too many resource subscription URIs were requested.");
 			}
-			requestedResources.addAll(distinctResources.values());
 		}
 		boolean taskIdsRequested = fields.containsKey("taskIds");
 		List<String> requestedTaskIds = new ArrayList<>();
@@ -4898,21 +5020,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		for (String taskId : requiredFilter.requestedTaskIds()) {
 			if (!requestControl.protocolProcessingAllowed())
 				return requiredFilter.withAcceptedTaskIds(List.of());
-			Optional<TaskSnapshot> taskSnapshot = requireNonNull(
-					taskManagerAdapter.findTask(requestContext, taskId),
-					"The MCP task manager adapter returned null.");
-			if (taskSnapshot.isEmpty())
-				continue;
-			TaskSnapshot snapshot = taskSnapshot.orElseThrow();
-			if (!taskId.equals(snapshot.task().getTaskId()))
-				throw new IllegalStateException(
-						"The MCP task manager returned a mismatched task ID.");
 			try {
+				Optional<TaskSnapshot> taskSnapshot = requireNonNull(
+						taskManagerAdapter
+								.findTaskForSubscriptionAuthorization(
+										requestContext, taskId),
+						"The MCP task manager adapter returned null.");
+				if (taskSnapshot.isEmpty())
+					continue;
+				TaskSnapshot snapshot = taskSnapshot.orElseThrow();
+				if (!taskId.equals(snapshot.task().getTaskId()))
+					throw new IllegalStateException(
+							"The MCP task manager returned a mismatched task ID.");
 				McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
 						requiredFilter.clientCapabilities());
-			} catch (McpProtocolJsonRpcException exception) {
-				// Do not subscribe a client to a snapshot it cannot consume. Polling
-				// remains the explicit, authoritative capability-error path.
+			} catch (Throwable throwable) {
+				// One unavailable, malformed, or capability-incompatible task must not
+				// destroy unrelated advisory subscriptions in the same request. Polling
+				// remains the explicit, authoritative task-error path.
+				if (throwable instanceof InterruptedException)
+					Thread.currentThread().interrupt();
 				continue;
 			}
 			acceptedTaskIds.add(taskId);
@@ -4932,7 +5059,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (filter.resourcesListChanged())
 			accepted.put("resourcesListChanged", McpJsonBoolean.TRUE);
 		if (filter.resourceSubscriptionsIncluded()) {
-			List<McpJsonValue> resourceUris = filter.resourceSubscriptions().stream()
+			List<McpJsonValue> resourceUris = filter.resourceSubscriptions().values()
+					.stream()
 					.map(resource -> (McpJsonValue) new McpJsonString(resource.wireUri()))
 					.toList();
 			accepted.put("resourceSubscriptions", new McpJsonArray(resourceUris));
@@ -5002,6 +5130,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpJsonRpcMessage.Notification canonicalNotification =
 				new McpJsonRpcMessage.Notification("notifications/tasks",
 						Optional.of(params), McpJsonObject.empty());
+		if (taskSnapshot.task().getTaskStatus()
+					== com.soklet.McpTaskStatus.COMPLETED
+				&& taskSnapshot.structuredContentMirroredAsText()) {
+			try {
+				envelopeCodec.encode(canonicalNotification);
+			} catch (IllegalArgumentException exception) {
+				params = McpServerRuntimeBridge.taskNotificationParams(taskSnapshot,
+						subscriptionMetadata(subscriptionId), false);
+				canonicalNotification = new McpJsonRpcMessage.Notification(
+						"notifications/tasks", Optional.of(params),
+						McpJsonObject.empty());
+			}
+		}
 		return requireNonNull(protocolProfile.renderFrameworkNotification(
 				McpProfileFrameworkNotificationKind.SUBSCRIPTION_EVENT,
 				canonicalNotification));
@@ -5792,7 +5933,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		requireNonNull(requestId);
 		requireNonNull(rejection);
 		requireNonNull(corsHeaders);
-		if (!applicationErrorCodeAllowed(rejection.jsonRpcError().code()))
+		if (!admissionErrorCodeAllowed(rejection.jsonRpcError().code()))
 			throw new IllegalArgumentException(
 					"Admission rejection used a reserved error code.");
 
@@ -5811,7 +5952,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull List<@NonNull Header> corsHeaders) {
 		requireNonNull(rejection);
 		requireNonNull(corsHeaders);
-		if (!applicationErrorCodeAllowed(rejection.jsonRpcError().code()))
+		if (!admissionErrorCodeAllowed(rejection.jsonRpcError().code()))
 			throw new IllegalArgumentException(
 					"Admission rejection used a reserved error code.");
 
@@ -5876,7 +6017,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return Long.toString(seconds);
 	}
 
-	private boolean applicationErrorCodeAllowed(int code) {
+	private boolean admissionErrorCodeAllowed(int code) {
+		if (code == McpJsonRpcError.INVALID_PARAMS)
+			return true;
 		return (code < -32_768 || code > -32_000)
 				&& code != SOKLET_RATE_LIMITED
 				&& code != SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER;
@@ -6689,6 +6832,39 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
+	private void validateHostAuthorizationConfiguration(
+			@NonNull McpHttpEndpointPolicy endpointPolicy) {
+		if (requireNonNull(endpointPolicy).allowedHosts().isEmpty()
+				&& !safeLoopbackBindHost(transportConfiguration.host()))
+			throw new IllegalArgumentException(
+					"A non-loopback MCP bind host requires at least one explicitly allowed host.");
+	}
+
+	private boolean safeLoopbackBindHost(@NonNull String configuredHost) {
+		String host = requireNonNull(configuredHost).toLowerCase(Locale.ROOT);
+		if ("localhost".equals(host) || "::1".equals(host)
+				|| "[::1]".equals(host))
+			return true;
+
+		String[] octets = host.split("\\.", -1);
+		if (octets.length != 4 || !"127".equals(octets[0]))
+			return false;
+		for (String octet : octets) {
+			if (octet.isEmpty() || octet.length() > 3)
+				return false;
+			int value = 0;
+			for (int index = 0; index < octet.length(); index++) {
+				char character = octet.charAt(index);
+				if (character < '0' || character > '9')
+					return false;
+				value = value * 10 + character - '0';
+			}
+			if (value > 255)
+				return false;
+		}
+		return true;
+	}
+
 	@NonNull
 	private Set<@NonNull String> normalizedAllowedHosts(
 			@NonNull InetSocketAddress effectiveAddress,
@@ -6698,12 +6874,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		InetAddress address = effectiveAddress.getAddress();
 		boolean loopback = address != null && address.isLoopbackAddress();
 		if (address == null && effectiveAddress.isUnresolved()) {
-			String host = effectiveAddress.getHostString();
-			loopback = "localhost".equalsIgnoreCase(host)
-					|| "::1".equals(host) || "[::1]".equals(host)
-					|| host.startsWith("127.");
+			loopback = safeLoopbackBindHost(effectiveAddress.getHostString());
 		}
 		if (loopback) {
+			// RFC 6761 reserves localhost for loopback use. The literal loopback
+			// authorities are equally safe aliases regardless of which address
+			// family accepted this particular connection.
+			addNormalizedHost(allowedHosts, "localhost");
+			addNormalizedHost(allowedHosts, "127.0.0.1");
+			addNormalizedHost(allowedHosts, "::1");
 			addNormalizedHost(allowedHosts, effectiveAddress.getHostString());
 			if (address != null)
 				addNormalizedHost(allowedHosts, address.getHostAddress());
@@ -7609,6 +7788,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull TaskNotificationProjectionState state) {
 			processor.executeTaskNotificationProjection(
 					new TaskNotificationProjectionJob(
+							this,
 							() -> projectTaskNotification(taskId, state),
 							() -> failTaskNotificationProjection(state,
 									StreamTerminationReason.BACKPRESSURE, null)));
@@ -7647,10 +7827,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			taskManagerAdapter = endpointRuntime.binding().taskManagerAdapter()
 					.orElseThrow();
 
+			Optional<TaskSnapshot> taskSnapshot;
 			try {
-				Optional<TaskSnapshot> taskSnapshot = requireNonNull(
+				taskSnapshot = requireNonNull(
 						taskManagerAdapter.findTask(requestContext, taskId),
 						"The MCP task manager adapter returned null.");
+			} catch (Throwable throwable) {
+				// Projection is advisory. A transient application-owned lookup failure
+				// skips this generation while preserving the subscription and any newer
+				// coalesced generation for retry.
+				if (throwable instanceof InterruptedException)
+					Thread.currentThread().interrupt();
+				finishTaskNotificationProjection(taskId, state,
+						projectionGeneration);
+				return;
+			}
+
+			try {
 				if (taskSnapshot.isPresent()) {
 					TaskSnapshot snapshot = taskSnapshot.orElseThrow();
 					if (!taskId.equals(snapshot.task().getTaskId()))
@@ -8540,8 +8733,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (stream != null) {
-				stream.enqueueMessage(notification);
-				return true;
+				return stream.enqueueMessage(notification);
 			}
 
 			StreamObservationOpenTransition openTransition = null;
@@ -8594,8 +8786,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return true;
 			}
 
-			stream.enqueueMessage(notification);
-			return true;
+			return stream.enqueueMessage(notification);
 		}
 
 		private boolean writeApplicationResponse(
@@ -8622,10 +8813,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				} else
 					streamTerminalResponseOwned = true;
 			}
+			McpApplicationResponse effectiveResponse =
+					omitCompatibilityMirrorIfNecessary(response);
 
 			if (stream == null) {
 				ApplicationResponseRendering rendering = renderApplicationResponse(
-						protocolProfile(), response, requestId, additionalHeaders,
+						protocolProfile(), effectiveResponse, requestId, additionalHeaders,
 						publicRequestContext().orElse(null));
 				planRequestObservation(rendering.observationResult());
 				boolean trackBody = tracksLifecycleResponseBody();
@@ -8650,12 +8843,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 				return true;
 			}
-			planRequestObservation(requestObservationResult(response));
+			planRequestObservation(requestObservationResult(effectiveResponse));
 
-			if (response.message().isEmpty())
+			if (effectiveResponse.message().isEmpty())
 				return stream.fail(StreamTerminationReason.RESPONSE_TIMEOUT, null);
 
-			McpJsonRpcMessage message = response.message().orElseThrow();
+			McpJsonRpcMessage message = effectiveResponse.message().orElseThrow();
 			McpApplicationExecutionObserver.@Nullable PendingMetricRecord
 					pendingError = null;
 			McpHttpServerRuntime.this.applicationExecutionObserver
@@ -8686,6 +8879,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			} finally {
 				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
+			}
+		}
+
+		@NonNull
+		private McpApplicationResponse omitCompatibilityMirrorIfNecessary(
+				@NonNull McpApplicationResponse response) {
+			Optional<McpApplicationResponse> fallback = requireNonNull(response)
+					.withoutCompatibilityMirror();
+			if (fallback.isEmpty() || response.message().isEmpty())
+				return response;
+			try {
+				envelopeCodec.encode(response.message().orElseThrow());
+				return response;
+			} catch (IllegalArgumentException exception) {
+				return fallback.orElseThrow();
 			}
 		}
 
@@ -8758,8 +8966,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpRequestSseStream stream;
 			SubscriptionRegistration subscription;
 			SubscriptionRegistration capReservation;
+			Runnable applicationCancellation = null;
 			boolean completedStream;
-			boolean remove;
 			synchronized (lock) {
 				if (terminal)
 					return false;
@@ -8782,20 +8990,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				subscriptionOwned = false;
 				preRenderedSubscriptionTerminal = null;
 				completedStream = stream != null && stream.isTerminalWritten();
-				remove = !applicationOwned;
 				if (applicationOwned) {
-					// Application cancellation runs under the ownership lock. Its
-					// terminal cleanup is reentrant, and this closes the gap in which a
-					// queued deadline or handler response could otherwise win after the
-					// transport had already marked this control canceled.
-					application.cancel(request, requireNonNull(reason), cause);
-					if (!terminal) {
-						applicationOwned = false;
-						markTerminalWhileLocked();
-						responseCallback = null;
-						releaseIdentifiedRequestExchange();
-						remove = true;
-					}
+					// Reserve the application terminal while this ownership lock still
+					// excludes a handler response. Application onCancel callbacks and the
+					// reentrant terminal cleanup run only after this lock is released.
+					applicationCancellation = application.reserveCancellation(
+							request, requireNonNull(reason), cause);
+					applicationOwned = false;
+					markTerminalWhileLocked();
+					responseCallback = null;
+					releaseIdentifiedRequestExchange();
 				} else {
 					markTerminalWhileLocked();
 					responseCallback = null;
@@ -8803,6 +9007,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			}
 
+			if (applicationCancellation != null)
+				applicationCancellation.run();
 			if (task != null) {
 				task.cancel(true);
 				processor.remove(task);
@@ -8816,8 +9022,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (stream != null)
 				markStreamClosed(completedStream
 						? StreamTerminationReason.COMPLETED : reason);
-			if (remove)
-				finishTransportLifecycle();
+			// Cancellation is itself the transport terminal transition. Application
+			// cleanup may reenter applicationTerminated() and mark this control terminal
+			// before stream.close() can report termination, so neither callback can be
+			// relied upon to release the transport half of the lifecycle lease.
+			finishTransportLifecycle();
 			if (completedStream)
 				finishPlannedRequestObservation(requestObservationResult(
 						StreamTerminationReason.COMPLETED, null));
@@ -8832,6 +9041,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void onTimer(long nowNanos) {
 			McpRequestSseStream stream;
 			boolean subscriptionStream;
+			boolean applicationStreamOwned;
 			boolean completeExpiredSubscription;
 			SubscriptionStreamFailure pendingFailure;
 			synchronized (lock) {
@@ -8841,6 +9051,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				pendingSubscriptionStreamFailure = null;
 				stream = responseStream;
 				subscriptionStream = subscriptionRegistration != null;
+				applicationStreamOwned = applicationOwned;
 				completeExpiredSubscription = subscriptionOwned
 						&& subscriptionStream && nowNanos - deadlineNanos >= 0L;
 			}
@@ -8855,7 +9066,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					completeSubscription(StreamTerminationReason.RESPONSE_TIMEOUT);
 					return;
 				}
-				if (!subscriptionStream
+				// The application execution owns its active deadline and can encode a
+				// correlated terminal error. The protocol timer retains responsibility
+				// once the application has already offered its terminal response.
+				if (!subscriptionStream && !applicationStreamOwned
 						&& stream.failIfDeadlineExpired(nowNanos, deadlineNanos,
 						StreamTerminationReason.RESPONSE_TIMEOUT, null)) {
 					application.recordStreamDeadlineExpiration();
@@ -8893,8 +9107,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (writeTimeoutWon)
 					return;
 
-				boolean terminateForBackpressure = false;
+				boolean terminateForInvariantFailure = false;
 				boolean keepAliveEmitted = false;
+				IllegalStateException keepAliveFailure = null;
 				try {
 					synchronized (streamObservationTransitionLock) {
 						synchronized (lock) {
@@ -8903,18 +9118,34 @@ final class McpHttpServerRuntime implements AutoCloseable {
 									|| nowNanos - deadlineNanos >= 0L)
 								return;
 							if (nowNanos - nextKeepAliveNanos >= 0L) {
+								long keepAliveIntervalNanos =
+										transportConfiguration.keepAliveInterval()
+												.toNanos();
 								McpOutboundChannel.OfferResult result =
-										stream.offerKeepAlive();
+										stream.offerKeepAliveIfWriteIdleExpired(
+												nowNanos, keepAliveIntervalNanos);
 								if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
-									nextKeepAliveNanos = saturatingAdd(nowNanos,
-											transportConfiguration.keepAliveInterval()
-													.toNanos());
 									keepAliveEmitted = true;
 								} else if (result
-										== McpOutboundChannel.OfferResult.FULL
-										|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
+										== McpOutboundChannel.OfferResult.TOO_LARGE) {
 									streamAbortOwned = true;
-									terminateForBackpressure = true;
+									terminateForInvariantFailure = true;
+									keepAliveFailure = new IllegalStateException(
+											"The MCP keep-alive frame exceeds the outbound byte capacity.");
+								}
+								// Keep-alives are optional. A recent write or a full queue
+								// skips this interval without turning a healthy stream into a
+								// backpressure failure.
+								if (result != McpOutboundChannel.OfferResult.CLOSED) {
+									long next = result
+											== McpOutboundChannel.OfferResult.NOT_IDLE
+											? stream.responseWriteIdleDeadlineNanos(
+													keepAliveIntervalNanos)
+											: Long.MAX_VALUE;
+									nextKeepAliveNanos = next != Long.MAX_VALUE
+											&& next - nowNanos > 0L ? next
+											: saturatingAdd(nowNanos,
+													keepAliveIntervalNanos);
 								}
 							}
 						}
@@ -8924,8 +9155,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				} finally {
 					drainApplicationExecutionObservation();
 				}
-				if (terminateForBackpressure)
-					stream.fail(StreamTerminationReason.BACKPRESSURE, null);
+				if (terminateForInvariantFailure)
+					stream.fail(StreamTerminationReason.INTERNAL_ERROR,
+							requireNonNull(keepAliveFailure));
 				return;
 			}
 
@@ -9388,14 +9620,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private record AcceptedSubscriptionFilter(boolean toolsListChanged,
 			boolean promptsListChanged, boolean resourcesListChanged,
 			boolean resourceSubscriptionsIncluded,
-			@NonNull List<@NonNull SubscriptionResource> resourceSubscriptions,
+			@NonNull Map<@NonNull URI, @NonNull SubscriptionResource>
+					resourceSubscriptions,
 			boolean taskIdsRequested,
 			@NonNull List<@NonNull String> requestedTaskIds,
 			@NonNull Set<@NonNull String> acceptedTaskIds,
 			@NonNull McpClientCapabilities clientCapabilities) {
 		private AcceptedSubscriptionFilter {
-			resourceSubscriptions = List.copyOf(
-					requireNonNull(resourceSubscriptions));
+			resourceSubscriptions = Collections.unmodifiableMap(
+					new LinkedHashMap<>(requireNonNull(resourceSubscriptions)));
 			requestedTaskIds = List.copyOf(requireNonNull(requestedTaskIds));
 			acceptedTaskIds = Collections.unmodifiableSet(
 					new LinkedHashSet<>(requireNonNull(acceptedTaskIds)));
@@ -9418,15 +9651,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		@NonNull
 		private List<@NonNull URI> requestedResourceSubscriptionUris() {
-			return resourceSubscriptions.stream()
-					.map(SubscriptionResource::uri)
-					.toList();
+			return List.copyOf(resourceSubscriptions.keySet());
 		}
 
 		private boolean contains(@NonNull URI resourceUri) {
 			requireNonNull(resourceUri);
-			return resourceSubscriptionsIncluded && resourceSubscriptions.stream()
-					.anyMatch(resource -> resource.uri().equals(resourceUri));
+			return resourceSubscriptionsIncluded
+					&& resourceSubscriptions.containsKey(resourceUri);
 		}
 
 		private boolean containsTask(@NonNull String taskId) {

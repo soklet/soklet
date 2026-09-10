@@ -32,6 +32,10 @@ MCP server default-construction amendment reviewed: 2026-09-04
 
 Typed MCP operation amendment reviewed: 2026-09-06
 
+Release-review API amendment reviewed: 2026-09-10
+
+Lifecycle-observer and final public-value amendment reviewed: 2026-09-10
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -42,10 +46,11 @@ not a Phase 5/6 implementation, full conformance, or release-candidate claim.
 At the 2026-08-07 wrapper correction, the reviewed incompatibility set
 contained exactly 556 canonical symbols and had SHA-256
 `c3313a6f690429f833f4b8e09ab84e92ab187255ab83f5944818c68cdd6dfe8e`.
-After the later Phase 5/6 additions and all reviewed amendments through the
-typed MCP operation restoration, the current reviewed set contains exactly
-658 canonical symbols and has SHA-256
+At the later Phase 5/6 additions and reviewed amendments through the typed MCP
+operation restoration, that checkpoint's reviewed set contained exactly 658
+canonical symbols and had SHA-256
 `f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+
 The lifecycle, pre-G3, naming, value-contract, and construction corrections
 are included in that set.
 `target/japicmp/mcp-api-diff.xml` is the modified-only report used to derive
@@ -71,8 +76,8 @@ was not yet in the then-current inventory because no MCP descriptor had landed
 on that shared host. It was later added to and frozen in Phase 6 when its MCP
 simulation descriptors landed.
 
-After all reviewed amendments, the current exact MCP owner partition is 134
-Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 234 total; the exact
+At the typed-operation checkpoint, the exact MCP owner partition was 134 Phase
+4, 36 Phase 5, 64 Phase 6, zero provisional, and 234 total; the exact
 non-MCP allowlist adds 51 owners for 285 current-side owners. The cohesion
 naming amendment was one-for-one; result and context changes adjusted Phase 6;
 record conversion did not alter MCP ownership. The typed-state and later
@@ -938,3 +943,70 @@ reviewed current-side owners. Restoring the enum and its surviving 3.5.1
 members removes eleven prior removal records; the released-3.5.1 compatibility
 ledger now contains 658 records with SHA-256
 `f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+
+## 2026-09-10 release-review API amendment
+
+The owner-approved pre-release review restores the nine 3.5.1 MCP listener
+hardening descriptors on `McpServer.Builder`: `requestHeaderTimeout`,
+`requestBodyTimeout`, `maximumRequestSizeInBytes`, `maximumHeaderCount`,
+`maximumHeadersSizeInBytes`, `maximumRequestTargetLengthInBytes`,
+`requestReadBufferSizeInBytes`, `concurrentConnectionLimit`, and
+`connectionQueueCapacity`. The restored request-body limit defaults to 10 MiB
+and is capped at the reviewed 16 MiB production-JSON ceiling.
+`connectionQueueCapacity` is the historical alias for
+`streamQueueCapacity`; the two methods configure one per-stream outbound
+queue, not independent bounds. Restoring these exact descriptors removes nine
+prior method-removal records rather than adding new compatibility obligations.
+
+The same review intentionally adds
+`McpToolRegistration.CompleteHandlerStage.inlineOperationHandler(McpToolHandler)`.
+The new staged-builder method preserves the declared typed output schema while
+selecting an advanced handler that always completes inline and may return
+explicit content or an `isError` result. Its `taskRequired` value is false;
+the existing `operationHandler(McpToolHandler)` remains the separately named,
+statically task-required path. This addition closes a previously
+unrepresentable Tool Schema Profile 1 construction shape before publication.
+It is not an alias, and no superseded 4.0 descriptor is retained.
+
+The amended Phase 4 snapshot contains 1,102 records: 134 classes, one
+constructor, 93 fields, and 874 methods. Its signature SHA-256 is
+`bf223c33b2c96de368e7ab303be4aa03edfa9dc55af3bb6f49fc5a14ec4aa226`;
+the reviewed reflection/nullability SHA-256 is
+`812dd8a48c4f0cd4f63ec33993b36b33a290fbfcdb96f6cfc5303b6aaa5ff68e`;
+and the unchanged include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The released-3.5.1 compatibility ledger contains 648 records with SHA-256
+`2f46e40adfed3c186050a6e4c0be6c238b71fe1cd48f0ddb77b19f34d7c88752`.
+
+The companion release-review amendment also freezes the 14 provisional Tasks
+owners through a separate reviewed 98-record signature snapshot, without
+changing their maturity classification. The aggregate Phase 4/5/6 and
+provisional signature check is a local development gate until it is captured
+for an immutable release candidate; it is not publication evidence.
+
+## 2026-09-10 lifecycle-observer and final public-value amendment
+
+The final release review adds the `LIFECYCLE_OBSERVER_TRANSITION_FAILED`
+`LogEventType` value for the nonfatal direct-lifecycle observer diagnostic. It
+also completes structural `equals(Object)` and `hashCode()` contracts on 14
+Phase 4 immutable values: `McpAdmissionRejection`, `McpBlobResourceContents`,
+`McpCachePolicy`, `McpClientCapabilities`, `McpContentAnnotations`, `McpIcon`,
+`McpImplementation`, `McpPromptArgumentDeclaration`, `McpResourceDescriptor`,
+`McpResourcePage`, `McpTextResourceContents`, `McpTokenBucketConfig`,
+`McpToolAnnotations`, and `McpToolSchema`. These methods are intentional public
+API, not compiler-generated compatibility aliases.
+
+The final Phase 4 snapshot contains 1,131 records: 134 classes, one
+constructor, 94 fields, and 902 methods. Its signature SHA-256 is
+`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`;
+the reviewed reflection/nullability SHA-256 is
+`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`;
+and the unchanged include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+
+Restoring `McpClientCapabilities.equals(Object)` and `hashCode()` removes their
+two prior compatible-removal records from the released-3.5.1 comparison. The
+final compatibility ledger therefore contains 646 records with SHA-256
+`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+The focused reflection and aggregate freeze checks remain local development
+evidence until captured for an immutable release candidate.
