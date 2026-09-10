@@ -1412,6 +1412,33 @@ corresponding `McpMetricsEvent.RequestStarted` and
 operations. Callback failures are logged and contained, and user callbacks do
 not run under MCP runtime or dispatcher locks.
 
+### Tasks observability boundary
+
+A task-producing tool invocation is an ordinary admitted `tools/call`
+request, so its lifecycle callbacks and request metrics use `tools/call`.
+Admitted `tasks/get`, `tasks/update`, and `tasks/cancel` requests receive the
+same exactly-once request start/finish lifecycle pair and
+`McpMetricsEvent.RequestStarted`/`RequestFinished` events as other MCP
+requests. Those three task methods are recognized bounded method values, and
+their request outcomes and durations are available through the ordinary
+aggregate metric families. The live listener and off-network simulator use
+the same observation path.
+
+These observations cover Soklet's protocol and manager-call boundary, not the
+durable work lifecycle. Soklet provides no separate public task-created or
+task-transition observability callback or metrics event, and no built-in
+counter or gauge for task status changes, active tasks, retries, leases, queue
+depth or backlog, or worker execution. An outbound `notifications/tasks`
+projection likewise has no dedicated task-notification counter; the
+surrounding subscription and stream still use their ordinary metrics.
+
+Applications should instrument the task manager, repository or outbox, queue,
+and worker layers where those transitions actually become authoritative. Use
+bounded application-defined dimensions such as a task kind, transition, or
+fixed failure category. Never use a task ID, task contents, status message,
+principal, origin, or other per-task value as a metric label. See
+[Durable Tasks](#durable-tasks) for the ownership and authorization contract.
+
 Accepted progress emissions and cooperative cancelation signals additionally
 produce `McpMetricsEvent.ProgressEmitted` and
 `McpMetricsEvent.CancelationSignaled`, labeled only with the bounded endpoint

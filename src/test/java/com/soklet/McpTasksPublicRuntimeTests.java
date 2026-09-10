@@ -330,6 +330,79 @@ public class McpTasksPublicRuntimeTests {
 	}
 
 	@Test
+	public void admittedTaskRequestsPublishExactLifecycleAndMetrics()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		AtomicInteger admissions = new AtomicInteger();
+		McpTaskRequestObservabilityRecorder recorder =
+				new McpTaskRequestObservabilityRecorder(7);
+		McpEndpoint endpoint = endpoint(taskManager, new AtomicInteger());
+		McpServer server = server(endpoint, Optional.of(taskManager),
+				McpHandlerInterceptor.passThroughInstance(), admissions);
+		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObservers(List.of(recorder.lifecycleObserver()))
+				.metricsCollector(recorder.metricsCollector())
+				.build());
+		String taskId = "observed-task";
+		String unknownTaskId = "observed-unknown-task";
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+
+			HttpResponse<String> creation = callTool(port, "observed-create",
+					taskId, false, true);
+			assertNoStore(creation, 200);
+			Assertions.assertTrue(creation.body().contains(
+					"\"resultType\":\"task\""), creation.body());
+			assertNoStore(callTask(port, "tasks/get", "observed-get",
+					taskId, true), 200);
+			assertNoStore(callTaskUpdate(port, "observed-update", taskId,
+					true), 200);
+			assertNoStore(callTask(port, "tasks/cancel", "observed-cancel",
+					taskId, true), 200);
+
+			taskManager.findMode = FindMode.EMPTY;
+			assertInvalidParamsWithoutTaskDisclosure(callTask(port, "tasks/get",
+					"observed-get-missing", unknownTaskId, true), unknownTaskId);
+			taskManager.mutationMode = MutationMode.NOT_FOUND;
+			assertInvalidParamsWithoutTaskDisclosure(callTaskUpdate(port,
+					"observed-update-missing", unknownTaskId, true), unknownTaskId);
+			assertInvalidParamsWithoutTaskDisclosure(callTask(port,
+					"tasks/cancel", "observed-cancel-missing", unknownTaskId,
+					true), unknownTaskId);
+
+			Assertions.assertEquals(7, admissions.get());
+			recorder.awaitAndAssert(MCP_PATH, List.of(
+					McpTaskRequestObservabilityRecorder.complete(
+							"observed-create", "tools/call", TOOL_NAME,
+							McpOperationType.TOOLS_CALL),
+					McpTaskRequestObservabilityRecorder.complete(
+							"observed-get", "tasks/get", taskId,
+							McpOperationType.TASKS_GET),
+					McpTaskRequestObservabilityRecorder.complete(
+							"observed-update", "tasks/update", taskId,
+							McpOperationType.TASKS_UPDATE),
+					McpTaskRequestObservabilityRecorder.complete(
+							"observed-cancel", "tasks/cancel", taskId,
+							McpOperationType.TASKS_CANCEL),
+					McpTaskRequestObservabilityRecorder.protocolError(
+							"observed-get-missing", "tasks/get", unknownTaskId,
+							McpOperationType.TASKS_GET),
+					McpTaskRequestObservabilityRecorder.protocolError(
+							"observed-update-missing", "tasks/update",
+							unknownTaskId, McpOperationType.TASKS_UPDATE),
+					McpTaskRequestObservabilityRecorder.protocolError(
+							"observed-cancel-missing", "tasks/cancel",
+							unknownTaskId, McpOperationType.TASKS_CANCEL)));
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void updateAndCancelPreserveAdmissionIdentityAndReturnEmptyAcks()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();

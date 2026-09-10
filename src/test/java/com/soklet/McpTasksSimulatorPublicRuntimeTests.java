@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -147,6 +148,79 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	public void admittedTaskRequestsPublishExactLifecycleAndMetricsOffNetwork()
+			throws Exception {
+		Fixture fixture = new Fixture();
+		McpTaskRequestObservabilityRecorder recorder =
+				new McpTaskRequestObservabilityRecorder(7);
+		SimulatorConfig config = SimulatorConfig
+				.withSokletConfig(fixture.sokletConfig())
+				.lifecycleObservers(List.of(recorder.lifecycleObserver()))
+				.metricsCollector(recorder.metricsCollector())
+				.build();
+		AtomicReference<String> taskId = new AtomicReference<>();
+		String unknownTaskId = "simulator-observed-unknown-task";
+
+		SokletSimulator.run(config, simulator -> {
+			String creation = performJson(simulator, request("tools/call",
+					TOOL_NAME, "simulator-observed-create", "\"name\":\""
+							+ TOOL_NAME + "\",\"arguments\":{}", true));
+			taskId.set(fixture.createdTaskId());
+			Assertions.assertTrue(creation.contains("\"resultType\":\"task\""),
+					creation);
+			performJson(simulator, request("tasks/get", taskId.get(),
+					"simulator-observed-get", "\"taskId\":\"" + taskId.get()
+							+ "\"", true));
+			performJson(simulator, request("tasks/update", taskId.get(),
+					"simulator-observed-update", "\"taskId\":\"" + taskId.get()
+							+ "\",\"inputResponses\":{}", true));
+			performJson(simulator, request("tasks/cancel", taskId.get(),
+					"simulator-observed-cancel", "\"taskId\":\"" + taskId.get()
+							+ "\"", true));
+
+			assertInvalidParams(performJson(simulator, request("tasks/get",
+					unknownTaskId, "simulator-observed-get-missing",
+					"\"taskId\":\"" + unknownTaskId + "\"", true), 400),
+					"simulator-observed-get-missing");
+			assertInvalidParams(performJson(simulator, request("tasks/update",
+					unknownTaskId, "simulator-observed-update-missing",
+					"\"taskId\":\"" + unknownTaskId
+							+ "\",\"inputResponses\":{}", true), 400),
+					"simulator-observed-update-missing");
+			assertInvalidParams(performJson(simulator, request("tasks/cancel",
+					unknownTaskId, "simulator-observed-cancel-missing",
+					"\"taskId\":\"" + unknownTaskId + "\"", true), 400),
+					"simulator-observed-cancel-missing");
+			Assertions.assertEquals(7, fixture.admissions().get());
+		});
+
+		recorder.awaitAndAssert(MCP_PATH, List.of(
+				McpTaskRequestObservabilityRecorder.complete(
+						"simulator-observed-create", "tools/call", TOOL_NAME,
+						McpOperationType.TOOLS_CALL),
+				McpTaskRequestObservabilityRecorder.complete(
+						"simulator-observed-get", "tasks/get", taskId.get(),
+						McpOperationType.TASKS_GET),
+				McpTaskRequestObservabilityRecorder.complete(
+						"simulator-observed-update", "tasks/update", taskId.get(),
+						McpOperationType.TASKS_UPDATE),
+				McpTaskRequestObservabilityRecorder.complete(
+						"simulator-observed-cancel", "tasks/cancel", taskId.get(),
+						McpOperationType.TASKS_CANCEL),
+				McpTaskRequestObservabilityRecorder.protocolError(
+						"simulator-observed-get-missing", "tasks/get",
+						unknownTaskId, McpOperationType.TASKS_GET),
+				McpTaskRequestObservabilityRecorder.protocolError(
+						"simulator-observed-update-missing", "tasks/update",
+						unknownTaskId, McpOperationType.TASKS_UPDATE),
+				McpTaskRequestObservabilityRecorder.protocolError(
+						"simulator-observed-cancel-missing", "tasks/cancel",
+						unknownTaskId, McpOperationType.TASKS_CANCEL)));
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+				fixture.sourceServer().getDiagnostics().getStatus());
+	}
+
+	@Test
 	public void taskSubscriptionUsesCurrentStateAndReconnectDoesNotReplay()
 			throws Exception {
 		Fixture fixture = new Fixture();
@@ -218,11 +292,18 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	@NonNull
 	private static String performJson(@NonNull Simulator simulator,
 			@NonNull Request request) throws InterruptedException {
+		return performJson(simulator, request, 200);
+	}
+
+	@NonNull
+	private static String performJson(@NonNull Simulator simulator,
+			@NonNull Request request, int expectedStatus)
+			throws InterruptedException {
 		try (McpSimulation simulation = simulator.startMcpRequest(request)) {
 			McpSimulationResponse response = simulation.awaitResponse(WAIT)
 					.orElseThrow(() -> new AssertionError(
 							"Timed out waiting for an MCP response."));
-			Assertions.assertEquals(200, response.getStatusCode());
+			Assertions.assertEquals(expectedStatus, response.getStatusCode());
 			Assertions.assertEquals(McpSimulationBodyType.JSON,
 					response.getBodyType());
 			Assertions.assertEquals(Set.of("no-store"),
@@ -244,6 +325,13 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	private static void assertEmptyAcknowledgement(@NonNull String json) {
 		Assertions.assertTrue(json.contains(
 				"\"result\":{\"resultType\":\"complete\"}"), json);
+	}
+
+	private static void assertInvalidParams(@NonNull String json,
+			@NonNull String requestId) {
+		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
+				+ "\",\"error\":{\"code\":-32602,\"message\":"
+				+ "\"Invalid params\"}}", json);
 	}
 
 	@NonNull
@@ -385,6 +473,8 @@ public class McpTasksSimulatorPublicRuntimeTests {
 		@NonNull
 		private final McpInMemoryTaskManager taskManager;
 		@NonNull
+		private final AtomicInteger admissions;
+		@NonNull
 		private final AtomicReference<@Nullable String> createdTaskId;
 		@NonNull
 		private final McpServer sourceServer;
@@ -393,6 +483,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 
 		private Fixture() {
 			this.taskManager = McpTaskManager.fromInMemoryDefaults();
+			this.admissions = new AtomicInteger();
 			this.createdTaskId = new AtomicReference<>();
 			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 					.withName(TOOL_NAME)
@@ -415,11 +506,13 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			this.sourceServer = McpServer.withPort(0)
 					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 							List.of(endpoint)))
-					.admissionController(context -> McpAdmissionDecision.accepted(
-							McpAdmissionIdentity
-									.withRateLimitPartitionKey("simulator-rate")
-									.authorizationPartitionKey("simulator-owner")
-									.build()))
+					.admissionController(context -> {
+						this.admissions.incrementAndGet();
+						return McpAdmissionDecision.accepted(McpAdmissionIdentity
+								.withRateLimitPartitionKey("simulator-rate")
+								.authorizationPartitionKey("simulator-owner")
+								.build());
+					})
 					.host(LOOPBACK)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
@@ -436,6 +529,11 @@ public class McpTasksSimulatorPublicRuntimeTests {
 		@NonNull
 		private McpInMemoryTaskManager taskManager() {
 			return this.taskManager;
+		}
+
+		@NonNull
+		private AtomicInteger admissions() {
+			return this.admissions;
 		}
 
 		@NonNull
