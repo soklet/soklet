@@ -70,6 +70,15 @@ maintenance or security fixes afterward. See the explicit
   Java-derived typed schemas, multi-round-trip input, progress, cooperative
   cancellation, resource subscriptions, localization, simulation, admission,
   limiting, interception, sanitization, and bounded diagnostics.
+- Added the `io.modelcontextprotocol/tasks` extension with application-owned
+  durable state through
+  [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html),
+  typed task creation, `tasks/get`, `tasks/update`, `tasks/cancel`, optional
+  task-status subscriptions, cross-node recovery when backed by a shared
+  application-provided manager, and simulator parity. The
+  explicit in-memory manager is bounded and process-local; it is intended for
+  development, tests, and deliberately ephemeral single-process use, not as a
+  production durability or worker system.
 - Added one lifecycle coordinator and immutable result model across HTTP, SSE,
   MCP, direct embedders, the standalone runner, and the off-network simulator.
 - Added a copy/paste [MCP quickstart](MCP_QUICKSTART.md), prose

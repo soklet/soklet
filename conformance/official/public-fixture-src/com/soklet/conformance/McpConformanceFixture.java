@@ -35,10 +35,12 @@ import com.soklet.McpInputRequestDeclaration;
 import com.soklet.McpInputRequiredResult;
 import com.soklet.McpInputRequirement;
 import com.soklet.McpJsonArray;
+import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
+import com.soklet.McpJsonValue;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpOfficialSchemaConformanceTool;
 import com.soklet.McpPromptArgumentDeclaration;
@@ -58,9 +60,19 @@ import com.soklet.McpResourcePage;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpRequestContext;
 import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
 import com.soklet.ShutdownComponentDisposition;
+import com.soklet.McpTask;
+import com.soklet.McpTaskControl;
+import com.soklet.McpTaskCreatedResult;
+import com.soklet.McpTaskEventPublisher;
+import com.soklet.McpTaskManager;
+import com.soklet.McpTaskNotFoundException;
+import com.soklet.McpTaskRequestContext;
+import com.soklet.McpTaskStatus;
+import com.soklet.McpTaskUpdateContext;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
@@ -81,10 +93,15 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -107,6 +124,19 @@ public final class McpConformanceFixture {
 			"input-required-result-result-type",
 			"input-required-result-ignore-extra-params",
 			"input-required-result-validate-input");
+	private static final Set<String> TASK_SCENARIOS = Set.of(
+			"tasks-lifecycle",
+			"tasks-capability-negotiation",
+			"tasks-wire-fields",
+			"tasks-request-state-removal",
+			"tasks-mrtr-input",
+			"tasks-request-headers",
+			"tasks-dispatch-and-envelope",
+			"tasks-required-task-error",
+			"tasks-mrtr-composition",
+			"tasks-status-notifications");
+	private static final TaskFixtureManager TASK_MANAGER =
+			new TaskFixtureManager();
 	private static final McpInputRequestDeclaration FORM_INPUT =
 			McpInputRequestDeclaration.fromElicitationForm(
 					McpInputRequirement.REQUIRED);
@@ -172,7 +202,17 @@ public final class McpConformanceFixture {
 			"input-required-result-tampered-state",
 			"input-required-result-capability-check",
 			"input-required-result-ignore-extra-params",
-			"input-required-result-validate-input");
+			"input-required-result-validate-input",
+			"tasks-lifecycle",
+			"tasks-capability-negotiation",
+			"tasks-wire-fields",
+			"tasks-request-state-removal",
+			"tasks-mrtr-input",
+			"tasks-request-headers",
+			"tasks-dispatch-and-envelope",
+			"tasks-required-task-error",
+			"tasks-mrtr-composition",
+			"tasks-status-notifications");
 
 	private McpConformanceFixture() {
 	}
@@ -277,7 +317,7 @@ public final class McpConformanceFixture {
 		requireSupportedScenario(scenario);
 		McpRateLimiter allowLimiter = context ->
 				McpRateLimitDecision.allowed();
-		return mcpServerBuilder
+		McpServer.Builder configured = mcpServerBuilder
 				.host(LOOPBACK)
 				.requestRateLimiter(allowLimiter)
 				.toolRateLimiter(allowLimiter)
@@ -285,6 +325,9 @@ public final class McpConformanceFixture {
 				.corsAuthorizer(corsAuthorizer)
 				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
 				.allowedHosts(Set.of(LOOPBACK));
+		if (TASK_SCENARIOS.contains(scenario))
+			configured.taskManager(TASK_MANAGER);
+		return configured;
 	}
 
 	private static void requireSupportedScenario(String scenario) {
@@ -417,7 +460,137 @@ public final class McpConformanceFixture {
 							"No log notification was emitted.")));
 		}
 		addPhase5Tools(tools, scenario);
+		if (TASK_SCENARIOS.contains(scenario))
+			addTaskTools(tools);
 		return List.copyOf(tools);
+	}
+
+	private static void addTaskTools(List<McpToolRegistration<?>> tools) {
+		tools.add(McpToolRegistration.withName("greet")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					String name = ((McpJsonString) arguments.getConvertedArguments()
+							.find("name").orElse(McpJsonString.fromValue("World")))
+							.getValue();
+					return McpCompleteResult.fromToolText("Hello, " + name + "!");
+				})
+				.description("Returns a synchronous greeting.")
+				.build());
+		tools.add(McpToolRegistration.withName("slow_compute")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					long seconds = integerArgument(arguments.getConvertedArguments(),
+							"seconds", 0L);
+					String label = stringArgument(arguments.getConvertedArguments(),
+							"label", "complete");
+					Optional<McpTaskControl> taskControl = features.getTaskControl();
+					if (taskControl.isEmpty())
+						return McpCompleteResult.fromToolText(
+								"Computed " + label + " synchronously.");
+					McpTask task = TASK_MANAGER.createTask(taskControl.orElseThrow());
+					TASK_MANAGER.completeAfter(task.getTaskId(),
+							Duration.ofSeconds(seconds), McpCompleteResult.fromToolText(
+									"Computed " + label + "."));
+					return McpTaskCreatedResult.<String>fromTaskId(task.getTaskId());
+				})
+				.description("Completes asynchronously when Tasks are negotiated.")
+				.build());
+		tools.add(McpToolRegistration.withName("failing_job")
+				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
+				.operationHandler((request, arguments, features) -> {
+					McpTask task = TASK_MANAGER.createTask(
+							features.getTaskControl().orElseThrow());
+					TASK_MANAGER.completeAfter(task.getTaskId(),
+							Duration.ofMillis(25), McpCompleteResult.fromToolErrorText(
+									"The task fixture intentionally failed."));
+					return McpTaskCreatedResult.<TaskOutput>fromTaskId(task.getTaskId());
+				})
+				.description("Completes with an application-level tool error.")
+				.build());
+		tools.add(McpToolRegistration.withName("protocol_error_job")
+				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
+				.operationHandler((request, arguments, features) -> {
+					McpTask task = TASK_MANAGER.createTask(
+							features.getTaskControl().orElseThrow());
+					TASK_MANAGER.failAfter(task.getTaskId(), Duration.ofMillis(25),
+							McpJsonRpcError.fromApplication(50001,
+									"Task fixture protocol failure."));
+					return McpTaskCreatedResult.<TaskOutput>fromTaskId(task.getTaskId());
+				})
+				.description("Fails with a protocol-level task error.")
+				.build());
+		tools.add(McpToolRegistration.withName("confirm_delete")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					Optional<McpTaskControl> taskControl = features.getTaskControl();
+					if (taskControl.isEmpty())
+						return McpCompleteResult.fromToolText(
+								"Tasks were not negotiated.");
+					McpTask task = TASK_MANAGER.createTask(
+							taskControl.orElseThrow());
+					TASK_MANAGER.requestTaskInput(task.getTaskId(), Map.of(
+							"confirmation", formInput("Confirm deletion", "confirm",
+									"boolean")));
+					return McpTaskCreatedResult.<String>fromTaskId(task.getTaskId());
+				})
+				.addInputRequestDeclarations(FORM_INPUT)
+				.description("Waits for one task-scoped elicitation response.")
+				.build());
+		tools.add(McpToolRegistration.withName("multi_input")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					Optional<McpTaskControl> taskControl = features.getTaskControl();
+					if (taskControl.isEmpty())
+						return McpCompleteResult.fromToolText(
+								"Tasks were not negotiated.");
+					McpTask task = TASK_MANAGER.createTask(
+							taskControl.orElseThrow());
+					TASK_MANAGER.requestTaskInput(task.getTaskId(), Map.of(
+							"first", formInput("First task input", "name", "string"),
+							"second", formInput("Second task input", "confirm",
+									"boolean")));
+					return McpTaskCreatedResult.<String>fromTaskId(task.getTaskId());
+				})
+				.addInputRequestDeclarations(FORM_INPUT)
+				.description("Waits for two task-scoped elicitation responses.")
+				.build());
+		tools.add(McpToolRegistration.withName("test_tool_with_task")
+				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
+				.operationHandler((request, arguments, features) -> {
+					if (request.getInputResponses().find("user_name").isEmpty())
+						return McpInputRequiredResult.withInputRequest("user_name",
+								formInput("What is your name?", "name", "string"))
+								.build();
+					McpTask task = TASK_MANAGER.createTask(
+							features.getTaskControl().orElseThrow());
+					TASK_MANAGER.completeNow(task.getTaskId(),
+							McpCompleteResult.fromToolStructuredContent(
+									McpJsonObject.builder()
+											.put("message", "Hello, Alice!")
+											.build()));
+					return McpTaskCreatedResult.<TaskOutput>fromTaskId(task.getTaskId());
+				})
+				.addInputRequestDeclarations(FORM_INPUT)
+				.description("Composes an MRTR response with task creation.")
+				.build());
+	}
+
+	private static long integerArgument(McpJsonObject arguments, String name,
+			long defaultValue) {
+		return arguments.find(name)
+				.filter(McpJsonNumber.class::isInstance)
+				.map(McpJsonNumber.class::cast)
+				.map(number -> number.getValue().longValueExact())
+				.orElse(defaultValue);
+	}
+
+	private static String stringArgument(McpJsonObject arguments, String name,
+			String defaultValue) {
+		return arguments.find(name)
+				.filter(McpJsonString.class::isInstance)
+				.map(McpJsonString.class::cast)
+				.map(McpJsonString::getValue)
+				.orElse(defaultValue);
 	}
 
 	private static void addPhase5Tools(List<McpToolRegistration<?>> tools,
@@ -828,5 +1001,274 @@ public final class McpConformanceFixture {
 	public record CustomHeaderArguments(
 			@McpToolProperty(description = "Mirrored test value")
 			@McpHeader(name = "Value") String value) {
+	}
+
+	/** Empty typed arguments for task-required conformance tools. */
+	public record EmptyTaskArguments() {
+	}
+
+	/** Typed eventual output retained by task-required conformance tools. */
+	private record TaskOutput(String message) {
+	}
+
+	/**
+	 * Test-only task manager with deterministic process-local worker behavior.
+	 * The production library deliberately supplies no worker runtime.
+	 */
+	private static final class TaskFixtureManager implements McpTaskManager {
+		private static final Duration TASK_TIME_TO_LIVE = Duration.ofHours(1);
+		private static final Duration POLL_INTERVAL = Duration.ofMillis(100);
+		private final Map<String, Entry> entries = new LinkedHashMap<>();
+		private final McpTaskEventPublisher eventPublisher =
+				McpTaskEventPublisher.fromInMemoryDefaults();
+
+		private synchronized McpTask createTask(McpTaskControl taskControl) {
+			McpRequestContext requestContext = taskControl.getRequestContext();
+			McpTask task;
+			String taskId;
+			do {
+				taskId = UUID.randomUUID().toString();
+			} while (this.entries.containsKey(taskId));
+			Instant now = Instant.now();
+			task = taskBuilder(taskId, taskControl.getTaskOrigin(),
+					McpTaskStatus.WORKING, now, now).build();
+			this.entries.put(taskId, new Entry(task,
+					requestContext.getEndpoint().getPath(), requestContext
+							.getAdmissionIdentity().getAuthorizationPartitionKey()));
+			publishChanged(taskId);
+			return task;
+		}
+
+		private synchronized void requestTaskInput(String taskId,
+				Map<String, McpInputRequest> inputRequests)
+				throws McpTaskNotFoundException {
+			Entry entry = requireEntry(taskId);
+			requireActive(entry.task);
+			Map<String, McpInputRequest> combined = new LinkedHashMap<>(
+					entry.task.getInputRequests());
+			combined.putAll(inputRequests);
+			entry.task = taskBuilder(entry.task, McpTaskStatus.INPUT_REQUIRED)
+					.taskStatusMessage("Waiting for client input.")
+					.addInputRequests(combined)
+					.build();
+			publishChanged(taskId);
+		}
+
+		private synchronized void completeNow(String taskId,
+				McpCompleteResult result) throws McpTaskNotFoundException {
+			Entry entry = requireEntry(taskId);
+			requireActive(entry.task);
+			entry.task = taskBuilder(entry.task, McpTaskStatus.COMPLETED)
+					.taskStatusMessage("Completed.")
+					.completedResult(result)
+					.build();
+			publishChanged(taskId);
+		}
+
+		private synchronized void failNow(String taskId,
+				McpJsonRpcError failure) throws McpTaskNotFoundException {
+			Entry entry = requireEntry(taskId);
+			requireActive(entry.task);
+			entry.task = taskBuilder(entry.task, McpTaskStatus.FAILED)
+					.taskStatusMessage("Failed.")
+					.failure(failure)
+					.build();
+			publishChanged(taskId);
+		}
+
+		private void completeAfter(String taskId, Duration delay,
+				McpCompleteResult result) {
+			launchWorker(taskId, delay, () -> completeNow(taskId, result));
+		}
+
+		private void failAfter(String taskId, Duration delay,
+				McpJsonRpcError failure) {
+			launchWorker(taskId, delay, () -> failNow(taskId, failure));
+		}
+
+		private void launchWorker(String taskId, Duration delay,
+				TaskTransition transition) {
+			Thread worker = new Thread(() -> {
+				long deadline = System.nanoTime() + delay.toNanos();
+				try {
+					while (System.nanoTime() < deadline) {
+						if (isTaskCancelationRequested(taskId)) {
+							cancelIfActive(taskId);
+							return;
+						}
+						Thread.sleep(10L);
+					}
+					transition.run();
+				} catch (McpTaskNotFoundException | IllegalStateException ignored) {
+					// A concurrent terminal transition or expiry won the fixture race.
+				} catch (InterruptedException ignored) {
+					Thread.currentThread().interrupt();
+				}
+			}, "soklet-conformance-task-" + taskId);
+			worker.setDaemon(true);
+			worker.start();
+		}
+
+		private synchronized void cancelIfActive(String taskId) {
+			try {
+				Entry entry = requireEntry(taskId);
+				if (isTerminal(entry.task.getTaskStatus()))
+					return;
+				entry.task = taskBuilder(entry.task, McpTaskStatus.CANCELED)
+						.taskStatusMessage("Canceled.")
+						.build();
+				publishChanged(taskId);
+			} catch (McpTaskNotFoundException ignored) {
+				// The fixture may already have discarded the task.
+			}
+		}
+
+		private synchronized boolean isTaskCancelationRequested(String taskId)
+				throws McpTaskNotFoundException {
+			return requireEntry(taskId).cancelationRequested;
+		}
+
+		@Override
+		public Optional<McpTaskEventPublisher> getTaskEventPublisher() {
+			return Optional.of(this.eventPublisher);
+		}
+
+		@Override
+		public synchronized Optional<McpTask> findTask(
+				McpTaskRequestContext context) {
+			Entry entry = this.entries.get(context.getTaskId());
+			return entry != null && entry.isAuthorized(context.getRequestContext())
+					? Optional.of(entry.task) : Optional.empty();
+		}
+
+		@Override
+		public synchronized void updateTask(McpTaskUpdateContext context)
+				throws McpTaskNotFoundException {
+			Entry entry = requireAuthorizedEntry(context.getTaskId(),
+					context.getRequestContext());
+			if (entry.task.getTaskStatus() != McpTaskStatus.INPUT_REQUIRED)
+				return;
+			Map<String, McpInputRequest> remaining = new LinkedHashMap<>(
+					entry.task.getInputRequests());
+			boolean accepted = false;
+			for (Map.Entry<String, McpJsonValue> response
+					: context.getInputResponses().asMap().entrySet()) {
+				McpInputRequest inputRequest = remaining.get(response.getKey());
+				if (inputRequest != null && inputRequest.matchesInputResponse(
+						response.getValue())) {
+					remaining.remove(response.getKey());
+					accepted = true;
+				}
+			}
+			if (!accepted)
+				return;
+			if (remaining.isEmpty())
+				entry.task = taskBuilder(entry.task, McpTaskStatus.COMPLETED)
+						.taskStatusMessage("Completed.")
+						.completedResult(McpCompleteResult.fromToolText(
+								"Task input accepted."))
+						.build();
+			else
+				entry.task = taskBuilder(entry.task, McpTaskStatus.INPUT_REQUIRED)
+						.taskStatusMessage("Waiting for client input.")
+						.addInputRequests(remaining)
+						.build();
+			publishChanged(context.getTaskId());
+		}
+
+		@Override
+		public synchronized void requestTaskCancelation(
+				McpTaskRequestContext context)
+				throws McpTaskNotFoundException {
+			Entry entry = requireAuthorizedEntry(context.getTaskId(),
+					context.getRequestContext());
+			if (isTerminal(entry.task.getTaskStatus()))
+				return;
+			entry.cancelationRequested = true;
+			entry.task = taskBuilder(entry.task, McpTaskStatus.CANCELED)
+					.taskStatusMessage("Canceled.")
+					.build();
+			publishChanged(context.getTaskId());
+		}
+
+		private synchronized Entry requireEntry(String taskId)
+				throws McpTaskNotFoundException {
+			Entry entry = this.entries.get(taskId);
+			if (entry == null)
+				throw new McpTaskNotFoundException();
+			return entry;
+		}
+
+		private synchronized Entry requireAuthorizedEntry(String taskId,
+				McpRequestContext requestContext) throws McpTaskNotFoundException {
+			Entry entry = requireEntry(taskId);
+			if (!entry.isAuthorized(requestContext))
+				throw new McpTaskNotFoundException();
+			return entry;
+		}
+
+		private static McpTask.Builder taskBuilder(String taskId,
+				com.soklet.McpTaskOrigin taskOrigin, McpTaskStatus taskStatus,
+				Instant createdAt, Instant lastUpdatedAt) {
+			return McpTask.withTaskId(taskId, taskOrigin, taskStatus, createdAt,
+					lastUpdatedAt)
+					.timeToLive(TASK_TIME_TO_LIVE)
+					.pollInterval(POLL_INTERVAL);
+		}
+
+		private static McpTask.Builder taskBuilder(McpTask task,
+				McpTaskStatus taskStatus) {
+			Instant lastUpdatedAt = Instant.now();
+			if (lastUpdatedAt.isBefore(task.getLastUpdatedAt()))
+				lastUpdatedAt = task.getLastUpdatedAt();
+			return taskBuilder(task.getTaskId(), task.getTaskOrigin(), taskStatus,
+					task.getCreatedAt(), lastUpdatedAt)
+					.metadata(task.getMetadata());
+		}
+
+		private static void requireActive(McpTask task) {
+			if (isTerminal(task.getTaskStatus()))
+				throw new IllegalStateException("The task is already terminal.");
+		}
+
+		private void publishChanged(String taskId) {
+			try {
+				this.eventPublisher.publishTaskChanged(taskId);
+			} catch (RuntimeException ignored) {
+				// Polling remains authoritative for this fixture.
+			}
+		}
+
+		private static boolean isTerminal(McpTaskStatus taskStatus) {
+			return taskStatus == McpTaskStatus.COMPLETED
+					|| taskStatus == McpTaskStatus.FAILED
+					|| taskStatus == McpTaskStatus.CANCELED;
+		}
+
+		@FunctionalInterface
+		private interface TaskTransition {
+			void run() throws McpTaskNotFoundException;
+		}
+
+		private static final class Entry {
+			private McpTask task;
+			private final String endpointPath;
+			private final Optional<String> authorizationPartitionKey;
+			private boolean cancelationRequested;
+
+			private Entry(McpTask task, String endpointPath,
+					Optional<String> authorizationPartitionKey) {
+				this.task = task;
+				this.endpointPath = endpointPath;
+				this.authorizationPartitionKey = authorizationPartitionKey;
+			}
+
+			private boolean isAuthorized(McpRequestContext requestContext) {
+				return this.endpointPath.equals(requestContext.getEndpoint().getPath())
+						&& this.authorizationPartitionKey.equals(requestContext
+								.getAdmissionIdentity()
+								.getAuthorizationPartitionKey());
+			}
+		}
 	}
 }

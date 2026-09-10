@@ -41,18 +41,18 @@
       "trigger": "Concrete demand and separate product/release decision"
     },
     {
-      "direction": "Tasks",
+      "direction": "Future Tasks extension evolution",
       "evidenceClassification": "planned",
       "id": "DF-04",
-      "landingZone": "2026-era negotiated extension descriptor/renderer, or core-owned behavior only in a later absorbing profile after R2C; framework result/feature and shared lifecycle",
+      "landingZone": "Additive extension-owned settings, operations, or result forms with explicit capability, routing, lifecycle, and manager-SPI review; core absorption only in a later profile after R2C",
       "negativeInventoryKeys": [
         "NI-06",
         "NI-07"
       ],
       "negativeInventoryReason": null,
-      "preReleaseHedge": "Open result discriminator, interceptor, `-32021` wire pieces, extension preservation, known capability-requirement widening points",
+      "preReleaseHedge": "The implemented SEP-2663 surface uses closed task-method routing, an open result discriminator, explicit capability negotiation, and an application-owned manager SPI",
       "testEvidence": null,
-      "trigger": "Concrete Soklet support decision with resolved execution/state/handle/auth ownership, or absorption into a candidate core profile; core absorption also triggers DF-02/R2C"
+      "trigger": "A stable Tasks extension revision adds settings, supported request types, task operations, or lifecycle semantics; core absorption also triggers DF-02/R2C"
     },
     {
       "direction": "Triggers & Events/webhooks",
@@ -226,14 +226,14 @@
     },
     {
       "id": "NI-06",
-      "rationale": "No general task or event lifecycle is advertised or implemented in the 4.0 profile.",
-      "statement": "Tasks, Triggers & Events, task persistence, or a general server-event family",
+      "rationale": "The Tasks extension delegates durable state and execution to the application; Soklet still owns no task store, worker runtime, general trigger/event lifecycle, or arbitrary server-event family.",
+      "statement": "Soklet-owned task persistence or workers, Triggers & Events, or a general server-event family",
       "status": "ABSENT_IN_4_0_0"
     },
     {
       "id": "NI-07",
-      "rationale": "Opaque client extension settings do not create server support or arbitrary routing.",
-      "statement": "server-side extension advertisement or an arbitrary-method router",
+      "rationale": "Soklet advertises and routes the explicitly implemented Tasks extension only; opaque client settings do not create arbitrary server support or routing.",
+      "statement": "arbitrary server-side extension advertisement or an arbitrary-method router",
       "status": "ABSENT_IN_4_0_0"
     },
     {

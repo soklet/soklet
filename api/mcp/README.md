@@ -2391,16 +2391,30 @@ ledger now contains 658 records with SHA-256
 
 The current provisional Tasks surface implements durable task creation and
 recovery, task input and cooperative cancelation, typed deferred-result safety,
-and task-status notifications. The application-owned `McpTaskManager` remains
-the authority for task state and authorization. Its optional task-event
+and task-status notifications. The application-owned
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+remains the authority for task state and authorization. Its optional task-event
 publisher carries task IDs only; Soklet performs a fresh authorized lookup for
 each accepted subscription before rendering `notifications/tasks`, while
 `tasks/get` polling remains authoritative. The public in-memory manager emits
 these advisory events only after observable mutations have committed.
 
-`McpTaskEventListener` and `McpTaskEventPublisher` increase the provisional
-inventory from 12 to 14 owners; custom managers remain polling-only by default,
-and task-event subscriptions reuse `McpSubscriptionEventRegistration`. The
+The public contract is documented in the
+[Durable Tasks guide](../../MCP.md#durable-tasks), with a compact
+[README entry point](../../README.md#durable-tasks), an explicit
+[deployment-security boundary](../../SECURITY.md#mcp-deployment-security), and
+a [client-compatibility qualification](../../release/MCP_CLIENT_COMPATIBILITY.md).
+The guide's public API map links every one of the 14 provisional task owners to
+its Javadoc and separates the production manager SPI from the explicit
+process-local development implementation.
+
+[`McpTaskEventListener`](https://javadoc.soklet.com/com/soklet/McpTaskEventListener.html)
+and
+[`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
+increase the provisional inventory from 12 to 14 owners; custom managers remain
+polling-only by default, and task-event subscriptions reuse
+[`McpSubscriptionEventRegistration`](https://javadoc.soklet.com/com/soklet/McpSubscriptionEventRegistration.html).
+The
 current owner partition is 134/36/64/14, or 248 MCP owners and 299 reviewed
 owners including the 51 non-MCP entries. The provisional include inventory has
 SHA-256

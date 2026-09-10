@@ -358,6 +358,7 @@ fallback, or legacy adapter.
 | Legacy SSE stream and request-result carriers | A POST response stream owns progress, input requests, and its terminal result. |
 | Session-scoped client/capability state | Validated protocol metadata and client capabilities are supplied per request. |
 | Legacy operation set | `server/discover`, current list/read/get/call methods, input responses, listening/subscriptions, and profile-defined notifications. |
+| Experimental or application-specific task shapes | The negotiated `io.modelcontextprotocol/tasks` extension uses server-directed task creation plus `tasks/get`, `tasks/update`, and `tasks/cancel`; legacy `task`, `tasks/list`, and `tasks/result` forms are not revived. |
 
 A readable legacy `initialize` request receives a narrow modern-only migration
 diagnostic naming `2026-07-28`. It is not negotiation or a compatibility
@@ -399,6 +400,18 @@ are:
 - Replace `McpShutdownOutcome`-style reporting with aggregate
   `ShutdownResult`, `ShutdownComponentResult`, and
   `ShutdownComponentDisposition` evidence.
+- To return durable work from `tools/call`, configure one application-wide
+  [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+  on
+  [`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>),
+  persist the invocation's
+  [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html)
+  with the application work, and return
+  [`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html).
+  Soklet owns protocol adaptation and deferred typed-output validation; the
+  application owns durable storage, authorization binding, work publication,
+  leases, retry/idempotency, and crash recovery. The built-in in-memory
+  manager is not a production durability backend.
 
 The [MCP quickstart](MCP_QUICKSTART.md) is a copy/paste starting point and
 [MCP.md](MCP.md) is the full current API and wire reference.

@@ -138,9 +138,20 @@ public class McpTaskInputUpdateRuntimeTests {
 			Assertions.assertTrue(initial.body().contains("\"first\":{")
 					&& initial.body().contains("\"second\":{"), initial.body());
 
+			assertEmptyAcknowledgement(updateTask(port, "unknown-nonunion", taskId,
+					"\"unknown-nonunion\":{\"ignored\":true}"));
+			McpTask afterUnknown = taskManager.findTask(taskId).orElseThrow();
+			Assertions.assertEquals(McpTaskStatus.INPUT_REQUIRED,
+					afterUnknown.getTaskStatus());
+			Assertions.assertEquals(List.of("first", "second"),
+					List.copyOf(afterUnknown.getInputRequests().keySet()));
+			Assertions.assertTrue(taskManager.takeTaskInputResponses(taskId)
+					.asMap().isEmpty());
+
 			assertEmptyAcknowledgement(updateTask(port, "partial", taskId,
 					"\"first\":{\"roots\":[]},"
-							+ "\"unknown\":{\"roots\":[]}"));
+							+ "\"second\":{\"ignored\":true},"
+							+ "\"unknown\":{\"ignored\":true}"));
 			McpTask partial = taskManager.findTask(taskId).orElseThrow();
 			Assertions.assertEquals(McpTaskStatus.INPUT_REQUIRED,
 					partial.getTaskStatus());

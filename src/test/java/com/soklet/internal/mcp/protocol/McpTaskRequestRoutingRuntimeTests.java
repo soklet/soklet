@@ -163,7 +163,7 @@ public class McpTaskRequestRoutingRuntimeTests {
 	}
 
 	@Test
-	public void updateRequiresValidInputResponsesAndTaskIdsRejectNewlines()
+	public void updateRequiresInputResponseObjectAndTaskIdsRejectNewlines()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger invocations = new AtomicInteger();
@@ -174,8 +174,7 @@ public class McpTaskRequestRoutingRuntimeTests {
 			int port = runtime.start().getPort();
 			List<String> invalidUpdateFields = List.of(
 					"\"taskId\":\"task-40\"",
-					"\"taskId\":\"task-40\",\"inputResponses\":[]",
-					"\"taskId\":\"task-40\",\"inputResponses\":{\"answer\":{}}"
+					"\"taskId\":\"task-40\",\"inputResponses\":[]"
 			);
 			for (int index = 0; index < invalidUpdateFields.size(); ++index) {
 				FixedResponse response = send(port,
@@ -185,14 +184,22 @@ public class McpTaskRequestRoutingRuntimeTests {
 				assertError(response, McpJsonRpcError.INVALID_PARAMS);
 			}
 
+			// Task managers correlate keys before validating union variants, so an
+			// unknown or mismatched response value must reach the manager to be
+			// ignored idempotently.
+			assertSuccess(send(port, request(42, "tasks/update",
+					"\"taskId\":\"task-40\",\"inputResponses\":{"
+							+ "\"unknown\":{\"ignored\":true}}", true),
+					headers("tasks/update", "task-40")));
+
 			String newlineTaskId = "line1\nline2";
 			FixedResponse newline = send(port,
 					request(50, "tasks/get",
 							"\"taskId\":\"line1\\nline2\"", true),
 					headers("tasks/get", "=?base64?bGluZTEKbGluZTI=?="));
 			assertError(newline, McpJsonRpcError.INVALID_PARAMS);
-			Assertions.assertEquals(0, admissions.get());
-			Assertions.assertEquals(0, invocations.get());
+			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(1, invocations.get());
 		} finally {
 			runtime.close();
 		}

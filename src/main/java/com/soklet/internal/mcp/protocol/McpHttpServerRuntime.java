@@ -4298,7 +4298,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if ("tasks/update".equals(mappedRequest.method())) {
 				try {
 					Optional<McpJsonObject> parsedInputResponses =
-							parseInputResponses(fields);
+							parseTaskInputResponses(fields);
 					if (parsedInputResponses.isEmpty())
 						return invalidParams(protocolProfile, mappedRequest,
 								corsHeaders);
@@ -5064,13 +5064,28 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private static Optional<@NonNull McpJsonObject> parseInputResponses(
 			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
+		Optional<McpJsonObject> responses = parseInputResponsesObject(fields);
+		if (responses.isPresent())
+			for (McpJsonValue response
+					: responses.orElseThrow().members().values())
+				McpInputResponseValidator.validate(response);
+		return responses;
+	}
+
+	@NonNull
+	private static Optional<@NonNull McpJsonObject> parseTaskInputResponses(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
+		return parseInputResponsesObject(fields);
+	}
+
+	@NonNull
+	private static Optional<@NonNull McpJsonObject> parseInputResponsesObject(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
 		McpJsonValue value = requireNonNull(fields).get("inputResponses");
 		if (value == null)
 			return Optional.empty();
 		if (!(value instanceof McpJsonObject responses))
 			throw new IllegalArgumentException("MCP input responses must be an object.");
-		for (McpJsonValue response : responses.members().values())
-			McpInputResponseValidator.validate(response);
 		return Optional.of(responses);
 	}
 

@@ -31,15 +31,22 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable input responses supplied with an MCP multi-round-trip retry.
+ * Immutable input responses supplied with an MCP multi-round-trip retry or
+ * task update.
  *
  * <p>Raw lookup preserves the exact MCP JSON value. Typed lookup uses
  * Soklet's closed intrinsic MCP binding and is provided both to live request
  * contexts and to application-created test fixtures.
  *
- * <p>Soklet validates that each wire value belongs to the open MCP
- * {@code InputResponse} union. Applications must still correlate a response
- * key with the request they emitted, branch explicitly on elicitation
+ * <p>For ordinary multi-round request retries, Soklet validates that each
+ * wire value belongs to the open MCP {@code InputResponse} union. A task
+ * update is different: the task manager must first correlate each key with
+ * the task's outstanding requests, then ignore unknown, consumed,
+ * superseded, or union-mismatched values. Its input-response collection can
+ * therefore contain an arbitrary bounded MCP JSON value under a key that the
+ * manager must ignore.
+ *
+ * <p>Applications must still branch explicitly on elicitation
  * {@code accept}, {@code decline}, and {@code cancel} actions, and validate
  * accepted form content against the exact requested schema before causing a
  * side effect. Typed lookup converts a value; it does not establish that

@@ -14,12 +14,12 @@ endpoint/server construction, application lifecycle, raw localhost discovery,
 and an exact Inspector command. Existing 3.5.1 integrations should first read
 the [MCP migration guide](MIGRATING_TO_4_0.md#mcp-wire-migration).
 
-This reference covers multi-round-trip request state, progress/cancelation,
-subscriptions, localization, lifecycle and aggregate metrics, bounded off-
-network simulation, downstream OpenTelemetry integration, and bounded
-structured trace-correlation logging. Internal evidence remains under
-`release/` and `conformance/`; local development results are not presented as
-published-release or immutable-candidate claims.
+This reference covers multi-round-trip request state, durable Tasks,
+progress/cancelation, subscriptions, localization, lifecycle and aggregate
+metrics, bounded off-network simulation, downstream OpenTelemetry integration,
+and bounded structured trace-correlation logging. Internal evidence remains
+under `release/` and `conformance/`; local development results are not presented
+as published-release or immutable-candidate claims.
 
 The [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) explains which
 diagnostic, metric, callback, and simulator values core Soklet redacts or
@@ -39,8 +39,9 @@ exactly which host/tool versions were manually exercised.
 | Prompts | Annotated and programmatic catalogs plus string-argument prompt rendering |
 | Resources | Exact URIs, bounded RFC 6570 Level 1 URI templates, reads, static catalogs, and application-owned custom listing/pagination |
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
+| Tasks | `tools/call` task augmentation, durable application-owned task state, polling, input, cooperative cancelation, typed deferred-result validation, and optional status notifications |
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
-| Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes and updates to requested resource URIs; application-owned local or distributed broadcast publishing |
+| Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes, requested-resource updates, and authorized task IDs; application-owned local or distributed broadcast publishing |
 | Localization | Request-scoped library-neutral localization for framework-owned server, tool, prompt, resource, and schema text; no protocol capability or `_meta` extension |
 | Simulation | Asynchronous off-network MCP POST through the real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
@@ -108,6 +109,13 @@ Every request restates its protocol version and client capabilities; Soklet
 validates those fields before application admission and exposes normalized,
 bounded request information through `McpRequestContext` and the operation-
 specific context.
+
+Task requests are classified as
+[`McpOperationType.TASKS_GET`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_GET),
+[`TASKS_UPDATE`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_UPDATE),
+or
+[`TASKS_CANCEL`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_CANCEL);
+the operation name is the validated task ID.
 
 `McpRequestContext`, `McpAdmissionContext`, and `McpRateLimitContext` expose
 the semantic `McpOperationType` through `getOperationType()`. Application
@@ -670,6 +678,217 @@ resource read on any retry carrying `inputResponses` or `requestState` is
 forced to private scope with zero TTL, regardless of its registration cache
 policy. Every HTTP transport response remains `Cache-Control: no-store`.
 
+## Durable Tasks
+
+Soklet implements the
+[MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.io/seps/2663-tasks-extension)
+for `tools/call`. A task is a durable handle to application-owned work, not a
+request continuation retained by Soklet. A client can lose its connection or
+the serving node and later use `tasks/get` against any eligible node that can
+reach the same application task backend.
+
+Configure one application-wide
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+through
+[`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>):
+
+```java
+McpServer mcpServer = McpServer.withPort(8082)
+    .taskManager(taskManager)
+    .toolRateLimiter(toolRateLimiter)
+    .build();
+```
+
+There is no implicit task manager. Configuring one advertises
+`io.modelcontextprotocol/tasks` for every endpoint on that server and enables
+`tasks/get`, `tasks/update`, and `tasks/cancel`. The client must declare the
+extension capability on each applicable request. A statically task-required
+tool presented by `tools/list` remains discoverable, but Soklet rejects its
+invocation with `-32021` before admission or application work when the client
+did not declare Tasks.
+
+The client declares that it understands task handles; it does not command the
+server to run a tool asynchronously. The selected application handler decides
+whether to return a task. Tasks do not augment prompts, resource reads, or
+other operations, and Soklet deliberately rejects the obsolete request-level
+`task` parameter, `tasks/list`, and `tasks/result` forms.
+
+### Authoring a task-returning tool
+
+An annotated tool that always creates a task returns
+[`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html),
+where `R` is the eventual typed output. It may receive one unannotated
+[`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html)
+parameter:
+
+```java
+@McpTool(name = "reports.generate")
+public McpTaskCreatedResult<GeneratedReport> generateReport(
+    @McpToolArgument(name = "accountId") String accountId,
+    McpTaskControl taskControl) {
+  String ownerKey = ownerKey(taskControl.getRequestContext());
+  String taskId = reportJobs.persistAndPublish(
+      accountId, ownerKey, taskControl.getTaskOrigin());
+  return McpTaskCreatedResult.fromTaskId(taskId);
+}
+```
+
+`persistAndPublish(...)` above represents application code. Before returning,
+it must atomically persist the work description, a stable authorization
+binding, and the complete framework-derived
+[`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html),
+then make the work recoverably visible to application workers. Soklet asks the
+configured manager for the new task before sending its handle and requires the
+returned origin to match. Returning a Java callback, retaining the request
+context, or publishing work before it can be recovered does not satisfy this
+contract.
+
+The type argument on `McpTaskCreatedResult<R>` is operational. Soklet retains
+the original tool's output schema and, when a later `tasks/get` observes a
+completed task, applies the configured
+[`McpToolOutputSanitizer`](https://javadoc.soklet.com/com/soklet/McpToolOutputSanitizer.html),
+typed schema validation, and ordinary node, depth, byte, and response limits.
+The opaque origin enables that lookup and may contain sensitive validated
+arguments; applications must protect it like the task itself and must never
+log it or send it to the client.
+
+Programmatic typed registration uses
+[`McpToolRegistration.CompleteHandlerStage::operationHandler`](<https://javadoc.soklet.com/com/soklet/McpToolRegistration.CompleteHandlerStage.html#operationHandler(com.soklet.McpToolHandler)>).
+That path is statically task-required and preserves its eventual output type.
+An advanced handler that may complete inline or create a task uses the ordinary
+operation-result handler and first inspects
+[`McpInvocationFeatures::getTaskControl`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getTaskControl()>).
+
+### Manager and state contract
+
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+is the application-owned, thread-safe authority. A production implementation
+normally fronts durable storage and job infrastructure shared by every node
+that may serve a task. The manager contract owns:
+
+- high-entropy task-ID generation, persistence, retention, and cleanup;
+- atomic authorization using the selected endpoint and independently admitted
+  request identity;
+- legal task transitions and immutable terminal state;
+- idempotent input-response consumption and durable cancelation intent;
+- task-event publication after the corresponding state is durable.
+
+The application infrastructure behind and alongside the manager owns work
+publication, leases, fencing, retries, and crash recovery. Soklet calls the
+manager at protocol boundaries but does not start, schedule, retry, lease,
+fence, or otherwise run application workers.
+
+Every manager lookup and mutation must independently authorize the task.
+Possession of a task ID is not authorization. Unknown and unauthorized IDs
+must be indistinguishable: lookup returns an empty optional and mutation throws
+the fixed, non-disclosing
+[`McpTaskNotFoundException`](https://javadoc.soklet.com/com/soklet/McpTaskNotFoundException.html).
+Task IDs and task contents must not become unbounded metric labels or default
+log fields.
+
+[`McpTask`](https://javadoc.soklet.com/com/soklet/McpTask.html) is an immutable
+authoritative snapshot. Its
+[`McpTaskStatus`](https://javadoc.soklet.com/com/soklet/McpTaskStatus.html) is
+`WORKING`, `INPUT_REQUIRED`, `COMPLETED`, `FAILED`, or `CANCELED`; the last is
+rendered as the extension-required wire value `"cancelled"`. Status-specific
+payloads are exclusive: outstanding input requests belong to
+`INPUT_REQUIRED`, a complete tool result to `COMPLETED`, and a JSON-RPC error
+to `FAILED`. A complete tool result whose `isError` value is true is still a
+completed task.
+
+`tasks/update` carries any partial subset of outstanding input responses.
+Unknown, already consumed, superseded, and union-mismatched responses are
+ignored idempotently. `tasks/cancel` records cooperative application-owned
+cancelation intent; it does not interrupt a worker or promise that `CANCELED`
+will beat concurrent completion or failure. Both differ from the original
+request's
+[`CancelationToken`](https://javadoc.soklet.com/com/soklet/CancelationToken.html),
+which ends with that HTTP request and must never be retained as durable work.
+
+Each task protocol request uses the normal `Mcp-Method` routing header and
+requires `Mcp-Name` to equal its task ID. This can assist load-balancer
+affinity, but correctness cannot depend on sticky routing. A production
+backend should assume at-least-once execution and use application-specific
+idempotency, an outbox or equivalent recovery path, and leases with fencing
+when work can run on multiple nodes. Soklet supplies no database, queue,
+scheduler, worker pool, lease implementation, or exactly-once guarantee.
+
+Graceful Soklet shutdown stops new MCP admission but does not cancel durable
+tasks or mark them failed. Application workers finish, checkpoint, or release
+their leases according to application policy. A task remains recoverable from
+another eligible node even when the node that created its handle disappears,
+provided the application uses shared durable backing.
+
+### Development-only in-memory manager
+
+[`McpTaskManager::fromInMemoryDefaults`](<https://javadoc.soklet.com/com/soklet/McpTaskManager.html#fromInMemoryDefaults()>)
+returns a bounded
+[`McpInMemoryTaskManager`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.html)
+for tests, simulation, development, and deliberately ephemeral single-process
+applications:
+
+```java
+McpInMemoryTaskManager taskManager =
+    McpTaskManager.fromInMemoryDefaults();
+
+McpTask task = taskManager.createTask(taskControl);
+// Application-owned test or development work runs separately.
+taskManager.completeTask(
+    task.getTaskId(),
+    McpCompleteResult.fromToolStructuredContent(resultJson),
+    "Report ready");
+```
+
+The manager is task-count bounded and expires tasks opportunistically. It owns
+no executor or worker and provides no durable storage, outbox, replication,
+leases, fencing, failover, or crash recovery. State disappears on JVM restart
+and is invisible to another process, so this implementation is not a
+production distributed-task backend and is never selected silently.
+
+### Task notifications
+
+Polling through `tasks/get` is authoritative. Notifications are an optional,
+best-effort projection of already-durable state. A manager enables them by
+returning a stable
+[`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
+from
+[`McpTaskManager::getTaskEventPublisher`](<https://javadoc.soklet.com/com/soklet/McpTaskManager.html#getTaskEventPublisher()>).
+The default is empty, which leaves polling fully functional. The in-memory
+manager supplies a process-local publisher automatically. This is a stable
+manager property: every call must remain empty or return the same publisher
+instance for the manager's lifetime, and each built server snapshots it once
+during construction.
+
+A capable client includes up to 256 deduplicated task IDs in
+`subscriptions/listen.notifications.taskIds`. Soklet independently admits the
+listen request, resolves every requested ID through the manager, and includes
+only authorized, existing IDs in the first acknowledgment. A later coarse
+task-ID event triggers a fresh authorized lookup before Soklet renders the
+complete current snapshot as `notifications/tasks`. Event payloads never
+override manager state, and delayed or duplicate events cannot regress a task
+after a terminal snapshot has been sent.
+
+[`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
+has broadcast, not competing-consumer, semantics. A fleet implementation must
+reach every eligible Soklet node; it must not let one node consume an event on
+behalf of the others. Delivery may be lost, so clients should poll after a
+disconnect or reconnect rather than expect notification replay. Projection
+work and stream queues are bounded; an oversized notification or exhausted
+queue closes only the affected stream with a backpressure reason. Soklet closes
+its listener registration during shutdown and never closes the
+application-owned publisher.
+
+### Public Tasks API map
+
+| Concern | Public API |
+| --- | --- |
+| Server configuration and production authority | [`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>), [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html) |
+| Handler-side creation | [`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html), [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html), [`McpTaskCreatedResult`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html) |
+| Durable snapshots | [`McpTask`](https://javadoc.soklet.com/com/soklet/McpTask.html), [`McpTask.Builder`](https://javadoc.soklet.com/com/soklet/McpTask.Builder.html), [`McpTaskStatus`](https://javadoc.soklet.com/com/soklet/McpTaskStatus.html) |
+| Manager request inputs and neutral absence | [`McpTaskRequestContext`](https://javadoc.soklet.com/com/soklet/McpTaskRequestContext.html), [`McpTaskUpdateContext`](https://javadoc.soklet.com/com/soklet/McpTaskUpdateContext.html), [`McpTaskNotFoundException`](https://javadoc.soklet.com/com/soklet/McpTaskNotFoundException.html) |
+| Explicit in-memory development backend | [`McpInMemoryTaskManager`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.html), [`McpInMemoryTaskManager.Builder`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.Builder.html) |
+| Advisory notification boundary | [`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html), [`McpTaskEventListener`](https://javadoc.soklet.com/com/soklet/McpTaskEventListener.html), [`McpSubscriptionEventRegistration`](https://javadoc.soklet.com/com/soklet/McpSubscriptionEventRegistration.html) |
+
 ## Admission and identity
 
 `McpAdmissionController` is the authentication, authorization, and
@@ -944,9 +1163,11 @@ Applications must authorize confidential or capability-bearing subscription URIs
 A rejected or failed admission never activates a subscription, even though the server generation's single shared publisher listener may already be registered.
 With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one endpoint share its empty authorization/quota partition; one caller can exhaust the configured per-partition subscription bucket for the rest.
 
-The listener parses all protocol filter fields but acknowledges and emits only
-the configured resource-list and requested-resource update families. Tool and
-prompt catalogs remain immutable, so their list-change filters are never
+The listener parses all protocol filter fields. It acknowledges the configured
+resource-list and requested-resource update families plus authorized task IDs
+when Tasks and its event publisher are enabled. Task filtering and notification
+semantics are described under [Task notifications](#task-notifications). Tool
+and prompt catalogs remain immutable, so their list-change filters are never
 acknowledged or advertised. The acknowledgment is always the first stream
 message. Every subscription message carries the listen request's exact string
 or integer ID as `io.modelcontextprotocol/subscriptionId`. That reuse does not
@@ -990,8 +1211,11 @@ SSE, and MCP objects. Explicit application collaborators are reused by identity,
 while configuration-dependent defaults are derived again. Soklet copies an
 imported MCP server's construction settings into a simulated server with fresh
 framework-owned listener and runtime state. Application-supplied MCP
-collaborators, including rate limiters, are reused by identity; tests remain
-responsible for isolating their mutable state.
+collaborators, including rate limiters and the task manager, are reused by
+identity. A task manager's stable event publisher therefore remains the same
+application object as well; the production and simulator runtimes attach
+independent listener registrations. Tests remain responsible for isolating
+their mutable collaborator state.
 
 Use
 [`SimulatorConfig::fromSokletConfig`](<https://javadoc.soklet.com/com/soklet/SimulatorConfig.html#fromSokletConfig(com.soklet.SokletConfig)>)
@@ -2455,33 +2679,20 @@ inspect namespaced inbound request metadata, and return nonreserved
 This remains application-owned behavior. It does not advertise matching server
 support or register a new protocol method.
 
-In particular, Soklet 4.0.0 does not implement the
-[MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.io/seps/2663-tasks-extension).
-It advertises no `io.modelcontextprotocol/tasks` server capability, registers
-no `tasks/*` methods, and produces no framework-owned task lifecycle or task
-result. Its open wire seams are deliberately narrower and independently
-testable: client capabilities can serialize the namespaced extension setting;
-`McpResultType.extension("task")` preserves an unknown result discriminator;
-and core owns the `-32021` envelope while a future extension integration would
-own its namespaced `requiredCapabilities.extensions` contribution.
+Tasks is the one namespaced protocol extension implemented by Soklet 4.0.0. It is
+advertised only when an application configures an
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html),
+and it is negotiated only when the current request declares the exact
+`io.modelcontextprotocol/tasks` client extension capability. The legacy `task`
+member of `tools/call` is rejected rather than treated as opt-in, and obsolete
+`tasks/list` and `tasks/result` methods remain unknown. See
+[Durable Tasks](#durable-tasks) for the supported API and protocol boundary.
 
-That future integration would require explicit API and compiler work. Today
-`McpClientCapabilityRequirement` is sealed to core requirements and
-`McpClientCapabilities.supports(...)` handles core capability values; both are
-known widening points. An annotated `@McpTool` normally returns a typed
-application value that Soklet wraps as a completion result. A tool that needs
-direct content, input-required results, or request state may instead return
-`McpOperationResult`; that advanced path derives only the input schema and is
-not an application result-extension registry. `void` remains unsupported.
-Per-request Tasks negotiation would also have to honor SEP-2663's compatibility
-boundary:
-the legacy `task` member of `tools/call` is only an unknown parameter, not
-opt-in, and `tasks/result` remains an unknown method.
-
-Finally, the two extension-field locations are distinct. JSON-RPC notification
-envelope extension fields serialize at the top level; namespaced request
-metadata belongs inside `params._meta`. Neither location by itself enables
-Tasks or any other server extension.
+The extension-field locations remain distinct. JSON-RPC notification envelope
+extension fields serialize at the top level; namespaced request metadata,
+including the per-request client capability map, belongs inside `params._meta`.
+An arbitrary extension field or an unsupported extension capability still does
+not register a method or enable matching server behavior.
 
 Soklet 4.0.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
@@ -2579,8 +2790,9 @@ unfrozen.
 
 ## Current Phase 6 and release state
 
-The current MCP API universe is 234 owners: 134 Phase 4, 36 Phase 5, and all 64
-Phase 6 owners are frozen; 51 non-MCP owners bring current-side coverage to 285. The
+The current MCP API universe is 248 owners: 134 Phase 4, 36 Phase 5, and all 64
+Phase 6 owners are frozen, while 14 Tasks owners remain provisional; 51 non-MCP
+owners bring current-side coverage to 299. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed

@@ -20,6 +20,34 @@ Server target: Soklet 4.0.0, exact MCP profile `2026-07-28`, Streamable HTTP
 | Cursor | Not installed; no version asserted | No connection was attempted. | **NOT TESTED** |
 | A client fixed to Soklet 3.5.1's initialization/session/GET-SSE contract | Legacy profile, independent of product version | Cannot use the 4.0.0 endpoint without a client migration. | **INCOMPATIBLE BY DESIGN** |
 
+None of these host rows exercised the
+[`io.modelcontextprotocol/tasks` extension](../MCP.md#durable-tasks). Soklet's
+server implementation and protocol conformance coverage do not imply that a
+listed host version negotiates Tasks. A future manual Tasks row must record the
+exact client version and exercise capability negotiation, task creation,
+`tasks/get`, input or cancelation where supported, reconnect recovery, and
+optional `notifications/tasks` independently of the core smoke above.
+
+## Tasks protocol conformance
+
+On 2026-09-09, official MCP conformance CLI `0.2.0-alpha.11` at commit
+`a983ba93c91e0bb31d0b6849eeb52f0ad1083107` exercised Soklet through the
+public-API-only fixture. All nine runnable Tasks scenarios passed, totaling
+**44/44 successful checks** across capability negotiation, lifecycle, wire
+fields, removed request state, task input, routing headers, dispatch and
+envelopes, required-task errors, and multi-round-input composition. Every
+fixture process shut down cleanly.
+
+The suite's `tasks-status-notifications` scenario reported its one check as
+**SKIPPED** because the upstream runner does not yet open and observe a
+`subscriptions/listen` task stream. Soklet's own production-path tests cover
+task subscription authorization, fresh manager lookup, event ordering,
+backpressure, reconnect, and terminal-state races. This is a local pre-release
+protocol check, not a compatibility result for any client or host in the table
+and not a release-candidate gate. The normal pinned conformance CI remains on
+`0.2.0-alpha.10` at commit `49103de6ed70804e940637bf3e9e29e4a3f54e64`
+and does not rerun these Tasks scenarios.
+
 “PASS (pre-release manual smoke)” means only that the named local interaction
 worked on the stated date. It does not mean every feature of that host was
 tested, a live language model was involved, or the eventual published artifact

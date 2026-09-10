@@ -255,6 +255,50 @@ The separately populated repositories model application replication; Soklet
 still supplies no distributed cursor store, key distribution, replication,
 or routing affinity.
 
+MCP Tasks create a separate durable authorization boundary. A configured
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+must atomically authorize every lookup, input update, cancelation request, and
+notification projection against the current admitted identity and endpoint.
+Possession of a task ID is never authorization. Generate high-entropy,
+non-enumerable IDs and make unknown and unauthorized tasks externally
+indistinguishable through the fixed manager contract; never include task IDs,
+operation names, or task contents in unbounded metric dimensions or default
+logs.
+
+Before returning
+[`McpTaskCreatedResult`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html),
+application code must atomically persist its durable work description,
+authorization binding, and the complete framework-supplied
+[`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html),
+then publish work through an outbox, recovery scan, or equivalent mechanism.
+The origin may contain validated arguments and must receive the same
+confidentiality and integrity controls as the task. Do not log it, expose it to
+clients, interpret or rewrite its opaque state, or retain the original request
+context, handler, continuation, or request cancelation token as durable work.
+
+A production worker path should assume at-least-once execution. Use
+application-specific idempotency and deduplication for side effects and leases
+with fencing where multiple nodes can claim work. `tasks/cancel` records
+cooperative durable intent; it is not an interrupt and may lose a race with
+completion or failure. Soklet shutdown likewise does not cancel durable tasks
+or prove that application workers have stopped.
+
+Task notifications are advisory. An application-provided
+[`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
+publishes task IDs only after the corresponding state is durable and must use
+broadcast semantics across eligible nodes. Soklet performs a fresh authorized
+manager lookup for each live subscription before emitting a snapshot, but
+events may be delayed, duplicated, or lost; `tasks/get` polling remains the
+recovery authority. Treat event channels and task IDs as sensitive
+application data.
+
+The public
+[`McpInMemoryTaskManager`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.html)
+is intentionally limited to development, tests, simulation, and deliberately
+ephemeral single-process use. It has no durable storage, worker, outbox,
+replication, leases, fencing, failover, or crash recovery, and all state is
+lost at JVM shutdown. It must not be mistaken for a production task backend.
+
 Request-state protection has two distinct trust boundaries:
 
 - `APPLICATION_PROTECTED` is exact opaque-string pass-through. Soklet enforces
@@ -351,7 +395,9 @@ token and any opted-in raw ID are still sensitive, high-cardinality correlation
 data. Restrict log access and retention, and do not treat validation or
 pseudonymization as authentication or anonymization.
 
-All 65 Phase 6 owners are now frozen and the provisional inventory is empty.
+All 64 Phase 6 owners remain frozen and 14 MCP Tasks owners are provisional.
+The exact current ownership and verification counts are recorded in the
+[MCP API inventory](api/mcp/README.md).
 Twenty-one bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
@@ -1390,9 +1436,9 @@ reviewed, default-off, bounded and redacted diagnostic rather than Java
 ## Current API and release-security state
 
 The current MCP owner inventory is 134 Phase 4, 36 Phase 5, and 64 Phase 6
-(234 MCP total); the 51 reviewed non-MCP owners bring the current-side
-inventory to 285. All three phases are frozen and there is no provisional
-owner. The implemented structured-log boundary completes the bounded
+frozen owners plus 14 provisional Tasks owners (248 MCP total); the 51 reviewed
+non-MCP owners bring the current-side inventory to 299. The implemented
+structured-log boundary completes the bounded
 `MCP_TRACE_CORRELATION` carrier
 and separate raw-ID opt-in, but operator access, storage, retention, and
 sustained cardinality/drain evidence remain outside that implementation proof.

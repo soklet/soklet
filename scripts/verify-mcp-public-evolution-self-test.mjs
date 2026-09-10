@@ -415,8 +415,9 @@ try {
   expectActiveTextRejected('ambiguous fenced-block scope must fail closed', () => {
     const path = activeTextFixturePath('MCP.md');
     writeFileSync(path, readFileSync(path, 'utf8').replace(
-      '## Admission and identity\n',
-      '```java\nextraDefaultExample();\n```\n\n## Admission and identity\n'));
+      '## Multi-round-trip input and request state\n',
+      '## Multi-round-trip input and request state\n\n'
+        + '```java\nextraDefaultExample();\n```\n'));
   }, /scope must resolve one fenced block/u);
 
   expectActiveTextRejected('candidate traversal path must fail closed', () => {

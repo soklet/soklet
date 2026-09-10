@@ -702,6 +702,8 @@ or assemble the same immutable model programmatically. The public API covers:
 - prompts, exact and templated resources, custom resource pagination, and
   protocol cache hints;
 - multi-round input requests with application- or framework-protected state;
+- durable Tasks for tool calls through an application-owned manager, including
+  polling, input, cooperative cancelation, and optional status notifications;
 - request-scoped progress, cooperative cancelation, and resource
   subscriptions;
 - admission, rate limiting, bounded handler execution, interception, output
@@ -751,6 +753,13 @@ extension method, while
 retains the exact validated wire value for diagnostics and extension-aware
 code. Keep a default branch when switching over operation types because Soklet
 may recognize additional operations in later MCP profiles.
+
+Task methods use
+[`McpOperationType.TASKS_GET`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_GET),
+[`TASKS_UPDATE`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_UPDATE),
+and
+[`TASKS_CANCEL`](https://javadoc.soklet.com/com/soklet/McpOperationType.html#TASKS_CANCEL);
+their operation name is the validated task ID.
 
 After admission, static `tools/list` and `prompts/list` catalogs are immutable
 and caller-neutral; Soklet does not authorization-filter their descriptors. A
@@ -814,7 +823,7 @@ Soklet validates the open `inputResponses` wire union, but
 applications still own response-key correlation, action handling, accepted
 content policy, user binding, sampling limits, and filesystem containment. See
 the compile-checked
-[application input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
+[application input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java),
 [durable-handle and prompt-security patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java),
 and [resource and cursor-security patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
 The separate [localized cursor fleet pattern](src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java)
@@ -826,6 +835,70 @@ authorization, canonical containment, delivery-intent URI policy, and stable
 cursor snapshots; Soklet does not supply the replicated repository, key
 distribution, or other deployment policies. See also
 [deployment guidance](SECURITY.md#mcp-deployment-security).
+
+##### Durable Tasks
+
+Soklet implements the MCP Tasks extension for `tools/call`. Configure one
+application-wide
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+through
+[`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>)
+to advertise and enable it:
+
+```java
+McpServer mcpServer = McpServer.withPort(8081)
+    .taskManager(taskManager)
+    .toolRateLimiter(toolRateLimiter)
+    .build();
+```
+
+An annotated tool that always creates a task returns
+[`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html)
+and can accept one unannotated
+[`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html):
+
+```java
+@McpTool(name = "reports.generate")
+public McpTaskCreatedResult<GeneratedReport> generateReport(
+    McpTaskControl taskControl) {
+  String ownerKey = deriveTaskOwnerKey(taskControl.getRequestContext());
+  String taskId = reportJobs.persistAndPublish(
+      ownerKey, taskControl.getTaskOrigin());
+  return McpTaskCreatedResult.fromTaskId(taskId);
+}
+```
+
+`reportJobs` represents application infrastructure. It must synchronously
+derive a stable authorization binding from the request, then atomically persist
+its work description and the complete opaque
+[`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html)
+before publishing recoverable work. Do not retain the request context or its
+request-scoped cancelation token as work. Before returning the handle, Soklet
+requires the configured manager to resolve the task and matching origin. A
+later completed result receives the current server's sanitizer and size-limit
+checks plus the persisted original typed-output schema.
+
+`tasks/get` polling is authoritative. `tasks/update` supplies partial,
+idempotently consumed input responses, and `tasks/cancel` records cooperative
+durable cancelation intent without promising that it wins a race with
+completion. An optional
+[`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
+lets `subscriptions/listen` project fresh authorized snapshots as
+`notifications/tasks`; delayed, duplicate, or lost events never replace
+polling. Graceful shutdown stops new requests but does not cancel application
+tasks.
+
+For development and tests,
+[`McpTaskManager::fromInMemoryDefaults`](<https://javadoc.soklet.com/com/soklet/McpTaskManager.html#fromInMemoryDefaults()>)
+creates a bounded
+[`McpInMemoryTaskManager`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.html).
+It has no worker, durable storage, replication, outbox, leases, fencing,
+failover, or crash recovery; its state disappears at JVM shutdown. Production
+systems provide their own manager and worker infrastructure shared by every
+eligible node and should assume at-least-once execution. See
+[Durable Tasks in the complete MCP guide](MCP.md#durable-tasks) for the full
+manager, authorization, wire-routing, notification, reconnect, simulator, and
+distributed-operation contract.
 
 ##### Deprecated compatibility surfaces
 
@@ -851,9 +924,11 @@ log event carrying
 the bounded pseudonymous token fields; the separate
 [`McpServer.Builder::logRawValidatedTraceIds`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#logRawValidatedTraceIds(java.lang.Boolean)>)
 opt-in may add only the validated lowercase MCP
-trace ID. Neither mode adds a trace value to metrics. The current snapshot has
-all 64 Phase 6 owners frozen and an empty provisional inventory, but it is not
-a release claim. The 1,676/0/0/4 result over 462 main and 194 test sources
+trace ID. Neither mode adds a trace value to metrics. The current snapshot
+retains all 64 Phase 6 owners as frozen and adds 14 provisional Tasks owners;
+the exact current counts and checks are recorded in the
+[MCP API inventory](api/mcp/README.md). This is not a release claim. The
+historical 1,676/0/0/4 result over 462 main and 194 test sources
 remains the rate-limit identity/trusted-proxy checkpoint. The independent-
 request direction-boundary checkpoint passed 1,678/0/0/4 over 462 main and 195
 test sources, with its focused protocol gate at 35/35. The localization-fleet
@@ -2698,8 +2773,8 @@ implementation completes the bounded
 pseudonymous-token and separately opted-in raw-ID structured-log contract;
 operator retention, custom collectors/application telemetry, broader privacy
 and redaction review, and sustained cardinality/drain evidence remain open.
-Phase 6 review and freeze are complete for all 64 owners, and the provisional
-inventory is empty.
+Phase 6 review and freeze are complete for all 64 owners, while 14 Tasks
+owners remain provisional.
 Here, the remaining fuzz work means scheduled/manual coverage-guided and
 sustained execution, not the completed registration and deterministic corpus
 replay checkpoint. No such coverage-guided nightly run has occurred, and the
@@ -2725,11 +2800,12 @@ and two abstract methods to
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html), while
 leaving the metric/snapshot/canary inventories unchanged.
 Those Vxx counts remain historical. The current MCP API inventory is 134/36/64
-Phase 4/5/6 owners (234 MCP total); the 51 reviewed non-MCP owners bring the
-current-side inventory to 285. All three phases are frozen, and
-`api/mcp/provisional.includes` is empty. The release-validation workflow and
-fail-closed evidence assembler are implemented, but no immutable candidate run
-is claimed. The last full pre-typed-state local evidence was green at core
+frozen Phase 4/5/6 owners plus 14 provisional Tasks owners (248 MCP total); the
+51 reviewed non-MCP owners bring the current-side inventory to 299. The three
+numbered phases remain frozen, while the Tasks surface is not yet frozen. The
+release-validation workflow and fail-closed evidence assembler are implemented,
+but no immutable candidate run is claimed. The last full pre-typed-state local
+evidence was green at core
 clean verify 1,671/0/0/4 over 464 main and 193 test sources, JDK 21 static-
 analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, fuzz replay 139/139, and smoke
 soak 6/6 plus verifier. After the no-alias greenfield typed-state amendment,

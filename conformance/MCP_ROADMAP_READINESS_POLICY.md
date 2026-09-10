@@ -18,8 +18,8 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 | NI-03 | ABSENT_IN_4_0_0 | `initialize`, sessions, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior | The supported transport remains request-scoped and sessionless. |
 | NI-04 | ABSENT_IN_4_0_0 | a public protocol-version enum, codec/profile SPI, arbitrary supported-versions builder, or service loader | Profile selection stays internal and bounded to the sole production revision. |
 | NI-05 | ABSENT_IN_4_0_0 | automatic Java `@Deprecated` annotations or Javadoc `@deprecated` tags derived only from MCP feature-lifecycle status | MCP feature lifecycle and Soklet Java API lifecycle remain independent axes. |
-| NI-06 | ABSENT_IN_4_0_0 | Tasks, Triggers & Events, task persistence, or a general server-event family | No general task or event lifecycle is advertised or implemented in the 4.0 profile. |
-| NI-07 | ABSENT_IN_4_0_0 | server-side extension advertisement or an arbitrary-method router | Opaque client extension settings do not create server support or arbitrary routing. |
+| NI-06 | ABSENT_IN_4_0_0 | Soklet-owned task persistence or workers, Triggers & Events, or a general server-event family | The Tasks extension delegates durable state and execution to the application; Soklet still owns no task store, worker runtime, general trigger/event lifecycle, or arbitrary server-event family. |
+| NI-07 | ABSENT_IN_4_0_0 | arbitrary server-side extension advertisement or an arbitrary-method router | Soklet advertises and routes the explicitly implemented Tasks extension only; opaque client settings do not create arbitrary server support or routing. |
 | NI-08 | ABSENT_IN_4_0_0 | dynamic/scoped tool and prompt catalogs, progressive discovery, or a generalized catalog provider SPI | Tool and prompt catalogs remain immutable and caller-neutral in 4.0. |
 | NI-09 | ABSENT_IN_4_0_0 | ETags, `If-None-Match`, `304`, uploads, range reads, or hierarchy | Resource representation and transfer evolution remains outside the 4.0 scope. |
 | NI-10 | ABSENT_IN_4_0_0 | built-in OAuth, DPoP, workload identity, delegation, or human-presence policy | Authentication and identity policy remain application-owned rather than built into core Soklet. |
@@ -60,11 +60,11 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 - Negative-inventory keys: `NI-01`, `NI-03`, `NI-04`
 - Reviewed no-mapping reason: Not applicable.
 
-### DF-04 — Tasks
+### DF-04 — Future Tasks extension evolution
 
-- Trigger: Concrete Soklet support decision with resolved execution/state/handle/auth ownership, or absorption into a candidate core profile; core absorption also triggers DF-02/R2C
-- Landing zone: 2026-era negotiated extension descriptor/renderer, or core-owned behavior only in a later absorbing profile after R2C; framework result/feature and shared lifecycle
-- Pre-release hedge: Open result discriminator, interceptor, `-32021` wire pieces, extension preservation, known capability-requirement widening points
+- Trigger: A stable Tasks extension revision adds settings, supported request types, task operations, or lifecycle semantics; core absorption also triggers DF-02/R2C
+- Landing zone: Additive extension-owned settings, operations, or result forms with explicit capability, routing, lifecycle, and manager-SPI review; core absorption only in a later profile after R2C
+- Pre-release hedge: The implemented SEP-2663 surface uses closed task-method routing, an open result discriminator, explicit capability negotiation, and an application-owned manager SPI
 - Evidence classification: `planned`
 - Test evidence: None.
 - Negative-inventory keys: `NI-06`, `NI-07`

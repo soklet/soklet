@@ -94,6 +94,25 @@ public final class McpConformanceFixtureContractTest {
 			"input-required-result-capability-check",
 			"input-required-result-ignore-extra-params",
 			"input-required-result-validate-input");
+	private static final Set<String> TASK_TOOL_NAMES = Set.of(
+			"greet",
+			"slow_compute",
+			"failing_job",
+			"protocol_error_job",
+			"confirm_delete",
+			"multi_input",
+			"test_tool_with_task");
+	private static final Set<String> TASK_SCENARIOS = Set.of(
+			"tasks-lifecycle",
+			"tasks-capability-negotiation",
+			"tasks-wire-fields",
+			"tasks-request-state-removal",
+			"tasks-mrtr-input",
+			"tasks-request-headers",
+			"tasks-dispatch-and-envelope",
+			"tasks-required-task-error",
+			"tasks-mrtr-composition",
+			"tasks-status-notifications");
 	private static final McpInvocationFeatures NO_FEATURES =
 			McpInvocationFeatures.fromFeatures(Map.of());
 
@@ -102,9 +121,44 @@ public final class McpConformanceFixtureContractTest {
 
 	public static void main(String[] arguments) throws Exception {
 		registrationsAreExactAndScenarioScoped();
+		taskRegistrationsAreCompleteAndScenarioScoped();
 		basicHandlersCompleteOnlyAfterTheirExpectedResponses();
 		frameworkStateHandlersAdvanceAndCompleteDeterministically();
 		promptHandlerUsesTheUniversalInputRequiredResultContract();
+	}
+
+	private static void taskRegistrationsAreCompleteAndScenarioScoped()
+			throws Exception {
+		for (String scenario : TASK_SCENARIOS) {
+			McpEndpoint endpoint = McpConformanceFixture
+					.endpointForScenario(scenario);
+			Set<String> taskTools = endpoint.getTools().stream()
+					.map(McpToolRegistration::getName)
+					.filter(TASK_TOOL_NAMES::contains)
+					.collect(java.util.stream.Collectors.toUnmodifiableSet());
+			assertEquals(TASK_TOOL_NAMES, taskTools,
+					"Incomplete Tasks fixture catalog for " + scenario);
+		}
+
+		McpEndpoint phase5 = McpConformanceFixture.endpointForScenario(
+				"input-required-result-basic-elicitation");
+		assertEquals(0L, phase5.getTools().stream()
+				.filter(tool -> TASK_TOOL_NAMES.contains(tool.getName())).count(),
+				"Tasks tools leaked into the reviewed non-Tasks catalog");
+
+		for (String required : List.of("failing_job", "protocol_error_job",
+				"test_tool_with_task"))
+			assertEquals("com.soklet.conformance.McpConformanceFixture$TaskOutput",
+					tool(
+					McpConformanceFixture.endpointForScenario("tasks-lifecycle"),
+					required).getOutputType().orElseThrow().getTypeName(),
+					"Task-required fixture must retain its eventual output type: "
+							+ required);
+
+		for (String dynamic : List.of("confirm_delete", "multi_input"))
+			assertComplete(tool(McpConformanceFixture.endpointForScenario(
+					"tasks-lifecycle"), dynamic).getHandler().handle(
+					context(responses(), null), toolArguments(), NO_FEATURES));
 	}
 
 	private static void registrationsAreExactAndScenarioScoped() {
