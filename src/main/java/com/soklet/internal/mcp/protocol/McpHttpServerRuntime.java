@@ -18,6 +18,8 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Event;
 import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Registration;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskSnapshot;
 import com.soklet.Cors;
 import com.soklet.CorsPreflight;
 import com.soklet.CorsPreflightResponse;
@@ -31,6 +33,7 @@ import com.soklet.McpRequestStateMode;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpTaskStatus;
 import com.soklet.Request;
 import com.soklet.StatusCode;
 import com.soklet.StreamTerminationReason;
@@ -64,6 +67,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -263,6 +267,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final int SOKLET_RATE_LIMITED = -31999;
 	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	private static final int MAXIMUM_TASK_SUBSCRIPTION_IDS = 256;
+	private static final int MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY = 4;
+	private static final int MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY =
+			128;
 	@NonNull
 	static final Set<@NonNull Integer> PRODUCED_PROTOCOL_ERROR_CODES = Set.of(
 			McpJsonRpcError.PARSE_ERROR,
@@ -823,17 +831,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private List<@NonNull SubscriptionSourceGroup> subscriptionSourceGroups() {
-		Map<Object, MutableSubscriptionSourceGroup> groupsByIdentity =
+		IdentityHashMap<Object, Map<McpSubscriptionEventSource.SourceType,
+				MutableSubscriptionSourceGroup>> groupsByIdentity =
 				new IdentityHashMap<>();
 		List<MutableSubscriptionSourceGroup> groupsInEndpointOrder =
 				new ArrayList<>();
 		for (EndpointRuntime endpointRuntime : this.endpointsByPath.values()) {
-			endpointRuntime.binding().subscriptionEventSource().ifPresent(source -> {
+			for (McpSubscriptionEventSource source
+					: endpointRuntime.binding().subscriptionEventSources()) {
+				Map<McpSubscriptionEventSource.SourceType,
+						MutableSubscriptionSourceGroup> groupsByType =
+						groupsByIdentity.computeIfAbsent(source.identity(),
+								ignored -> new EnumMap<>(
+										McpSubscriptionEventSource.SourceType.class));
 				MutableSubscriptionSourceGroup group =
-						groupsByIdentity.get(source.identity());
+						groupsByType.get(source.sourceType());
 				if (group == null) {
 					group = new MutableSubscriptionSourceGroup(source);
-					groupsByIdentity.put(source.identity(), group);
+					groupsByType.put(source.sourceType(), group);
 					groupsInEndpointOrder.add(group);
 				}
 				group.endpointPaths().add(endpointRuntime.path());
@@ -841,7 +856,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					group.endpointSources().add(new EndpointSubscriptionSource(
 							endpointRuntime.path(),
 							source.endpointSubscriber().orElseThrow()));
-			});
+			}
 		}
 		List<SubscriptionSourceGroup> groups = new ArrayList<>(
 				groupsInEndpointOrder.size());
@@ -878,7 +893,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							responses.resourceTemplatesList());
 				}
 				if (endpoint.subscriptionConfig().isPresent()
-						&& endpointRuntime.binding().subscriptionEventSource().isPresent())
+						&& !endpointRuntime.binding().subscriptionEventSources().isEmpty())
 					preflightFrameworkOwnedResponse(endpointRuntime.path(),
 							profile.revision(), "subscriptions/listen terminal",
 							subscriptionTerminalResponse(profile,
@@ -3204,8 +3219,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	@NonNull
-	private ThreadPoolExecutor newRequestProcessor() {
+	private LifecycleRequestProcessor newRequestProcessor() {
 		int concurrency = transportConfiguration.requestProcessorConcurrency();
+		boolean taskNotifications = this.subscriptionSourceGroups.stream()
+				.anyMatch(group -> group.source().sourceType()
+						== McpSubscriptionEventSource.SourceType.TASK);
+		if (taskNotifications && concurrency < 2)
+			throw new IllegalStateException(
+					"MCP task notifications require request-processor concurrency of at least two.");
+		int taskProjectionConcurrency = concurrency == 1 ? 1
+				: Math.min(MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY,
+						concurrency - 1);
+		int taskProjectionQueueCapacity = Math.min(
+				MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY,
+				transportConfiguration.requestProcessorQueueCapacity());
 		ThreadFactory threadFactory = runnable -> {
 			Thread thread = new Thread(runnable, "soklet-mcp-request-"
 					+ processorThreadSequence.incrementAndGet());
@@ -3219,7 +3246,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(
 						transportConfiguration.requestProcessorQueueCapacity()),
-				threadFactory,
+				threadFactory, taskProjectionConcurrency,
+				taskProjectionQueueCapacity,
 				new ThreadPoolExecutor.AbortPolicy());
 	}
 
@@ -3229,16 +3257,43 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final AtomicReference<@Nullable Runnable> afterTermination;
 		@NonNull
 		private final AtomicBoolean terminationObserved;
+		@NonNull
+		private final TaskNotificationProjectionScheduler
+				taskNotificationProjectionScheduler;
 
 		private LifecycleRequestProcessor(int corePoolSize, int maximumPoolSize,
 				long keepAliveTime, @NonNull TimeUnit unit,
 				@NonNull ArrayBlockingQueue<@NonNull Runnable> workQueue,
 				@NonNull ThreadFactory threadFactory,
+				int taskProjectionConcurrency,
+				int taskProjectionQueueCapacity,
 				@NonNull RejectedExecutionHandler handler) {
 			super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue,
 					threadFactory, handler);
 			this.afterTermination = new AtomicReference<>();
 			this.terminationObserved = new AtomicBoolean();
+			this.taskNotificationProjectionScheduler =
+					new TaskNotificationProjectionScheduler(this,
+							taskProjectionConcurrency,
+							taskProjectionQueueCapacity);
+		}
+
+		private void executeTaskNotificationProjection(
+				@NonNull TaskNotificationProjectionJob job) {
+			this.taskNotificationProjectionScheduler.execute(requireNonNull(job));
+		}
+
+		@Override
+		public void shutdown() {
+			this.taskNotificationProjectionScheduler.shutdown();
+			super.shutdown();
+		}
+
+		@Override
+		@NonNull
+		public List<@NonNull Runnable> shutdownNow() {
+			this.taskNotificationProjectionScheduler.shutdown();
+			return super.shutdownNow();
 		}
 
 		private void afterTermination(@NonNull Runnable action) {
@@ -3261,6 +3316,145 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Runnable action = this.afterTermination.get();
 			if (action != null && this.terminationObserved.compareAndSet(false, true))
 				action.run();
+		}
+	}
+
+	/**
+	 * Bounded fair scheduler that prevents task-event fan-out from filling the
+	 * protocol request queue. Each worker performs one projection and returns to
+	 * the tail of that queue before it may perform another.
+	 */
+	@ThreadSafe
+	private static final class TaskNotificationProjectionScheduler {
+		@NonNull
+		private final Executor executor;
+		private final int maximumWorkers;
+		@NonNull
+		private final ArrayBlockingQueue<@NonNull TaskNotificationProjectionJob>
+				jobs;
+		@NonNull
+		private final Object lock;
+		private int workersScheduled;
+		private boolean shutdown;
+
+		private TaskNotificationProjectionScheduler(@NonNull Executor executor,
+				int maximumWorkers, int queueCapacity) {
+			this.executor = requireNonNull(executor);
+			if (maximumWorkers < 1)
+				throw new IllegalArgumentException(
+						"Task-notification projection concurrency must be positive.");
+			if (queueCapacity < 1)
+				throw new IllegalArgumentException(
+						"Task-notification projection queue capacity must be positive.");
+			this.maximumWorkers = maximumWorkers;
+			this.jobs = new ArrayBlockingQueue<>(queueCapacity);
+			this.lock = new Object();
+		}
+
+		private void execute(@NonNull TaskNotificationProjectionJob job) {
+			TaskNotificationProjectionJob requiredJob = requireNonNull(job);
+			boolean scheduleWorker = false;
+			boolean reject = false;
+			synchronized (this.lock) {
+				if (this.shutdown || !this.jobs.offer(requiredJob))
+					reject = true;
+				else if (this.workersScheduled < this.maximumWorkers) {
+					this.workersScheduled++;
+					scheduleWorker = true;
+				}
+			}
+			if (reject)
+				requiredJob.reject();
+			else if (scheduleWorker)
+				submitWorker();
+		}
+
+		private void submitWorker() {
+			try {
+				this.executor.execute(this::runOne);
+			} catch (RuntimeException | Error failure) {
+				List<TaskNotificationProjectionJob> rejected = List.of();
+				synchronized (this.lock) {
+					this.workersScheduled--;
+					if (this.workersScheduled == 0)
+						rejected = drainJobsWhileLocked();
+				}
+				reject(rejected);
+				if (!(failure instanceof RejectedExecutionException))
+					throw failure;
+			}
+		}
+
+		private void runOne() {
+			TaskNotificationProjectionJob job;
+			synchronized (this.lock) {
+				job = this.shutdown ? null : this.jobs.poll();
+				if (job == null)
+					this.workersScheduled--;
+			}
+			if (job == null)
+				return;
+
+			try {
+				job.run();
+			} finally {
+				boolean scheduleWorker;
+				synchronized (this.lock) {
+					scheduleWorker = !this.shutdown && !this.jobs.isEmpty();
+					if (!scheduleWorker)
+						this.workersScheduled--;
+				}
+				if (scheduleWorker)
+					submitWorker();
+			}
+		}
+
+		private void shutdown() {
+			List<TaskNotificationProjectionJob> rejected;
+			synchronized (this.lock) {
+				if (this.shutdown)
+					return;
+				this.shutdown = true;
+				rejected = drainJobsWhileLocked();
+			}
+			reject(rejected);
+		}
+
+		@NonNull
+		private List<@NonNull TaskNotificationProjectionJob>
+		drainJobsWhileLocked() {
+			if (!Thread.holdsLock(this.lock))
+				throw new IllegalStateException(
+						"The task-notification scheduler lock is required.");
+			List<TaskNotificationProjectionJob> drained = new ArrayList<>();
+			this.jobs.drainTo(drained);
+			return drained;
+		}
+
+		private void reject(
+				@NonNull List<@NonNull TaskNotificationProjectionJob> rejected) {
+			for (TaskNotificationProjectionJob job : requireNonNull(rejected))
+				try {
+					job.reject();
+				} catch (Throwable ignored) {
+					// One rejected stream cannot strand scheduler cleanup for peers.
+				}
+		}
+	}
+
+	private record TaskNotificationProjectionJob(@NonNull Runnable task,
+			@NonNull Runnable rejection) {
+		private TaskNotificationProjectionJob {
+			requireNonNull(task);
+			requireNonNull(rejection);
+		}
+
+		private void run() {
+			this.task.run();
+		}
+
+		private void reject() {
+			this.rejection.run();
 		}
 	}
 
@@ -3755,7 +3949,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		for (RequestControl subscription : subscriptions) {
 			try {
-				subscription.offerSubscriptionEvent(event);
+				if (event instanceof McpSubscriptionEventSource.Event.TaskChanged task)
+					subscription.scheduleTaskSubscriptionEvent(task);
+				else
+					subscription.offerSubscriptionEvent(event);
 			} catch (Throwable ignored) {
 				// One subscriber can never alter publisher or peer delivery.
 			}
@@ -4059,7 +4256,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		} else if (subscriptionListenRequest) {
 			if (endpoint.subscriptionConfig().isEmpty()
-					|| endpointBinding.subscriptionEventSource().isEmpty())
+					|| endpointBinding.subscriptionEventSources().isEmpty())
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 			try {
 				acceptedSubscriptionFilter = Optional.of(
@@ -4072,6 +4269,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			} catch (IllegalArgumentException exception) {
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 			}
+			if (acceptedSubscriptionFilter.orElseThrow().taskIdsRequested()
+					&& !mappedRequest.params().metadata().clientCapabilities()
+							.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
+				return missingTasksCapability(protocolProfile, mappedRequest.id(),
+						corsHeaders);
 		} else if (taskRequest) {
 			Optional<McpApplicationRequestHandler> taskHandler =
 					applicationRouter.resolve(mappedRequest.method());
@@ -4432,22 +4634,58 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		if (subscriptionListenRequest) {
-			SubscriptionOpenResult openResult = requestControl.openSubscription(
+			SubscriptionCapReservation cap = requestControl.reserveSubscriptionCap(
 					endpointRuntime.path(), endpoint,
 					effectiveIdentity.authorizationPartition(), mappedRequest.id(),
-					acceptedSubscriptionFilter.orElseThrow(), corsHeaders,
-					endpointPolicy, protocolProfile);
-			if (openResult == SubscriptionOpenResult.CAPACITY_REJECTED)
+					acceptedSubscriptionFilter.orElseThrow(), protocolProfile);
+			if (cap.result() == SubscriptionOpenResult.CAPACITY_REJECTED)
 				return observedSubscriptionCapacityRejected(requestControl,
 						mappedRequest.id(), corsHeaders);
-			if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED
-					|| openResult
-						== SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED)
-				return observedPolicyHookInternalError(requestControl,
-						mappedRequest.id(), corsHeaders, null);
-			if (openResult == SubscriptionOpenResult.SERVER_STOPPING)
+			if (cap.result() == SubscriptionOpenResult.SERVER_STOPPING) {
 				requestControl.cancel(StreamTerminationReason.SERVER_STOPPING, null);
-			return null;
+				return null;
+			}
+			if (cap.result() != SubscriptionOpenResult.OPENED)
+				return null;
+
+			SubscriptionRegistration capRegistration = requireNonNull(
+					cap.registration());
+			try {
+				try {
+					acceptedSubscriptionFilter = Optional.of(
+							authorizeTaskSubscriptions(endpointBinding,
+									requestControl,
+									acceptedSubscriptionFilter.orElseThrow()));
+				} catch (Throwable throwable) {
+					return observedPolicyHookInternalError(requestControl,
+							mappedRequest.id(), corsHeaders, throwable);
+				}
+				if (!requestControl.protocolProcessingAllowed())
+					return null;
+				SubscriptionRegistration updatedRegistration = requestControl
+						.updateSubscriptionCapFilter(
+								capRegistration,
+								acceptedSubscriptionFilter.orElseThrow());
+				if (updatedRegistration == null)
+					return null;
+				capRegistration = updatedRegistration;
+				SubscriptionOpenResult openResult = requestControl.openSubscription(
+						endpointRuntime.path(), endpoint,
+						effectiveIdentity.authorizationPartition(), mappedRequest.id(),
+						acceptedSubscriptionFilter.orElseThrow(), corsHeaders,
+						endpointPolicy, protocolProfile, capRegistration);
+				if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED
+						|| openResult
+							== SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED)
+					return observedPolicyHookInternalError(requestControl,
+							mappedRequest.id(), corsHeaders, null);
+				if (openResult == SubscriptionOpenResult.SERVER_STOPPING)
+					requestControl.cancel(StreamTerminationReason.SERVER_STOPPING,
+							null);
+				return null;
+			} finally {
+				requestControl.releaseSubscriptionCapReservation(capRegistration);
+			}
 		}
 
 		if (discoveryRequest) {
@@ -4576,6 +4814,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			requestedResources.addAll(distinctResources.values());
 		}
+		boolean taskIdsRequested = fields.containsKey("taskIds");
+		List<String> requestedTaskIds = new ArrayList<>();
+		if (taskIdsRequested) {
+			McpJsonValue taskIdsValue = fields.get("taskIds");
+			if (!(taskIdsValue instanceof McpJsonArray taskIds))
+				throw new IllegalArgumentException(
+						"Task subscription IDs must be an array.");
+			Set<String> distinctTaskIds = new LinkedHashSet<>();
+			for (McpJsonValue value : taskIds.values()) {
+				if (!(value instanceof McpJsonString string)
+						|| !validTaskId(string.value()))
+					throw new IllegalArgumentException(
+							"Task subscription IDs must be valid task-ID strings.");
+				distinctTaskIds.add(string.value());
+				if (distinctTaskIds.size() > MAXIMUM_TASK_SUBSCRIPTION_IDS)
+					throw new IllegalArgumentException(
+							"Too many task subscription IDs were requested.");
+			}
+			requestedTaskIds.addAll(distinctTaskIds);
+		}
 
 		Set<McpResourceNotificationType> supported =
 				requireNonNull(configuration).notificationTypes();
@@ -4600,7 +4858,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				&& supported.contains(McpResourceNotificationType.RESOURCE_UPDATED);
 		return new AcceptedSubscriptionFilter(acceptToolsListChanged,
 				acceptPromptsListChanged, acceptResourcesListChanged,
-				acceptResourceSubscriptions, requestedResources);
+				acceptResourceSubscriptions, requestedResources,
+				taskIdsRequested, requestedTaskIds, Set.of(),
+				request.params().metadata().clientCapabilities());
 	}
 
 	private boolean optionalSubscriptionBoolean(
@@ -4613,6 +4873,51 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			throw new IllegalArgumentException(
 					"Subscription filter booleans must be boolean values.");
 		return booleanValue == McpJsonBoolean.TRUE;
+	}
+
+	@NonNull
+	private AcceptedSubscriptionFilter authorizeTaskSubscriptions(
+			@NonNull McpHttpEndpointBinding endpointBinding,
+			@NonNull RequestControl requestControl,
+			@NonNull AcceptedSubscriptionFilter filter) throws Exception {
+		requireNonNull(endpointBinding);
+		requireNonNull(requestControl);
+		AcceptedSubscriptionFilter requiredFilter = requireNonNull(filter);
+		if (!requiredFilter.taskIdsRequested()
+				|| !endpointBinding.endpoint().subscriptionConfig().orElseThrow()
+						.taskNotifications())
+			return requiredFilter.withAcceptedTaskIds(List.of());
+
+		TaskManagerAdapter taskManagerAdapter = endpointBinding.taskManagerAdapter()
+				.orElseThrow(() -> new IllegalStateException(
+						"MCP task notifications require a task manager."));
+		McpRequestContext requestContext = requestControl.publicRequestContext()
+				.orElseThrow(() -> new IllegalStateException(
+						"MCP task notification authorization requires an admitted request context."));
+		List<String> acceptedTaskIds = new ArrayList<>();
+		for (String taskId : requiredFilter.requestedTaskIds()) {
+			if (!requestControl.protocolProcessingAllowed())
+				return requiredFilter.withAcceptedTaskIds(List.of());
+			Optional<TaskSnapshot> taskSnapshot = requireNonNull(
+					taskManagerAdapter.findTask(requestContext, taskId),
+					"The MCP task manager adapter returned null.");
+			if (taskSnapshot.isEmpty())
+				continue;
+			TaskSnapshot snapshot = taskSnapshot.orElseThrow();
+			if (!taskId.equals(snapshot.task().getTaskId()))
+				throw new IllegalStateException(
+						"The MCP task manager returned a mismatched task ID.");
+			try {
+				McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
+						requiredFilter.clientCapabilities());
+			} catch (McpProtocolJsonRpcException exception) {
+				// Do not subscribe a client to a snapshot it cannot consume. Polling
+				// remains the explicit, authoritative capability-error path.
+				continue;
+			}
+			acceptedTaskIds.add(taskId);
+		}
+		return requiredFilter.withAcceptedTaskIds(acceptedTaskIds);
 	}
 
 	private McpJsonRpcMessage.@NonNull Notification subscriptionAcknowledgement(
@@ -4631,6 +4936,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					.map(resource -> (McpJsonValue) new McpJsonString(resource.wireUri()))
 					.toList();
 			accepted.put("resourceSubscriptions", new McpJsonArray(resourceUris));
+		}
+		if (!filter.acceptedTaskIds().isEmpty()) {
+			List<McpJsonValue> taskIds = filter.acceptedTaskIds().stream()
+					.map(taskId -> (McpJsonValue) new McpJsonString(taskId))
+					.toList();
+			accepted.put("taskIds", new McpJsonArray(taskIds));
 		}
 		Map<String, McpJsonValue> params = new LinkedHashMap<>();
 		params.put("_meta", subscriptionMetadata(subscriptionId));
@@ -4677,6 +4988,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpJsonRpcMessage.Notification canonicalNotification =
 				new McpJsonRpcMessage.Notification(method,
 				Optional.of(new McpJsonObject(params)), McpJsonObject.empty());
+		return requireNonNull(protocolProfile.renderFrameworkNotification(
+				McpProfileFrameworkNotificationKind.SUBSCRIPTION_EVENT,
+				canonicalNotification));
+	}
+
+	private McpJsonRpcMessage.@NonNull Notification taskNotification(
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpJsonRpcId subscriptionId,
+			@NonNull TaskSnapshot taskSnapshot) {
+		McpJsonObject params = McpServerRuntimeBridge.taskNotificationParams(
+				requireNonNull(taskSnapshot), subscriptionMetadata(subscriptionId));
+		McpJsonRpcMessage.Notification canonicalNotification =
+				new McpJsonRpcMessage.Notification("notifications/tasks",
+						Optional.of(params), McpJsonObject.empty());
 		return requireNonNull(protocolProfile.renderFrameworkNotification(
 				McpProfileFrameworkNotificationKind.SUBSCRIPTION_EVENT,
 				canonicalNotification));
@@ -4754,6 +5079,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return !taskId.isBlank()
 				&& taskId.indexOf('\r') < 0
 				&& taskId.indexOf('\n') < 0;
+	}
+
+	private static boolean terminalTaskStatus(@NonNull McpTaskStatus taskStatus) {
+		return switch (requireNonNull(taskStatus)) {
+			case COMPLETED, FAILED, CANCELED -> true;
+			case WORKING, INPUT_REQUIRED -> false;
+		};
 	}
 
 	@NonNull
@@ -6752,7 +7084,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final MicrohttpRequest request;
 		private long deadlineNanos;
 		@NonNull
-		private final ThreadPoolExecutor processor;
+		private final LifecycleRequestProcessor processor;
 		@NonNull
 		private final McpApplicationExecution application;
 		private final @Nullable Request publicRequest;
@@ -6773,6 +7105,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable StreamTerminationReason cancellationReason;
 		private @Nullable Throwable cancellationCause;
 		private @Nullable McpRuntimeRequestObservation requestObservation;
+		private @Nullable SubscriptionRegistration subscriptionCapReservation;
 		private @Nullable SubscriptionRegistration subscriptionRegistration;
 		private @Nullable StreamTerminationReason plannedSubscriptionCloseReason;
 		private @Nullable SubscriptionStreamFailure pendingSubscriptionStreamFailure;
@@ -6785,6 +7118,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean requestObservationDelivered;
 		@NonNull
 		private List<@NonNull Header> deadlineResponseHeaders;
+		@NonNull
+		private final Map<@NonNull String, @NonNull TaskNotificationProjectionState>
+				taskNotificationProjectionStates;
 		private long nextKeepAliveNanos;
 		private long streamOpenedAtNanos;
 		private long subscriptionOpenedAtNanos;
@@ -6816,7 +7152,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull Consumer<@NonNull MicrohttpResponse> responseCallback) {
 			this.request = requireNonNull(request);
 			this.deadlineNanos = deadlineNanos;
-			this.processor = requireNonNull(processor);
+			if (!(requireNonNull(processor)
+					instanceof LifecycleRequestProcessor lifecycleProcessor))
+				throw new IllegalArgumentException(
+						"MCP request controls require a lifecycle request processor.");
+			this.processor = lifecycleProcessor;
 			this.application = requireNonNull(application);
 			this.publicRequest = publicRequest;
 			this.simulation = simulation;
@@ -6829,6 +7169,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.responseCallback = requireNonNull(responseCallback);
 			this.publicRequestContext = Optional.empty();
 			this.deadlineResponseHeaders = decorateResponseHeaders(List.of());
+			this.taskNotificationProjectionStates = new LinkedHashMap<>();
 			this.lifecycleWorkOwners = lifecycleAdmission == null ? 0 : 1;
 		}
 
@@ -6967,9 +7308,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull AcceptedSubscriptionFilter filter,
 				@NonNull List<@NonNull Header> additionalHeaders,
 				@NonNull McpHttpEndpointPolicy endpointPolicy,
-				@NonNull McpProtocolProfile protocolProfile) {
+				@NonNull McpProtocolProfile protocolProfile,
+				@NonNull SubscriptionRegistration capReservation) {
 			requireNonNull(additionalHeaders);
 			requireNonNull(protocolProfile);
+			requireNonNull(capReservation);
 			// The terminal carries the request ID both as its JSON-RPC ID and as
 			// subscription metadata. Pre-render that actual request-specific shape so
 			// an acknowledgment can never commit a stream whose terminal cannot fit.
@@ -6980,29 +7323,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			} catch (RuntimeException exception) {
 				return SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED;
 			}
-			// Two-phase when a localizer is configured: reserve only the cap,
-			// release every lock, retain the original request deadline, create
-			// the context and pre-render the localized terminal metadata, and
-			// only then materialize and commit the stream. The rendered stream
+			// The subscription cap was reserved before any external task lookup.
+			// Continue the two-phase open without a framework lock held: retain the
+			// original request deadline, pre-render localized terminal metadata,
+			// and only then materialize and commit the stream. The rendered stream
 			// deadline extension therefore follows successful pre-render.
 			boolean localizeTerminal = endpointPolicy.catalogLocalizer().isPresent()
 					&& publicRequestContext().isPresent();
-			SubscriptionRegistration capReservation = null;
 			Object localizationInvalidationToken = null;
 			Optional<String> contentLanguage = Optional.empty();
 			boolean terminalPreflightComplete = false;
 
 			if (localizeTerminal) {
-				SubscriptionCapReservation cap = reserveSubscriptionCap(
-						endpointPath, endpoint, authorizationPartition,
-						subscriptionId, filter, protocolProfile);
-
-				if (cap.result() != SubscriptionOpenResult.OPENED)
-					return cap.result();
-
-				capReservation = requireNonNull(cap.registration());
-				localizationInvalidationToken = requireNonNull(
-						cap.localizationInvalidationToken());
+				localizationInvalidationToken = localizationInvalidationToken(
+						endpointPath);
 				McpRuntimeCatalogLocalizer.Outcome outcome;
 
 				try {
@@ -7014,9 +7348,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 				if (outcome == null || outcome.disposition()
 						== McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST) {
-					// This method still solely owns the unmaterialized cap, so
-					// the rollback happens exactly once.
-					removeSubscription(this, capReservation);
 					return SubscriptionOpenResult.LOCALIZATION_FAILED;
 				}
 				contentLanguage = outcome.contentLanguage();
@@ -7036,8 +7367,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				try {
 					envelopeCodec.encode(preRenderedTerminal);
 				} catch (RuntimeException exception) {
-					if (capReservation != null)
-						removeSubscription(this, capReservation);
 					return SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED;
 				}
 			}
@@ -7092,9 +7421,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		/**
 		 * Reserves only the per-authorization-partition and server subscription
-		 * capacity, so
-		 * localized terminal pre-render can run between cap reservation and
-		 * stream materialization without any framework lock held.
+		 * capacity before external task authorization and localized terminal
+		 * pre-render. Neither operation runs with a framework lock held.
 		 */
 		@NonNull
 		private SubscriptionCapReservation reserveSubscriptionCap(
@@ -7105,25 +7433,65 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull AcceptedSubscriptionFilter filter,
 				@NonNull McpProtocolProfile protocolProfile) {
 			synchronized (lock) {
-				if (canceled || terminal || applicationOwned || subscriptionOwned)
+				if (canceled || terminal || applicationOwned || subscriptionOwned
+						|| subscriptionCapReservation != null)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.TERMINATED, null, null);
+							SubscriptionOpenResult.TERMINATED, null);
 				SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
 						this, endpointPath, endpoint, authorizationPartition,
 						subscriptionId, filter, protocolProfile);
 				if (registrationAttempt.result()
 						== SubscriptionRegistrationResult.NOT_ACCEPTING)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.SERVER_STOPPING, null, null);
+							SubscriptionOpenResult.SERVER_STOPPING, null);
 				if (registrationAttempt.result()
 						== SubscriptionRegistrationResult.CAPACITY_REJECTED)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.CAPACITY_REJECTED, null, null);
+							SubscriptionOpenResult.CAPACITY_REJECTED, null);
+				SubscriptionRegistration registration = requireNonNull(
+						registrationAttempt.registration());
+				subscriptionCapReservation = registration;
 				return new SubscriptionCapReservation(
-						SubscriptionOpenResult.OPENED,
-						requireNonNull(registrationAttempt.registration()),
-						localizationInvalidationToken(endpointPath));
+						SubscriptionOpenResult.OPENED, registration);
 			}
+		}
+
+		@SuppressWarnings("ReferenceEquality")
+		private @Nullable SubscriptionRegistration updateSubscriptionCapFilter(
+				@NonNull SubscriptionRegistration expectedRegistration,
+				@NonNull AcceptedSubscriptionFilter filter) {
+			requireNonNull(expectedRegistration);
+			requireNonNull(filter);
+			synchronized (lock) {
+				if (canceled || terminal || subscriptionCapReservation
+						!= expectedRegistration)
+					return null;
+				SubscriptionRegistration updatedRegistration =
+						new SubscriptionRegistration(
+								expectedRegistration.endpointPath(),
+								expectedRegistration.endpoint(),
+								expectedRegistration.authorizationPartition(),
+								expectedRegistration.subscriptionId(), filter,
+								expectedRegistration.protocolProfile(),
+								expectedRegistration.openedAtNanos());
+				subscriptionCapReservation = updatedRegistration;
+				return updatedRegistration;
+			}
+		}
+
+		@SuppressWarnings("ReferenceEquality")
+		private void releaseSubscriptionCapReservation(
+				@NonNull SubscriptionRegistration expectedRegistration) {
+			SubscriptionRegistration registration = null;
+			synchronized (lock) {
+				if (subscriptionCapReservation == requireNonNull(
+						expectedRegistration)) {
+					registration = subscriptionCapReservation;
+					subscriptionCapReservation = null;
+				}
+			}
+			if (registration != null)
+				removeSubscription(this, registration);
 		}
 
 		@NonNull
@@ -7135,43 +7503,34 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpJsonRpcId subscriptionId,
 				@NonNull AcceptedSubscriptionFilter filter,
 				@NonNull McpProtocolProfile protocolProfile,
-				@Nullable SubscriptionRegistration preReservedRegistration) {
+				@NonNull SubscriptionRegistration preReservedRegistration) {
+			requireNonNull(preReservedRegistration);
 			SubscriptionRegistration registration;
 			synchronized (lock) {
-				if (canceled || terminal || applicationOwned || subscriptionOwned) {
-					if (preReservedRegistration != null)
-						removeSubscription(this, preReservedRegistration);
-
+				if (canceled || terminal || applicationOwned || subscriptionOwned)
 					return new SubscriptionOpenReservation(
 							SubscriptionOpenResult.TERMINATED,
 							null, null, null);
-				}
-				if (preReservedRegistration != null) {
-					registration = preReservedRegistration;
-					if (registration.protocolProfile() != protocolProfile)
-						throw new IllegalStateException(
-								"An MCP subscription reservation cannot change protocol profiles.");
-				} else {
-					SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
-							this, endpointPath, endpoint, authorizationPartition,
-							subscriptionId, filter, protocolProfile);
-					if (registrationAttempt.result()
-							== SubscriptionRegistrationResult.NOT_ACCEPTING)
-						return new SubscriptionOpenReservation(
-								SubscriptionOpenResult.SERVER_STOPPING,
-								null, null, null);
-					if (registrationAttempt.result()
-							== SubscriptionRegistrationResult.CAPACITY_REJECTED)
-						return new SubscriptionOpenReservation(
-								SubscriptionOpenResult.CAPACITY_REJECTED,
-								null, null, null);
-					registration = requireNonNull(registrationAttempt.registration());
-				}
+				if (subscriptionCapReservation != preReservedRegistration)
+					return new SubscriptionOpenReservation(
+							SubscriptionOpenResult.TERMINATED,
+							null, null, null);
+				registration = preReservedRegistration;
+				if (!registration.endpointPath().equals(endpointPath)
+						|| registration.endpoint() != endpoint
+						|| !registration.authorizationPartition().equals(
+								authorizationPartition)
+						|| !registration.subscriptionId().equals(subscriptionId)
+						|| !registration.filter().equals(filter)
+						|| registration.protocolProfile() != protocolProfile)
+					throw new IllegalStateException(
+							"An MCP subscription reservation cannot change before activation.");
 				// This is the last shutdown-admission check before materialization.
 				// The request-control lock remains held while stream state is installed,
 				// so a shutdown that races after this point snapshots the still-pending
 				// control and cannot complete it before that state is coherent.
 				if (!subscriptionMayCommit(this)) {
+					subscriptionCapReservation = null;
 					removeSubscription(this, registration);
 					return new SubscriptionOpenReservation(
 							SubscriptionOpenResult.SERVER_STOPPING,
@@ -7187,6 +7546,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						throw new IllegalStateException(
 								"A new MCP subscription stream could not accept its acknowledgment.");
 					responseStream = stream;
+					subscriptionCapReservation = null;
 					subscriptionRegistration = registration;
 					subscriptionOwned = true;
 					long nowNanos = applicationClock.nanoTime();
@@ -7199,10 +7559,196 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							SubscriptionOpenResult.OPENED, stream,
 							takeResponseCallback(), registration);
 				} catch (RuntimeException | Error failure) {
+					subscriptionCapReservation = null;
 					removeSubscription(this, registration);
 					throw failure;
 				}
 			}
+		}
+
+		private void scheduleTaskSubscriptionEvent(
+				McpSubscriptionEventSource.Event.@NonNull TaskChanged event) {
+			String taskId = requireNonNull(event).taskId();
+			TaskNotificationProjectionState state;
+			boolean submit = false;
+			synchronized (lock) {
+				if (!subscriptionOwned || canceled || terminal
+						|| streamAbortOwned || streamTerminalResponseOwned
+						|| subscriptionRegistration == null
+						|| responseStream == null
+						|| !subscriptionRegistration.filter().containsTask(taskId))
+					return;
+				state = taskNotificationProjectionStates.computeIfAbsent(taskId,
+						ignored -> new TaskNotificationProjectionState());
+				state.requestedGeneration++;
+				if (!state.scheduled) {
+					state.scheduled = true;
+					submit = true;
+				}
+			}
+			if (submit)
+				submitTaskNotificationProjection(taskId, state);
+		}
+
+		private void submitTaskNotificationProjection(@NonNull String taskId,
+				@NonNull TaskNotificationProjectionState state) {
+			processor.executeTaskNotificationProjection(
+					new TaskNotificationProjectionJob(
+							() -> projectTaskNotification(taskId, state),
+							() -> failTaskNotificationProjection(state,
+									StreamTerminationReason.BACKPRESSURE, null)));
+		}
+
+		private void projectTaskNotification(@NonNull String taskId,
+				@NonNull TaskNotificationProjectionState state) {
+			long projectionGeneration;
+			SubscriptionRegistration registration;
+			McpRequestSseStream stream;
+			McpRequestContext requestContext;
+			TaskManagerAdapter taskManagerAdapter;
+			synchronized (lock) {
+				if (!taskNotificationProjectionActiveWhileLocked(taskId, state)) {
+					state.scheduled = false;
+					return;
+				}
+				projectionGeneration = state.requestedGeneration;
+				registration = requireNonNull(subscriptionRegistration);
+				stream = requireNonNull(responseStream);
+				requestContext = publicRequestContext.orElse(null);
+			}
+			if (requestContext == null) {
+				failTaskNotificationProjection(state,
+						StreamTerminationReason.INTERNAL_ERROR, null);
+				return;
+			}
+			EndpointRuntime endpointRuntime = endpointsByPath.get(
+					registration.endpointPath());
+			if (endpointRuntime == null
+					|| endpointRuntime.binding().taskManagerAdapter().isEmpty()) {
+				failTaskNotificationProjection(state,
+						StreamTerminationReason.INTERNAL_ERROR, null);
+				return;
+			}
+			taskManagerAdapter = endpointRuntime.binding().taskManagerAdapter()
+					.orElseThrow();
+
+			try {
+				Optional<TaskSnapshot> taskSnapshot = requireNonNull(
+						taskManagerAdapter.findTask(requestContext, taskId),
+						"The MCP task manager adapter returned null.");
+				if (taskSnapshot.isPresent()) {
+					TaskSnapshot snapshot = taskSnapshot.orElseThrow();
+					if (!taskId.equals(snapshot.task().getTaskId()))
+						throw new IllegalStateException(
+								"The MCP task manager returned a mismatched task ID.");
+					try {
+						McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
+								registration.filter().clientCapabilities());
+					} catch (McpProtocolJsonRpcException exception) {
+						finishTaskNotificationProjection(taskId, state,
+								projectionGeneration);
+						return;
+					}
+					boolean deliver;
+					synchronized (lock) {
+						deliver = taskNotificationProjectionActiveWhileLocked(
+								taskId, state)
+								&& state.requestedGeneration == projectionGeneration
+								&& shouldDeliverTaskSnapshot(state, snapshot);
+					}
+					if (deliver) {
+						McpOutboundChannel.OfferResult result;
+						try {
+							McpJsonRpcMessage.Notification notification = taskNotification(
+									registration.protocolProfile(),
+									registration.subscriptionId(), snapshot);
+							result = stream.offerMessage(notification);
+						} catch (IllegalArgumentException exception) {
+							failTaskNotificationProjection(state,
+									StreamTerminationReason.BACKPRESSURE, exception);
+							return;
+						}
+						if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
+							synchronized (lock) {
+								if (taskNotificationProjectionActiveWhileLocked(
+										taskId, state))
+									state.lastDeliveredSnapshot = snapshot;
+							}
+						} else if (result == McpOutboundChannel.OfferResult.FULL
+								|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
+							failTaskNotificationProjection(state,
+									StreamTerminationReason.BACKPRESSURE, null);
+							return;
+						}
+					}
+				}
+				finishTaskNotificationProjection(taskId, state,
+						projectionGeneration);
+			} catch (Throwable throwable) {
+				failTaskNotificationProjection(state,
+						StreamTerminationReason.INTERNAL_ERROR, throwable);
+			}
+		}
+
+		private boolean taskNotificationProjectionActiveWhileLocked(
+				@NonNull String taskId,
+				@NonNull TaskNotificationProjectionState state) {
+			if (!Thread.holdsLock(lock))
+				throw new IllegalStateException(
+						"The request-control lock is required for task notification state.");
+			return subscriptionOwned && !canceled && !terminal
+					&& !streamAbortOwned && !streamTerminalResponseOwned
+					&& subscriptionRegistration != null && responseStream != null
+					&& taskNotificationProjectionStates.get(taskId) == state
+					&& subscriptionRegistration.filter().containsTask(taskId);
+		}
+
+		private boolean shouldDeliverTaskSnapshot(
+				@NonNull TaskNotificationProjectionState state,
+				@NonNull TaskSnapshot snapshot) {
+			TaskSnapshot lastSnapshot = state.lastDeliveredSnapshot;
+			if (lastSnapshot == null)
+				return true;
+			if (terminalTaskStatus(lastSnapshot.task().getTaskStatus()))
+				return false;
+			if (lastSnapshot.equals(snapshot))
+				return false;
+			if (snapshot.task().getLastUpdatedAt().isBefore(
+					lastSnapshot.task().getLastUpdatedAt()))
+				return false;
+			return true;
+		}
+
+		private void finishTaskNotificationProjection(@NonNull String taskId,
+				@NonNull TaskNotificationProjectionState state,
+				long projectionGeneration) {
+			boolean submitAgain = false;
+			synchronized (lock) {
+				if (!taskNotificationProjectionActiveWhileLocked(taskId, state)) {
+					state.scheduled = false;
+					return;
+				}
+				if (state.requestedGeneration == projectionGeneration)
+					state.scheduled = false;
+				else
+					submitAgain = true;
+			}
+			if (submitAgain)
+				submitTaskNotificationProjection(taskId, state);
+		}
+
+		private void failTaskNotificationProjection(
+				@NonNull TaskNotificationProjectionState state,
+				@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			McpRequestSseStream stream;
+			synchronized (lock) {
+				state.scheduled = false;
+				stream = subscriptionOwned && responseStream != null
+						? responseStream : null;
+			}
+			if (stream != null)
+				scheduleSubscriptionStreamFailure(stream, reason, cause);
 		}
 
 		private void offerSubscriptionEvent(
@@ -7323,48 +7869,62 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			SubscriptionRegistration registration = null;
 			McpJsonRpcMessage.ResultResponse preRendered = null;
 			SubscriptionStreamFailure pendingFailure;
+			boolean cancelPendingReservation;
 			synchronized (lock) {
-				pendingFailure = pendingSubscriptionStreamFailure;
-				if (pendingFailure != null) {
-					pendingSubscriptionStreamFailure = null;
-					stream = pendingFailure.stream();
+				cancelPendingReservation = subscriptionCapReservation != null
+						&& subscriptionRegistration == null;
+				if (cancelPendingReservation) {
+					stream = null;
+					pendingFailure = null;
 				} else {
-					if (!subscriptionOwned || canceled || terminal
-							|| streamAbortOwned || streamTerminalResponseOwned
-							|| subscriptionRegistration == null
-							|| responseStream == null)
-						return;
-					subscriptionOwned = false;
-					plannedSubscriptionCloseReason = closeReason;
-					streamTerminalResponseOwned = true;
-					stream = responseStream;
-					registration = subscriptionRegistration;
-					preRendered = preRenderedSubscriptionTerminal;
-					preRenderedSubscriptionTerminal = null;
+					pendingFailure = pendingSubscriptionStreamFailure;
+					if (pendingFailure != null) {
+						pendingSubscriptionStreamFailure = null;
+						stream = pendingFailure.stream();
+					} else {
+						if (!subscriptionOwned || canceled || terminal
+								|| streamAbortOwned || streamTerminalResponseOwned
+								|| subscriptionRegistration == null
+								|| responseStream == null)
+							return;
+						subscriptionOwned = false;
+						plannedSubscriptionCloseReason = closeReason;
+						streamTerminalResponseOwned = true;
+						stream = responseStream;
+						registration = subscriptionRegistration;
+						preRendered = preRenderedSubscriptionTerminal;
+						preRenderedSubscriptionTerminal = null;
+					}
 				}
 			}
+			if (cancelPendingReservation) {
+				cancel(closeReason, null);
+				return;
+			}
+			McpRequestSseStream resolvedStream = requireNonNull(stream);
 			if (pendingFailure != null) {
-				stream.fail(pendingFailure.reason(), pendingFailure.cause());
+				resolvedStream.fail(pendingFailure.reason(), pendingFailure.cause());
 				return;
 			}
 			planRequestObservation(new RequestObservationResult(
 					McpRequestOutcome.COMPLETE, null, List.of()));
 			SubscriptionRegistration resolvedRegistration = requireNonNull(registration);
 			try {
-				if (!stream.completeMessage(preRendered != null ? preRendered
+				if (!resolvedStream.completeMessage(preRendered != null ? preRendered
 						: subscriptionTerminalResponse(
 								resolvedRegistration.protocolProfile(),
 								resolvedRegistration.subscriptionId(),
 								resolvedRegistration.endpoint())))
-					stream.fail(StreamTerminationReason.INTERNAL_ERROR, null);
+					resolvedStream.fail(StreamTerminationReason.INTERNAL_ERROR, null);
 			} catch (Throwable throwable) {
-				stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+				resolvedStream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
 			}
 		}
 
 		private boolean hasSubscriptionRegistration() {
 			synchronized (lock) {
-				return subscriptionRegistration != null;
+				return subscriptionRegistration != null
+						|| subscriptionCapReservation != null;
 			}
 		}
 
@@ -8182,6 +8742,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			FutureTask<Void> task;
 			McpRequestSseStream stream;
 			SubscriptionRegistration subscription;
+			SubscriptionRegistration capReservation;
 			boolean completedStream;
 			boolean remove;
 			synchronized (lock) {
@@ -8200,6 +8761,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				stream = responseStream;
 				subscription = subscriptionRegistration;
 				subscriptionRegistration = null;
+				capReservation = subscriptionCapReservation;
+				subscriptionCapReservation = null;
 				pendingSubscriptionStreamFailure = null;
 				subscriptionOwned = false;
 				preRenderedSubscriptionTerminal = null;
@@ -8233,6 +8796,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				stream.close(reason, cause);
 			if (subscription != null)
 				removeSubscription(this, subscription);
+			if (capReservation != null)
+				removeSubscription(this, capReservation);
 			if (stream != null)
 				markStreamClosed(completedStream
 						? StreamTerminationReason.COMPLETED : reason);
@@ -8429,9 +8994,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			FutureTask<Void> task = protocolTask;
 			protocolTask = null;
 			Consumer<MicrohttpResponse> callback = takeResponseCallback();
+			SubscriptionRegistration capReservation = subscriptionCapReservation;
+			subscriptionCapReservation = null;
 			releaseIdentifiedRequestExchange();
 			return new ProtocolDeadlineExpiration(
-					cancelTask ? task : null, callback, deadlineResponseHeaders);
+					cancelTask ? task : null, callback, deadlineResponseHeaders,
+					capReservation);
 		}
 
 		private void finishProtocolDeadline(
@@ -8441,6 +9009,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				expiration.task().cancel(true);
 				processor.remove(expiration.task());
 			}
+			SubscriptionRegistration capReservation =
+					expiration.subscriptionCapReservation();
+			if (capReservation != null)
+				removeSubscription(this, capReservation);
 			application.recordProtocolDeadlineExpiration();
 			RequestObservationResult fallback = new RequestObservationResult(
 					McpRequestOutcome.DEADLINE_EXCEEDED, null, List.of());
@@ -8753,15 +9325,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private record SubscriptionCapReservation(
 			@NonNull SubscriptionOpenResult result,
-			@Nullable SubscriptionRegistration registration,
-			@Nullable Object localizationInvalidationToken) {
+			@Nullable SubscriptionRegistration registration) {
 		private SubscriptionCapReservation {
 			requireNonNull(result);
 			boolean opened = result == SubscriptionOpenResult.OPENED;
-			if (opened != (registration != null)
-					|| opened != (localizationInvalidationToken != null))
+			if (opened != (registration != null))
 				throw new IllegalArgumentException(
-						"Exactly an opened MCP subscription cap retains registration and invalidation state.");
+						"Exactly an opened MCP subscription cap retains registration state.");
 		}
 	}
 
@@ -8803,10 +9373,32 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private record AcceptedSubscriptionFilter(boolean toolsListChanged,
 			boolean promptsListChanged, boolean resourcesListChanged,
 			boolean resourceSubscriptionsIncluded,
-			@NonNull List<@NonNull SubscriptionResource> resourceSubscriptions) {
+			@NonNull List<@NonNull SubscriptionResource> resourceSubscriptions,
+			boolean taskIdsRequested,
+			@NonNull List<@NonNull String> requestedTaskIds,
+			@NonNull Set<@NonNull String> acceptedTaskIds,
+			@NonNull McpClientCapabilities clientCapabilities) {
 		private AcceptedSubscriptionFilter {
 			resourceSubscriptions = List.copyOf(
 					requireNonNull(resourceSubscriptions));
+			requestedTaskIds = List.copyOf(requireNonNull(requestedTaskIds));
+			acceptedTaskIds = Collections.unmodifiableSet(
+					new LinkedHashSet<>(requireNonNull(acceptedTaskIds)));
+			requireNonNull(clientCapabilities);
+			if (!requestedTaskIds.containsAll(acceptedTaskIds))
+				throw new IllegalArgumentException(
+						"Accepted task subscription IDs must have been requested.");
+		}
+
+		@NonNull
+		private AcceptedSubscriptionFilter withAcceptedTaskIds(
+				@NonNull List<@NonNull String> acceptedTaskIds) {
+			return new AcceptedSubscriptionFilter(toolsListChanged,
+					promptsListChanged, resourcesListChanged,
+					resourceSubscriptionsIncluded, resourceSubscriptions,
+					taskIdsRequested, requestedTaskIds,
+					new LinkedHashSet<>(requireNonNull(acceptedTaskIds)),
+					clientCapabilities);
 		}
 
 		@NonNull
@@ -8820,6 +9412,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requireNonNull(resourceUri);
 			return resourceSubscriptionsIncluded && resourceSubscriptions.stream()
 					.anyMatch(resource -> resource.uri().equals(resourceUri));
+		}
+
+		private boolean containsTask(@NonNull String taskId) {
+			return acceptedTaskIds.contains(requireNonNull(taskId));
 		}
 	}
 
@@ -8851,6 +9447,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private SubscriptionEventKey {
 			requireNonNull(resourceUri);
 		}
+	}
+
+	private static final class TaskNotificationProjectionState {
+		private long requestedGeneration;
+		private boolean scheduled;
+		private @Nullable TaskSnapshot lastDeliveredSnapshot;
 	}
 
 	private record SubscriptionSourceGroup(
@@ -9436,7 +10038,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private record ProtocolDeadlineExpiration(
 			@Nullable FutureTask<@Nullable Void> task,
 			@NonNull Consumer<@NonNull MicrohttpResponse> responseCallback,
-			@NonNull List<@NonNull Header> responseHeaders) {
+			@NonNull List<@NonNull Header> responseHeaders,
+			@Nullable SubscriptionRegistration subscriptionCapReservation) {
 		private ProtocolDeadlineExpiration {
 			requireNonNull(responseCallback);
 			responseHeaders = List.copyOf(responseHeaders);

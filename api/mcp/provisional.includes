@@ -4,6 +4,8 @@ com.soklet.McpTask
 com.soklet.McpTask$Builder
 com.soklet.McpTaskControl
 com.soklet.McpTaskCreatedResult
+com.soklet.McpTaskEventListener
+com.soklet.McpTaskEventPublisher
 com.soklet.McpTaskManager
 com.soklet.McpTaskNotFoundException
 com.soklet.McpTaskOrigin

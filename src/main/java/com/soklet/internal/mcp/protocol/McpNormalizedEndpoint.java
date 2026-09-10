@@ -101,9 +101,11 @@ final class McpNormalizedEndpoint {
 		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
 		this.subscriptionConfig = builder.subscriptionConfig;
 
-		if (this.subscriptionConfig.isPresent() && !hasResourceSurface())
+		if (this.subscriptionConfig
+				.map(configuration -> !configuration.notificationTypes().isEmpty())
+				.orElse(false) && !hasResourceSurface())
 			throw new IllegalStateException(
-					"Resource subscriptionConfig require an exact resource, template, or custom list handler.");
+					"Resource subscription configuration requires an exact resource, template, or custom list handler.");
 	}
 
 	@NonNull
@@ -692,16 +694,22 @@ enum McpResourceNotificationType {
  */
 @ThreadSafe
 record McpNormalizedSubscriptionConfiguration(
-		@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes) {
+		@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes,
+		boolean taskNotifications) {
+	McpNormalizedSubscriptionConfiguration(
+			@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes) {
+		this(notificationTypes, false);
+	}
+
 	McpNormalizedSubscriptionConfiguration {
 		requireNonNull(notificationTypes);
 
-		if (notificationTypes.isEmpty())
+		if (notificationTypes.isEmpty() && !taskNotifications)
 			throw new IllegalArgumentException(
-					"At least one resource notification type is required.");
+					"At least one subscription notification type is required.");
 
-		notificationTypes = Collections.unmodifiableSet(
-				EnumSet.copyOf(notificationTypes));
+		notificationTypes = notificationTypes.isEmpty() ? Set.of()
+				: Collections.unmodifiableSet(EnumSet.copyOf(notificationTypes));
 	}
 
 	@NonNull

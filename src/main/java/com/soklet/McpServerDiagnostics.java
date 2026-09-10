@@ -109,7 +109,7 @@ public interface McpServerDiagnostics {
 	/**
 	 * The number of open request-scoped SSE streams in this snapshot.
 	 * <p>
-	 * This count includes a resource subscription once its acknowledgment stream
+	 * This count includes an MCP subscription once its acknowledgment stream
 	 * has opened; it does not imply client receipt. The value is nonnegative and
 	 * is zero after a completed server stop transition. A transient snapshot
 	 * captured while failure cleanup is closing streams may remain nonzero.
@@ -120,8 +120,8 @@ public interface McpServerDiagnostics {
 	Integer getActiveRequestStreams();
 
 	/**
-	 * The number of open resource subscriptions whose request-scoped SSE streams
-	 * remain open in this snapshot.
+	 * The number of open MCP subscriptions whose request-scoped SSE streams remain
+	 * open in this snapshot.
 	 * <p>
 	 * The count includes a subscription once its acknowledgment stream has
 	 * opened; it does not imply client receipt. This value is nonnegative, never

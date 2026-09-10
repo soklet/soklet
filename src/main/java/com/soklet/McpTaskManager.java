@@ -70,8 +70,42 @@ public interface McpTaskManager {
 	}
 
 	/**
+	 * Returns the optional application-owned publisher for durable task-state
+	 * changes.
+	 * <p>
+	 * When present, Soklet subscribes while the server is running and may project
+	 * matching events onto {@code subscriptions/listen} streams as
+	 * {@code notifications/tasks}. The publisher carries task IDs only; Soklet
+	 * performs a fresh, authorized lookup through this manager before sending a
+	 * current snapshot. Polling through {@code tasks/get} remains authoritative.
+	 * <p>
+	 * This is a stable manager property: every invocation for the manager's
+	 * lifetime must return either an empty optional or an optional containing the
+	 * same publisher instance. Each built {@link McpServer} snapshots the property
+	 * once during construction; it does not observe a later publisher change.
+	 * This lets production and simulator servers backed by the same manager attach
+	 * independently to one shared event topology.
+	 * <p>
+	 * The default returns an empty optional, enabling polling without task
+	 * notifications. Soklet neither starts nor closes the publisher.
+	 *
+	 * @return task-event publisher, or the empty optional when task notifications
+	 * are disabled
+	 */
+	@NonNull
+	default Optional<@NonNull McpTaskEventPublisher> getTaskEventPublisher() {
+		return Optional.empty();
+	}
+
+	/**
 	 * Finds the current authoritative task snapshot after atomically
 	 * authorizing the request.
+	 * <p>
+	 * Soklet may invoke this method asynchronously to project a task-change event.
+	 * A subscription can disconnect while that lookup is in progress, so
+	 * implementations should apply finite storage deadlines and respond promptly
+	 * to thread interruption; a result may be discarded when the subscription is
+	 * no longer active.
 	 *
 	 * @param context independently admitted lookup context
 	 * @return current snapshot, or empty when the task is unknown or unauthorized

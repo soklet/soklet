@@ -19,8 +19,8 @@ amendments, followed by the 2026-09-04 public-contract annotation and
 transport-ownership documentation amendment and the 2026-09-04 non-MCP
 public-record elimination amendment, followed by the 2026-09-04 MCP server
 default-construction amendment, the 2026-09-06 exported-nullability completion,
-the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional Tasks
-authoring amendment. The
+the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional MCP
+Tasks implementation checkpoint. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
@@ -72,10 +72,10 @@ scope has exactly one owner:
 | `phase-4.includes` | 134 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
-| `provisional.includes` | 12 | provisional MCP Tasks types |
+| `provisional.includes` | 14 | provisional MCP Tasks types |
 | `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
 
-The 246-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 297 current types.
+The 248-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 299 current types.
 Ownership records when a type is intended to stabilize; they do not themselves freeze it.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
@@ -83,6 +83,8 @@ SHA-256 values
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`,
 and
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
+The provisional MCP Tasks include inventory has SHA-256
+`11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
 It complements the baseline comparison; it is not the authoritative
@@ -90,9 +92,9 @@ compatibility inventory.
 
 ## Current local evidence
 
-The 2026-09-09 local refresh is green at 657 incompatibilities, 297 exact
-owners, and 1,092/189/423 Phase 4/5/6 signature records. Core clean test passes
-2,326/0/0/4 and packaging builds Javadocs; local JDK 26 static analysis reports
+The 2026-09-09 local refresh is green at 657 incompatibilities, 299 exact
+owners, and 1,092/190/423 Phase 4/5/6 signature records. Core clean test passes
+2,362/0/0/4 and packaging builds Javadocs; local JDK 26 static analysis reports
 `BUILD SUCCESS`, SpotBugs reports zero findings, and the aggregate API-freeze
 verifier passes. These results revalidate the current API and local development
 artifact; they are not immutable release-candidate provenance, public Javadoc
@@ -1553,20 +1555,18 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-658 reviewed incompatibilities across 285 owners: 234 MCP and 51 non-MCP.
-The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
-`RequestStreamTerminationKey`, and `SubscriptionTerminationKey` are now frozen
-Phase 6 owners. The amended frozen inventories contain 1,075 Phase 4, 189
-Phase 5, and 423 Phase 6 signatures. Phase 4 contains 134 classes, one
-constructor, 90 fields, and 850 methods, with SHA-256
-`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`
+657 reviewed incompatibilities across 299 owners: 248 MCP and 51 non-MCP.
+The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
+contain 1,092 Phase 4, 190 Phase 5, and 423 Phase 6 signatures. Phase 4 contains
+134 classes, one constructor, 93 fields, and 864 methods, with SHA-256
+`765f0768a8fc40fd872036054ef54f212688ad49f240514ca15cdce991bdbc10`
 and exact nullability digest
-`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`.
-Phase 5 contains 36 classes, zero constructors, 19 fields, and 134 methods,
+`d6299ae37278087e7b655cb3cd1c46a7b2dca363b9bfaf39db07e84739029ec0`.
+Phase 5 contains 36 classes, zero constructors, 19 fields, and 135 methods,
 with SHA-256
-`0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`
+`8fdfad9393655dc44e8759801abb955bb09a7418174dd6325455e51a0c2933a2`
 and exact nullability digest
-`bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`.
+`2b4fd2a4664d9605f847132f4dd234fac9540ef274ca58cabdeceb0408e8345a`.
 Phase 6 contains 64 classes, zero constructors, 41 fields, and 318 methods,
 with SHA-256
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`
@@ -2386,3 +2386,26 @@ reviewed current-side owners. Restoring the enum and its surviving 3.5.1
 members removes eleven prior removal records; the released-3.5.1 compatibility
 ledger now contains 658 records with SHA-256
 `f494beaa6573e3d82126544761084f39cfd291639e1c731b1f43c76cf920cfc1`.
+
+### 2026-09-09 provisional MCP Tasks implementation checkpoint
+
+The current provisional Tasks surface implements durable task creation and
+recovery, task input and cooperative cancelation, typed deferred-result safety,
+and task-status notifications. The application-owned `McpTaskManager` remains
+the authority for task state and authorization. Its optional task-event
+publisher carries task IDs only; Soklet performs a fresh authorized lookup for
+each accepted subscription before rendering `notifications/tasks`, while
+`tasks/get` polling remains authoritative. The public in-memory manager emits
+these advisory events only after observable mutations have committed.
+
+`McpTaskEventListener` and `McpTaskEventPublisher` increase the provisional
+inventory from 12 to 14 owners; custom managers remain polling-only by default,
+and task-event subscriptions reuse `McpSubscriptionEventRegistration`. The
+current owner partition is 134/36/64/14, or 248 MCP owners and 299 reviewed
+owners including the 51 non-MCP entries. The provisional include inventory has
+SHA-256
+`11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
+The released-3.5.1 compatibility ledger remains at 657 records with SHA-256
+`6a62b7d5a87f0bfb40abe6c9c81e77bdc72b28974037292fa8262e7cd2effbc8`.
+These local checks do not freeze the provisional Tasks API or establish
+release-candidate provenance.

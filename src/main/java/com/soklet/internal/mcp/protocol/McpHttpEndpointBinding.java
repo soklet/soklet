@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -33,13 +34,16 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		@NonNull McpNormalizedEndpoint endpoint,
 		@NonNull McpApplicationRequestRouter applicationRouter,
 		@NonNull McpRuntimeObservationSink observationSink,
-		@NonNull Optional<@NonNull McpSubscriptionEventSource>
-				subscriptionEventSource) {
+		@NonNull List<@NonNull McpSubscriptionEventSource>
+				subscriptionEventSources,
+		@NonNull Optional<McpServerRuntimeBridge.@NonNull TaskManagerAdapter>
+				taskManagerAdapter) {
 	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 			@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
 		this(endpointPolicy, endpoint, applicationRouter,
-				McpRuntimeObservationSink.disabledInstance(), Optional.empty());
+				McpRuntimeObservationSink.disabledInstance(), List.of(),
+				Optional.empty());
 	}
 
 	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
@@ -47,6 +51,17 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 			@NonNull McpApplicationRequestRouter applicationRouter,
 			@NonNull McpRuntimeObservationSink observationSink) {
 		this(endpointPolicy, endpoint, applicationRouter, observationSink,
+				List.of(), Optional.empty());
+	}
+
+	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull McpApplicationRequestRouter applicationRouter,
+			@NonNull McpRuntimeObservationSink observationSink,
+			@NonNull Optional<@NonNull McpSubscriptionEventSource>
+					subscriptionEventSource) {
+		this(endpointPolicy, endpoint, applicationRouter, observationSink,
+				requireNonNull(subscriptionEventSource).stream().toList(),
 				Optional.empty());
 	}
 
@@ -55,9 +70,25 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		requireNonNull(endpoint);
 		requireNonNull(applicationRouter);
 		requireNonNull(observationSink);
-		requireNonNull(subscriptionEventSource);
-		if (subscriptionEventSource.isPresent() != endpoint.subscriptionConfig().isPresent())
+		subscriptionEventSources = List.copyOf(
+				requireNonNull(subscriptionEventSources));
+		requireNonNull(taskManagerAdapter);
+		if (!subscriptionEventSources.isEmpty()
+				!= endpoint.subscriptionConfig().isPresent())
 			throw new IllegalArgumentException(
-					"An MCP subscription source and normalized configuration must be present together.");
+					"MCP subscription sources and normalized configuration must be present together.");
+		long taskSourceCount = subscriptionEventSources.stream()
+				.filter(source -> source.sourceType()
+						== McpSubscriptionEventSource.SourceType.TASK)
+				.count();
+		boolean taskNotifications = endpoint.subscriptionConfig()
+				.map(McpNormalizedSubscriptionConfiguration::taskNotifications)
+				.orElse(false);
+		if (taskSourceCount > 1 || taskNotifications != (taskSourceCount == 1))
+			throw new IllegalArgumentException(
+					"MCP task-notification configuration requires exactly one task event source.");
+		if (taskNotifications && taskManagerAdapter.isEmpty())
+			throw new IllegalArgumentException(
+					"MCP task notifications require a task-manager adapter.");
 	}
 }

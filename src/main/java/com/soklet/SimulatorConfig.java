@@ -90,8 +90,9 @@ public final class SimulatorConfig {
 	 * Explicitly configured application collaborators are reused by identity,
 	 * while unset defaults that depend on the completed configuration are
 	 * derived again for the simulator configuration. MCP collaborators such as
-	 * admission controllers, interceptors, localizers, and rate limiters are also
-	 * reused by identity; stateful ones can be replaced through
+ * admission controllers, interceptors, localizers, rate limiters, the task
+ * manager, and its task-event publisher are also reused by identity; stateful
+ * ones can be replaced through
 	 * {@link Builder#configureMcpServer(Consumer)}. Later calls on the returned
 	 * builder override imported settings.
 	 * <p>

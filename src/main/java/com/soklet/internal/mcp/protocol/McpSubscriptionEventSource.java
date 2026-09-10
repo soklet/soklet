@@ -33,17 +33,37 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 record McpSubscriptionEventSource(@NonNull Object identity,
+		@NonNull SourceType sourceType,
 		@NonNull Subscriber subscriber,
 		@NonNull Optional<@NonNull Subscriber> endpointSubscriber) {
 	McpSubscriptionEventSource(@NonNull Object identity,
 			@NonNull Subscriber subscriber) {
-		this(identity, subscriber, Optional.empty());
+		this(identity, SourceType.RESOURCE, subscriber, Optional.empty());
+	}
+
+	McpSubscriptionEventSource(@NonNull Object identity,
+			@NonNull SourceType sourceType,
+			@NonNull Subscriber subscriber) {
+		this(identity, sourceType, subscriber, Optional.empty());
+	}
+
+	McpSubscriptionEventSource(@NonNull Object identity,
+			@NonNull Subscriber subscriber,
+			@NonNull Optional<@NonNull Subscriber> endpointSubscriber) {
+		this(identity, SourceType.RESOURCE, subscriber, endpointSubscriber);
 	}
 
 	McpSubscriptionEventSource {
 		requireNonNull(identity);
+		requireNonNull(sourceType);
 		requireNonNull(subscriber);
 		requireNonNull(endpointSubscriber);
+	}
+
+	enum SourceType {
+		RESOURCE,
+		TASK,
+		FRAMEWORK
 	}
 
 	@NonNull
@@ -74,7 +94,8 @@ record McpSubscriptionEventSource(@NonNull Object identity,
 
 	@ThreadSafe
 	sealed interface Event permits Event.ResourcesListChanged,
-			Event.ResourceUpdated, Event.LocalizationCatalogsChanged {
+			Event.ResourceUpdated, Event.LocalizationCatalogsChanged,
+			Event.TaskChanged {
 		/**
 		 * Framework-owned coarse localization catalog invalidation. Carries
 		 * only which notification families apply - never localized text,
@@ -92,6 +113,12 @@ record McpSubscriptionEventSource(@NonNull Object identity,
 			public ResourceUpdated {
 				requireNonNull(resourceUri);
 				requireNonNull(wireResourceUri);
+			}
+		}
+
+		record TaskChanged(@NonNull String taskId) implements Event {
+			public TaskChanged {
+				requireNonNull(taskId);
 			}
 		}
 	}

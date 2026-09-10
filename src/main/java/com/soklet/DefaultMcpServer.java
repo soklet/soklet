@@ -143,6 +143,8 @@ final class DefaultMcpServer implements McpServer {
 	@Nullable
 	private final McpTaskManager taskManager;
 	@Nullable
+	private final McpTaskEventPublisher taskEventPublisher;
+	@Nullable
 	private final McpRateLimiter requestRateLimiter;
 	@Nullable
 	private final McpRateLimiter toolRateLimiter;
@@ -228,6 +230,10 @@ final class DefaultMcpServer implements McpServer {
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.taskManager = taskManager;
+		this.taskEventPublisher = taskManager == null ? null
+				: requireNonNull(taskManager.getTaskEventPublisher(),
+						"The MCP task manager returned a null task-event publisher optional.")
+						.orElse(null);
 		this.requestRateLimiter = requestRateLimiter;
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
@@ -524,6 +530,12 @@ final class DefaultMcpServer implements McpServer {
 		if (configuredTaskManager == null)
 			return Optional.empty();
 		return Optional.of(new TaskManagerAdapter() {
+			@Override
+			@NonNull
+			public Optional<@NonNull McpTaskEventPublisher> taskEventPublisher() {
+				return Optional.ofNullable(DefaultMcpServer.this.taskEventPublisher);
+			}
+
 			@Override
 			@NonNull
 			public Optional<@NonNull TaskSnapshot> findTask(

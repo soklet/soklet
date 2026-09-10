@@ -86,8 +86,8 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PHASE_FOUR_TYPE_COUNT = 134;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 64;
-	private static final int PROVISIONAL_TYPE_COUNT = 12;
-	private static final int CURRENT_MCP_TYPE_COUNT = 246;
+	private static final int PROVISIONAL_TYPE_COUNT = 14;
+	private static final int CURRENT_MCP_TYPE_COUNT = 248;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
 			"d6299ae37278087e7b655cb3cd1c46a7b2dca363b9bfaf39db07e84739029ec0";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
@@ -855,6 +855,22 @@ public class McpPublicApiReflectionContractTests {
 				"publish", McpSubscriptionEvent.class), "event");
 		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
 				"publishResourceUpdated", java.net.URI.class), "resourceUri");
+	}
+
+	@Test
+	public void provisionalTaskEventExtensionPointContractRemainsExact()
+			throws Exception {
+		Method taskEventPublisher = assertInstanceMethod(McpTaskManager.class,
+				"getTaskEventPublisher", Optional.class, MethodShape.DEFAULT,
+				false);
+		assertNonNullOptionalPayload(taskEventPublisher,
+				McpTaskEventPublisher.class);
+		assertParameterNames(McpTaskEventListener.class.getMethod(
+				"onTaskChanged", String.class), "taskId");
+		assertParameterNames(McpTaskEventPublisher.class.getMethod(
+				"subscribe", McpTaskEventListener.class), "listener");
+		assertParameterNames(McpTaskEventPublisher.class.getMethod(
+				"publishTaskChanged", String.class), "taskId");
 	}
 
 	@Test

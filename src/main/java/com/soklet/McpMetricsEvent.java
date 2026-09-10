@@ -164,7 +164,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * Creates an event indicating that a resource subscription became active.
+	 * Creates an event indicating that an MCP subscription became active.
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
 	 * @return subscription-opened event
@@ -175,7 +175,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * Creates an event indicating that a resource subscription terminated.
+	 * Creates an event indicating that an MCP subscription terminated.
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
 	 * @param reason fixed stream termination reason
@@ -756,7 +756,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * A resource subscription became active.
+	 * An MCP subscription became active.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -802,7 +802,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * A resource subscription terminated.
+	 * An MCP subscription terminated.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

@@ -38,6 +38,7 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpTask;
+import com.soklet.McpTaskEventPublisher;
 import com.soklet.McpTaskNotFoundException;
 import com.soklet.McpAdmissionRejection;
 import com.soklet.McpRequestStateMode;
@@ -930,24 +931,33 @@ public final class McpServerRuntimeBridge {
 			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
-		Optional<McpSubscriptionEventSource> subscriptionEventSource =
+		Set<McpResourceNotificationType> notificationTypes =
+				EnumSet.noneOf(McpResourceNotificationType.class);
+		Optional<McpSubscriptionEventSource> resourceSubscriptionEventSource =
 				publicEndpoint.getSubscriptionConfig().map(configuration -> {
-					Set<McpResourceNotificationType> notificationTypes =
-							EnumSet.noneOf(McpResourceNotificationType.class);
 					for (McpSubscriptionNotificationType notificationType
-							: configuration.getNotificationTypes()) {
+							: configuration.getNotificationTypes())
 						notificationTypes.add(switch (notificationType) {
-							case RESOURCES_LIST_CHANGED ->
-									McpResourceNotificationType.RESOURCES_LIST_CHANGED;
-							case RESOURCE_UPDATED ->
-									McpResourceNotificationType.RESOURCE_UPDATED;
-						});
-					}
-					endpointBuilder.subscriptionConfig(
-							new McpNormalizedSubscriptionConfiguration(
-									notificationTypes));
+								case RESOURCES_LIST_CHANGED ->
+										McpResourceNotificationType.RESOURCES_LIST_CHANGED;
+								case RESOURCE_UPDATED ->
+										McpResourceNotificationType.RESOURCE_UPDATED;
+							});
 					return toInternal(configuration);
 				});
+		Optional<McpSubscriptionEventSource> taskSubscriptionEventSource =
+				endpointPlan.taskManagerAdapter()
+						.flatMap(TaskManagerAdapter::taskEventPublisher)
+						.map(McpServerRuntimeBridge::toInternal);
+		List<McpSubscriptionEventSource> subscriptionEventSources =
+				new ArrayList<>();
+		resourceSubscriptionEventSource.ifPresent(
+				subscriptionEventSources::add);
+		taskSubscriptionEventSource.ifPresent(subscriptionEventSources::add);
+		if (!subscriptionEventSources.isEmpty())
+			endpointBuilder.subscriptionConfig(
+					new McpNormalizedSubscriptionConfiguration(notificationTypes,
+							taskSubscriptionEventSource.isPresent()));
 
 		Map<String, McpApplicationToolRoute> toolRoutes = new LinkedHashMap<>();
 		for (ToolPlan toolPlan : endpointPlan.toolPlans()) {
@@ -1110,21 +1120,19 @@ public final class McpServerRuntimeBridge {
 		if (endpointPlan.localizationEnabled())
 			endpointPolicy = endpointPolicy.withLocalizationEnabled();
 		if (endpointPlan.catalogLocalizer().isPresent()
-				&& subscriptionEventSource.isPresent()) {
-			// Retain the application publisher's identity/subscriber so endpoints
-			// sharing it still create exactly one application registration. The
-			// framework publisher is an endpoint-local supplemental source that rides
-			// the same generation, filter, coalescing, and shutdown machinery.
+				&& !subscriptionEventSources.isEmpty()) {
+			// The framework publisher is an endpoint-local supplemental source that
+			// rides the same generation, filter, coalescing, and shutdown machinery as
+			// application resource and task publishers.
 			Set<McpRuntimeCatalogLocalizer.ResponseKind> localizedKinds =
 					endpointPlan.catalogLocalizer().orElseThrow()
 							.localizedResponseKinds();
 			McpLocalizationCatalogEventPublisher frameworkPublisher =
 					new McpLocalizationCatalogEventPublisher();
-			McpSubscriptionEventSource applicationSource =
-					subscriptionEventSource.orElseThrow();
-			subscriptionEventSource = Optional.of(new McpSubscriptionEventSource(
-					applicationSource.identity(), applicationSource.subscriber(),
-					Optional.of(frameworkPublisher::subscribe)));
+			subscriptionEventSources.add(new McpSubscriptionEventSource(
+					frameworkPublisher,
+					McpSubscriptionEventSource.SourceType.FRAMEWORK,
+					frameworkPublisher::subscribe));
 			localizedEndpointInvalidations.add(new LocalizedEndpointInvalidation(
 					frameworkPublisher,
 					new McpSubscriptionEventSource.Event.LocalizationCatalogsChanged(
@@ -1165,7 +1173,8 @@ public final class McpServerRuntimeBridge {
 			return new McpHttpEndpointBinding(endpointPolicy, endpoint,
 					applicationRouter,
 					McpRuntimeObservationSink.disabledInstance(),
-					subscriptionEventSource);
+					subscriptionEventSources,
+					endpointPlan.taskManagerAdapter());
 
 		RequestObservationAdapter observationAdapter =
 				requestObservationAdapter.orElseThrow();
@@ -1258,7 +1267,8 @@ public final class McpServerRuntimeBridge {
 			};
 		};
 		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
-				applicationRouter, observationSink, subscriptionEventSource);
+				applicationRouter, observationSink, subscriptionEventSources,
+				endpointPlan.taskManagerAdapter());
 	}
 
 	@NonNull
@@ -1277,6 +1287,27 @@ public final class McpServerRuntimeBridge {
 						}
 					}),
 					"An MCP subscription event publisher returned a null registration.");
+			return registration::close;
+		});
+	}
+
+	@NonNull
+	private static McpSubscriptionEventSource toInternal(
+			@NonNull McpTaskEventPublisher publisher) {
+		requireNonNull(publisher);
+		return new McpSubscriptionEventSource(publisher,
+				McpSubscriptionEventSource.SourceType.TASK, listener -> {
+			McpSubscriptionEventRegistration registration = requireNonNull(
+					publisher.subscribe(taskId -> {
+						try {
+							listener.onEvent(new McpSubscriptionEventSource.Event
+									.TaskChanged(requireNonNull(taskId)));
+						} catch (Throwable ignored) {
+							// Publisher callbacks never expose one stream's failure or
+							// an invalid application event to publisher callers.
+						}
+					}),
+					"An MCP task event publisher returned a null registration.");
 			return registration::close;
 		});
 	}
@@ -1628,6 +1659,12 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public interface TaskManagerAdapter {
+		/** Returns the optional task-change publisher paired with this manager. */
+		@NonNull
+		default Optional<@NonNull McpTaskEventPublisher> taskEventPublisher() {
+			return Optional.empty();
+		}
+
 		/** Finds and renders an authorized task snapshot. */
 		@NonNull
 		Optional<@NonNull TaskSnapshot> findTask(
@@ -3453,7 +3490,7 @@ public final class McpServerRuntimeBridge {
 		return taskResult(snapshot, false);
 	}
 
-	private static void requireTaskInputCapabilities(
+	static void requireTaskInputCapabilities(
 			@NonNull TaskSnapshot taskSnapshot,
 			@NonNull McpClientCapabilities clientCapabilities)
 			throws McpProtocolJsonRpcException {
@@ -3551,6 +3588,28 @@ public final class McpServerRuntimeBridge {
 				? McpWireResult.extension(McpResultType.extension("task"),
 						internalFields, optionalMetadata)
 				: McpWireResult.complete(internalFields, optionalMetadata);
+	}
+
+	static com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
+	taskNotificationParams(
+			@NonNull TaskSnapshot taskSnapshot,
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
+					subscriptionMetadata) {
+		TaskSnapshot snapshot = requireNonNull(taskSnapshot);
+		com.soklet.internal.mcp.protocol.McpJsonObject taskFields =
+				(com.soklet.internal.mcp.protocol.McpJsonObject) toInternal(
+						taskFields(snapshot, true));
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> params =
+				new LinkedHashMap<>(taskFields.members());
+		com.soklet.internal.mcp.protocol.McpJsonObject taskMetadata =
+				(com.soklet.internal.mcp.protocol.McpJsonObject) toInternal(
+						snapshot.task().getMetadata());
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> metadata =
+				new LinkedHashMap<>(taskMetadata.members());
+		metadata.putAll(requireNonNull(subscriptionMetadata).members());
+		params.put("_meta",
+				new com.soklet.internal.mcp.protocol.McpJsonObject(metadata));
+		return new com.soklet.internal.mcp.protocol.McpJsonObject(params);
 	}
 
 	@NonNull

@@ -80,6 +80,8 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	@NonNull
 	private final LongSupplier nanoTime;
 	@NonNull
+	private final McpTaskEventPublisher taskEventPublisher;
+	@NonNull
 	private final ReentrantLock lock;
 	@GuardedBy("lock")
 	@NonNull
@@ -112,6 +114,7 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 		this.pollInterval = builder.pollInterval;
 		this.clock = requireNonNull(clock);
 		this.nanoTime = requireNonNull(nanoTime);
+		this.taskEventPublisher = McpTaskEventPublisher.fromInMemoryDefaults();
 		this.lock = new ReentrantLock();
 		this.entries = new HashMap<>();
 	}
@@ -132,6 +135,17 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	@NonNull
 	public Duration getPollInterval() {
 		return this.pollInterval;
+	}
+
+	/**
+	 * Returns this manager's process-local task-event publisher.
+	 *
+	 * @return task-event publisher
+	 */
+	@Override
+	@NonNull
+	public Optional<@NonNull McpTaskEventPublisher> getTaskEventPublisher() {
+		return Optional.of(this.taskEventPublisher);
 	}
 
 	/**
@@ -161,6 +175,7 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 		Optional<String> authorizationPartitionKey = requestContext
 				.getAdmissionIdentity().getAuthorizationPartitionKey();
 
+		McpTask task;
 		this.lock.lock();
 		try {
 			long nowNanos = this.nanoTime.getAsLong();
@@ -175,17 +190,18 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 			} while (this.entries.containsKey(taskId));
 
 			Instant now = this.clock.instant();
-			McpTask task = McpTask.withTaskId(taskId, taskOrigin,
+			task = McpTask.withTaskId(taskId, taskOrigin,
 						McpTaskStatus.WORKING, now, now)
 					.timeToLive(this.taskTimeToLive)
 					.pollInterval(this.pollInterval)
 					.build();
 			this.entries.put(taskId, new Entry(task, endpointPath,
 					authorizationPartitionKey, nowNanos));
-			return task;
 		} finally {
 			this.lock.unlock();
 		}
+		publishTaskChanged(task.getTaskId());
+		return task;
 	}
 
 	/**
@@ -254,6 +270,8 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 		if (inputRequests.isEmpty())
 			throw new IllegalArgumentException("inputRequests must not be empty");
 		String requiredTaskId = McpTask.requireTaskId(taskId);
+		McpTask result;
+		boolean changed;
 
 		this.lock.lock();
 		try {
@@ -287,17 +305,24 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 			if (newlyIssuedKeys.isEmpty()
 					&& entry.task.getTaskStatus() == McpTaskStatus.INPUT_REQUIRED
 					&& entry.task.getTaskStatusMessage().equals(
-							Optional.ofNullable(taskStatusMessage)))
-				return entry.task;
-
-			McpTask updatedTask = buildTask(entry, McpTaskStatus.INPUT_REQUIRED,
-					taskStatusMessage, combinedInputRequests, null, null);
-			entry.issuedInputRequestKeys.addAll(newlyIssuedKeys);
-			entry.task = updatedTask;
-			return updatedTask;
+							Optional.ofNullable(taskStatusMessage))) {
+				result = entry.task;
+				changed = false;
+			} else {
+				McpTask updatedTask = buildTask(entry,
+						McpTaskStatus.INPUT_REQUIRED, taskStatusMessage,
+						combinedInputRequests, null, null);
+				entry.issuedInputRequestKeys.addAll(newlyIssuedKeys);
+				entry.task = updatedTask;
+				result = updatedTask;
+				changed = true;
+			}
 		} finally {
 			this.lock.unlock();
 		}
+		if (changed)
+			publishTaskChanged(requiredTaskId);
+		return result;
 	}
 
 	/**
@@ -440,6 +465,7 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	public void updateTask(@NonNull McpTaskUpdateContext context)
 			throws McpTaskNotFoundException {
 		requireNonNull(context);
+		boolean changed = false;
 		this.lock.lock();
 		try {
 			Entry entry = requireAuthorizedEntry(context.getTaskId(),
@@ -474,9 +500,12 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 					remainingInputRequests, null, null);
 			entry.pendingInputResponses.putAll(acceptedInputResponses);
 			entry.task = updatedTask;
+			changed = true;
 		} finally {
 			this.lock.unlock();
 		}
+		if (changed)
+			publishTaskChanged(context.getTaskId());
 	}
 
 	/**
@@ -514,20 +543,31 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 			@Nullable McpJsonRpcError failure)
 			throws McpTaskNotFoundException {
 		String requiredTaskId = McpTask.requireTaskId(taskId);
+		McpTask updatedTask;
 		this.lock.lock();
 		try {
 			Entry entry = requireEntry(requiredTaskId,
 					this.nanoTime.getAsLong());
 			requireNonterminal(entry.task);
-			McpTask updatedTask = buildTask(entry, taskStatus,
+			updatedTask = buildTask(entry, taskStatus,
 					taskStatusMessage, inputRequests, completeResult, failure);
 			entry.task = updatedTask;
 			if (isTerminal(taskStatus)) {
 				entry.pendingInputResponses.clear();
 			}
-			return updatedTask;
 		} finally {
 			this.lock.unlock();
+		}
+		publishTaskChanged(requiredTaskId);
+		return updatedTask;
+	}
+
+	private void publishTaskChanged(@NonNull String taskId) {
+		try {
+			this.taskEventPublisher.publishTaskChanged(requireNonNull(taskId));
+		} catch (RuntimeException ignored) {
+			// Optional notification delivery cannot make an already-committed task
+			// mutation appear to have failed. Polling remains authoritative.
 		}
 	}
 

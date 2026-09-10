@@ -58,6 +58,7 @@ public class McpInMemoryTaskManagerTests {
 				defaults.getTaskTimeToLive());
 		Assertions.assertEquals(Duration.ofSeconds(1),
 				defaults.getPollInterval());
+		Assertions.assertTrue(defaults.getTaskEventPublisher().isPresent());
 
 		McpInMemoryTaskManager reset = McpInMemoryTaskManager.builder()
 				.maximumRetainedTasks(3)
@@ -89,6 +90,55 @@ public class McpInMemoryTaskManagerTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpInMemoryTaskManager.builder()
 						.taskTimeToLive(Duration.ofSeconds(Long.MAX_VALUE)));
+	}
+
+	@Test
+	public void taskEventsFollowSuccessfulObservableMutationsAndAreAdvisory()
+			throws Exception {
+		McpInMemoryTaskManager manager =
+				McpInMemoryTaskManager.builder().build();
+		McpTaskEventPublisher publisher = manager.getTaskEventPublisher()
+				.orElseThrow();
+		List<McpTaskStatus> observedStatuses = new ArrayList<>();
+		McpSubscriptionEventRegistration observer = publisher.subscribe(taskId ->
+				observedStatuses.add(manager.findTask(taskId).orElseThrow()
+						.getTaskStatus()));
+		McpSubscriptionEventRegistration failing = publisher.subscribe(taskId -> {
+			throw new IllegalStateException("optional listener failure");
+		});
+		McpTaskControl control = control("/one", "owner", "origin");
+
+		try {
+			McpTask task = manager.createTask(control);
+			manager.markTaskWorking(task.getTaskId(), "Running");
+			McpInputRequest inputRequest = inputRequest("answer");
+			McpTask waiting = manager.requestTaskInput(task.getTaskId(),
+					Map.of("answer", inputRequest), "Waiting");
+			Assertions.assertSame(waiting, manager.requestTaskInput(
+					task.getTaskId(), Map.of("answer", inputRequest), "Waiting"));
+
+			manager.updateTask(updateContext(control.getRequestContext(),
+					task.getTaskId(), Map.of("answer", McpJsonObject.builder()
+						.put("roots", McpJsonArray.emptyInstance()).build())));
+			manager.updateTask(updateContext(control.getRequestContext(),
+					task.getTaskId(), Map.of("answer", inputResponse("accepted"))));
+			manager.requestTaskCancelation(requestContext(
+					control.getRequestContext(), task.getTaskId()));
+			manager.completeTask(task.getTaskId(),
+					McpCompleteResult.fromToolText("done"), null);
+			Assertions.assertThrows(IllegalStateException.class, () ->
+					manager.cancelTask(task.getTaskId(), null));
+
+			Assertions.assertEquals(List.of(
+					McpTaskStatus.WORKING,
+					McpTaskStatus.WORKING,
+					McpTaskStatus.INPUT_REQUIRED,
+					McpTaskStatus.WORKING,
+					McpTaskStatus.COMPLETED), observedStatuses);
+		} finally {
+			observer.close();
+			failing.close();
+		}
 	}
 
 	@Test

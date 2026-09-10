@@ -19,7 +19,7 @@ package com.soklet;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Thread-safe listener registration returned by an MCP subscription-event
+ * Thread-safe listener registration returned by an MCP resource- or task-event
  * publisher.
  * <p>
  * Closing a registration is idempotent. It unsubscribes only its listener and
