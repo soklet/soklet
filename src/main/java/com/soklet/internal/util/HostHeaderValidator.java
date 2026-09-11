@@ -19,6 +19,8 @@ package com.soklet.internal.util;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetAddress;
+import java.util.Optional;
 
 /**
  * Validates HTTP/1.1 Host header values against RFC 3986 uri-host grammar.
@@ -46,6 +48,31 @@ public final class HostHeaderValidator {
 		}
 
 		return isValidHostPort(trimmed);
+	}
+
+	/**
+	 * Parses an IPv6 address literal after validating its complete literal
+	 * grammar. Registration names, IPvFuture values, and malformed literals are
+	 * rejected before the JDK address parser is invoked, so this method cannot
+	 * send them to a name service.
+	 *
+	 * <p>The returned address may be represented by the JDK as an IPv4 address
+	 * when the input is an IPv4-mapped IPv6 literal.</p>
+	 *
+	 * @param literal the unbracketed candidate literal
+	 * @return the parsed address, or empty when the candidate is not an IPv6
+	 * address literal
+	 */
+	public static Optional<InetAddress> parseIpv6AddressLiteral(
+			@Nullable String literal) {
+		if (literal == null || !isValidIpv6Address(literal))
+			return Optional.empty();
+
+		try {
+			return Optional.of(InetAddress.getByName(literal));
+		} catch (Exception exception) {
+			return Optional.empty();
+		}
 	}
 
 	private static String trimOws(String value) {

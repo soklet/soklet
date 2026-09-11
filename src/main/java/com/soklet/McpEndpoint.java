@@ -170,7 +170,7 @@ public final class McpEndpoint {
 	 * @return the server implementation information
 	 */
 	@NonNull
-	public McpImplementation getServerInformation() {
+	public McpImplementation getServerInfo() {
 		return this.serverInformation;
 	}
 
@@ -181,7 +181,7 @@ public final class McpEndpoint {
 	 * @return {@code true} when MCP result metadata includes server information
 	 */
 	@NonNull
-	public Boolean isServerInformationIncluded() {
+	public Boolean isServerInfoIncluded() {
 		return this.serverInformationIncluded;
 	}
 
@@ -382,7 +382,7 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder serverInformation(
+		public Builder serverInfo(
 				@NonNull McpImplementation implementation) {
 			this.serverInformation = requireNonNull(implementation);
 			return this;
@@ -393,15 +393,15 @@ public final class McpEndpoint {
 		 * {@code _meta["io.modelcontextprotocol/serverInfo"]} in MCP results. The
 		 * default is {@code true}.
 		 *
-		 * @param serverInformationIncluded whether MCP result metadata includes server
-		 *                                 information, or null to restore the default
+		 * @param serverInfoIncluded whether MCP result metadata includes server
+		 *                           information, or null to restore the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder serverInformationIncluded(
-				@Nullable Boolean serverInformationIncluded) {
-			this.serverInformationIncluded = serverInformationIncluded == null
-					? true : serverInformationIncluded;
+		public Builder serverInfoIncluded(
+				@Nullable Boolean serverInfoIncluded) {
+			this.serverInformationIncluded = serverInfoIncluded == null
+					? true : serverInfoIncluded;
 			return this;
 		}
 

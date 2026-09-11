@@ -725,7 +725,7 @@ public class McpServerPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("omitted-server-info", "4.0.0")
 						.build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);

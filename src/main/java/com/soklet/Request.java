@@ -1266,7 +1266,8 @@ public final class Request {
 				.filter(value -> !value.isEmpty())
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 
-		return Optional.of(CorsPreflight.with(origin, accessControlRequestMethod, accessControlRequestHeaders));
+		return Optional.of(CorsPreflight.fromOrigin(origin,
+				accessControlRequestMethod, accessControlRequestHeaders));
 	}
 
 	@NonNull

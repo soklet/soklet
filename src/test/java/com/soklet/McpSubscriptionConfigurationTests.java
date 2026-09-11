@@ -373,7 +373,7 @@ public class McpSubscriptionConfigurationTests {
 		McpRateLimiter directToolRateLimiter = context ->
 				McpRateLimitDecision.allowed();
 		McpEndpoint generated = McpEndpoint.withPath("/generated", serverInformation())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.instructions("generated instructions")
 				.addTool(tool)
 				.addPrompt(prompt)
@@ -416,10 +416,10 @@ public class McpSubscriptionConfigurationTests {
 		Assertions.assertNotSame(namedLimiter, namedReplaced);
 		Assertions.assertSame(other, overlaid.getEndpoints().get(2));
 		Assertions.assertEquals(generated.getPath(), replaced.getPath());
-		Assertions.assertSame(generated.getServerInformation(),
-				replaced.getServerInformation());
-		Assertions.assertEquals(generated.isServerInformationIncluded(),
-				replaced.isServerInformationIncluded());
+		Assertions.assertSame(generated.getServerInfo(),
+				replaced.getServerInfo());
+		Assertions.assertEquals(generated.isServerInfoIncluded(),
+				replaced.isServerInfoIncluded());
 		Assertions.assertEquals(generated.getInstructions(),
 				replaced.getInstructions());
 		Assertions.assertSame(generated.getTools(), replaced.getTools());

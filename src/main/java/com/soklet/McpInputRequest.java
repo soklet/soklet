@@ -82,10 +82,10 @@ public final class McpInputRequest {
 	/**
 	 * Returns the declared client request method.
 	 *
-	 * @return client request method
+	 * @return client JSON-RPC request method
 	 */
 	@NonNull
-	public String getMethod() {
+	public String getJsonRpcMethod() {
 		return this.declaration.getJsonRpcMethod();
 	}
 
@@ -134,6 +134,6 @@ public final class McpInputRequest {
 	@NonNull
 	public final String toString() {
 		return "McpInputRequest{method='%s', params=<redacted>}"
-				.formatted(getMethod());
+				.formatted(getJsonRpcMethod());
 	}
 }

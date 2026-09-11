@@ -829,28 +829,151 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
-	public void clientInitializerCatchupIsBoundedByConnectionQueueCapacity()
-			throws Exception {
+	public void clientInitializerCatchupIsBoundedBeforeActivation() {
 		DefaultSseServer.DefaultSseUnicaster unicaster =
 				new DefaultSseServer.DefaultSseUnicaster(
 						ResourcePath.fromPath("/catchup"), 2);
 
 		unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
 		unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
-		BlockingQueue<Object> writeQueue = new ArrayBlockingQueue<>(2);
-		Method activate = DefaultSseServer.DefaultSseUnicaster.class
-				.getDeclaredMethod("activate", BlockingQueue.class);
-		activate.setAccessible(true);
-		activate.invoke(unicaster, writeQueue);
-
-		Assertions.assertEquals(2, writeQueue.size(),
-				"Initializer writes must occupy the live connection queue");
 
 		IllegalStateException exception = Assertions.assertThrows(
 				IllegalStateException.class, () -> unicaster.unicastEvent(
 						SseEvent.withData("catchup-2").build()));
 		Assertions.assertEquals(
 				"SSE connection write queue is at capacity", exception.getMessage());
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void clientInitializerActivationRejectsInsufficientQueueCapacity()
+			throws Exception {
+		DefaultSseServer.DefaultSseUnicaster unicaster =
+				new DefaultSseServer.DefaultSseUnicaster(
+						ResourcePath.fromPath("/catchup"), 2);
+		unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
+		unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
+		BlockingQueue<Object> writeQueue = new ArrayBlockingQueue<>(1);
+		Method activate = DefaultSseServer.DefaultSseUnicaster.class
+				.getDeclaredMethod("activate", BlockingQueue.class);
+		activate.setAccessible(true);
+
+		InvocationTargetException exception = Assertions.assertThrows(
+				InvocationTargetException.class,
+				() -> activate.invoke(unicaster, writeQueue));
+		IllegalStateException cause = Assertions.assertInstanceOf(
+				IllegalStateException.class, exception.getCause());
+		Assertions.assertEquals(
+				"SSE connection write queue is at capacity", cause.getMessage());
+		Assertions.assertTrue(writeQueue.isEmpty(),
+				"Failed activation must not partially populate the live queue");
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void fullClientInitializerAndVerificationHeartbeatReachRealSocket()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		SseServer sseServer = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.connectionQueueCapacity(6)
+				.heartbeatInterval(Duration.ofSeconds(30))
+				.build();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(LargeCatchupSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/catchup", ssePort);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
+						rawHeaders);
+
+				for (int index = 0; index < 6; index++) {
+					String block = readUntil(socket, "\n\n", 4_096);
+					Assertions.assertNotNull(block,
+							"Missing initializer event " + index);
+					Assertions.assertTrue(block.contains("data: catchup-" + index),
+							block);
+				}
+
+				Assertions.assertEquals(":\n\n",
+						readUntil(socket, "\n\n", 4_096),
+						"Framework verification heartbeat must follow the full initializer");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void clientInitializerOverflowOnRealSocketIsLoggedAndMetered()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		DefaultMetricsCollector metricsCollector =
+				DefaultMetricsCollector.defaultInstance();
+		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+		SseServer sseServer = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.connectionQueueCapacity(5)
+				.heartbeatInterval(Duration.ofSeconds(30))
+				.build();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(LargeCatchupSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/catchup", ssePort);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
+						rawHeaders);
+				Assertions.assertTrue(waitForEof(socket, 3_000),
+						"Initializer overflow must close the accepted connection");
+			}
+		}
+
+		LogEvent overflowEvent = logEvents.stream()
+				.filter(logEvent -> logEvent.getLogEventType()
+						== LogEventType.SSE_SERVER_CONNECTION_REJECTED)
+				.filter(logEvent -> logEvent.getMessage()
+						.contains("client initializer exceeded"))
+				.findFirst()
+				.orElseThrow(() -> new AssertionError(
+						"Missing initializer-overflow SSE log: " + logEvents));
+		IllegalStateException overflow = Assertions.assertInstanceOf(
+				IllegalStateException.class,
+				overflowEvent.getThrowable().orElseThrow());
+		Assertions.assertEquals("SSE connection write queue is at capacity",
+				overflow.getMessage());
+		Assertions.assertEquals(1L, transportFailureCount(metricsCollector,
+				ServerType.SSE,
+				MetricsCollector.TransportFailureReason.REGISTER_ERROR));
+		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
+				logEvent.getLogEventType()
+						== LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
 	}
 
 	@Test
@@ -1246,9 +1369,11 @@ public class SseTests {
 
 		Class<?> broadcasterClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseBroadcaster");
 		Class<?> registrationClass = Class.forName("com.soklet.DefaultSseServer$ClientSocketChannelRegistration");
-		Constructor<?> registrationConstructor = registrationClass.getDeclaredConstructor(connectionClass, broadcasterClass);
+		Constructor<?> registrationConstructor = registrationClass.getDeclaredConstructor(
+				connectionClass, broadcasterClass, int.class, boolean.class);
 		registrationConstructor.setAccessible(true);
-		Object registration = registrationConstructor.newInstance(connection, broadcaster);
+		Object registration = registrationConstructor.newInstance(
+				connection, broadcaster, 0, false);
 		Method processMethod = DefaultSseServer.class.getDeclaredMethod("processEstablishedConnection", registrationClass, Object.class);
 		processMethod.setAccessible(true);
 		AtomicReference<Throwable> processingFailure = new AtomicReference<>();
@@ -2075,6 +2200,78 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
+	public void timeoutInterruptOwnsFailureClassificationAndDoesNotMeterTaskError()
+			throws Exception {
+		int ssePort = findFreePort();
+		CountDownLatch handlerEntered = new CountDownLatch(1);
+		CountDownLatch handlerInterrupted = new CountDownLatch(1);
+		DefaultMetricsCollector metricsCollector =
+				DefaultMetricsCollector.defaultInstance();
+		CopyOnWriteArrayList<SseConnection.HandshakeFailureReason> failures =
+				new CopyOnWriteArrayList<>();
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.requestHandlerTimeout(Duration.ofSeconds(1))
+				.build();
+		SokletConfig config = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(SseNetworkResource.class)))
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didFailToEstablishSseConnection(
+							@NonNull Request request,
+							@Nullable ResourceMethod resourceMethod,
+							SseConnection.@NonNull HandshakeFailureReason reason,
+							@Nullable Throwable throwable) {
+						failures.add(reason);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.build();
+		server.initialize(config, (request, requestResultConsumer) -> {
+			handlerEntered.countDown();
+			try {
+				new CountDownLatch(1).await();
+				throw new AssertionError("Handshake wait unexpectedly completed");
+			} catch (InterruptedException e) {
+				handlerInterrupted.countDown();
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException(
+						"Handshake interrupted by timeout", e);
+			}
+		});
+
+		try {
+			server.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/tests/interrupt-timeout", ssePort);
+				Assertions.assertTrue(
+						handlerEntered.await(2, SECONDS),
+						"Handshake handler did not start");
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"),
+						rawHeaders);
+				Assertions.assertTrue(waitForEof(socket, 3_000));
+				Assertions.assertTrue(handlerInterrupted.await(2, SECONDS),
+						"Timeout did not interrupt the handshake handler");
+			}
+		} finally {
+			server.stop();
+		}
+
+		Assertions.assertEquals(
+				List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT),
+				failures);
+		Assertions.assertEquals(0L, transportFailureCount(metricsCollector,
+				ServerType.SSE,
+				MetricsCollector.TransportFailureReason.TASK_ERROR));
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_read_times_out_returns_408_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2170,6 +2367,43 @@ public class SseTests {
 						rawHeaders);
 				Assertions.assertFalse(rawHeaders.toLowerCase(Locale.ROOT)
 						.contains("transfer-encoding:"), rawHeaders);
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void acceptedHandshakeCanonicalizesApplicationKeepAliveHeaders()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(AcceptedWithKeepAliveHeaders.class)))
+				.lifecycleObserver(new QuietLifecycle()).build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/sse/accepted-keep-alive", ssePort);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
+						rawHeaders);
+				List<String> headerLines = Arrays.asList(rawHeaders.split("\r?\n"));
+				Assertions.assertEquals(1, headerLines.stream()
+						.filter(line -> line.regionMatches(true, 0,
+								"Connection:", 0, "Connection:".length()))
+						.count(), rawHeaders);
+				Assertions.assertTrue(headerLines.stream().anyMatch(line ->
+						line.equalsIgnoreCase("Connection: keep-alive")), rawHeaders);
+				Assertions.assertFalse(headerLines.stream().anyMatch(line ->
+						line.regionMatches(true, 0, "Keep-Alive:", 0,
+								"Keep-Alive:".length())), rawHeaders);
 			}
 		}
 	}
@@ -2356,6 +2590,17 @@ public class SseTests {
 		public SseHandshakeResult accept() {
 			return SseHandshakeResult.Accepted.builder()
 					.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
+					.build();
+		}
+	}
+
+	public static class AcceptedWithKeepAliveHeaders {
+		@SseEventSource("/sse/accepted-keep-alive")
+		public SseHandshakeResult accept() {
+			return SseHandshakeResult.Accepted.builder()
+					.headers(Map.of(
+							"Connection", Set.of("close"),
+							"Keep-Alive", Set.of("timeout=5, max=1000")))
 					.build();
 		}
 	}
@@ -3278,6 +3523,130 @@ public class SseTests {
 		Assertions.assertTrue(setCookie.contains("session=abc"), "Missing Set-Cookie header");
 
 		Assertions.assertEquals("payload", parts[1]);
+	}
+
+	@Test
+	public void timeoutOwnedHandshakeCannotBeClaimedOrClosedByHandler()
+			throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		Class<?> contextClass = Class.forName(
+				"com.soklet.DefaultSseServer$HandshakeContext");
+		Constructor<?> contextConstructor = contextClass
+				.getDeclaredConstructor(InetSocketAddress.class);
+		contextConstructor.setAccessible(true);
+		Object context = contextConstructor.newInstance((InetSocketAddress) null);
+
+		Class<?> ownerClass = Class.forName(
+				"com.soklet.DefaultSseServer$HandshakeResponseOwner");
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		Object timeoutOwner = Enum.valueOf((Class<? extends Enum>) ownerClass,
+				"TIMEOUT");
+		Field ownerField = contextClass.getDeclaredField("handshakeResponseOwner");
+		ownerField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		AtomicReference<Object> owner =
+				(AtomicReference<Object>) ownerField.get(context);
+		owner.set(timeoutOwner);
+
+		Method claim = DefaultSseServer.class.getDeclaredMethod(
+				"claimHandshakeResponseForHandler", contextClass);
+		claim.setAccessible(true);
+		Method closeUnlessTimeoutOwned = DefaultSseServer.class.getDeclaredMethod(
+				"closeHandshakeChannelUnlessTimeoutOwned", SocketChannel.class,
+				contextClass);
+		closeUnlessTimeoutOwned.setAccessible(true);
+		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1);
+
+		try {
+			Assertions.assertEquals(Boolean.FALSE, claim.invoke(server, context),
+					"Handler must lose after timeout atomically owns the handshake");
+			closeUnlessTimeoutOwned.invoke(server, channel, context);
+			Assertions.assertTrue(channel.isOpen(),
+					"Losing handler must not close the timeout-owned channel");
+		} finally {
+			channel.close();
+		}
+	}
+
+	@Test
+	public void headerOverflowClaimsHandlerBeforeTimeoutCanTakeChannel()
+			throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.maximumHeadersSizeInBytes(19)
+				.build();
+		Class<?> contextClass = Class.forName(
+				"com.soklet.DefaultSseServer$HandshakeContext");
+		Constructor<?> contextConstructor = contextClass
+				.getDeclaredConstructor(InetSocketAddress.class);
+		contextConstructor.setAccessible(true);
+		Object context = contextConstructor.newInstance((InetSocketAddress) null);
+
+		Class<?> ownerClass = Class.forName(
+				"com.soklet.DefaultSseServer$HandshakeResponseOwner");
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		Object unclaimedOwner = Enum.valueOf((Class<? extends Enum>) ownerClass,
+				"UNCLAIMED");
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		Object timeoutOwner = Enum.valueOf((Class<? extends Enum>) ownerClass,
+				"TIMEOUT");
+		Field ownerField = contextClass.getDeclaredField("handshakeResponseOwner");
+		ownerField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		AtomicReference<Object> owner =
+				(AtomicReference<Object>) ownerField.get(context);
+		AtomicBoolean timeoutClaimAttempted = new AtomicBoolean(false);
+		AtomicBoolean timeoutClaimed = new AtomicBoolean(false);
+
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didFailToReadRequest(@NonNull ServerType serverType,
+							@Nullable InetSocketAddress remoteAddress,
+							@Nullable String requestTarget,
+							@NonNull RequestReadFailureReason reason,
+							@Nullable Throwable throwable) {
+						timeoutClaimAttempted.set(true);
+						timeoutClaimed.set(owner.compareAndSet(
+								unclaimedOwner, timeoutOwner));
+					}
+				})
+				.build(), (request, requestResultConsumer) -> { /* no-op */ });
+
+		ExecutorService requestReader = Executors.newSingleThreadExecutor();
+		Field requestReaderField = DefaultSseServer.class.getDeclaredField(
+				"requestReaderExecutorService");
+		requestReaderField.setAccessible(true);
+		requestReaderField.set(server, requestReader);
+		byte[] requestBytes = ("GET /sse HTTP/1.1\r\n"
+				+ "Host: localhost\r\n"
+				+ "X-Test: abc\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1);
+		AtomicBoolean requestDelivered = new AtomicBoolean(false);
+		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(8) {
+			@Override
+			public int read(ByteBuffer destination) {
+				if (!requestDelivered.compareAndSet(false, true))
+					return -1;
+				destination.put(requestBytes);
+				return requestBytes.length;
+			}
+		};
+		Method handle = DefaultSseServer.class.getDeclaredMethod(
+				"handleClientSocketChannel", SocketChannel.class, contextClass);
+		handle.setAccessible(true);
+
+		try {
+			handle.invoke(server, channel, context);
+			Assertions.assertTrue(timeoutClaimAttempted.get(),
+					"Test seam did not reach the former read/CAS race window");
+			Assertions.assertFalse(timeoutClaimed.get(),
+					"Parse-error handler must claim ownership before callbacks run");
+			Assertions.assertFalse(channel.isOpen());
+			Assertions.assertTrue(new String(channel.getWrittenBytes(),
+					StandardCharsets.ISO_8859_1).startsWith("HTTP/1.1 431"));
+		} finally {
+			channel.close();
+			requestReader.shutdownNow();
+		}
 	}
 
 	private static final class TransientAcceptFailureServerSocketChannel extends ServerSocketChannel {

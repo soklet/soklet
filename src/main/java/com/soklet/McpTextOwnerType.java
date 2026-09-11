@@ -30,7 +30,7 @@ public enum McpTextOwnerType {
 	SERVER_INFORMATION,
 	/** Endpoint instructions. */
 	ENDPOINT,
-	/** Tool descriptor, annotations, or generated schema presentation text. */
+	/** Tool descriptor, annotations, or derived, fixed, or authored schema presentation text. */
 	TOOL,
 	/** Prompt or prompt-argument presentation text. */
 	PROMPT,

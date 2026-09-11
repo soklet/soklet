@@ -61,6 +61,16 @@ import javax.annotation.concurrent.ThreadSafe;
  *     .build();
  * }}</pre>
  * <p>
+ * Client-initializer writes are buffered before the connection becomes active
+ * and are therefore limited to the configured
+ * {@link SseServer.Builder#connectionQueueCapacity(Integer)}. Configure that
+ * capacity for the largest expected catch-up page, and paginate or otherwise
+ * limit larger replays before returning the accepted result. If an overflow
+ * escapes the initializer, Soklet closes the already-accepted connection
+ * before delivering the buffered writes and records the failure in logs and
+ * metrics. Soklet's optional one-time connection-verification heartbeat does
+ * not consume an application queue slot.
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events#client-initialization">https://www.soklet.com/docs/server-sent-events#client-initialization</a> for detailed documentation.
  * <p>
  * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
@@ -77,6 +87,9 @@ public interface SseUnicaster {
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
 	 * @param sseEvent the Server-Sent Event payload to unicast
+	 * @throws IllegalStateException if the client initializer or active
+	 * connection already has the configured maximum number of pending
+	 * application writes
 	 */
 	void unicastEvent(@NonNull SseEvent sseEvent);
 
@@ -90,6 +103,9 @@ public interface SseUnicaster {
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
 	 * @param sseComment the comment payload to unicast
+	 * @throws IllegalStateException if the client initializer or active
+	 * connection already has the configured maximum number of pending
+	 * application writes
 	 */
 	void unicastComment(@NonNull SseComment sseComment);
 

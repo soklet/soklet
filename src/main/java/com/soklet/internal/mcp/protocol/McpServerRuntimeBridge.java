@@ -1058,7 +1058,7 @@ public final class McpServerRuntimeBridge {
 			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
 					exactResourceCount, 3, 8, "MCP resource catalog");
 		}
-		McpImplementation publicInformation = publicEndpoint.getServerInformation();
+		McpImplementation publicInformation = publicEndpoint.getServerInfo();
 		McpImplementationMetadata implementation = new McpImplementationMetadata(
 				publicInformation.getName(), publicInformation.getVersion(),
 				publicInformation.getTitle(), publicInformation.getDescription(),
@@ -1067,7 +1067,7 @@ public final class McpServerRuntimeBridge {
 		McpNormalizedEndpoint.Builder endpointBuilder =
 				McpNormalizedEndpoint.withServerInformation(implementation)
 						.serverInformationIncluded(
-								publicEndpoint.isServerInformationIncluded());
+								publicEndpoint.isServerInfoIncluded());
 		if (endpointPlan.tasksSupported())
 			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 					com.soklet.internal.mcp.protocol.McpJsonObject.empty());

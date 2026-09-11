@@ -1859,7 +1859,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("method", key.getMethod().name());
+		labels.put("method", key.getHttpMethod().name());
 		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
 		labels.put("status_class", key.getStatusClass());
 		return new LabelSet(labels);
@@ -1870,7 +1870,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("method", key.getMethod().name());
+		labels.put("method", key.getHttpMethod().name());
 		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
 		return new LabelSet(labels);
 	}

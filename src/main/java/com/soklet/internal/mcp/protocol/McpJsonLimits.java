@@ -23,13 +23,15 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Explicit resource bounds for the internal JSON codec.
  *
- * <p>The package-private production and maximum-supported profiles are fixed
- * from pinned-corpus, adversarial-boundary, and cross-JDK evidence. The
- * maximum-supported profile is the public transport ceiling. A separate,
- * package-private durable-task-origin profile provides deterministic headroom
- * for a maximum public request plus framework-retained schema and wrapper
- * state. Public callers may construct a stricter profile, but cannot raise a
- * field beyond the implementation's reviewed internal hard ceiling.</p>
+ * <p>The production and maximum-supported profiles are fixed from
+ * pinned-corpus, adversarial-boundary, and cross-JDK evidence. The
+ * maximum-supported profile's input-byte bound is the 16 MiB public transport
+ * ceiling, which the supported server builder and runtime bridge enforce
+ * independently. The compact constructor also admits larger, package-owned
+ * durable-task profiles so an accepted public request can be retained with
+ * framework schema and wrapper state. Those internal allowances do not widen
+ * transport acceptance; direct construction of this internal type is not a
+ * supported way to configure an MCP server transport.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

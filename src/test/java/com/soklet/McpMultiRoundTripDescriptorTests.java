@@ -131,7 +131,8 @@ class McpMultiRoundTripDescriptorTests {
 
 			assertSame(declaration, request.getDeclaration());
 			assertSame(params, request.getParams());
-			assertEquals(declaration.getJsonRpcMethod(), request.getMethod());
+			assertEquals(declaration.getJsonRpcMethod(),
+					request.getJsonRpcMethod());
 			assertEquals(request,
 					McpInputRequest.fromDeclaration(declaration, params));
 			assertEquals(request.hashCode(),

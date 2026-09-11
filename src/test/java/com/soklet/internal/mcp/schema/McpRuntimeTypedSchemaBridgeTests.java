@@ -92,24 +92,36 @@ class McpRuntimeTypedSchemaBridgeTests {
 	}
 
 	@Test
-	void floatingPointSchemasAcceptTheirOwnFiniteBoundaryEncoding() {
+	void floatingPointSchemasAcceptFiniteBoundariesAndRejectOutOfRangeValues() {
 		McpRuntimeTypedSchemaBridge<Float> floatBridge =
 				McpRuntimeTypedSchemaBridge.compileToolOutput(Float.class);
 		McpJsonNumber encodedMaximum = assertInstanceOf(McpJsonNumber.class,
 				floatBridge.encode(Float.MAX_VALUE));
+		McpJsonNumber aboveFloatMaximum = McpJsonNumber.fromValue(
+				new BigDecimal(Float.toString(Float.MAX_VALUE))
+						.multiply(BigDecimal.TEN));
 
 		assertEquals(new BigDecimal(Float.toString(Float.MAX_VALUE)),
 				encodedMaximum.getValue());
 		assertTrue(floatBridge.isValid(encodedMaximum));
 		assertEquals(Float.MAX_VALUE, floatBridge.decode(encodedMaximum));
+		assertFalse(floatBridge.isValid(aboveFloatMaximum));
+		assertThrows(IllegalArgumentException.class,
+				() -> floatBridge.decode(aboveFloatMaximum));
 
 		McpRuntimeTypedSchemaBridge<Double> doubleBridge =
 				McpRuntimeTypedSchemaBridge.compileToolOutput(Double.class);
 		McpJsonNumber encodedDoubleMaximum = assertInstanceOf(McpJsonNumber.class,
 				doubleBridge.encode(Double.MAX_VALUE));
+		McpJsonNumber aboveDoubleMaximum = McpJsonNumber.fromValue(
+				new BigDecimal(Double.toString(Double.MAX_VALUE))
+						.multiply(BigDecimal.TEN));
 		assertTrue(doubleBridge.isValid(encodedDoubleMaximum));
 		assertEquals(Double.MAX_VALUE,
 				doubleBridge.decode(encodedDoubleMaximum));
+		assertFalse(doubleBridge.isValid(aboveDoubleMaximum));
+		assertThrows(IllegalArgumentException.class,
+				() -> doubleBridge.decode(aboveDoubleMaximum));
 	}
 
 	@Test

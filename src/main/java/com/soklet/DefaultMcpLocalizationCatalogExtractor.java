@@ -163,9 +163,9 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	private static List<McpCanonicalLocalizationPlan.Slot>
 			serverInformationSlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
-		if (!endpoint.isServerInformationIncluded())
+		if (!endpoint.isServerInfoIncluded())
 			return List.of();
-		McpImplementation information = endpoint.getServerInformation();
+		McpImplementation information = endpoint.getServerInfo();
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		information.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
 				endpoint.getPath(), McpTextOwnerType.SERVER_INFORMATION,

@@ -299,7 +299,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint discoveryEndpoint = endpointBuilder(
 				"result-envelope-complete")
-				.serverInformationIncluded(true)
+				.serverInfoIncluded(true)
 				.addTool(tool)
 				.addPrompt(prompt)
 				.addResource(resource)
@@ -410,7 +410,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 		McpEndpoint localizedEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-discovery")
-				.serverInformationIncluded(true)
+				.serverInfoIncluded(true)
 				.instructions("Canonical result instructions")
 				.build();
 		McpServer localizedServer = serverBuilder(localizedEndpoint)
@@ -620,7 +620,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint subscriptionEndpoint = endpointBuilder(
 				"result-envelope-subscription")
-				.serverInformationIncluded(true)
+				.serverInfoIncluded(true)
 				.addResource(resource)
 				.subscriptionConfig(subscriptions)
 				.build();
@@ -630,7 +630,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 		McpEndpoint localizedSubscriptionEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-subscription")
-				.serverInformationIncluded(true)
+				.serverInfoIncluded(true)
 				.addResource(resource)
 				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisher(
@@ -1003,7 +1003,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	private static McpEndpoint.Builder endpointBuilder(String name) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						name, "4.0.0").build())
-				.serverInformationIncluded(false);
+				.serverInfoIncluded(false);
 	}
 
 	private static McpEndpoint.Builder localizedEndpointBuilder(String name) {
@@ -1012,7 +1012,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 						.title("Canonical result title")
 						.description("Canonical result description")
 						.build())
-				.serverInformationIncluded(false);
+				.serverInfoIncluded(false);
 	}
 
 	private static McpLocalizer frenchLocalizer() {

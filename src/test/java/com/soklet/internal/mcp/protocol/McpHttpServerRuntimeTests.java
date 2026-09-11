@@ -1041,6 +1041,54 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void host_authorization_rejects_ipvFuture_without_protocol_dispatch()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(), ignored -> {
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpServerRuntime runtime = runtime(configuration(0), policy);
+
+		try {
+			int port = runtime.start().getPort();
+			for (String literal : List.of(
+					"v1.example", "vdeadbeef.attacker.test")) {
+				RawResponse response = send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+								"Host", "[" + literal + "]:" + port),
+						discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(421, response.status(), literal);
+			}
+			Assertions.assertEquals(0, admissions.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void host_authorization_preserves_valid_ipv6_literals()
+			throws Exception {
+		McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy(
+				"/mcp", Set.of("2001:db8::1"), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(),
+				ignored -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpServerRuntime runtime = runtime(configuration(0), policy);
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse response = send(port, "POST", "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host",
+							"[2001:0db8:0:0:0:0:0:1]:" + port),
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+			Assertions.assertEquals(200, response.status(), response.bodyText());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void literal_loopback_bind_spellings_do_not_require_allowed_hosts() {
 		for (String host : List.of(
 				"0:0:0:0:0:0:0:1", "[0:0:0:0:0:0:0:1]", "::0.0.0.1",
@@ -1056,7 +1104,7 @@ public class McpHttpServerRuntimeTests {
 	public void nonloopback_and_wildcard_binds_require_explicit_allowed_hosts() {
 		for (String host : List.of(
 				"0.0.0.0", "::", "0:0:0:0:0:0:0:2", "128.1",
-				"192.0.2.1", "example.test")) {
+				"192.0.2.1", "example.test", ".::1", "[.::1]")) {
 			IllegalArgumentException exception = Assertions.assertThrows(
 					IllegalArgumentException.class,
 					() -> runtime(configurationWithHost(0, host), defaultPolicy()),

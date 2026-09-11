@@ -170,10 +170,10 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 						prompt.getArguments().get(1).getName());
 				Assertions.assertFalse(prompt.getArguments().get(1).isRequired());
 				Assertions.assertEquals("/catalog/mcp", endpoint.getPath());
-				Assertions.assertEquals("catalog", endpoint.getServerInformation()
+				Assertions.assertEquals("catalog", endpoint.getServerInfo()
 						.getName());
 				Assertions.assertEquals("Catalog server", endpoint
-						.getServerInformation().getTitle().orElseThrow());
+						.getServerInfo().getTitle().orElseThrow());
 				Assertions.assertEquals("Use catalog.search", endpoint
 						.getInstructions().orElseThrow());
 				Assertions.assertEquals("catalog-endpoint", endpoint

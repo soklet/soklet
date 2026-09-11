@@ -1142,45 +1142,49 @@ public final class SokletProcessor extends AbstractProcessor {
 					ownerName);
 		}
 
-		// Elements#getAllMembers deliberately omits a supertype method when the
-		// endpoint overrides it. Walk the hierarchy itself so an unannotated
-		// override cannot silently hide an MCP operation compiled in another
-		// module.
-		List<ExecutableElement> endpointMethods = endpointType.getEnclosedElements()
+		// Elements#getAllMembers deliberately omits a supertype method when a more
+		// specific method overrides it. Walk the hierarchy itself so an unannotated
+		// endpoint or intermediate-class override cannot silently hide an MCP
+		// operation compiled in another module.
+		List<ExecutableElement> effectiveMethods = elements.getAllMembers(endpointType)
 				.stream()
 				.filter(element -> element.getKind() == ElementKind.METHOD)
 				.map(element -> (ExecutableElement) element)
 				.toList();
 		List<TypeElement> supertypeHierarchy =
 				mcpSupertypeHierarchy(endpointType);
-		for (ExecutableElement endpointMethod : endpointMethods) {
+		for (ExecutableElement effectiveMethod : effectiveMethods) {
 			Set<String> reportedAnnotations = new LinkedHashSet<>();
-			Set<String> endpointAnnotations = new LinkedHashSet<>(
-					mcpOperationAnnotationNames(endpointMethod, toolAnnotation,
+			Set<String> effectiveAnnotations = new LinkedHashSet<>(
+					mcpOperationAnnotationNames(effectiveMethod, toolAnnotation,
 							promptAnnotation, resourceAnnotation,
 							listResourcesAnnotation));
+			Element effectiveOwner = effectiveMethod.getEnclosingElement();
+			String effectiveOwnerName = effectiveOwner instanceof TypeElement ownerType
+					? ownerType.getQualifiedName().toString()
+					: effectiveOwner.toString();
 			for (TypeElement supertype : supertypeHierarchy) {
 				for (Element enclosed : supertype.getEnclosedElements()) {
 					if (!(enclosed instanceof ExecutableElement supertypeMethod)
-							|| !elements.overrides(endpointMethod,
+							|| !elements.overrides(effectiveMethod,
 							supertypeMethod, endpointType))
 						continue;
 					List<String> missingAnnotations = new ArrayList<>(
 							mcpOperationAnnotationNames(supertypeMethod,
 									toolAnnotation, promptAnnotation,
 									resourceAnnotation, listResourcesAnnotation));
-					missingAnnotations.removeAll(endpointAnnotations);
+					missingAnnotations.removeAll(effectiveAnnotations);
 					missingAnnotations.removeIf(annotation ->
 							!reportedAnnotations.add(annotation));
 					if (missingAnnotations.isEmpty())
 						continue;
-					mcpError(endpointMethod,
+					mcpError(endpointType,
 							"Soklet: Inherited MCP operation %s method %s from supertype %s is overridden by method %s.%s without redeclaring %s; this inherited operation is not supported, and MCP operation annotations must be declared directly on the overriding @McpServerEndpoint method.",
 							String.join("/", missingAnnotations),
 							supertypeMethod.getSimpleName(),
 							supertype.getQualifiedName(),
-							endpointType.getQualifiedName(),
-							endpointMethod.getSimpleName(),
+							effectiveOwnerName,
+							effectiveMethod.getSimpleName(),
 							String.join("/", missingAnnotations));
 				}
 			}

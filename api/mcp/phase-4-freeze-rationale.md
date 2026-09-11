@@ -18,7 +18,7 @@ Greenfield localization-result simplification amendment reviewed: 2026-08-17
 
 Greenfield localization-context builder amendment reviewed: 2026-08-17
 
-Final greenfield API polish amendment reviewed: 2026-08-17
+Greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 Greenfield typed-request-state amendment reviewed: 2026-08-18
@@ -34,7 +34,11 @@ Typed MCP operation amendment reviewed: 2026-09-06
 
 Release-review API amendment reviewed: 2026-09-10
 
-Lifecycle-observer and final public-value amendment reviewed: 2026-09-10
+Lifecycle-observer and public-value amendment reviewed: 2026-09-10
+
+Authored input-schema remediation amendment reviewed: 2026-09-10
+
+Pre-release naming amendment reviewed: 2026-09-11
 
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
@@ -341,9 +345,9 @@ and its reflection digest is
 The generated compatibility ledger remains exactly 564 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
 
-### Final greenfield API polish amendment
+### Greenfield API polish amendment
 
-The final same-day review removes the last pre-freeze convenience and SPI
+The API-polish review removes the remaining pre-freeze convenience and SPI
 ambiguities without retaining aliases. `McpEndpointRegistry` is now a final,
 immutable Soklet-owned class rather than an application-implemented interface;
 its public factories and copy operations are unchanged. Tool handlers read the
@@ -680,7 +684,7 @@ the counts and advanced the canonical compatibility set to 562. The
 greenfield cohesion amendment then replaced the reviewed naming families
 one-for-one without changing Phase 4 counts and advanced the canonical
 compatibility set to 564. The later localization-result simplification changes
-only Phase 6 and leaves that 564-record set unchanged. The final greenfield API
+only Phase 6 and leaves that 564-record set unchanged. The greenfield API
 polish changes the Phase 4 signature and reflection hashes without changing
 its counts or that compatibility set. The subsequent public-record elimination
 changes all three phase snapshots and advances the compatibility set to 565;
@@ -984,9 +988,9 @@ changing their maturity classification. The aggregate Phase 4/5/6 and
 provisional signature check is a local development gate until it is captured
 for an immutable release candidate; it is not publication evidence.
 
-## 2026-09-10 lifecycle-observer and final public-value amendment
+## 2026-09-10 lifecycle-observer and public-value amendment
 
-The final release review adds the `LIFECYCLE_OBSERVER_TRANSITION_FAILED`
+The release review adds the `LIFECYCLE_OBSERVER_TRANSITION_FAILED`
 `LogEventType` value for the nonfatal direct-lifecycle observer diagnostic. It
 also completes structural `equals(Object)` and `hashCode()` contracts on 14
 Phase 4 immutable values: `McpAdmissionRejection`, `McpBlobResourceContents`,
@@ -996,7 +1000,7 @@ Phase 4 immutable values: `McpAdmissionRejection`, `McpBlobResourceContents`,
 `McpToolAnnotations`, and `McpToolSchema`. These methods are intentional public
 API, not compiler-generated compatibility aliases.
 
-The final Phase 4 snapshot contains 1,131 records: 134 classes, one
+The resulting Phase 4 snapshot contains 1,131 records: 134 classes, one
 constructor, 94 fields, and 902 methods. Its signature SHA-256 is
 `fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`;
 the reviewed reflection/nullability SHA-256 is
@@ -1006,7 +1010,7 @@ and the unchanged include-inventory SHA-256 is
 
 Restoring `McpClientCapabilities.equals(Object)` and `hashCode()` removes their
 two prior compatible-removal records from the released-3.5.1 comparison. The
-final compatibility ledger therefore contains 646 records with SHA-256
+compatibility ledger at that checkpoint therefore contains 646 records with SHA-256
 `8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 The focused reflection and aggregate freeze checks remain local development
 evidence until captured for an immutable release candidate.
@@ -1032,5 +1036,34 @@ and the unchanged include-inventory SHA-256 is
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 The owner partition and 646-record released-3.5.1 compatibility ledger remain
 unchanged. The historical D1p preview seal is not rewritten; this local
-amendment remains development evidence until a fresh final release-candidate
+amendment remains development evidence until a fresh release-candidate
 API-freeze capture records it.
+
+## 2026-09-11 pre-release naming amendment
+
+The owner-approved naming pass applies four one-for-one Phase 4 renames on
+`McpEndpoint`: `getServerInfo()`, `isServerInfoIncluded()`,
+`Builder.serverInfo(...)`, and `Builder.serverInfoIncluded(...)`. The former
+`Information`-spelled methods are not retained as aliases. This keeps the
+getter and builder property vocabulary aligned before publication.
+
+The same pass renames the two non-MCP HTTP route-key getters to
+`getHttpMethod()` and both `CorsPreflight.with(...)` overloads to
+`fromOrigin(...)`. The route-key getters were unreleased 4.0 additions and do
+not alter the 3.5.1 comparison. The CORS factories existed in 3.5.1, so their
+deliberate removal adds two reviewed incompatibility records. `CorsPreflight`
+therefore joins the reviewed non-MCP owner allowlist, which now contains 52
+owners; the complete current-side owner partition is 134/36/64/14 plus those
+52 non-MCP owners, or 300 owners in total.
+
+The count-neutral Phase 4 snapshot remains at 1,132 records across 134 owners.
+Its signature SHA-256 is
+`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`;
+the reflection/nullability SHA-256 is
+`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`;
+and the unchanged include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The released-3.5.1 compatibility ledger now contains 648 records with SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+The historical D1p preview seal remains immutable; a release-candidate capture
+must use this active snapshot.

@@ -616,7 +616,7 @@ public class McpSimulatorEveryOperationTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-every-operation-test",
 						"4.0.0").build())
-				.serverInformationIncluded(this.serverInformationIncluded)
+				.serverInfoIncluded(this.serverInformationIncluded)
 				.addTool(tool)
 				.addPrompt(prompt)
 				.addResource(exact)

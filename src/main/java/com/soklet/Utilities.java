@@ -1673,17 +1673,7 @@ public final class Utilities {
 	private static Optional<InetAddress> parseIpv6Literal(@Nullable String value) {
 		String trimmed = trimAggressivelyToNull(value);
 
-		if (trimmed == null || !trimmed.contains(":"))
-			return Optional.empty();
-
-		if (trimmed.indexOf('[') >= 0 || trimmed.indexOf(']') >= 0 || trimmed.indexOf('"') >= 0 || trimmed.indexOf('%') >= 0)
-			return Optional.empty();
-
-		try {
-			return Optional.of(InetAddress.getByName(trimmed));
-		} catch (Exception e) {
-			return Optional.empty();
-		}
+		return HostHeaderValidator.parseIpv6AddressLiteral(trimmed);
 	}
 
 	private static boolean isValidPort(@Nullable String value) {
@@ -1944,20 +1934,22 @@ public final class Utilities {
 	}
 
 	static void validateHeaderNameAndValue(@Nullable String name,
-																				 @Nullable String value) {
+																 @Nullable String value) {
 		// First, validate name:
-		name = trimAggressivelyToNull(name);
-
-		if (name == null)
+		if (trimAggressivelyToNull(name) == null)
 			throw new IllegalArgumentException("Header name is blank");
+		String storedName = requireNonNull(name);
 
-		for (int i = 0; i < name.length(); i++) {
-			char c = name.charAt(i);
+		// Validate the exact name that will be stored and serialized.  Trimming only
+		// for the blank check would otherwise allow leading or trailing whitespace
+		// through this boundary and fail much later in the transport.
+		for (int i = 0; i < storedName.length(); i++) {
+			char c = storedName.charAt(i);
 			// RFC 9110 tchar: "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
 			if (c > 0x7F || !(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
 					c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
 					Character.isLetterOrDigit(c))) {
-				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", name, printableChar(c)));
+				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", storedName, printableChar(c)));
 			}
 		}
 
@@ -1967,8 +1959,8 @@ public final class Utilities {
 
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
-			if (c == '\r' || c == '\n' || c == 0x00 || c > 0xFF || (c < 0x20 && c != '\t')) {
-				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, printableChar(c)));
+			if (c == '\r' || c == '\n' || c == 0x00 || c == 0x7F || c > 0xFF || (c < 0x20 && c != '\t')) {
+				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, storedName, printableChar(c)));
 			}
 		}
 
@@ -1980,7 +1972,7 @@ public final class Utilities {
 			if (b == 0x0D || b == 0x0A || b == 0x00 || (b >= 0x00 && b < 0x20 && b != 0x09)) {
 				throw new IllegalArgumentException(format(
 						"Illegal (percent-encoded) header value '%s' for header name '%s'. Offending octet: 0x%02X",
-						value, name, b));
+						value, storedName, b));
 			}
 		}
 	}

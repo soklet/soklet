@@ -26,7 +26,7 @@ public class MicrohttpResponseHeaderValidationTests {
 	@Test
 	public void serializationRejectsControlCharactersInEveryHeaderSource() {
 		for (char character : new char[]{
-				'\0', '\u0001', '\r', '\n', '\u007F', '\u0085'}) {
+				'\0', '\u0001', '\r', '\n', '\u007F', '\u0100'}) {
 			Header invalidName = new Header("X-Test" + character, "safe");
 			Header invalidValue = new Header("X-Test", "safe" + character + "unsafe");
 
@@ -38,15 +38,15 @@ public class MicrohttpResponseHeaderValidationTests {
 	}
 
 	@Test
-	public void serializationAcceptsTokenNamesAndHorizontalTabsInValues() {
+	public void serializationAcceptsTokenNamesHorizontalTabsAndObsTextInValues() {
 		MicrohttpResponse response = new MicrohttpResponse(200, "OK", List.of(
-				new Header("X-!#$%&'*+-.^_`|~", "one\ttwo\u00E9")), new byte[0]);
+				new Header("X-!#$%&'*+-.^_`|~", "one\ttwo\u0080\u0085\u00E9\u00FF")), new byte[0]);
 
 		String serialized = new String(response.serializeHead("HTTP/1.1", List.of()),
 				StandardCharsets.ISO_8859_1);
 
 		Assertions.assertEquals("HTTP/1.1 200 OK\r\n"
-				+ "X-!#$%&'*+-.^_`|~: one\ttwo\u00E9\r\n\r\n", serialized);
+				+ "X-!#$%&'*+-.^_`|~: one\ttwo\u0080\u0085\u00E9\u00FF\r\n\r\n", serialized);
 	}
 
 	private static void assertRejectedResponseHeader(Header header) {

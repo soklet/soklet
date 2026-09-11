@@ -924,9 +924,13 @@ public final class Soklet implements AutoCloseable {
 
 		// Overlay user-supplied headers (prefer user values on key collision)
 		for (Map.Entry<String, Set<String>> e : headers.entrySet()) {
+			String headerName = e.getKey();
+			if (headerName != null && (headerName.equalsIgnoreCase("Connection")
+					|| headerName.equalsIgnoreCase("Keep-Alive")))
+				continue;
 			// Defensively copy so callers can't mutate after construction
 			Set<String> values = e.getValue() == null ? Set.of() : Set.copyOf(e.getValue());
-			finalHeaders.put(e.getKey(), values);
+			finalHeaders.put(headerName, values);
 		}
 
 		return MarshaledResponse.withStatusCode(200)

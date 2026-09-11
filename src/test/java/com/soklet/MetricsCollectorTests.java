@@ -60,6 +60,7 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -91,6 +92,12 @@ public class MetricsCollectorTests {
 		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.fromPath("/widgets/{id}");
 		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
 		HttpServerRouteKey routeKey = new HttpServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
+		assertEquals(HttpMethod.POST, statusKey.getHttpMethod());
+		assertEquals(HttpMethod.POST, routeKey.getHttpMethod());
+		assertThrows(NoSuchMethodException.class,
+				() -> statusKey.getClass().getMethod("getMethod"));
+		assertThrows(NoSuchMethodException.class,
+				() -> routeKey.getClass().getMethod("getMethod"));
 
 		HistogramSnapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);

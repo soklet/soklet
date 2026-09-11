@@ -229,7 +229,7 @@ public class McpBootstrapValueTests {
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonObject.builder().put("value", (Boolean) null));
 		Assertions.assertSame(Boolean.TRUE,
-				endpoint("/mcp").isServerInformationIncluded());
+				endpoint("/mcp").isServerInfoIncluded());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonRpcError.fromApplication(null, "failure"));
 		Assertions.assertThrows(NullPointerException.class,
@@ -267,20 +267,24 @@ public class McpBootstrapValueTests {
 				.build();
 
 		Assertions.assertEquals("/mcp", endpoint.getPath());
-		Assertions.assertSame(serverInformation, endpoint.getServerInformation());
-		Assertions.assertTrue(endpoint.isServerInformationIncluded());
+		Assertions.assertSame(serverInformation, endpoint.getServerInfo());
+		Assertions.assertTrue(endpoint.isServerInfoIncluded());
 		Assertions.assertEquals("Use this endpoint for catalog discovery.",
 				endpoint.getInstructions().orElseThrow());
 	}
 
 	@Test
 	public void endpointCanOmitServerInformationFromResponseMetadata() {
+		McpImplementation replacementServerInfo = McpImplementation
+				.withNameAndVersion("replacement-server", "2.0").build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1.0").build())
-				.serverInformationIncluded(false)
+				.serverInfo(replacementServerInfo)
+				.serverInfoIncluded(false)
 				.build();
 
-		Assertions.assertFalse(endpoint.isServerInformationIncluded());
+		Assertions.assertSame(replacementServerInfo, endpoint.getServerInfo());
+		Assertions.assertFalse(endpoint.isServerInfoIncluded());
 	}
 
 	@Test

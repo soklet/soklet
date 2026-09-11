@@ -96,6 +96,7 @@ class CorsAuthorizerTransportNeutralPreflightTests {
 
 	@NonNull
 	private static CorsPreflight preflight(@NonNull String origin) {
-		return CorsPreflight.with(origin, HttpMethod.POST, Set.of("Authorization", "X-Request-Id"));
+		return CorsPreflight.fromOrigin(origin, HttpMethod.POST,
+				Set.of("Authorization", "X-Request-Id"));
 	}
 }

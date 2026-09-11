@@ -8,7 +8,7 @@ Greenfield localization-result simplification amendment reviewed: 2026-08-17
 
 Greenfield localization-context builder amendment reviewed: 2026-08-17
 
-Final greenfield API polish amendment reviewed: 2026-08-17
+Greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 
@@ -18,7 +18,9 @@ MCP value-contract amendment reviewed: 2026-09-03
 
 Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
-Final public-value amendment reviewed: 2026-09-10
+Public-value amendment reviewed: 2026-09-10
+
+Pre-release naming amendment reviewed: 2026-09-11
 
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
@@ -48,8 +50,8 @@ The matching full japicmp report establishes an exact owner universe of:
 
 That list is the original Phase 5 checkpoint. The current exact owner
 partition is 134 Phase 4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks
-owners, for 248 MCP owners; the 51-owner non-MCP allowlist brings current-side
-coverage to 299.
+owners, for 248 MCP owners; the 52-owner non-MCP allowlist brings current-side
+coverage to 300.
 
 The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
@@ -67,9 +69,9 @@ records with SHA-256
 The 2026-08-18 public-record elimination amendment retained the owner partition
 and advanced that checkpoint to 565 records. Typed request state then removed
 three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections left
-Phase 5 byte-identical at that checkpoint. The final current released-3.5.1
-comparison contains 646 records with SHA-256
-`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+Phase 5 byte-identical at that checkpoint. The current released-3.5.1
+comparison contains 648 records with SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
 
 ## Frozen Phase 5 snapshot
 
@@ -164,9 +166,9 @@ and
 The generated compatibility ledger remains exactly 564 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
 
-## 2026-08-17 final greenfield API polish amendment
+## 2026-08-17 greenfield API polish amendment
 
-The final same-day review removes the redundant
+The API-polish review removes the redundant
 `McpInputRequest.fromDeclaration(...)` factory. At that checkpoint,
 `McpInputRequest` was a Soklet-owned record whose canonical constructor
 validated its declaration and parameters, so applications used that
@@ -449,21 +451,41 @@ The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. These are local development checks, not
 release-candidate provenance or publication evidence.
 
-## 2026-09-10 final public-value amendment
+## 2026-09-10 public-value amendment
 
-The final release review adds deliberate structural `equals(Object)` and
+The release review adds deliberate structural `equals(Object)` and
 `hashCode()` contracts to `McpInputRequiredResult`, `McpInputResponses`,
 `McpProgressUpdate`, `McpProtectionKeyringSnapshot`, and
 `McpRequestStateProtectionContext`. The additions complete the public immutable
 value contract and do not add or remove Phase 5 owners.
 
-The final Phase 5 snapshot contains 200 records: 36 classes, no public
+The resulting Phase 5 snapshot contains 200 records: 36 classes, no public
 constructors, 19 fields, and 145 methods. Its signature SHA-256 is
 `4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`;
 the reviewed reflection/nullability SHA-256 is
 `36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`;
 and the unchanged include-inventory SHA-256 is
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
-The shared final released-3.5.1 compatibility ledger contains 646 records with
-SHA-256
+The shared released-3.5.1 compatibility ledger at that checkpoint contains
+646 records with SHA-256
 `8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+
+## 2026-09-11 pre-release naming amendment
+
+The owner-approved naming pass renames
+`McpInputRequest.getMethod()` to `getJsonRpcMethod()` without retaining an
+alias. The request now uses the same unambiguous JSON-RPC vocabulary as
+`McpInputRequestDeclaration` and the other MCP request contexts.
+
+The one-for-one replacement leaves the Phase 5 snapshot at 200 records across
+36 owners. Its signature SHA-256 is
+`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`;
+the reflection/nullability SHA-256 is
+`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`;
+and the unchanged include-inventory SHA-256 is
+`0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
+The shared compatibility ledger now contains 648 records with SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`;
+the two added records are the separately reviewed non-MCP
+`CorsPreflight.with(...)` removals. The historical D1p preview seal is not
+rewritten.

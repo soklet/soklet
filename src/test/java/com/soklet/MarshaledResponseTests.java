@@ -84,6 +84,28 @@ public class MarshaledResponseTests {
 	}
 
 	@Test
+	public void public_builder_header_contract_matches_latin1_wire_format() {
+		String obsText = "\u0080\u0085\u00FF";
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("X-Obs-Text", Set.of(obsText)))
+				.build();
+
+		Assertions.assertEquals(Set.of(obsText), response.getHeaders().get("X-Obs-Text"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> MarshaledResponse.withStatusCode(200)
+						.headers(Map.of(" X-Leading-Space", Set.of("value")))
+						.build());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("X-Delete", Set.of("before\u007Fafter")))
+						.build());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("X-Non-Latin-1", Set.of("before\u0100after")))
+						.build());
+	}
+
+	@Test
 	public void to_string_redacts_headers_and_cookies() {
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Authorization", Set.of("secret-token")))

@@ -8,7 +8,7 @@ trace-log and rate-limit decision factory naming amendments, followed by the
 2026-08-16 admission-controller naming amendment and the 2026-08-17 greenfield
 cohesion naming amendment, followed by the 2026-08-17 greenfield
 localization-result simplification amendment and the 2026-08-17 greenfield
-localization-context builder amendment, followed by the 2026-08-17 final
+localization-context builder amendment, followed by the 2026-08-17
 greenfield API polish amendment and the 2026-08-18 greenfield public-record
 elimination amendment, followed by the 2026-08-18 greenfield typed-request-
 state amendment, the 2026-08-27 lifecycle cutover, the 2026-08-28 pre-G3 API
@@ -21,16 +21,17 @@ public-record elimination amendment, followed by the 2026-09-04 MCP server
 default-construction amendment, the 2026-09-06 exported-nullability completion,
 the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional MCP
 Tasks implementation checkpoint, followed by the 2026-09-10 release-review
-API amendment and provisional Tasks signature freeze, and the final
-lifecycle-observer and public-value amendment. The
+API amendment and provisional Tasks signature freeze, and the
+lifecycle-observer and public-value amendment, followed by the authored
+input-schema remediation and 2026-09-11 pre-release naming amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 646 records and has SHA-256
-`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+4.0.0 source tree. It currently contains 648 records and has SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -75,9 +76,9 @@ scope has exactly one owner:
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
-| `non-mcp-public-api.allowlist` | 51 | reviewed lifecycle, runner, transport-SPI, and metrics owners |
+| `non-mcp-public-api.allowlist` | 52 | reviewed lifecycle, runner, transport-SPI, CORS, and metrics owners |
 
-The 248-entry MCP union plus the 51-entry non-MCP allowlist owns exactly 299 current types.
+The 248-entry MCP union plus the 52-entry non-MCP allowlist owns exactly 300 current types.
 Ownership alone does not freeze a type. The three phase snapshots freeze their
 phase inventories, and the separate `provisional.signatures.jsonl` snapshot
 now freezes the 14 Tasks owners while retaining their explicit provisional
@@ -97,7 +98,7 @@ compatibility inventory.
 
 ## Current local evidence
 
-The final 2026-09-10 reconciliation is green at 646 incompatibilities, 299
+The 2026-09-11 naming reconciliation is green at 648 incompatibilities, 300
 exact owners, 1,132/200/425 Phase 4/5/6 signature records, and 98 provisional
 Tasks signature records. The aggregate API-freeze verifier passes against the
 reviewed snapshots. These results revalidate the current API and local
@@ -137,7 +138,7 @@ with zero failures, zero errors, and four skips over 464 main and 193 test
 sources; JDK 21 static analysis reports `BUILD SUCCESS`, and SpotBugs reports
 zero errors and zero warnings.
 
-The final 2026-08-17 greenfield API polish amendment makes
+The 2026-08-17 greenfield API polish amendment makes
 `McpEndpointRegistry` a final immutable Soklet-owned class, clarifies converted
 tool arguments, named rate-limiter setters, the pass-through interceptor, and
 the tool-output error setter, and removes the redundant
@@ -378,11 +379,11 @@ separate evidence is recorded below.
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
 freezes 1,132 canonical records across all 134 selected owners: 134 classes,
 one constructor, 94 fields, and 903 methods. Its SHA-256 is
-`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`.
+`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`.
 `phase-5.signatures.jsonl` freezes 200 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
 Its SHA-256 is
-`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`.
+`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`.
 `phase-6.signatures.jsonl` freezes 425 canonical records across all 64
 selected owners: 64 classes, zero constructors, 41 fields, and 320 methods.
 Its SHA-256 is
@@ -392,8 +393,8 @@ the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
 Its SHA-256 is
 `70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
 The Phase 4/5/6 reflection/nullability digests are respectively
-`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`,
-`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`,
+`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`,
+`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`,
 and
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
 
@@ -500,7 +501,7 @@ and its exact reflection/nullability digest is
 The incompatibility ledger remains exactly 564 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
 
-A ninth reviewed amendment on 2026-08-17 performs the final no-alias polish of
+A ninth reviewed amendment on 2026-08-17 performs a no-alias polish of
 the still-unreleased greenfield API. `McpEndpointRegistry` becomes a final
 immutable Soklet-owned class; `McpToolArguments.getConvertedArguments()`
 names the converted value explicitly; the String-valued Java builder methods
@@ -1567,18 +1568,18 @@ reviewed file.
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-646 reviewed incompatibilities across 299 owners: 248 MCP and 51 non-MCP.
+648 reviewed incompatibilities across 300 owners: 248 MCP and 52 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
 contain 1,132 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
 134 classes, one constructor, 94 fields, and 903 methods, with SHA-256
-`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`
+`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`
 and exact nullability digest
-`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`.
+`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 145 methods,
 with SHA-256
-`4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`
+`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`
 and exact nullability digest
-`36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`.
+`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`.
 Phase 6 contains 64 classes, zero constructors, 41 fields, and 320 methods,
 with SHA-256
 `06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`
@@ -2432,8 +2433,8 @@ increase the provisional inventory from 12 to 14 owners; custom managers remain
 polling-only by default, and task-event subscriptions reuse
 [`McpSubscriptionEventRegistration`](https://javadoc.soklet.com/com/soklet/McpSubscriptionEventRegistration.html).
 The
-current owner partition is 134/36/64/14, or 248 MCP owners and 299 reviewed
-owners including the 51 non-MCP entries. The provisional include inventory has
+owner partition at that checkpoint was 134/36/64/14, or 248 MCP owners and 299
+reviewed owners including the 51 non-MCP entries. The provisional include inventory has
 SHA-256
 `11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
 The released-3.5.1 compatibility ledger remains at 657 records with SHA-256
@@ -2492,9 +2493,9 @@ provisional descriptor set beside the Phase 4/5/6 sets under
 candidate evidence. This local amendment and its checks do not themselves
 establish release-candidate provenance or publication evidence.
 
-### 2026-09-10 lifecycle-observer and final public-value amendment
+### 2026-09-10 lifecycle-observer and public-value amendment
 
-The final review adds the Phase 4
+The review adds the Phase 4
 `LogEventType.LIFECYCLE_OBSERVER_TRANSITION_FAILED` value and completes
 structural `equals(Object)`/`hashCode()` contracts on 14 Phase 4 values, five
 Phase 5 values, and one Phase 6 value. The additions are intentional frozen
@@ -2502,7 +2503,7 @@ surface. Restoring the two released `McpClientCapabilities` methods removes
 their prior compatible-removal entries from the 3.5.1 comparison; no other
 incompatibility record changes.
 
-The final reviewed signature counts are 1,131/200/425 for Phase 4/5/6 and 98
+The resulting signature counts are 1,131/200/425 for Phase 4/5/6 and 98
 for provisional Tasks. Their SHA-256 values are respectively
 `fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`,
 `4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`,
@@ -2535,6 +2536,38 @@ SHA-256 is
 the reflection/nullability SHA-256 is
 `c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`.
 The owner/include inventories and the 646-record 3.5.1 compatibility ledger
-are unchanged. The historical D1p preview seal remains immutable; the final
-release candidate must capture this amended active snapshot as fresh API-freeze
-evidence.
+are unchanged. The historical D1p preview seal remains immutable; this
+checkpoint is superseded by the pre-release naming amendment below.
+
+### 2026-09-11 pre-release naming amendment
+
+The owner-approved naming pass replaces the Phase 4 `McpEndpoint`
+`Information`-spelled getter and builder family with `getServerInfo()`,
+`isServerInfoIncluded()`, `serverInfo(...)`, and `serverInfoIncluded(...)`.
+Phase 5 likewise replaces `McpInputRequest.getMethod()` with
+`getJsonRpcMethod()`. No aliases are retained. The one-for-one replacements
+leave the Phase 4 and Phase 5 record and owner counts unchanged.
+
+Two non-MCP naming corrections complete the same pass. Both
+`CorsPreflight.with(...)` overloads become `fromOrigin(...)`, and the HTTP
+route-key getter on `MetricsCollector.HttpServerRouteKey` and
+`HttpServerRouteStatusKey` becomes `getHttpMethod()`. The CORS factories are
+released 3.5.1 surface, so their removals add two reviewed incompatibility
+records. `CorsPreflight` joins the non-MCP allowlist, raising that inventory to
+52 owners and the complete reviewed current-side union to 300 owners.
+
+The Phase 4 and Phase 5 signature SHA-256 values are respectively
+`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`
+and
+`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`.
+Their reflection/nullability SHA-256 values are respectively
+`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`
+and
+`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`.
+The 648-record compatibility ledger has SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`;
+the 52-entry non-MCP allowlist has SHA-256
+`9dce1550f8596f66b482da39c397858a4f68861f53d7fd7ba5d8e60caf1be519`.
+All include inventories, Phase 6, and the provisional Tasks snapshot remain
+unchanged. The historical D1p preview seal is not rewritten; a release
+candidate must capture the active snapshots as fresh API-freeze evidence.

@@ -341,7 +341,7 @@ public final class McpConformanceFixture {
 						"soklet-public-conformance", "4.0.0")
 						.description("Soklet MCP conformance fixture")
 						.build())
-				.serverInformationIncluded(true)
+				.serverInfoIncluded(true)
 				.addTools(tools(scenario))
 				.addPrompts(prompts(scenario))
 				.addResources(resources())

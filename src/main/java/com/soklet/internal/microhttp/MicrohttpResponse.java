@@ -300,7 +300,11 @@ public final class MicrohttpResponse {
         }
         for (int index = 0; index < value.length(); index++) {
             char character = value.charAt(index);
-            if (Character.isISOControl(character) && character != '\t')
+            // RFC 9110 permits obs-text (0x80-0xFF) in field values.  Reject
+            // C0 controls other than HTAB, DEL, and characters that cannot be
+            // represented by the Latin-1 wire writer.
+            if (character > 0xFF || character == 0x7F
+                || (character < 0x20 && character != '\t'))
                 throw new IllegalArgumentException(
                     "Response header value contains an illegal control character.");
         }

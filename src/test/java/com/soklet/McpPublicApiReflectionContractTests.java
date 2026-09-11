@@ -89,9 +89,9 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 248;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c";
+			"a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13";
+			"79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -419,7 +419,7 @@ public class McpPublicApiReflectionContractTests {
 						"metadata", "pollInterval", "taskStatusMessage",
 						"timeToLive"),
 				McpEndpoint.Builder.class, Set.of(
-						"serverInformationIncluded", "instructions",
+						"serverInfoIncluded", "instructions",
 						"resourceListCachePolicy", "resourceListHandler",
 						"resourceTemplateListCachePolicy", "subscriptionConfig",
 						"toolRateLimiter", "toolRateLimiterName"),
@@ -530,6 +530,17 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpEndpoint.class.getMethod("withPath", String.class));
 		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpEndpoint.class.getMethod("getServerInformation"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpEndpoint.class.getMethod(
+						"isServerInformationIncluded"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpEndpoint.Builder.class.getMethod("serverInformation",
+						McpImplementation.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpEndpoint.Builder.class.getMethod(
+						"serverInformationIncluded", Boolean.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpResourceOutput.class.getMethod("builder"));
 		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpInputRequiredResult.class.getMethod("builder"));
@@ -602,8 +613,11 @@ public class McpPublicApiReflectionContractTests {
 	public void reviewedMcpPropertyParameterNamesRemainTypeAligned()
 			throws Exception {
 		assertParameterNames(McpEndpoint.Builder.class.getMethod(
-				"serverInformation", McpImplementation.class),
+				"serverInfo", McpImplementation.class),
 				"implementation");
+		assertParameterNames(McpEndpoint.Builder.class.getMethod(
+				"serverInfoIncluded", Boolean.class),
+				"serverInfoIncluded");
 		assertParameterNames(McpEndpoint.Builder.class.getMethod(
 				"resourceListCachePolicy", McpCachePolicy.class),
 				"resourceListCachePolicy");
@@ -991,7 +1005,9 @@ public class McpPublicApiReflectionContractTests {
 		assertGetter(McpInputRequest.class, "getDeclaration",
 				McpInputRequestDeclaration.class);
 		assertGetter(McpInputRequest.class, "getParams", McpJsonObject.class);
-		assertGetter(McpInputRequest.class, "getMethod", String.class);
+		assertGetter(McpInputRequest.class, "getJsonRpcMethod", String.class);
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpInputRequest.class.getMethod("getMethod"));
 		Method matchesInputResponse = assertInstanceMethod(McpInputRequest.class,
 				"matchesInputResponse", Boolean.class, MethodShape.CONCRETE,
 				false, McpJsonValue.class);

@@ -1,3 +1,4 @@
+com.soklet.CorsPreflight
 com.soklet.HttpServer
 com.soklet.HttpTransportAttachmentContext
 com.soklet.LifecyclePolicy

@@ -358,7 +358,7 @@ class McpTasksFleetPublicRuntimeTests {
 		McpToolRegistration<FleetArguments> tool = toolBuilder.build();
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
 				McpImplementation.withNameAndVersion(node, "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		return server(node, taskManager, mainEndpoint);
@@ -369,7 +369,7 @@ class McpTasksFleetPublicRuntimeTests {
 			@NonNull DurableFleetTaskManager taskManager) {
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
 				McpImplementation.withNameAndVersion(node, "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.build();
 		return server(node, taskManager, mainEndpoint);
 	}
@@ -381,7 +381,7 @@ class McpTasksFleetPublicRuntimeTests {
 		McpEndpoint otherEndpoint = McpEndpoint.withPath(OTHER_PATH,
 				McpImplementation.withNameAndVersion(node + "-other", "4.0.0")
 						.build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.build();
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(

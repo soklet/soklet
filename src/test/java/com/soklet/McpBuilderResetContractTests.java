@@ -50,8 +50,8 @@ public class McpBuilderResetContractTests {
 				replacedHandler.getResourceListHandler().orElseThrow());
 
 		McpEndpoint reset = McpEndpoint.withPath("/mcp", implementation)
-				.serverInformationIncluded(false)
-				.serverInformationIncluded(null)
+				.serverInfoIncluded(false)
+				.serverInfoIncluded(null)
 				.instructions("Custom instructions")
 				.instructions(null)
 				.resourceListHandler(firstHandler)
@@ -65,7 +65,7 @@ public class McpBuilderResetContractTests {
 				.toolRateLimiter(directLimiter)
 				.toolRateLimiter(null)
 				.build();
-		Assertions.assertTrue(reset.isServerInformationIncluded());
+		Assertions.assertTrue(reset.isServerInfoIncluded());
 		Assertions.assertTrue(reset.getInstructions().isEmpty());
 		Assertions.assertTrue(reset.getResourceListHandler().isEmpty());
 		Assertions.assertSame(McpCachePolicy.privateNoCacheInstance(),

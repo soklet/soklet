@@ -38,6 +38,28 @@ legacy MCP protocol or Java API.
 8. Exercise the application through a real loopback listener in addition to
    off-network simulation.
 
+### Public API naming pass
+
+The 4.0 release candidate uses the following names without deprecated aliases.
+Applications built against an earlier 4.0 preview must update these calls; the
+`CorsPreflight` factory rename also applies directly to 3.5.1 applications.
+
+| Previous name | 4.0.0 name |
+| --- | --- |
+| `CorsPreflight.with(...)` | `CorsPreflight.fromOrigin(...)` |
+| `McpInputRequest.getMethod()` | `McpInputRequest.getJsonRpcMethod()` |
+| `MetricsCollector.HttpServerRouteKey.getMethod()` | `getHttpMethod()` |
+| `MetricsCollector.HttpServerRouteStatusKey.getMethod()` | `getHttpMethod()` |
+| `McpEndpoint.getServerInformation()` | `getServerInfo()` |
+| `McpEndpoint.isServerInformationIncluded()` | `isServerInfoIncluded()` |
+| `McpEndpoint.Builder.serverInformation(...)` | `serverInfo(...)` |
+| `McpEndpoint.Builder.serverInformationIncluded(...)` | `serverInfoIncluded(...)` |
+
+`fromOrigin(...)` remains overloaded for calls with and without requested
+headers. It names the origin—the value from which the preflight representation
+is constructed—without misidentifying the preflight's actual HTTP method,
+which is always `OPTIONS`.
+
 ## Lifecycle and process ownership
 
 ### One lifecycle owns all transports
@@ -210,6 +232,23 @@ method for an independently terminating child is
 `attachTransparentDelegate(...)`. Soklet can validate honest evidence presented
 through those contracts; it cannot detect a custom transport that lies about
 its own attestation or behavior.
+
+The built-in SSE server now hard-bounds client-initializer catch-up buffering
+with `SseServer.Builder.connectionQueueCapacity(...)`, using the same 128-write
+default as the active connection queue. An initializer may use all configured
+application slots; the optional framework verification heartbeat is accounted
+separately. Initializers that can replay more than the configured capacity must
+page or cap that work before accepting the handshake. Overflow throws
+`IllegalStateException`; if it escapes the initializer, Soklet closes the
+already-accepted connection and emits both an SSE log event and a
+transport-failure metric.
+
+For accepted SSE handshakes, Soklet now ignores application-provided
+`Connection` and `Keep-Alive` headers and emits its canonical
+`Connection: keep-alive` value. Applications may remove those redundant
+headers. `Content-Length`, `Transfer-Encoding`, and other unsupported hop-by-hop
+headers still fail the accepted handshake because they can conflict with
+stream framing.
 
 MCP is intentionally different in 4.0.0. `McpServer` is sealed to Soklet's
 built-in request-scoped HTTP/1.1 implementation, and there is no public MCP

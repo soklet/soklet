@@ -117,7 +117,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-required-preflight-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpLocalizer localizer = McpLocalizer
@@ -250,7 +250,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-large-origin-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpServer server = server(endpoint, Optional.of(taskManager),
@@ -299,7 +299,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-manager-required-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 
@@ -687,7 +687,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-typed-interceptor-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) ->
@@ -752,7 +752,7 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-sanitizer-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
@@ -843,7 +843,7 @@ public class McpTasksPublicRuntimeTests {
 		return McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-public-runtime-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 	}

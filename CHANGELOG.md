@@ -67,6 +67,12 @@
   explicit invocation features/interceptor continuation, and aggregate
   lifecycle results. See
   [MCP Java API migration](MIGRATING_TO_4_0.md#mcp-java-api-migration).
+- **Public naming pass:** `CorsPreflight.with(...)` is now
+  `fromOrigin(...)`; MCP input requests expose `getJsonRpcMethod()`; HTTP route
+  metric keys expose `getHttpMethod()`; and the `McpEndpoint` server-information
+  getter/builder family consistently uses `ServerInfo`/`serverInfo`. These are
+  hard renames with no deprecated aliases. See
+  [the naming migration](MIGRATING_TO_4_0.md#public-api-naming-pass).
 - **Annotation processing:** MCP endpoints and operations are generated at
   compile time; runtime handler-method scanning is not a fallback. Builds must
   enable `SokletProcessor`, retain `-parameters`, and preserve generated
@@ -120,8 +126,52 @@ maintenance or security fixes afterward. See the explicit
 - Added explicit license/NOTICE packaging and a tracked
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
+### Reviewed Non-Blocking Deferrals
+
+The 4.0 release review also recorded the following deliberate post-release work;
+none is claimed as fixed by 4.0.0:
+
+- **S2-1:** add an owner-level lifecycle integration test that exercises the
+  real coordinator-to-`DelegatedRuntime` wiring. The state machine and its
+  relevant shutdown interleavings remain covered by lower-level tests.
+- **S4-1:** task-notification projection uses bounded global capacity and
+  heaviest-owner victim selection, but does not coalesce projections per
+  subscription. A conforming 256-ID subscription can therefore exhaust the
+  128-slot projection queue and close its own stream with `BACKPRESSURE`.
+- **S7-1 / R12-2:** persisted output schemas are still compiled eagerly during
+  task lookup, including subscription authorization. This is bounded extra CPU
+  work, not a correctness or isolation failure.
+- **S9-2 / R11-4:** body-only request sizing and early-error response headers
+  remain internal MCP-listener controls; equivalent public `HttpServer.Builder`
+  controls are intentionally not part of the 4.0 API.
+- **R11-3:** a streaming producer failure with an attached cause can still be
+  metered as generic `WRITE_ERROR` / `WRITE_FAILED` instead of the producer's
+  reserved stream-termination reason. Termination remains bounded and safe.
+- **R13-1:** immutable `LifecyclePolicy` instances retain reference identity;
+  structural `equals`/`hashCode` semantics are not introduced in 4.0.
+
+`McpJsonLimits` (S13-4) is internal. Its larger durable-origin profile does not
+widen the independently enforced and tested 16 MiB public MCP transport
+ceiling; its Javadoc now makes that separation explicit.
+
 ### Detailed Implementation Record
 
+- SSE client-initializer catch-up buffering is hard-bounded by
+  `connectionQueueCapacity`; uncaught overflows are now logged and metered
+  instead of silently dropping an accepted connection. The framework's optional
+  connection-verification heartbeat is held outside the application queue, so
+  an initializer may use the full configured capacity. Handshake parse-error
+  responses and the timeout path now claim one atomic channel owner before
+  either side can close the socket. Redundant application `Connection` and
+  `Keep-Alive` handshake headers are ignored and canonicalized; framing-
+  dangerous headers such as `Content-Length` and `Transfer-Encoding` continue
+  to fail closed.
+- Public response builders and the HTTP response-head serializer now enforce
+  one representable header contract. Header values preserve RFC 9110
+  `obs-text` bytes (`0x80`-`0xFF`) while rejecting C0 controls other than HTAB,
+  DEL, and non-Latin-1 characters; header names are validated exactly as
+  stored, so invalid responses fail during construction instead of closing the
+  connection later during serialization.
 - Bounded application-owned MCP cursors with one shared wire contract: the
   existing 4,096-byte default is retained, while configuration is capped at
   174,762 UTF-8 bytes so worst-case JSON escaping remains representable within

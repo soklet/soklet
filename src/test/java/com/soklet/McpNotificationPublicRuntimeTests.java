@@ -78,7 +78,7 @@ public class McpNotificationPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-boundary-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
@@ -217,7 +217,7 @@ public class McpNotificationPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-output-test", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(progressTool)
 				.addResource(McpResourceRegistration.withUriAndName(
 						URI.create("https://example.com/notification-resource"),

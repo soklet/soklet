@@ -269,13 +269,18 @@
       ],
       "category": "HEADER",
       "deterministicFailure": {
-        "contract": "HTTP header overflow fails with 431 before dispatch; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention.",
+        "contract": "HTTP request-header overflow fails with 431 before dispatch; admission-rejection response headers are independently capped at 100 fields and 65,536 encoded bytes by validatedPolicyHeaders and fail closed as an internal policy error before response construction; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention.",
         "stage": "TRANSPORT_OR_HEADER_INPUT_VALIDATION"
       },
       "enforcementOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "member": "processRequest",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "validatedPolicyHeaders",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
         {
@@ -502,7 +507,7 @@
       ],
       "category": "JSON",
       "deterministicFailure": {
-        "contract": "Parsing and serialization throw a sanitized IllegalArgumentException before retaining a value beyond any configured resource limit.",
+        "contract": "Parsing and serialization throw a sanitized IllegalArgumentException before retaining a value beyond any configured resource limit. Restored durable-task arguments are revalidated through the dedicated restored-arguments profile before application use.",
         "stage": "JSON_CODEC"
       },
       "enforcementOwners": [
@@ -514,6 +519,11 @@
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
           "member": "encode/decode",
+          "owner": "com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
+          "member": "requireRestorableRawArguments",
           "owner": "com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec"
         }
       ],

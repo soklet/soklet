@@ -59,18 +59,28 @@ import static java.util.Objects.requireNonNull;
  *     // about the request, which provides the opportunity to, for example,
  *     // examine annotations on the method/parameter which might
  *     // inform custom marshaling strategies.
-	 *     try {
-	 *       return Optional.of(GSON.fromJson(
-	 *         request.getBodyAsString().orElseThrow(),
-	 *         requestBodyType
-	 *       ));
-	 *     } catch (JsonParseException e) {
-	 *       // Expected parse failures are client errors. Keep request data and
-	 *       // the parser's input-bearing cause out of the public diagnostic.
-	 *       throw new IllegalRequestBodyException(
-	 *         "Request body is not valid JSON."
-	 *       );
-	 *     }
+ *     String body = request.getBodyAsString()
+ *       .filter(value -> !value.isBlank())
+ *       .orElseThrow(() -> new IllegalRequestBodyException(
+ *         "Request body must contain JSON."
+ *       ));
+ *
+ *     try {
+ *       Object value = GSON.fromJson(body, requestBodyType);
+ *
+ *       if (value == null)
+ *         throw new IllegalRequestBodyException(
+ *           "Request body must contain a non-null JSON value."
+ *         );
+ *
+ *       return Optional.of(value);
+ *     } catch (JsonParseException e) {
+ *       // Expected parse failures are client errors. Keep request data and
+ *       // the parser's input-bearing cause out of the public diagnostic.
+ *       throw new IllegalRequestBodyException(
+ *         "Request body is not valid JSON."
+ *       );
+ *     }
  *   }
  * }).build();}</pre>
  * <p>

@@ -24,12 +24,16 @@ import javax.annotation.concurrent.ThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable schema generated under Soklet MCP Tool Schema Profile 1.
+ * Immutable schema compiled under Soklet MCP Tool Schema Profile 1.
  *
- * <p>Applications may inspect a generated schema but cannot construct,
- * compile, or replace one. Profile 1 is a closed generation and validation
- * profile based on JSON Schema Draft 2020-12, not a complete Draft 2020-12
- * implementation.
+ * <p>Instances expose derived, fixed, and application-authored input schemas
+ * for inspection, but applications cannot construct or replace this type
+ * directly. Programmatic tool registrations may provide an authored Profile 1
+ * object-root input document through
+ * {@link McpToolRegistration.ArgumentTypeStage#inputSchema(McpJsonObject)};
+ * output schemas remain derived. Profile 1 is a closed generation and
+ * validation profile based on JSON Schema Draft 2020-12, not a complete Draft
+ * 2020-12 implementation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

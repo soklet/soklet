@@ -59,6 +59,8 @@ public class McpAnnotationProcessorValidationTests {
 			@TempDir Path temporaryDirectory) throws IOException {
 		Path baseSource = temporaryDirectory.resolve(
 				"base-src/example/BaseOperations.java");
+		Path intermediateSource = temporaryDirectory.resolve(
+				"base-src/example/IntermediateOperations.java");
 		Path baseClasses = temporaryDirectory.resolve("base-classes");
 		Path endpointSource = temporaryDirectory.resolve(
 				"endpoint-src/example/InheritedEndpoint.java");
@@ -87,12 +89,18 @@ public class McpAnnotationProcessorValidationTests {
 				  public record Result(String value) {}
 				}
 				""", StandardCharsets.UTF_8);
+		Files.writeString(intermediateSource, """
+				package example;
+				public class IntermediateOperations extends BaseOperations {
+				  @Override public BaseOperations.Result tool() { return null; }
+				}
+				""", StandardCharsets.UTF_8);
 		Files.writeString(endpointSource, """
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
 				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
-				public final class InheritedEndpoint extends BaseOperations {
-				  @Override public BaseOperations.Result tool() { return null; }
+				public final class InheritedEndpoint extends IntermediateOperations {
+				  @Override public BaseOperations.PromptResult prompt() { return null; }
 				}
 				""", StandardCharsets.UTF_8);
 
@@ -105,7 +113,7 @@ public class McpAnnotationProcessorValidationTests {
 					fileManager, null, List.of("--release", "17", "-proc:none",
 							"-classpath", System.getProperty("java.class.path"),
 							"-d", baseClasses.toString()), null,
-					fileManager.getJavaFileObjects(baseSource));
+					fileManager.getJavaFileObjects(baseSource, intermediateSource));
 			Assertions.assertTrue(Boolean.TRUE.equals(baseTask.call()));
 		}
 
@@ -145,7 +153,11 @@ public class McpAnnotationProcessorValidationTests {
 					operation + ": " + inherited);
 		Assertions.assertTrue(inherited.stream().anyMatch(diagnostic ->
 				diagnostic.getMessage(Locale.ROOT).contains(
-						"method example.InheritedEndpoint.tool without redeclaring @McpTool")),
+						"method example.IntermediateOperations.tool without redeclaring @McpTool")),
+				inherited.toString());
+		Assertions.assertTrue(inherited.stream().anyMatch(diagnostic ->
+				diagnostic.getMessage(Locale.ROOT).contains(
+						"method example.InheritedEndpoint.prompt without redeclaring @McpPrompt")),
 				inherited.toString());
 	}
 

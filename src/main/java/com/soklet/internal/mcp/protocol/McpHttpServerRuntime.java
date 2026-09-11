@@ -47,6 +47,7 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.NoopLogger;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.TransportFailureObserver;
+import com.soklet.internal.util.HostHeaderValidator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -54,7 +55,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -6149,7 +6149,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						mcpPreflightRequestHeaders(endpointRuntime)))
 			return emptyResponse(403, "Forbidden", List.of());
 
-		CorsPreflight preflight = CorsPreflight.with(origins.get(0), HttpMethod.POST,
+		CorsPreflight preflight = CorsPreflight.fromOrigin(origins.get(0), HttpMethod.POST,
 				requestedHeaders.orElseThrow());
 		CorsPreflightResponse authorization;
 		try {
@@ -6897,24 +6897,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		long ipv4Address = parseIpv4Literal(literal);
 		if (ipv4Address >= 0L)
 			return (ipv4Address >>> 24) == 127L;
-		if (literal.indexOf(':') < 0)
-			return false;
 
-		// Reaching getByName only after this character gate keeps parsing
-		// literal-only: no DNS-valid registration name can reach the resolver.
-		for (int index = 0; index < literal.length(); index++) {
-			char character = literal.charAt(index);
-			if (!(character >= '0' && character <= '9')
-					&& !(character >= 'A' && character <= 'F')
-					&& !(character >= 'a' && character <= 'f')
-					&& character != ':' && character != '.')
-				return false;
-		}
-		try {
-			return InetAddress.getByName(literal).isLoopbackAddress();
-		} catch (Exception exception) {
-			return false;
-		}
+		return HostHeaderValidator.parseIpv6AddressLiteral(literal)
+				.map(InetAddress::isLoopbackAddress).orElse(false);
 	}
 
 	private long parseIpv4Literal(@NonNull String literal) {
@@ -7055,14 +7040,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private Optional<@NonNull String> normalizeIpv6(@NonNull String value) {
-		try {
-			InetAddress address = InetAddress.getByName(value);
-			return address instanceof Inet6Address
-					? Optional.of(address.getHostAddress().toLowerCase(Locale.ROOT))
-					: Optional.empty();
-		} catch (Exception exception) {
-			return Optional.empty();
-		}
+		return HostHeaderValidator.parseIpv6AddressLiteral(value)
+				.map(address -> address.getHostAddress().toLowerCase(Locale.ROOT));
 	}
 
 	@NonNull

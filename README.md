@@ -393,12 +393,24 @@ SokletConfig config = SokletConfig.withHttpServer(
     // about the request, which provides the opportunity to, for example,
     // examine annotations on the method/parameter which might
     // inform custom marshaling strategies.
-    try {
-      return Optional.of(GSON.fromJson(
-        request.getBodyAsString().orElseThrow(),
-        requestBodyType
+    String body = request.getBodyAsString()
+      .filter(value -> !value.isBlank())
+      .orElseThrow(() -> new IllegalRequestBodyException(
+        "Request body must contain JSON."
       ));
+
+    try {
+      Object value = GSON.fromJson(body, requestBodyType);
+
+      if (value == null)
+        throw new IllegalRequestBodyException(
+          "Request body must contain a non-null JSON value."
+        );
+
+      return Optional.of(value);
     } catch (JsonParseException e) {
+      // Expected parse failures are client errors. Keep request data and
+      // the parser's input-bearing cause out of the public diagnostic.
       throw new IllegalRequestBodyException(
         "Request body is not valid JSON."
       );
@@ -624,6 +636,15 @@ public class ChatResource {
   }
 }
 ```
+
+Client-initializer writes are buffered until the SSE connection becomes active
+and are hard-bounded by `SseServer.Builder.connectionQueueCapacity(...)` (128
+application writes by default). Size the queue for the largest catch-up page
+and paginate larger `Last-Event-ID` replays; exceeding the bound throws
+`IllegalStateException`. If that exception escapes the initializer, Soklet
+closes the accepted connection and records the failure in logs and metrics. The
+optional framework connection-verification heartbeat does not use an
+application queue slot.
 
 Because this example exposes both an SSE event source and a regular `POST /chat`
 resource method, it needs both servers:

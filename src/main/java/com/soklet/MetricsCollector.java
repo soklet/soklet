@@ -2438,7 +2438,7 @@ public interface MetricsCollector {
 
 		/** @return HTTP method */
 		@NonNull
-		public HttpMethod getMethod() {
+		public HttpMethod getHttpMethod() {
 			return this.method;
 		}
 
@@ -2517,7 +2517,7 @@ public interface MetricsCollector {
 
 		/** @return HTTP method */
 		@NonNull
-		public HttpMethod getMethod() {
+		public HttpMethod getHttpMethod() {
 			return this.method;
 		}
 

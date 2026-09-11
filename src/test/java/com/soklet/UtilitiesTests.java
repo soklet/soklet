@@ -417,6 +417,19 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void effectiveClientIpFromHeaders_rejectsNonIpv6TokensBeforeFallback()
+			throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"Forwarded", Set.of("for=\"[v1.example]\""),
+				"X-Forwarded-For", Set.of(".::1"));
+
+		assertEquals(Optional.of(address("203.0.113.50")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.remoteAddress(remoteAddress("203.0.113.50"))
+						.resolve());
+	}
+
+	@Test
 	public void effectiveClientIpFromHeaders_unresolvedRemoteAddressDoesNotTrustForwardedHeaders() throws Exception {
 		Map<String, Set<String>> headers = Map.of(
 				"X-Forwarded-For", Set.of("198.51.100.10")
@@ -898,6 +911,10 @@ public class UtilitiesTests {
 		assertThrows(IllegalArgumentException.class,
 				() -> Utilities.validateHeaderNameAndValue("X Foo", "ok")); // space not allowed in name
 		assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue(" X-Foo", "ok")); // validate the stored name, not a trimmed copy
+		assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X-Foo ", "ok"));
+		assertThrows(IllegalArgumentException.class,
 				() -> Utilities.validateHeaderNameAndValue("X\nFoo", "ok")); // CR/LF must be rejected
 	}
 
@@ -910,6 +927,12 @@ public class UtilitiesTests {
 	@Test
 	void acceptsLegalHeaders() {
 		Assertions.assertDoesNotThrow(() -> Utilities.validateHeaderNameAndValue("X-Foo", "bar"));
+		Assertions.assertDoesNotThrow(() -> Utilities.validateHeaderNameAndValue(
+				"X-Obs-Text", "\u0080\u0085\u00FF"));
+		assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X-Foo", "bad\u007Fvalue"));
+		assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X-Foo", "bad\u0100value"));
 	}
 
 	@Test

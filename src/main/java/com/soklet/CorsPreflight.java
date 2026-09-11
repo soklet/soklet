@@ -39,8 +39,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Instances can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #with(String, HttpMethod)} (uses {@code Origin} and {@code Access-Control-Request-Method} header values)</li>
- *   <li>{@link #with(String, HttpMethod, Set)} (uses {@code Origin}, {@code Access-Control-Request-Method}, and {@code Access-Control-Request-Headers} header values)</li>
+ *   <li>{@link #fromOrigin(String, HttpMethod)} (uses {@code Origin} and {@code Access-Control-Request-Method} header values)</li>
+ *   <li>{@link #fromOrigin(String, HttpMethod, Set)} (uses {@code Origin}, {@code Access-Control-Request-Method}, and {@code Access-Control-Request-Headers} header values)</li>
  *   <li>{@link #fromHeaders(Map)} (parses raw headers)</li>
  * </ul>
  * Data for <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> requests is represented by {@link Cors}.
@@ -69,7 +69,7 @@ public final class CorsPreflight {
 	 * @return a {@link CorsPreflight} instance
 	 */
 	@NonNull
-	public static CorsPreflight with(@NonNull String origin,
+	public static CorsPreflight fromOrigin(@NonNull String origin,
 																	 @NonNull HttpMethod accessControlRequestMethod) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
@@ -89,7 +89,7 @@ public final class CorsPreflight {
 	 * @return a {@link CorsPreflight} instance
 	 */
 	@NonNull
-	public static CorsPreflight with(@NonNull String origin,
+	public static CorsPreflight fromOrigin(@NonNull String origin,
 																	 @NonNull HttpMethod accessControlRequestMethod,
 																	 @Nullable Set<@NonNull String> accessControlRequestHeaders) {
 		requireNonNull(origin);

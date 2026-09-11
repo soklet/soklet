@@ -483,10 +483,12 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets each connection's pending-write queue capacity. This bound also
-		 * applies to client-initializer catch-up writes (and the optional initial
-		 * connection-verification heartbeat). Passing {@code null} restores the
-		 * built-in default of 128 pending writes per connection.
+		 * Sets each connection's pending application-write queue capacity. The same
+		 * hard bound applies while client-initializer catch-up writes are buffered
+		 * before connection activation. An initializer may fill the capacity exactly;
+		 * Soklet's optional one-time connection-verification heartbeat does not
+		 * consume an application slot. Passing {@code null} restores the built-in
+		 * default of 128 pending application writes per connection.
 		 *
 		 * @param connectionQueueCapacity connection queue capacity, or {@code null}
 		 * for the default

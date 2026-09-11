@@ -175,7 +175,7 @@ public final class McpToolRegistration<A> {
 		return this.argumentType;
 	}
 
-	/** @return generated or fixed input schema */
+	/** @return derived, fixed, or application-authored input schema */
 	@NonNull
 	public McpToolSchema getInputSchema() {
 		return this.inputSchema;

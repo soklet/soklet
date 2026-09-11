@@ -504,7 +504,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
 							"tasks-simulator-test", "4.0.0").build())
-					.serverInformationIncluded(false)
+					.serverInfoIncluded(false)
 					.addTool(tool)
 					.build();
 			this.sourceServer = McpServer.withPort(0)

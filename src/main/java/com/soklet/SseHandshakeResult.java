@@ -188,6 +188,13 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 
 			/**
 			 * Replaces the custom response headers to be sent with the handshake.
+			 * <p>
+			 * Soklet owns the streaming connection framing. Application-provided
+			 * {@code Connection} and {@code Keep-Alive} headers are ignored and the
+			 * canonical {@code Connection: keep-alive} header is retained. Framing-
+			 * dangerous headers such as {@code Content-Length} and
+			 * {@code Transfer-Encoding}, and other unsupported hop-by-hop headers,
+			 * cause the accepted handshake to fail closed.
 			 *
 			 * @param headers custom response headers to send, or {@code null} or an empty map to configure no custom headers
 			 * @return this builder, for chaining
@@ -230,9 +237,15 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * Specifies custom "client initializer" function to run immediately after the handshake succeeds - useful for performing "catch-up" logic if the client had provided a {@code Last-Event-ID} request header.
 			 * <p>
 			 * The function is provided with a {@link SseUnicaster}, which permits sending Server-Sent Events and comments directly to the client that accepted the handshake (as opposed to a {@link SseBroadcaster}, which would send to all clients listening on the same {@link ResourcePath}).
-			 * Initial writes, including the optional connection-verification heartbeat,
-			 * count against the server's per-connection queue capacity. An initializer
-			 * that exceeds that capacity fails with {@link IllegalStateException}.
+			 * Application writes made by this initializer count against the server's
+			 * per-connection queue capacity. The initializer may fill that capacity
+			 * exactly; Soklet's optional connection-verification heartbeat uses no
+			 * application queue slot. An initializer that exceeds the configured
+			 * capacity fails with {@link IllegalStateException}, so larger catch-up
+			 * histories must be paginated or otherwise limited before returning the
+			 * accepted result. If that exception escapes the initializer, Soklet closes
+			 * the already-accepted connection before delivering the buffered writes and
+			 * records the failure in logs and metrics.
 			 * <p>
 			 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
 			 *

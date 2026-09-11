@@ -37,6 +37,25 @@ public class CorsTests {
 	private static final String EVIL = "https://evil.example";
 
 	@Test
+	public void corsPreflightFactoriesUseFromOriginNaming() {
+		CorsPreflight withoutHeaders = CorsPreflight.fromOrigin(GOOD,
+				HttpMethod.POST);
+		CorsPreflight withHeaders = CorsPreflight.fromOrigin(GOOD,
+				HttpMethod.POST, Set.of("Authorization"));
+
+		Assertions.assertEquals(Set.of(),
+				withoutHeaders.getAccessControlRequestHeaders());
+		Assertions.assertEquals(Set.of("Authorization"),
+				withHeaders.getAccessControlRequestHeaders());
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> CorsPreflight.class.getMethod("with", String.class,
+						HttpMethod.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> CorsPreflight.class.getMethod("with", String.class,
+						HttpMethod.class, Set.class));
+	}
+
+	@Test
 	public void preflight_allOrigins_allowed() {
 		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))

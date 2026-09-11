@@ -105,6 +105,8 @@
 {"id":"F:com/soklet/McpType#UUID:Lcom/soklet/McpType;","kind":"field","changes":[{"type":"FIELD_REMOVED","site":"field","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"F:com/soklet/ServerType#MCP:Lcom/soklet/ServerType;","kind":"field","changes":[{"type":"FIELD_REMOVED","site":"field","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"F:com/soklet/StreamTerminationReason#SESSION_TERMINATED:Lcom/soklet/StreamTerminationReason;","kind":"field","changes":[{"type":"FIELD_REMOVED","site":"field","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/CorsPreflight#with(Ljava/lang/String;Lcom/soklet/HttpMethod;)Lcom/soklet/CorsPreflight;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/CorsPreflight#with(Ljava/lang/String;Lcom/soklet/HttpMethod;Ljava/util/Set;)Lcom/soklet/CorsPreflight;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/HttpServer#attach(Lcom/soklet/HttpTransportAttachmentContext;Lcom/soklet/StartupContext;)Lcom/soklet/TransportRuntime;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/HttpServer#close()V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/HttpServer#getTransportIdentity()Lcom/soklet/TransportIdentity;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}

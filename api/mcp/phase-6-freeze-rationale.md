@@ -14,7 +14,7 @@ Greenfield localization-result simplification amendment reviewed: 2026-08-17
 
 Greenfield localization-context builder amendment reviewed: 2026-08-17
 
-Final greenfield API polish amendment reviewed: 2026-08-17
+Greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 
@@ -24,7 +24,9 @@ MCP value-contract amendment reviewed: 2026-09-03
 
 Invocation and typed-input declaration amendment reviewed: 2026-09-03
 
-Final public-value amendment reviewed: 2026-09-10
+Public-value amendment reviewed: 2026-09-10
+
+Pre-release naming compatibility reconciliation reviewed: 2026-09-11
 
 This record approves the Phase 6 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
@@ -41,16 +43,16 @@ the current full japicmp report.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 646 canonical
+The reviewed current incompatibility set contains exactly 648 canonical
 symbols and has SHA-256
-`8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
 The matching full japicmp report establishes an exact owner universe of:
 
 - 134 Phase 4 owners;
 - 36 Phase 5 owners;
 - 64 Phase 6 owners;
 - 14 provisional Tasks owners; and
-- 248 MCP owners, plus 51 reviewed non-MCP owners for 299 current-side owners.
+- 248 MCP owners, plus 52 reviewed non-MCP owners for 300 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory is 134, while its signature snapshot includes the
@@ -327,9 +329,9 @@ errors, and four skips over 464 main and 193 test sources. JDK 21 static
 analysis reports `BUILD SUCCESS`, and SpotBugs reports zero errors and zero
 warnings.
 
-## 2026-08-17 final greenfield API polish amendment
+## 2026-08-17 greenfield API polish amendment
 
-The final same-day review changes only Phase 4 and Phase 5 declarations. It
+The API-polish review changes only Phase 4 and Phase 5 declarations. It
 makes the Phase 4-owned endpoint registry a final immutable Soklet value,
 clarifies converted-argument, named-limiter, pass-through-interceptor, and
 tool-output builder names, and removes the redundant Phase 5 input-request
@@ -607,20 +609,38 @@ The focused reflection/Javadoc contracts and aggregate API-freeze gate passed
 against this development tree. These are local development checks, not
 release-candidate provenance or publication evidence.
 
-## 2026-09-10 final public-value amendment
+## 2026-09-10 public-value amendment
 
-The final release review adds deliberate structural `equals(Object)` and
+The release review adds deliberate structural `equals(Object)` and
 `hashCode()` contracts to `McpLocalizationCatalog`. The addition completes the
 catalog's immutable value contract without changing the 64-owner Phase 6
 inventory.
 
-The final Phase 6 snapshot contains 425 records: 64 classes, no public
+The resulting Phase 6 snapshot contains 425 records: 64 classes, no public
 constructors, 41 fields, and 320 methods. Its signature SHA-256 is
 `06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`;
 the reviewed reflection/nullability SHA-256 is
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`;
 and the unchanged include-inventory SHA-256 is
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
-The shared final released-3.5.1 compatibility ledger contains 646 records with
-SHA-256
+The shared released-3.5.1 compatibility ledger at that checkpoint contains
+646 records with SHA-256
 `8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
+
+## 2026-09-11 pre-release naming compatibility reconciliation
+
+The Phase 4 and Phase 5 naming amendment does not change a Phase 6 descriptor
+or owner. The Phase 6 snapshot therefore remains byte-identical at 425 records
+across 64 owners, with signature SHA-256
+`06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`,
+reflection/nullability SHA-256
+`10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`,
+and include-inventory SHA-256
+`29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
+
+The two reviewed `CorsPreflight.with(...)` removals raise the shared
+released-3.5.1 compatibility ledger to 648 records with SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+The complete current-side owner union is 300 owners after adding
+`CorsPreflight` to the 52-owner non-MCP allowlist. The historical D1p preview
+seal remains immutable.

@@ -408,7 +408,8 @@ public final class McpConformanceFixtureContractTest {
 		assertEquals(expectedKeys, List.copyOf(result.getInputRequests().keySet()),
 				"Wrong input-request keys");
 		assertEquals(expectedMethods, result.getInputRequests().values().stream()
-				.map(McpInputRequest::getMethod).toList(), "Wrong input-request methods");
+				.map(McpInputRequest::getJsonRpcMethod).toList(),
+				"Wrong input-request methods");
 		if (expectedState == null) {
 			assertEquals(Optional.empty(), result.getFrameworkRequestState(),
 					"Unexpected framework request state");

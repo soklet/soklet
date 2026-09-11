@@ -90,8 +90,13 @@ public final class CatalogMcpEndpoint {
 }
 ```
 
-The input and output schemas are derived from the Java declaration. Soklet
-validates both and does not accept an application-supplied replacement schema.
+This annotation-driven tool's input and output schemas are derived from its
+Java declaration and both are validated. Programmatic registrations may
+instead call `McpToolRegistration.withName(...).inputSchema(...)` with an
+authored Profile 1 object-root input document when Java derivation cannot
+express the required constraints. The handler then receives the validated
+immutable `McpJsonObject`. Applications cannot replace annotation-derived
+schemas, construct `McpToolSchema` directly, or author output schemas.
 
 ## 3. Build and run the server
 

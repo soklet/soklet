@@ -1159,6 +1159,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.Builder.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-004",
+          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.Builder.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)->LogEvent.Builder.throwable@1",
           "matcherRuleId": "PRIV-MATCH-004",
           "member": "safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)",
@@ -12586,9 +12595,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#ClientSocketChannelRegistration(DefaultSseConnection,DefaultSseBroadcaster)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#ClientSocketChannelRegistration(DefaultSseConnection,DefaultSseBroadcaster,int,boolean)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "ClientSocketChannelRegistration(DefaultSseConnection,DefaultSseBroadcaster)",
+          "member": "ClientSocketChannelRegistration(DefaultSseConnection,DefaultSseBroadcaster,int,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.ClientSocketChannelRegistration",
           "sink": "Diagnostic.recordConstructor"
@@ -12598,6 +12607,24 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#broadcaster()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "broadcaster()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.ClientSocketChannelRegistration",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#connectionVerificationRequired()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "connectionVerificationRequired()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.ClientSocketChannelRegistration",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#initialApplicationWriteCount()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "initialApplicationWriteCount()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.ClientSocketChannelRegistration",
           "sink": "Diagnostic.recordAccessor"
@@ -33706,6 +33733,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.ClientSocketChannelRegistration#ClientSocketChannelRegistration()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ClientSocketChannelRegistration()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.ClientSocketChannelRegistration",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseBroadcaster#broadcastComment(Function<Object, T>,Function<T, SseComment>)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "broadcastComment(Function<Object, T>,Function<T, SseComment>)",
@@ -33814,12 +33850,12 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#enqueue(DefaultSseConnection.WriteQueueElement)->Throwable.IllegalStateException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#enqueue(DefaultSseConnection.WriteQueueElement)->Throwable.SseInitializerQueueCapacityExceededException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "enqueue(DefaultSseConnection.WriteQueueElement)",
-          "occurrence": 2,
+          "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalStateException"
+          "sink": "Throwable.SseInitializerQueueCapacityExceededException"
         },
         {
           "file": "src/main/java/com/soklet/EntityTag.java",
@@ -46044,6 +46080,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.with:SSE_SERVER_CONNECTION_REJECTED@1",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.with:SSE_SERVER_CONNECTION_REJECTED"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)->LogEvent.with:METRICS_COLLECTOR_FAILED@1",
           "matcherRuleId": "PRIV-MATCH-001",
           "member": "safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)",
@@ -51679,12 +51724,12 @@
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector.HttpServerRouteKey#getMethod()->MetricsCollector.surface.getMethod@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector.HttpServerRouteKey#getHttpMethod()->MetricsCollector.surface.getHttpMethod@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "getMethod()",
+          "member": "getHttpMethod()",
           "occurrence": 1,
           "owner": "com.soklet.MetricsCollector.HttpServerRouteKey",
-          "sink": "MetricsCollector.surface.getMethod"
+          "sink": "MetricsCollector.surface.getHttpMethod"
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
@@ -51742,12 +51787,12 @@
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector.HttpServerRouteStatusKey#getMethod()->MetricsCollector.surface.getMethod@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector.HttpServerRouteStatusKey#getHttpMethod()->MetricsCollector.surface.getHttpMethod@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "getMethod()",
+          "member": "getHttpMethod()",
           "occurrence": 1,
           "owner": "com.soklet.MetricsCollector.HttpServerRouteStatusKey",
-          "sink": "MetricsCollector.surface.getMethod"
+          "sink": "MetricsCollector.surface.getHttpMethod"
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
@@ -55772,6 +55817,24 @@
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#recordTransportFailure(MetricsCollector.TransportFailureReason,Throwable,String)->LogEvent.attachment.throwable@1",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "recordTransportFailure(MetricsCollector.TransportFailureReason,Throwable,String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.attachment.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.attachment.build@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.attachment.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.attachment.throwable"

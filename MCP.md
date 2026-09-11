@@ -1141,6 +1141,12 @@ transitions produce one queue-depth removal and one observable request outcome
 even when a reserved deadline response becomes unwritable before transport
 handoff.
 
+That application-handler mapping is distinct from a deadline that expires
+while Soklet still owns framework protocol work, before an application handoff.
+A framework-owned protocol-operation deadline returns a bodyless HTTP 504 with
+the normal bounded response headers; there is no JSON-RPC `-32603` body in that
+case. Both paths are recorded as deadline-exceeded outcomes.
+
 An absolute request timeout, disconnect, forced shutdown after the graceful
 budget, or response-stream backpressure failure cancels the invocation's
 `CancelationToken`. Graceful shutdown itself fences new work but preserves the
@@ -1502,7 +1508,8 @@ Implemented framework mappings are stable:
 | Strict unknown mirrored header | 400 | `-31998` |
 | Handler capacity exhausted | 503 | `-32603` |
 | Queued request deadline | 503 | `-32603` |
-| Active request deadline | 504 | `-32603` |
+| Active application-handler request deadline | 504 | `-32603` |
+| Framework-owned protocol-operation deadline | 504 | bodyless |
 | Standard or custom header mismatch | 400 | `-32020` |
 | Unsupported protocol version | 400 | `-32022` |
 | Missing required capability | 400 | `-32021` |
@@ -1550,6 +1557,14 @@ already parsed from the JSON arguments. It never supplies an absent or null
 argument from the header. Mirroring is limited to statically reachable string,
 boolean, or JavaScript-safe integer properties. Both values remain untrusted
 input.
+
+In an authored input schema, `x-mcp-header` must be a string containing the
+nonempty RFC 9110 field-name-token suffix, such as `"Tenant"`, not the complete
+`Mcp-Param-Tenant` field name. It may appear only on a property reached from the
+schema root solely through `properties` chains; that property must declare the
+direct type `string`, `boolean`, or `integer`. Suffixes must be unique
+case-insensitively within the tool schema. Soklet rejects invalid placement,
+type, token syntax, or collisions when `inputSchema(...)` compiles the document.
 
 Unknown `Mcp-Param-*` headers are ignored by default and never become tool
 arguments. `McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS` enables request-

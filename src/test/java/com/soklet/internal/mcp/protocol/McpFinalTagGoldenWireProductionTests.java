@@ -266,7 +266,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addPrompt(prompt)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -343,7 +343,7 @@ public class McpFinalTagGoldenWireProductionTests {
 
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addResource(textResource)
 				.addResource(blobResource)
 				.addResource(recordTemplate)
@@ -560,7 +560,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.addTool(inputResponsesTool)
 				.build();
@@ -690,7 +690,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -894,7 +894,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.serverInformationIncluded(false)
+				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
