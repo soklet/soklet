@@ -67,6 +67,7 @@ class McpTasksFleetPublicRuntimeTests {
 			Instant.parse("2026-09-09T12:00:01Z");
 
 	@Test
+	@Timeout(180)
 	void completedTasksMoveAcrossNodesAndSurviveOriginNodeReplacement()
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();
@@ -124,6 +125,7 @@ class McpTasksFleetPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void taskOperationsPreserveEndpointAndTenantIsolationAcrossNodes()
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();
@@ -178,6 +180,7 @@ class McpTasksFleetPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void durableSnapshotsControlTtlAndOriginVersionCompatibility()
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();
@@ -255,6 +258,7 @@ class McpTasksFleetPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void persistedInputContractSurvivesCurrentRegistrationChanges()
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();

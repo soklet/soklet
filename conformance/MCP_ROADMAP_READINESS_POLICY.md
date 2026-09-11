@@ -179,3 +179,13 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 - Test evidence: None.
 - Negative-inventory keys: `NI-10`
 - Reviewed no-mapping reason: Not applicable.
+
+### DF-16 — Typed-schema and annotation expressiveness
+
+- Trigger: 4.1 typed-schema and annotation API design, including a reviewed diagnostic privacy envelope and parity across runtime reflection, annotation processing, generated registration, and JSON binding
+- Landing zone: Additive 4.1 annotation constraints and formats shared by the reflection and annotation-processing schema frontends; UUID and selected java.time scalar bindings with exact format/parse gates; bounded instance-free validation-diagnostic projection; and an annotation-native typed-output plus advanced inline-result declaration
+- Pre-release hedge: 4.0 exposes the already bounded Profile 1 authored input-schema path when Java derivation cannot express a constraint, advertises finite float/double bounds, documents the closed scalar family and generic validation failure, and supports typed-output inline isError results through the programmatic builder
+- Evidence classification: `planned`
+- Test evidence: None.
+- Negative-inventory keys: None.
+- Reviewed no-mapping reason: Richer derived-schema constraints, scalar conveniences, validation diagnostics, and annotation-native typed-output advanced results are deferred API evolution rather than capabilities advertised for the documented 4.0 closed Java family.

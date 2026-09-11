@@ -66,7 +66,7 @@ public class McpLimitsAndAccountingTests {
 		Assertions.assertEquals("../mcp/PROFILE_1_NUMERIC_BOUNDS.md",
 				string(authority, "path"));
 		Assertions.assertEquals(
-				"9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70",
+				"c0d54bf7d5411df5d60dfbc9485c2a3c02878189fe2faceb482e6ebe57fead2e",
 				string(authority, "sha256"));
 
 		Set<String> knownBoundIds = finiteBoundIds();
@@ -101,12 +101,14 @@ public class McpLimitsAndAccountingTests {
 		}
 
 		Assertions.assertEquals(Set.of("LIMITS-CURSOR-ADJACENT-OUTPUT",
-				"LIMITS-NUMERIC-PARSER", "LIMITS-SCHEMA-COMPILER-EVALUATOR",
+				"LIMITS-DURABLE-TASK-ARGUMENTS", "LIMITS-NUMERIC-PARSER",
+				"LIMITS-SCHEMA-COMPILER-EVALUATOR",
 				"LIMITS-SERIALIZED-RESULT", "LIMITS-TRANSPORT",
 				"LIMITS-URI-TEMPLATE"), decisionIds);
-		Assertions.assertEquals(Set.of("CURSOR_ADJACENT_OUTPUT", "NUMERIC_PARSER",
-				"SCHEMA_COMPILER_EVALUATOR", "SERIALIZED_RESULT", "TRANSPORT",
-				"URI_TEMPLATE"), topics);
+		Assertions.assertEquals(Set.of("CURSOR_ADJACENT_OUTPUT",
+				"DURABLE_TASK_ARGUMENTS", "NUMERIC_PARSER",
+				"SCHEMA_COMPILER_EVALUATOR", "SERIALIZED_RESULT",
+				"TRANSPORT", "URI_TEMPLATE"), topics);
 		assertStrictlySorted(orderedDecisionIds, "decision IDs");
 	}
 
@@ -116,11 +118,35 @@ public class McpLimitsAndAccountingTests {
 			case "URI_TEMPLATE" -> uriTemplateValues();
 			case "TRANSPORT" -> transportValues();
 			case "CURSOR_ADJACENT_OUTPUT" -> cursorOutputValues();
+			case "DURABLE_TASK_ARGUMENTS" -> durableTaskArgumentsValues();
 			case "NUMERIC_PARSER" -> numericParserValues();
 			case "SCHEMA_COMPILER_EVALUATOR" -> schemaValues();
 			case "SERIALIZED_RESULT" -> serializedResultValues();
 			default -> throw new AssertionError("Unknown decision topic " + topic);
 		};
+	}
+
+	private static Map<String, Bound> durableTaskArgumentsValues()
+			throws Exception {
+		Map<String, Bound> values = new LinkedHashMap<>();
+		McpJsonLimits limits = McpJsonLimits.durableTaskArguments();
+		Assertions.assertEquals(limits, staticValue(
+				"com.soklet.internal.mcp.protocol."
+						+ "McpTaskOriginPersistedStateCodec",
+				"RESTORED_ARGUMENT_LIMITS"));
+		put(values, "depth", "LEVELS", limits.maximumNestingDepth());
+		put(values, "exponent-magnitude", "INTEGER",
+				limits.maximumExponentMagnitude());
+		put(values, "input-bytes", "UTF8_BYTES", limits.maximumInputBytes());
+		put(values, "nodes", "NODES", limits.maximumNodeCount());
+		put(values, "number-characters", "UTF16_CODE_UNITS",
+				limits.maximumNumberLengthInCharacters());
+		put(values, "output-bytes", "UTF8_BYTES", limits.maximumOutputBytes());
+		put(values, "string-characters", "UTF16_CODE_UNITS",
+				limits.maximumStringLengthInCharacters());
+		put(values, "token-characters", "UTF16_CODE_UNITS",
+				limits.maximumTokenLengthInCharacters());
+		return Map.copyOf(values);
 	}
 
 	private static Map<String, Bound> uriTemplateValues() throws Exception {
@@ -172,7 +198,7 @@ public class McpLimitsAndAccountingTests {
 				transport.maximumHeaderCount());
 		put(values, "maximum-header-bytes", "WIRE_BYTES",
 				transport.maximumHeaderBytes());
-		put(values, "maximum-request-body-bytes", "BYTES",
+		put(values, "direct-maximum-request-body-bytes", "BYTES",
 				transport.maximumRequestBodyBytes());
 		put(values, "maximum-request-target-bytes", "ASCII_BYTES",
 				transport.maximumRequestTargetBytes());
@@ -181,8 +207,26 @@ public class McpLimitsAndAccountingTests {
 						- transport.maximumRequestBodyBytes()
 						- transport.maximumHeaderBytes()
 						- transport.maximumRequestTargetBytes());
-		put(values, "maximum-aggregate-request-bytes", "WIRE_BYTES",
+		put(values, "direct-maximum-aggregate-request-bytes", "WIRE_BYTES",
 				transport.maximumAggregateRequestBytes());
+		Number effectiveRequestBodyBytes = (Number) fieldValue(publicBuilder,
+				"maximumRequestSizeInBytes");
+		put(values, "effective-maximum-request-body-bytes", "BYTES",
+				effectiveRequestBodyBytes);
+		long framingBytes = transport.maximumAggregateRequestBytes()
+				- transport.maximumRequestBodyBytes()
+				- transport.maximumHeaderBytes()
+				- transport.maximumRequestTargetBytes();
+		put(values, "effective-maximum-aggregate-request-bytes", "WIRE_BYTES",
+				effectiveRequestBodyBytes.longValue()
+						+ ((Number) fieldValue(publicBuilder,
+								"maximumHeadersSizeInBytes")).longValue()
+						+ ((Number) fieldValue(publicBuilder,
+								"maximumRequestTargetLengthInBytes")).longValue()
+						+ framingBytes);
+		put(values, "maximum-supported-request-body-bytes", "BYTES",
+				staticNumber("com.soklet.McpServer$Builder",
+						"MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES"));
 		put(values, "read-buffer-bytes", "BYTES_PER_CONNECTION",
 				transport.readBufferSize());
 		put(values, "accept-backlog", "CONNECTIONS", transport.acceptBacklog());

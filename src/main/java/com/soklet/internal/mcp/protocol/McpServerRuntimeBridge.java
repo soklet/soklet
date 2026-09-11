@@ -3688,8 +3688,6 @@ public final class McpServerRuntimeBridge {
 		if (taskSnapshot.isEmpty())
 			throw new McpInvalidApplicationInputException();
 		TaskSnapshot snapshot = taskSnapshot.orElseThrow();
-		requireTaskInputCapabilities(snapshot,
-				invocation.request().params().metadata().clientCapabilities());
 		return taskResult(snapshot, false);
 	}
 

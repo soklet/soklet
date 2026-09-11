@@ -57,6 +57,7 @@ public class McpTaskCancelationLifecycleTests {
 	private static final String TOOL_NAME = "tasks.lifecycle";
 
 	@Test
+	@Timeout(120)
 	public void taskCancelationIsCooperativeAndDoesNotCancelOriginatingRequest()
 			throws Exception {
 		McpInMemoryTaskManager taskManager =
@@ -133,6 +134,7 @@ public class McpTaskCancelationLifecycleTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void requestCancelationNotificationIsAcceptedAndIgnored()
 			throws Exception {
 		McpInMemoryTaskManager taskManager =
@@ -212,6 +214,7 @@ public class McpTaskCancelationLifecycleTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void taskCancelationAndCompletionRacePreservesTerminalCompletion()
 			throws Exception {
 		McpInMemoryTaskManager taskManager =
@@ -294,6 +297,7 @@ public class McpTaskCancelationLifecycleTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void requestTimeoutDoesNotRecordDurableTaskCancelation()
 			throws Exception {
 		McpInMemoryTaskManager taskManager =
@@ -362,6 +366,7 @@ public class McpTaskCancelationLifecycleTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void shutdownLeavesDurableTaskWorkApplicationOwnedAcrossRestart()
 			throws Exception {
 		McpInMemoryTaskManager taskManager =

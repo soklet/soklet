@@ -341,7 +341,7 @@ class McpToolRegistrationTests {
 	}
 
 	@Test
-	void conformanceSchemaSeamPreservesEnforcesAndDerivesMirroredHeaders()
+	void authoredInputSchemaPreservesEnforcesAndDerivesMirroredHeaders()
 			throws Exception {
 		McpJsonObject tenantSchema = McpJsonObject.builder()
 				.put("type", "string")
@@ -366,7 +366,7 @@ class McpToolRegistrationTests {
 		AtomicReference<McpJsonObject> decodedArguments = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> registration =
 				McpToolRegistration.withName("conformance_schema")
-						.conformanceInputSchema(inputSchema)
+						.inputSchema(inputSchema)
 						.handler((request, arguments, features) -> {
 							decodedArguments.set(arguments.getConvertedArguments());
 							return McpCompleteResult.fromToolText("done");
@@ -377,8 +377,8 @@ class McpToolRegistrationTests {
 				.put("email", "a@example.test")
 				.build();
 
-		assertFalse(Modifier.isPublic(McpToolRegistration.ArgumentTypeStage.class
-				.getDeclaredMethod("conformanceInputSchema", McpJsonObject.class)
+		assertTrue(Modifier.isPublic(McpToolRegistration.ArgumentTypeStage.class
+				.getDeclaredMethod("inputSchema", McpJsonObject.class)
 				.getModifiers()));
 		assertSame(inputSchema, registration.getInputSchema().getDocument());
 		assertEquals(McpJsonObject.class, registration.getArgumentType());
@@ -405,7 +405,7 @@ class McpToolRegistrationTests {
 				.build();
 		assertThrows(IllegalArgumentException.class,
 				() -> McpToolRegistration.withName("unsupported_schema")
-						.conformanceInputSchema(unsupportedSchema));
+						.inputSchema(unsupportedSchema));
 	}
 
 	@Test

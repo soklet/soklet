@@ -3169,7 +3169,7 @@ final class McpPrivacyBoundaryFuzzTests {
     verifyLimitsAccountingAuthority({ projectRoot: limitsAuthorityRoot }),
     {
       path: '../mcp/PROFILE_1_NUMERIC_BOUNDS.md',
-      sha256: '9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70',
+      sha256: 'c0d54bf7d5411df5d60dfbc9485c2a3c02878189fe2faceb482e6ebe57fead2e',
     },
   );
   expectLimitsAuthorityInvalid('limits-authority-path-drift', (value) => {

@@ -26,14 +26,12 @@ import javax.annotation.concurrent.ThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable production bridge for one package-private authored tool-input
- * schema.
+ * Immutable production bridge for one authored tool-input schema.
  *
- * <p>This bridge exists solely for Soklet's conformance fixture. It is public
- * only so production code in another Soklet package can consume the internal
- * schema implementation; internal MCP packages are excluded from Soklet's
- * public API and compatibility surface. Compilation and evaluation use the
- * reviewed production JSON and Profile 1 limits.</p>
+ * <p>This bridge is public only so production code in another Soklet package
+ * can consume the internal schema implementation; internal MCP packages are
+ * excluded from Soklet's public API and compatibility surface. Compilation
+ * and evaluation use the reviewed production JSON and Profile 1 limits.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

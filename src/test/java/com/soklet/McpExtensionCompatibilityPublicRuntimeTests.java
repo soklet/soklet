@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -365,6 +366,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void taskControlRequiresConfiguredManagerAndNegotiatedToolCall()
 			throws Exception {
 		List<Optional<McpTaskControl>> observedTaskControls =
@@ -410,6 +412,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					.orElseThrow().getPort();
 			Assertions.assertEquals(200,
 					callTaskControlTool(port, "capable", true).statusCode());
+			HttpResponse<String> largeInline = callLargeTaskControlTool(port,
+					"large-inline");
+			Assertions.assertEquals(200, largeInline.statusCode(),
+					largeInline.body());
 			Assertions.assertEquals(200,
 					callTaskControlTool(port, "incapable", false).statusCode());
 			Assertions.assertEquals(200,
@@ -430,7 +436,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			unconfiguredSoklet.close();
 		}
 
-		Assertions.assertEquals(3, observedTaskControls.size());
+		Assertions.assertEquals(4, observedTaskControls.size());
 		McpTaskControl taskControl = observedTaskControls.get(0).orElseThrow();
 		Assertions.assertSame(observedRequestContexts.get(0),
 				taskControl.getRequestContext());
@@ -446,8 +452,15 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.put("structuredContentMirroredAsText", false)
 				.put("inputRequestDeclarations", McpJsonArray.emptyInstance())
 				.build(), taskControl.getTaskOrigin().getPersistedState());
-		Assertions.assertTrue(observedTaskControls.get(1).isEmpty());
+		McpTaskControl largeInlineControl = observedTaskControls.get(1)
+				.orElseThrow();
+		Field taskOriginField = largeInlineControl.getClass()
+				.getDeclaredField("taskOrigin");
+		taskOriginField.setAccessible(true);
+		Assertions.assertNull(taskOriginField.get(largeInlineControl),
+				"A task-eligible inline completion must not eagerly encode its origin.");
 		Assertions.assertTrue(observedTaskControls.get(2).isEmpty());
+		Assertions.assertTrue(observedTaskControls.get(3).isEmpty());
 		Assertions.assertEquals(List.of(Optional.empty()),
 				observedPromptTaskControls);
 	}
@@ -699,6 +712,28 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
 				+ extensions + "},\"name\":\"" + TOOL_NAME + "\","
 				+ "\"arguments\":{\"query\":\"catalog\"}}}";
+		return post(port, "tools/call", TOOL_NAME, body);
+	}
+
+	private static HttpResponse<String> callLargeTaskControlTool(int port,
+			String id) throws Exception {
+		String chunk = "x".repeat(900_000);
+		StringBuilder arguments = new StringBuilder(4_500_128);
+		arguments.append("{\"chunks\":[");
+		for (int index = 0; index < 5; ++index) {
+			if (index > 0)
+				arguments.append(',');
+			arguments.append('"').append(chunk).append('"');
+		}
+		arguments.append("]}");
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\","
+				+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{"
+				+ "\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}}},"
+				+ "\"name\":\"" + TOOL_NAME + "\",\"arguments\":"
+				+ arguments + "}}";
 		return post(port, "tools/call", TOOL_NAME, body);
 	}
 

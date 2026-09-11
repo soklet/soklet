@@ -121,6 +121,7 @@ for (const [name, reduced] of [
   ['rejectedAndIrrelevantWorkNeverInvokesTheProvider', 1],
   ['testLargeRequestBodyMemoryHandling', 1],
   ['headerCountAndEncodedByteLimitsHaveExactListenerBoundaries', 1],
+  ['everyFrameworkAndApplicationCompleteAuthorityMatchesGoldens', 3],
 ]) {
   run(`source-bound generation count ${name}`, () => {
     const document = clone(INVENTORY);
@@ -601,6 +602,31 @@ run('helper propagation repeated direct calls and literal loop', () => {
   assert.equal(byName.get('repeated').generationSiteCount, 2);
   assert.equal(byName.get('looped').generationSiteCount, 4);
   assert.ok(byName.get('repeated').propagatedHelperEvidence.length > 0);
+});
+
+run('reviewed sequential generation cannot understate source sites', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    import org.junit.jupiter.api.Timeout;
+    class SyntheticLifecycleTests {
+      @Test @Timeout(180) void repeated() {
+        runOwner(); runOwner(); runOwner();
+      }
+      void runOwner() {
+        Soklet soklet = Soklet.fromConfig(null);
+        soklet.start(); soklet.close();
+      }
+    }
+  `);
+  assert.equal(scopes[0].generationSiteCount, 3);
+  expectFailure(() => reviewedSyntheticRows(scopes, {
+    repeated: {
+      generation: {
+        complete: 2, count: 2, incomplete: 1,
+        mode: 'SEQUENTIAL', prior: 1,
+      },
+    },
+  }), /understates source evidence/u);
 });
 
 run('enhanced-for lifecycle repetition cannot close as one generation', () => {
@@ -1898,8 +1924,8 @@ run('generated D1p semantic evidence is not live lifecycle source', () => {
   const source = readFileSync(join(ROOT, path), 'utf8');
   assert.match(source, /\bshutdownTimeout\s*\(/u);
   assert.deepEqual(verifyNoSurvivingLegacySites(new Map([[path, source]])), []);
-  assert.equal(EVIDENCE.currentLegacyExclusions.length, 21);
-  assert.equal(INVENTORY.currentLegacyExclusions.length, 21);
+  assert.equal(EVIDENCE.currentLegacyExclusions.length, 23);
+  assert.equal(INVENTORY.currentLegacyExclusions.length, 23);
 });
 
 run('only exact generated D1p evidence paths bypass source scanning', () => {

@@ -72,9 +72,12 @@ public interface McpRateLimiter {
 	 * <p>
 	 * The returned limiter partitions state by normalized endpoint path, the
 	 * accepted admission identity's stable rate-limit partition key, and the
-	 * context target. Retained partition state is bounded and a new partition
-	 * fails closed when no fully replenished partition can be reclaimed. The
-	 * limiter is local to this JVM and provides no cross-instance coordination.
+	 * context target. Retained partition state is bounded. At capacity, one
+	 * acquisition examines a bounded rotating sample of retained partitions and
+	 * reclaims the first fully replenished one it finds. A new partition fails
+	 * closed when that sample contains none, even if another reclaimable
+	 * partition exists outside the current sample. The limiter is local to this
+	 * JVM and provides no cross-instance coordination.
 	 *
 	 * @param tokenBucketConfig finite token-bucket configuration
 	 * @return a new independent in-memory limiter

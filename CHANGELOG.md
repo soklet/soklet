@@ -36,17 +36,22 @@
   read phase, 100 headers, 64 KiB aggregate headers, an 8,192-byte request
   target, a 64 KiB read buffer, 8,192 concurrent connections, and a 128-item
   stream queue. Configured request bodies are bounded by the reviewed 16 MiB
-  production-JSON ceiling; `connectionQueueCapacity` is an alias of
-  `streamQueueCapacity`.
+  production-JSON ceiling, while any single JSON string or token remains
+  capped at 1,048,576 characters; `connectionQueueCapacity` is an alias of
+  `streamQueueCapacity`. A loopback bind literal or `localhost` seeds its
+  effective Host authority; every non-loopback bind now requires at least one
+  explicit `allowedHosts(...)` entry or server construction fails.
 - **Fixed MCP endpoint paths:** templated endpoint HTTP paths and
   `@McpEndpointPathParameter` have no 4.0 replacement. Register separate fixed
   endpoints for a bounded tenant set, or use application-authenticated
   admission/header tenancy. Resource URI templates remain supported; the
   retained request/admission endpoint-path-parameter maps are always empty.
 - **Simulator:** the static `Soklet.runSimulator` entry points are removed.
-  `SokletSimulator.run` now supplies a scope-bound `SimulatorConfig.Builder`
-  for fresh off-network HTTP, SSE, and MCP transports and returns the
-  simulation's shutdown result. See
+  `SokletSimulator.run` now accepts either an existing `SokletConfig` or a
+  single-use `SimulatorConfig`, supplies a scope-bound `Simulator` to the
+  simulation body, and returns the simulation's shutdown result. Build a fresh
+  off-network HTTP, SSE, and MCP graph separately with `SimulatorConfig.Builder`.
+  See
   [Simulator migration](MIGRATING_TO_4_0.md#simulator-migration).
 - **MCP wire/profile:** the 2025-11-25 initialize/session/GET-SSE design is
   replaced by the exact modern `2026-07-28` profile. The first request may be
@@ -74,6 +79,9 @@
   parsed messages, `Request.toString()`, or cause chains must use typed
   accessors and application-owned redaction. See
   [Request diagnostics and privacy](MIGRATING_TO_4_0.md#request-diagnostics-and-privacy).
+  Custom request-body marshalers must translate expected malformed-input
+  failures to `IllegalRequestBodyException`; unexpected runtime failures remain
+  HTTP 500 server faults.
 
 Soklet 3.x reaches end of life when 4.0.0 is published; it receives no promised
 maintenance or security fixes afterward. See the explicit
@@ -309,11 +317,15 @@ maintenance or security fixes afterward. See the explicit
   application-telemetry privacy remain owned by `SOK-PRIV-001`.
 - Added annotation-first and programmatic tools, prompts, exact resources,
   resource templates, resource reads, and custom resource listing. Tool
-  registration uses staged typed, argument-only, or raw-JSON argument paths;
-  typed Java declarations produce schemas and conversion plans under Soklet
-  MCP Tool Schema Profile 1. There is no public hand-authored JSON Schema
-  registration API, and Soklet does not claim general-purpose JSON Schema
-  Draft 2020-12 support.
+  registration uses staged typed, argument-only, fixed raw-JSON, or authored
+  Profile 1 input-schema paths; typed Java declarations produce schemas and
+  conversion plans under Soklet MCP Tool Schema Profile 1. Authored schemas
+  are limited to direct object-root tool inputs and the same bounded closed
+  profile; Soklet does not claim general-purpose JSON Schema Draft 2020-12
+  support. Derived `float` and `double` schemas now advertise their finite
+  binder limits; richer derived constraints and formats, UUID/`java.time`
+  scalars, public validation diagnostics, and annotation-native typed-output
+  advanced results remain explicit 4.1 roadmap work.
 - Added static resource-list fallback and sole-authority custom resource lists,
   application-owned opaque cursors with UTF-8 byte bounds, cache hints, MCP
   content blocks, structured tool results, and standard MCP metadata.

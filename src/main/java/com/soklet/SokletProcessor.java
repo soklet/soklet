@@ -1127,15 +1127,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (member.getKind() != ElementKind.METHOD
 					|| member.getEnclosingElement().equals(endpointType))
 				continue;
-			List<String> annotations = new ArrayList<>(4);
-			if (findAnnotation(member, toolAnnotation) != null)
-				annotations.add("@McpTool");
-			if (findAnnotation(member, promptAnnotation) != null)
-				annotations.add("@McpPrompt");
-			if (findAnnotation(member, resourceAnnotation) != null)
-				annotations.add("@McpResource");
-			if (findAnnotation(member, listResourcesAnnotation) != null)
-				annotations.add("@McpResourceList");
+			List<String> annotations = mcpOperationAnnotationNames(member,
+					toolAnnotation, promptAnnotation, resourceAnnotation,
+					listResourcesAnnotation);
 			if (annotations.isEmpty())
 				continue;
 			Element owner = member.getEnclosingElement();
@@ -1147,6 +1141,95 @@ public final class SokletProcessor extends AbstractProcessor {
 					String.join("/", annotations), member.getSimpleName(),
 					ownerName);
 		}
+
+		// Elements#getAllMembers deliberately omits a supertype method when the
+		// endpoint overrides it. Walk the hierarchy itself so an unannotated
+		// override cannot silently hide an MCP operation compiled in another
+		// module.
+		List<ExecutableElement> endpointMethods = endpointType.getEnclosedElements()
+				.stream()
+				.filter(element -> element.getKind() == ElementKind.METHOD)
+				.map(element -> (ExecutableElement) element)
+				.toList();
+		List<TypeElement> supertypeHierarchy =
+				mcpSupertypeHierarchy(endpointType);
+		for (ExecutableElement endpointMethod : endpointMethods) {
+			Set<String> reportedAnnotations = new LinkedHashSet<>();
+			Set<String> endpointAnnotations = new LinkedHashSet<>(
+					mcpOperationAnnotationNames(endpointMethod, toolAnnotation,
+							promptAnnotation, resourceAnnotation,
+							listResourcesAnnotation));
+			for (TypeElement supertype : supertypeHierarchy) {
+				for (Element enclosed : supertype.getEnclosedElements()) {
+					if (!(enclosed instanceof ExecutableElement supertypeMethod)
+							|| !elements.overrides(endpointMethod,
+							supertypeMethod, endpointType))
+						continue;
+					List<String> missingAnnotations = new ArrayList<>(
+							mcpOperationAnnotationNames(supertypeMethod,
+									toolAnnotation, promptAnnotation,
+									resourceAnnotation, listResourcesAnnotation));
+					missingAnnotations.removeAll(endpointAnnotations);
+					missingAnnotations.removeIf(annotation ->
+							!reportedAnnotations.add(annotation));
+					if (missingAnnotations.isEmpty())
+						continue;
+					mcpError(endpointMethod,
+							"Soklet: Inherited MCP operation %s method %s from supertype %s is overridden by method %s.%s without redeclaring %s; this inherited operation is not supported, and MCP operation annotations must be declared directly on the overriding @McpServerEndpoint method.",
+							String.join("/", missingAnnotations),
+							supertypeMethod.getSimpleName(),
+							supertype.getQualifiedName(),
+							endpointType.getQualifiedName(),
+							endpointMethod.getSimpleName(),
+							String.join("/", missingAnnotations));
+				}
+			}
+		}
+	}
+
+	@NonNull
+	private List<@NonNull TypeElement> mcpSupertypeHierarchy(
+			@NonNull TypeElement endpointType) {
+		List<TypeElement> hierarchy = new ArrayList<>();
+		Set<String> visited = new LinkedHashSet<>();
+		ArrayDeque<TypeMirror> pending = new ArrayDeque<>();
+		List<? extends TypeMirror> directSupertypes =
+				types.directSupertypes(endpointType.asType());
+		directSupertypes.stream()
+				.sorted(Comparator.comparing(TypeMirror::toString))
+				.forEach(pending::addLast);
+		while (!pending.isEmpty()) {
+			TypeMirror candidate = pending.removeFirst();
+			if (!(candidate instanceof DeclaredType declared)
+					|| !(declared.asElement() instanceof TypeElement supertype)
+					|| supertype.getQualifiedName().contentEquals("java.lang.Object")
+					|| !visited.add(supertype.getQualifiedName().toString()))
+				continue;
+			hierarchy.add(supertype);
+			types.directSupertypes(supertype.asType()).stream()
+					.sorted(Comparator.comparing(TypeMirror::toString))
+					.forEach(pending::addLast);
+		}
+		return List.copyOf(hierarchy);
+	}
+
+	@NonNull
+	private List<@NonNull String> mcpOperationAnnotationNames(
+			@NonNull Element element,
+			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement promptAnnotation,
+			@NonNull TypeElement resourceAnnotation,
+			@NonNull TypeElement listResourcesAnnotation) {
+		List<String> annotations = new ArrayList<>(4);
+		if (findAnnotation(element, toolAnnotation) != null)
+			annotations.add("@McpTool");
+		if (findAnnotation(element, promptAnnotation) != null)
+			annotations.add("@McpPrompt");
+		if (findAnnotation(element, resourceAnnotation) != null)
+			annotations.add("@McpResource");
+		if (findAnnotation(element, listResourcesAnnotation) != null)
+			annotations.add("@McpResourceList");
+		return List.copyOf(annotations);
 	}
 
 	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
@@ -3572,15 +3655,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		// would let an older cache resurrect a row deliberately removed by a newer
 		// compilation.
 		boolean existingSnapshotRead = classOutputIndexPath != null
-				&& readMcpEndpointIndexFromPath(classOutputIndexPath, merged,
-						false);
+				&& readMcpEndpointIndexFromPath(classOutputIndexPath, merged);
 		if (!existingSnapshotRead)
 			existingSnapshotRead = readMcpEndpointIndexFromLocation(merged);
 		if (!existingSnapshotRead && sideCarIndexPath != null)
 			existingSnapshotRead = readMcpEndpointIndexFromPath(
-					sideCarIndexPath, merged, true);
+					sideCarIndexPath, merged);
 		if (!existingSnapshotRead && persistentIndexPath != null)
-			readMcpEndpointIndexFromPath(persistentIndexPath, merged, true);
+			readMcpEndpointIndexFromPath(persistentIndexPath, merged);
 		if (mcpProcessingErrorDetected)
 			return;
 
@@ -3682,10 +3764,12 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean readMcpEndpointIndexFromPath(@NonNull Path path,
-			@NonNull Map<String, McpEndpointProviderDeclaration> output,
-			boolean invalidatableCache) {
+			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
 		if (!Files.isRegularFile(path))
 			return false;
+		// A sidecar or persistent cache can be the only complete snapshot of
+		// untouched endpoints. Leave an invalid snapshot in place and fail with
+		// its exact location rather than silently publishing a partial index.
 		try (BufferedReader reader = Files.newBufferedReader(path,
 				StandardCharsets.UTF_8)) {
 			Map<String, McpEndpointProviderDeclaration> parsed =
@@ -3695,16 +3779,11 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (problem == null) {
 				output.clear();
 				output.putAll(parsed);
-			} else if (invalidatableCache)
-				return !invalidateMcpEndpointIndexCache(path,
-						"malformed row " + problem.lineNumber());
-			else
+			} else
 				reportMcpEndpointIndexProblem(mcpEndpointIndexLocation(path),
 						problem);
 			return true;
 		} catch (IOException exception) {
-			if (invalidatableCache)
-				return !invalidateMcpEndpointIndexCache(path, "read failure");
 			mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index at %s; delete it and rebuild.",
 					mcpEndpointIndexLocation(path));
 			return true;
@@ -3740,20 +3819,6 @@ public final class SokletProcessor extends AbstractProcessor {
 				? "Soklet: The existing generated MCP endpoint-provider index at %s:%d contains conflicting rows; delete it and rebuild."
 				: "Soklet: The existing generated MCP endpoint-provider index at %s:%d is malformed; delete it and rebuild.",
 				location, problem.lineNumber());
-	}
-
-	private boolean invalidateMcpEndpointIndexCache(@NonNull Path path,
-			@NonNull String reason) {
-		try {
-			Files.deleteIfExists(path);
-			debug("SokletProcessor: invalidated MCP cache index %s after %s",
-					path, reason);
-			return true;
-		} catch (IOException exception) {
-			mcpError("Soklet: The generated MCP endpoint-provider cache index at %s could not be invalidated; delete it and rebuild.",
-					mcpEndpointIndexLocation(path));
-			return false;
-		}
 	}
 
 	@NonNull

@@ -60,8 +60,14 @@ public final class SseTransportAttachmentContext {
 	}
 
 	/**
-	 * @return the framework admission-fenced request handler, which may be
-	 * retained and invoked by the attached runtime while admission remains open
+	 * Returns the framework admission-fenced request handler. The attached
+	 * runtime may retain and invoke it for that runtime's lifetime. While
+	 * admission is open it dispatches to the application; before admission opens
+	 * and after it is sealed, it completes the supplied result callback with a
+	 * framework-marshaled HTTP 503 response instead of silently dropping the
+	 * request.
+	 *
+	 * @return the framework admission-fenced request handler
 	 */
 	public SseServer.@NonNull RequestHandler getAdmissionFencedRequestHandler() {
 		return this.internalContext.requestHandler();

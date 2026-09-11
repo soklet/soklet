@@ -59,6 +59,37 @@ public class McpTaskNotificationProjectionSchedulerTests {
 	}
 
 	@Test
+	public void lightSubscriberOverflowRetiresTheSubscriberMonopolizingTheQueue() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(
+						executor, 1, 4);
+		Object heavySubscriber = new Object();
+		Object lightSubscriber = new Object();
+		AtomicInteger heavyRuns = new AtomicInteger();
+		AtomicInteger heavyRejections = new AtomicInteger();
+		AtomicInteger lightRuns = new AtomicInteger();
+		AtomicInteger lightRejections = new AtomicInteger();
+
+		for (int index = 0; index < 3; index++)
+			scheduler.execute(job(heavySubscriber, heavyRuns, heavyRejections));
+		scheduler.execute(job(lightSubscriber, lightRuns, lightRejections));
+		scheduler.execute(job(lightSubscriber, lightRuns, lightRejections));
+
+		Assertions.assertEquals(3, heavyRejections.get(),
+				"Overflow must retire the owner monopolizing the bounded queue.");
+		Assertions.assertEquals(0, lightRejections.get(),
+				"A lighter incoming owner must not be selected over a heavier owner.");
+		Assertions.assertEquals(2, scheduler.queuedJobCount());
+
+		executor.runNext();
+		executor.runNext();
+		Assertions.assertEquals(0, heavyRuns.get());
+		Assertions.assertEquals(2, lightRuns.get());
+		Assertions.assertEquals(0, scheduler.queuedJobCount());
+	}
+
+	@Test
 	public void transientExecutorRejectionRetainsBoundedProjectionWorkForRetry() {
 		RejectFirstExecutor executor = new RejectFirstExecutor();
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =

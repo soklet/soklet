@@ -58,7 +58,8 @@ public interface McpTaskControl {
 	 * used or a tool handler can be entered.
 	 *
 	 * @return immutable non-wire task origin
-	 * @throws IllegalArgumentException if the typed tool arguments are invalid
+	 * @throws IllegalArgumentException if the typed tool arguments are invalid or
+	 *                                  the origin exceeds its durable bound
 	 */
 	@NonNull
 	McpTaskOrigin getTaskOrigin();

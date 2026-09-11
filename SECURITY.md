@@ -49,7 +49,8 @@ claim to secure an application or deployment end to end. In particular:
   an honest custom implementation; Soklet cannot detect a custom transport or
   decorator that lies about its identity, delegation, termination, or resource
   ownership.
-- MCP Tool Schema Profile 1 is a closed, bounded Java-first subset. It is not
+- MCP Tool Schema Profile 1 is a closed, bounded subset for Java-derived and
+  explicitly authored tool-input schemas. It is not
   universal JSON Schema safety, semantic sensitive-data classification,
   protection against prompt injection, or validation of application business
   rules.
@@ -74,6 +75,10 @@ release wording that was deliberately accepted, rejected, or narrowed.
 See the [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) for the exact
 division between Soklet-owned redacted diagnostics and built-in metrics,
 application callback values, simulator fixtures, and operator retention.
+The 4.0 release pairing is `com.soklet:soklet:4.0.0` with
+`com.soklet:soklet-otel:2.0.0`. Older snapshot coordinates in the historical
+Phase 6 checkpoint narrative record provenance only and are not current
+dependency guidance.
 
 Soklet's MCP 2026-07-28 support runs on a dedicated `McpServer` listener. It is
 not mounted on the ordinary HTTP or SSE listener. The MCP listener binds to
@@ -83,13 +88,15 @@ terminate TLS, so expose a non-loopback listener only behind suitable TLS
 termination and access controls.
 
 Host and Origin checks are independent. Soklet validates `Host`, including its
-effective port, and `McpServer.Builder.allowedHosts(...)` adds deployment-
-specific hostnames or IP literals. A request without `Origin` is allowed by
-default, unless `McpAbsentOriginPolicy.REQUIRE_ORIGIN` is configured. A request
-with `Origin` is rejected unless the shared `CorsAuthorizer` explicitly
-authorizes it; omitting an authorizer is reject-all for present origins. Do not
-treat browser CORS response headers as a substitute for authentication or
-network isolation.
+effective port. A loopback bind literal or `localhost` seeds the listener's
+effective authority; every non-loopback bind must configure at least one
+deployment hostname or IP literal with `McpServer.Builder.allowedHosts(...)`,
+or server construction fails. A request without `Origin` is allowed by default,
+unless `McpAbsentOriginPolicy.REQUIRE_ORIGIN` is configured. A request with
+`Origin` is rejected unless the shared `CorsAuthorizer` explicitly authorizes
+it; omitting an authorizer is reject-all for present origins. Do not treat
+browser CORS response headers as a substitute for authentication or network
+isolation.
 
 Validation precedence is a security boundary. Transport limits and endpoint routing run first, followed by Host, Origin/CORS, POST/media negotiation,
 strict JSON, and JSON-RPC envelope classification.

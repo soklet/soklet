@@ -393,10 +393,16 @@ SokletConfig config = SokletConfig.withHttpServer(
     // about the request, which provides the opportunity to, for example,
     // examine annotations on the method/parameter which might
     // inform custom marshaling strategies.
-    return Optional.of(GSON.fromJson(
-      request.getBodyAsString().orElseThrow(),
-      requestBodyType
-    ));
+    try {
+      return Optional.of(GSON.fromJson(
+        request.getBodyAsString().orElseThrow(),
+        requestBodyType
+      ));
+    } catch (JsonParseException e) {
+      throw new IllegalRequestBodyException(
+        "Request body is not valid JSON."
+      );
+    }
   }
 }).build();
 ```
@@ -1688,6 +1694,11 @@ SokletConfig config = SokletConfig.withHttpServer(
   // or MetricsCollector.disabledInstance()
 ).build();
 ```
+
+For the 4.0 release, pair `com.soklet:soklet:4.0.0` with
+`com.soklet:soklet-otel:2.0.0`. Versioned snapshot coordinates later in this
+section are retained as historical implementation-checkpoint provenance, not
+as current dependency guidance.
 
 Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.

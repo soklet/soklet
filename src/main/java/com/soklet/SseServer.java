@@ -454,11 +454,11 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the initial active-broadcaster registry capacity and the maximum
-		 * idle-broadcaster cache capacity. Passing {@code null} restores the built-in
-		 * default of 1,024 entries.
+		 * Sets the initial active-broadcaster registry capacity. This is an
+		 * allocation hint, not a maximum number of broadcaster routes. Passing
+		 * {@code null} restores the built-in default of 1,024 entries.
 		 *
-		 * @param broadcasterCacheCapacity broadcaster cache capacity, or
+		 * @param broadcasterCacheCapacity broadcaster registry initial capacity, or
 		 * {@code null} for the default
 		 * @return this builder
 		 */
@@ -483,9 +483,10 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets each established connection's pending-write queue capacity. Passing
-		 * {@code null} restores the built-in default of 128 pending writes per
-		 * connection.
+		 * Sets each connection's pending-write queue capacity. This bound also
+		 * applies to client-initializer catch-up writes (and the optional initial
+		 * connection-verification heartbeat). Passing {@code null} restores the
+		 * built-in default of 128 pending writes per connection.
 		 *
 		 * @param connectionQueueCapacity connection queue capacity, or {@code null}
 		 * for the default

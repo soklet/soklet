@@ -267,6 +267,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final int SOKLET_RATE_LIMITED = -31999;
 	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	private static final int MAXIMUM_ADMISSION_REJECTION_HEADER_COUNT = 100;
+	private static final int MAXIMUM_ADMISSION_REJECTION_HEADER_BYTES = 64 * 1_024;
+	private static final int MAXIMUM_RESOURCE_LIST_DIAGNOSTIC_VALUE_CHARACTERS =
+			256;
 	private static final int MAXIMUM_RESOURCE_SUBSCRIPTION_URIS = 256;
 	private static final int MAXIMUM_TASK_SUBSCRIPTION_IDS = 256;
 	private static final int MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY = 4;
@@ -730,9 +734,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.envelopeCodec = new McpJsonRpcEnvelopeCodec(jsonCodec);
 		this.requestWireMapper = new McpRequestWireMapper(jsonLimits);
 		this.protocolProfiles = requireNonNull(protocolProfiles);
-		this.mirroredHeaderCodec = new McpMirroredHeaderCodec(Math.min(
-				McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES,
-				transportConfiguration.maximumHeaderBytes()));
+		this.mirroredHeaderCodec = new McpMirroredHeaderCodec(
+				McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES);
 		this.customMirroredHeaderValidator =
 				new McpCustomMirroredHeaderValidator(mirroredHeaderCodec);
 		this.endpointsByPath = endpointRuntimes(endpointBindings);
@@ -3373,10 +3376,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				else if (!this.jobs.offer(requiredJob)) {
 					int currentOwnerCount = queuedOwnerCountWhileLocked(
 							requiredJob.owner());
-					Object victim = currentOwnerCount > 0 ? requiredJob.owner()
-							: mostRepresentedOwnerWhileLocked();
-					if (victim == null || (currentOwnerCount == 0
-							&& queuedOwnerCountWhileLocked(victim) <= 1)) {
+					Object mostRepresentedOwner = mostRepresentedOwnerWhileLocked();
+					int mostRepresentedOwnerCount = mostRepresentedOwner == null ? 0
+							: queuedOwnerCountWhileLocked(mostRepresentedOwner);
+					Object victim = currentOwnerCount == 0
+							? (mostRepresentedOwnerCount > 1
+									? mostRepresentedOwner : null)
+							: (mostRepresentedOwnerCount > currentOwnerCount
+									? mostRepresentedOwner : requiredJob.owner());
+					if (victim == null) {
 						rejected.add(requiredJob);
 					} else {
 						rejected.addAll(removeOwnerJobsWhileLocked(victim));
@@ -4339,7 +4347,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 											endpoint.resourceListCachePolicy())),
 							endpoint.resourceListCachePolicy(), true, false,
 							endpointPolicy.localizationEnabled(),
-							endpoint.maximumCursorSizeInBytes(), applicationRouter));
+							endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
+							applicationRouter));
 			} else {
 				// The framework-owned fallback is exactly one static page. Every
 				// present cursor, including the empty string, is invalid.
@@ -4558,7 +4567,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						route.cachePolicy(), false,
 						resourceRetry,
 						endpointPolicy.localizationEnabled(),
-						endpoint.maximumCursorSizeInBytes(), applicationRouter));
+						endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
+						applicationRouter));
 			} else {
 				// Preserve the generic package-private seam used by transport tests.
 				applicationHandler = genericResourceHandler;
@@ -5277,9 +5287,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean resourceListResult, boolean resourceRetry,
 			boolean localizationEnabled,
 			int maximumCursorSizeInBytes,
+			@NonNull String endpointPath,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
 		requireNonNull(result);
 		requireNonNull(cachePolicy);
+		requireNonNull(endpointPath);
 		requireNonNull(applicationRouter);
 		if (!McpResultType.COMPLETE.equals(result.resultType())) {
 			if (resourceListResult)
@@ -5291,7 +5303,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Map<String, McpJsonValue> fields =
 				new LinkedHashMap<>(result.fields().members());
 		if (resourceListResult)
-			validateResourceListResult(fields, applicationRouter);
+			validateResourceListResult(fields, endpointPath, applicationRouter);
 		else
 			validateResourceReadResult(fields);
 
@@ -5337,7 +5349,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private void validateResourceListResult(
 			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
+			@NonNull String endpointPath,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
+		requireNonNull(endpointPath);
 		requireNonNull(applicationRouter);
 		McpJsonValue resourcesValue = fields.get("resources");
 		if (!(resourcesValue instanceof McpJsonArray resources))
@@ -5377,11 +5391,36 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							metadata, McpResourceCachePolicy.privateNoCache());
 			if (!observedUris.add(URI.create(normalized.uri())))
 				throw new IllegalArgumentException(
-						"A resource-list page contains a duplicate URI.");
+						resourceListRouteDiagnostic(true, normalized.uri(),
+								endpointPath));
 			if (!hasReadableResourceRoute(normalized.uri(), applicationRouter))
 				throw new IllegalArgumentException(
-						"A resource-list page contains an unreadable URI.");
+						resourceListRouteDiagnostic(false, normalized.uri(),
+								endpointPath));
 		}
+	}
+
+	@NonNull
+	static String resourceListRouteDiagnostic(boolean duplicateUri,
+			@NonNull String uri, @NonNull String endpointPath) {
+		return "A resource-list page for endpoint '"
+				+ boundedResourceListDiagnosticValue(endpointPath)
+				+ "' contains " + (duplicateUri ? "a duplicate" : "an unreadable")
+				+ " URI '" + boundedResourceListDiagnosticValue(uri) + "'.";
+	}
+
+	@NonNull
+	private static String boundedResourceListDiagnosticValue(
+			@NonNull String value) {
+		requireNonNull(value);
+		if (value.length()
+				<= MAXIMUM_RESOURCE_LIST_DIAGNOSTIC_VALUE_CHARACTERS)
+			return value;
+
+		int end = MAXIMUM_RESOURCE_LIST_DIAGNOSTIC_VALUE_CHARACTERS - 3;
+		if (Character.isHighSurrogate(value.charAt(end - 1)))
+			--end;
+		return value.substring(0, end) + "...";
 	}
 
 	private static void validateResourceReadResult(
@@ -6052,10 +6091,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					throw new IllegalArgumentException(
 							"Admission rejection contains an unsafe response header value.");
 				encodedBytes += name.length() + value.length() + 4L;
-				if (headers.size() >= transportConfiguration.maximumHeaderCount()
-						|| encodedBytes > transportConfiguration.maximumHeaderBytes())
+				if (headers.size() >= MAXIMUM_ADMISSION_REJECTION_HEADER_COUNT
+						|| encodedBytes > MAXIMUM_ADMISSION_REJECTION_HEADER_BYTES)
 					throw new IllegalArgumentException(
-							"Admission rejection response headers exceed the configured bounds.");
+							"Admission rejection response headers exceed the fixed bounds.");
 				headers.add(new Header(name, value));
 			}
 		}
@@ -6841,28 +6880,78 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private boolean safeLoopbackBindHost(@NonNull String configuredHost) {
-		String host = requireNonNull(configuredHost).toLowerCase(Locale.ROOT);
-		if ("localhost".equals(host) || "::1".equals(host)
-				|| "[::1]".equals(host))
+		String host = requireNonNull(configuredHost);
+		if ("localhost".equalsIgnoreCase(host))
 			return true;
 
-		String[] octets = host.split("\\.", -1);
-		if (octets.length != 4 || !"127".equals(octets[0]))
-			return false;
-		for (String octet : octets) {
-			if (octet.isEmpty() || octet.length() > 3)
+		String literal = host;
+		if (literal.startsWith("[") && literal.endsWith("]")
+				&& literal.length() > 2) {
+			literal = literal.substring(1, literal.length() - 1);
+			if (literal.indexOf(':') < 0)
 				return false;
-			int value = 0;
-			for (int index = 0; index < octet.length(); index++) {
-				char character = octet.charAt(index);
-				if (character < '0' || character > '9')
-					return false;
-				value = value * 10 + character - '0';
-			}
-			if (value > 255)
+		} else if (literal.indexOf('[') >= 0 || literal.indexOf(']') >= 0) {
+			return false;
+		}
+
+		long ipv4Address = parseIpv4Literal(literal);
+		if (ipv4Address >= 0L)
+			return (ipv4Address >>> 24) == 127L;
+		if (literal.indexOf(':') < 0)
+			return false;
+
+		// Reaching getByName only after this character gate keeps parsing
+		// literal-only: no DNS-valid registration name can reach the resolver.
+		for (int index = 0; index < literal.length(); index++) {
+			char character = literal.charAt(index);
+			if (!(character >= '0' && character <= '9')
+					&& !(character >= 'A' && character <= 'F')
+					&& !(character >= 'a' && character <= 'f')
+					&& character != ':' && character != '.')
 				return false;
 		}
-		return true;
+		try {
+			return InetAddress.getByName(literal).isLoopbackAddress();
+		} catch (Exception exception) {
+			return false;
+		}
+	}
+
+	private long parseIpv4Literal(@NonNull String literal) {
+		String[] parts = requireNonNull(literal).split("\\.", -1);
+		if (parts.length < 1 || parts.length > 4)
+			return -1L;
+
+		long[] values = new long[parts.length];
+		for (int partIndex = 0; partIndex < parts.length; partIndex++) {
+			String part = parts[partIndex];
+			if (part.isEmpty() || part.length() > 10)
+				return -1L;
+			long value = 0L;
+			for (int index = 0; index < part.length(); index++) {
+				char character = part.charAt(index);
+				if (character < '0' || character > '9')
+					return -1L;
+				value = value * 10L + character - '0';
+				if (value > 0xFFFF_FFFFL)
+					return -1L;
+			}
+			values[partIndex] = value;
+		}
+
+		return switch (values.length) {
+			case 1 -> values[0];
+			case 2 -> values[0] <= 0xFFL && values[1] <= 0xFF_FFFFL
+					? values[0] << 24 | values[1] : -1L;
+			case 3 -> values[0] <= 0xFFL && values[1] <= 0xFFL
+					&& values[2] <= 0xFFFFL
+					? values[0] << 24 | values[1] << 16 | values[2] : -1L;
+			case 4 -> values[0] <= 0xFFL && values[1] <= 0xFFL
+					&& values[2] <= 0xFFL && values[3] <= 0xFFL
+					? values[0] << 24 | values[1] << 16
+							| values[2] << 8 | values[3] : -1L;
+			default -> -1L;
+		};
 	}
 
 	@NonNull

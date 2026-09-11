@@ -176,7 +176,7 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": "json-schema-2020-12.phase4.v1",
       "requiredFixtureRegistrations": [
-        "tool registered through the audited same-package conformanceInputSchema seam with the exact pinned official input schema"
+        "tool registered through the public inputSchema API with the exact pinned official input schema"
       ],
       "localSupplements": [
         "McpToolSchemaProfileTests#exactOfficialMcpFixtureCompilesPreservesAndEvaluates",

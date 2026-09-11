@@ -22,7 +22,8 @@ public class OptionsBuilder {
     private int readBufferSize;
     private int acceptLength;
     private int maxRequestSize;
-    private int maxRequestBodySize;
+    @Nullable
+    private Integer maxRequestBodySize;
     private int maxHeaderCount;
     private int maxHeadersSize;
     private int maxRequestTargetLength;
@@ -42,7 +43,7 @@ public class OptionsBuilder {
         this.readBufferSize = 1_024 * 64;
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
-        this.maxRequestBodySize = this.maxRequestSize;
+        this.maxRequestBodySize = null;
         this.maxHeaderCount = 100;
         this.maxHeadersSize = 64 * 1_024;
         this.maxRequestTargetLength = 8_192;
@@ -56,6 +57,9 @@ public class OptionsBuilder {
     }
 
     public Options build() {
+        int resolvedMaxRequestBodySize = this.maxRequestBodySize == null
+            ? this.maxRequestSize : this.maxRequestBodySize;
+
         if (this.port < 0 || this.port > 65_535)
             throw new IllegalArgumentException("Port must be between 0 and 65535.");
         if (this.resolution == null || this.resolution.isNegative() || this.resolution.isZero())
@@ -66,9 +70,9 @@ public class OptionsBuilder {
             throw new IllegalArgumentException("Concurrency must be positive.");
         if (this.maxRequestSize < 1)
             throw new IllegalArgumentException("Maximum aggregate request size must be positive.");
-        if (this.maxRequestBodySize < 1)
+        if (resolvedMaxRequestBodySize < 1)
             throw new IllegalArgumentException("Maximum request-body size must be positive.");
-        if (this.maxRequestBodySize > this.maxRequestSize)
+        if (resolvedMaxRequestBodySize > this.maxRequestSize)
             throw new IllegalArgumentException("Maximum request-body size must not exceed the aggregate request size.");
 
         return new Options(this.host,
@@ -82,7 +86,7 @@ public class OptionsBuilder {
             this.readBufferSize,
             this.acceptLength,
             this.maxRequestSize,
-            this.maxRequestBodySize,
+            resolvedMaxRequestBodySize,
             this.maxHeaderCount,
             this.maxHeadersSize,
             this.maxRequestTargetLength,
@@ -143,13 +147,12 @@ public class OptionsBuilder {
 
     public OptionsBuilder withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
-        this.maxRequestBodySize = maxRequestSize;
         return this;
     }
 
     /**
      * Sets the body-only request limit independently from the aggregate buffered-request limit.
-     * Calling {@link #withMaxRequestSize(int)} afterward resets this value to the aggregate limit.
+     * The configured value is preserved if {@link #withMaxRequestSize(int)} is called afterward.
      */
     public OptionsBuilder withMaxRequestBodySize(int maxRequestBodySize) {
         this.maxRequestBodySize = maxRequestBodySize;

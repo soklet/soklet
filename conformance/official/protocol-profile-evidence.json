@@ -20,7 +20,7 @@
       },
       "scenarios": {
         "path": "conformance/official/scenarios.json",
-        "sha256": "b5226af43caf2aaeb12150ee25c45bc8bbd895f4af08a334314f58109ccd3ff9"
+        "sha256": "45e5290666dadecd549971a916cd421c9cb1f20c6311153dc47c1e4c6a40df7d"
       },
       "goldens": [
         {

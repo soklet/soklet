@@ -66,6 +66,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -828,37 +829,28 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
-	public void clientInitializerCatchupMayExceedLiveConnectionQueueCapacity()
+	public void clientInitializerCatchupIsBoundedByConnectionQueueCapacity()
 			throws Exception {
-		int httpPort = findFreePort();
-		int ssePort = findFreePort();
-		SseServer sse = SseServer.withPort(ssePort)
-				.host("127.0.0.1")
-				.connectionQueueCapacity(1)
-				.verifyConnectionOnceEstablished(false)
-				.build();
-		SokletConfig config = SokletConfig.withHttpServer(
-				HttpServer.withPort(httpPort).build())
-				.sseServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
-						Set.of(LargeCatchupSseResource.class)))
-				.lifecycleObserver(new QuietLifecycle()).build();
+		DefaultSseServer.DefaultSseUnicaster unicaster =
+				new DefaultSseServer.DefaultSseUnicaster(
+						ResourcePath.fromPath("/catchup"), 2);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
-			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
-				socket.setSoTimeout(4_000);
-				writeHttpGet(socket, "/catchup", ssePort);
-				String headers = readUntil(socket, "\r\n\r\n", 8_192);
-				Assertions.assertNotNull(headers);
-				Assertions.assertTrue(headers.startsWith("HTTP/1.1 200"), headers);
-				for (int index = 0; index < 6; index++) {
-					String block = readNextEventBlock(socket, 8_192);
-					Assertions.assertNotNull(block, "Missing catch-up event " + index);
-					Assertions.assertEquals("data: catchup-" + index + "\n\n", block);
-				}
-			}
-		}
+		unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
+		unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
+		BlockingQueue<Object> writeQueue = new ArrayBlockingQueue<>(2);
+		Method activate = DefaultSseServer.DefaultSseUnicaster.class
+				.getDeclaredMethod("activate", BlockingQueue.class);
+		activate.setAccessible(true);
+		activate.invoke(unicaster, writeQueue);
+
+		Assertions.assertEquals(2, writeQueue.size(),
+				"Initializer writes must occupy the live connection queue");
+
+		IllegalStateException exception = Assertions.assertThrows(
+				IllegalStateException.class, () -> unicaster.unicastEvent(
+						SseEvent.withData("catchup-2").build()));
+		Assertions.assertEquals(
+				"SSE connection write queue is at capacity", exception.getMessage());
 	}
 
 	@Test
@@ -2155,6 +2147,35 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
+	public void acceptedHandshakeRejectsApplicationTransferEncoding()
+			throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		SokletConfig config = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
+				.sseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(AcceptedWithTransferEncoding.class)))
+				.lifecycleObserver(new QuietLifecycle()).build();
+
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+				socket.setSoTimeout(4_000);
+				writeHttpGet(socket, "/sse/accepted-transfer-encoding", ssePort);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+				Assertions.assertNotNull(rawHeaders);
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 500"),
+						rawHeaders);
+				Assertions.assertFalse(rawHeaders.toLowerCase(Locale.ROOT)
+						.contains("transfer-encoding:"), rawHeaders);
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseAccepted_includesCorsHeaders_whenAllOriginsAuthorizer() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2327,6 +2348,15 @@ public class SseTests {
 		@SseEventSource("/sse/{id}")
 		public SseHandshakeResult ok(@NonNull Request request, @NonNull @PathParameter String id) {
 			return SseHandshakeResult.accept();
+		}
+	}
+
+	public static class AcceptedWithTransferEncoding {
+		@SseEventSource("/sse/accepted-transfer-encoding")
+		public SseHandshakeResult accept() {
+			return SseHandshakeResult.Accepted.builder()
+					.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
+					.build();
 		}
 	}
 
@@ -2676,6 +2706,14 @@ public class SseTests {
 	public void idContainingNull_isRejected() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				SseEvent.builder().id("abc\u0000def").build());
+	}
+
+	@Test
+	public void fieldlessSseEventIsRejected() {
+		IllegalArgumentException exception = Assertions.assertThrows(
+				IllegalArgumentException.class, () -> SseEvent.builder().build());
+		Assertions.assertTrue(exception.getMessage().contains(
+				"must specify at least one"));
 	}
 
 	@Test

@@ -39,6 +39,22 @@ $ java -jar target/soklet-benchmarks.jar -prof gc -rf json -rff target/jmh-resul
 
 The `gc` profiler reports allocation rate and garbage collection behavior, and the JSON result file is suitable for archiving with release notes or comparing between commits.
 
+## MCP Release Comparison
+
+The benchmark jar also contains the candidate-bound
+`McpReleaseJsonJmhBenchmark`. It compares MCP JSON parsing and writing between
+the exact released 3.5.1 artifact and the exact 4.0.0 candidate in isolated
+class loaders, and measures Profile 1 schema compilation and evaluation on the
+candidate. The isolation is intentional: neither comparison leg resolves
+Soklet classes from the benchmark harness class path.
+
+Release evidence must be produced through the registered `mcp-benchmarks`
+workflow, which pins the candidate commit and toolchain, retains every raw JMH
+document, and requires project-owner review of the canonical draft before
+finalization. See [`benchmarks/README.md`](benchmarks/README.md) for the
+producer/finalizer contract. An ad hoc local invocation remains exploratory
+and is not release evidence.
+
 ## End-To-End HTTP Smoke Run
 
 The end-to-end benchmark starts a real Soklet instance on `127.0.0.1`, resolves annotated resource methods through `ResourceMethodResolver.fromClasses(...)`, and drives the embedded HTTP server with keep-alive client sockets.
@@ -119,6 +135,7 @@ Current benchmarks cover:
 - public `Request` construction from embedded HTTP requests, including header, query, and form-access variants
 - `MarshaledResponse` conversion to the embedded HTTP response representation for static and dynamic byte-array, cookie, file, file-channel, and byte-buffer bodies
 - Server-Sent Event event/comment formatting, UTF-8 payload serialization, and comment fan-out serialization strategy
+- MCP JSON parse/write comparison for the exact 3.5.1 baseline and 4.0.0 candidate, plus candidate Profile 1 schema compile/evaluate paths
 - end-to-end embedded HTTP handling over loopback for small plaintext, JSON, and POST JSON requests
 - cold-JVM startup latency (to started and to first response served) and settled memory footprint (post-GC heap, OS-level RSS, thread count) for a minimal application
 
@@ -136,6 +153,7 @@ When sharing benchmark results, include:
 - OS and CPU
 - exact benchmark command
 - JMH JSON output, when reporting JMH results
+- exact baseline and candidate artifact identities when reporting MCP release-benchmark results
 - end-to-end JSON output, when reporting HTTP loopback results
 - startup JSON output, when reporting startup/memory results
 
@@ -158,4 +176,6 @@ Prefer allocation and relative before/after changes over broad performance claim
 
 Public release baselines should be produced only from a stable managed runner, such as a dedicated EC2 instance type with a pinned AMI, JDK, JVM flags, benchmark commands, and machine-quieting procedure. Ad hoc laptop numbers are useful for local regression checks, but should not be published as release evidence.
 
-Soklet 3.5.0 adds benchmark harnesses for local measurement and future release baselines. It does not publish public benchmark numbers.
+Soklet 3.5.0 introduced the local benchmark harnesses. Soklet 4.0.0 adds the
+candidate-bound MCP comparison and its reviewed evidence path; neither release
+claims public benchmark numbers without results from the stable managed runner.

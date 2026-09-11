@@ -102,6 +102,9 @@ public class McpTasksPublicRuntimeTests {
 							.orElseThrow();
 					observedTaskControl.set(taskControl);
 					McpTaskOrigin taskOrigin = taskControl.getTaskOrigin();
+					Assertions.assertSame(taskOrigin,
+							taskControl.getTaskOrigin(),
+							"The locale-pinned origin must be materialized once.");
 					taskManager.taskOrigin = Optional.of(taskOrigin);
 					taskManager.putTask(task("typed-required-task", taskOrigin,
 							McpTaskStatus.WORKING));
@@ -223,6 +226,68 @@ public class McpTasksPublicRuntimeTests {
 	}
 
 	@Test
+	public void taskOriginLargerThanProductionJsonRestoresAtTaskBoundary()
+			throws Exception {
+		String taskId = "large-origin-task";
+		String toolName = "tasks.large-origin";
+		String chunk = "x".repeat(900_000);
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(toolName)
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					McpTaskOrigin invocationOrigin = features.getTaskControl()
+							.orElseThrow().getTaskOrigin();
+					McpTaskOrigin restoredOrigin = McpTaskOrigin.fromPersistedString(
+							invocationOrigin.toPersistedString());
+					taskManager.taskOrigin = Optional.of(restoredOrigin);
+					taskManager.putTask(task(taskId, restoredOrigin,
+							McpTaskStatus.WORKING));
+					return McpTaskCreatedResult
+							.<McpJsonObject>fromTaskId(taskId);
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-large-origin-test", "4.0.0").build())
+				.serverInformationIncluded(false)
+				.addTool(tool)
+				.build();
+		McpServer server = server(endpoint, Optional.of(taskManager),
+				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"large-create\","
+					+ "\"method\":\"tools/call\",\"params\":{"
+					+ taskMetadata(true) + ",\"name\":\"" + toolName
+					+ "\",\"arguments\":{\"a\":\"" + chunk
+					+ "\",\"b\":\"" + chunk + "\",\"c\":\"" + chunk
+					+ "\",\"d\":\"" + chunk + "\",\"e\":\"" + chunk
+					+ "\"}}}";
+
+			HttpResponse<String> creation = post(port, "tools/call", toolName,
+					body);
+			assertNoStore(creation, 200);
+			Assertions.assertTrue(creation.body().contains(
+					"\"resultType\":\"task\""), creation.body());
+			Assertions.assertTrue(taskManager.taskOrigin.orElseThrow()
+					.toPersistedString().getBytes(StandardCharsets.UTF_8).length
+					> 4 * 1_024 * 1_024);
+
+			HttpResponse<String> restored = callTask(port, "tasks/get",
+					"large-get", taskId, true);
+			assertNoStore(restored, 200);
+			Assertions.assertTrue(restored.body().contains(
+					"\"taskId\":\"" + taskId + "\""), restored.body());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void taskRequiredRegistrationRequiresConfiguredTaskManager() {
 		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
 				.withName("tasks.manager-required")
@@ -283,17 +348,18 @@ public class McpTasksPublicRuntimeTests {
 			HttpResponse<String> missingRoots = callTask(port, "tasks/get",
 					"get-input-missing-roots", inputRequired.getTaskId(), true,
 					false);
-			assertNoStore(missingRoots, 400);
-			Assertions.assertEquals(
-					"{\"jsonrpc\":\"2.0\","
-							+ "\"id\":\"get-input-missing-roots\",\"error\":{"
-							+ "\"code\":-32021,\"message\":"
-							+ "\"Missing required client capability\",\"data\":{"
-							+ "\"requiredCapabilities\":{\"roots\":{}}}}}",
-					missingRoots.body());
+			assertNoStore(missingRoots, 200);
+			Assertions.assertEquals(taskResponse("get-input-missing-roots",
+					inputRequired, false,
+					",\"inputRequests\":{\"approval\":{"
+							+ "\"method\":\"roots/list\",\"params\":{}},"
+							+ "\"secondary\":{\"method\":\"roots/list\","
+							+ "\"params\":{}}}"), missingRoots.body());
 			assertTaskGet(port, "get-input", inputRequired,
 					",\"inputRequests\":{\"approval\":{"
-							+ "\"method\":\"roots/list\",\"params\":{}}}");
+							+ "\"method\":\"roots/list\",\"params\":{}},"
+							+ "\"secondary\":{\"method\":\"roots/list\","
+							+ "\"params\":{}}}");
 
 			McpTask completed = task("task-completed", taskOrigin,
 					McpTaskStatus.COMPLETED);
@@ -553,6 +619,7 @@ public class McpTasksPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void capabilityAndTaskNamespacePreflightRemainFailClosed()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
@@ -847,7 +914,10 @@ public class McpTasksPublicRuntimeTests {
 		switch (taskStatus) {
 			case INPUT_REQUIRED -> builder.addInputRequest("approval",
 					McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
-							McpJsonObject.emptyInstance()));
+							McpJsonObject.emptyInstance()))
+					.addInputRequest("secondary",
+							McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
+									McpJsonObject.emptyInstance()));
 			case COMPLETED -> builder.completedResult(
 					McpCompleteResult.fromToolText("completed-output")
 							.withMetadata(McpJsonObject.builder()

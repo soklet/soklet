@@ -203,6 +203,21 @@ public final class McpPublicJsonValueConverter {
 		return (McpJsonObject) toInternal(requireNonNull(value), limits);
 	}
 
+	/**
+	 * Converts a structurally bounded public object for a caller that will
+	 * immediately canonicalize it under the same limits. Canonicalization's
+	 * writer supplies the scalar and serialized-byte validation, so this seam
+	 * deliberately avoids producing and discarding an intermediate encoding.
+	 */
+	@NonNull
+	static McpJsonObject toInternalObjectForCanonicalization(
+			com.soklet.@NonNull McpJsonObject value,
+			@NonNull McpJsonLimits limits) {
+		McpJsonLimits requiredLimits = requireNonNull(limits);
+		nodeCount(requireNonNull(value), requiredLimits);
+		return (McpJsonObject) convert(value);
+	}
+
 	static void requireCollectionCouldFitNodeBudget(long size,
 			long minimumNodesPerElement, long fixedNodes,
 			@NonNull String description, @NonNull McpJsonLimits limits) {

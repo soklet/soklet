@@ -31,7 +31,7 @@ import java.util.Map;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Canonical JSON used exclusively by protected MCP request state.
+ * Canonical JSON shared by protected request state and durable task origins.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -47,9 +47,22 @@ final class McpRequestStateCanonicalJson {
 	static byte @NonNull [] canonicalize(
 			@NonNull McpJsonValue value, int maximumBytes) {
 		requireNonNull(value);
-		McpJsonLimits limits = limitsFor(maximumBytes);
-		McpJsonValue normalized = new Normalizer(limits).normalize(value);
-		return new McpJsonCodec(limits).toUtf8Bytes(normalized);
+		return canonicalize(value, limitsFor(maximumBytes));
+	}
+
+	static byte @NonNull [] canonicalize(
+			@NonNull McpJsonValue value, @NonNull McpJsonLimits limits) {
+		return canonicalizeWithNormalizedValue(value, limits).canonicalUtf8();
+	}
+
+	@NonNull
+	static Canonicalization canonicalizeWithNormalizedValue(
+			@NonNull McpJsonValue value, @NonNull McpJsonLimits limits) {
+		requireNonNull(value);
+		McpJsonLimits requiredLimits = requireNonNull(limits);
+		McpJsonValue normalized = new Normalizer(requiredLimits).normalize(value);
+		return new Canonicalization(normalized,
+				new McpJsonCodec(requiredLimits).toUtf8Bytes(normalized));
 	}
 
 	@NonNull
@@ -131,6 +144,14 @@ final class McpRequestStateCanonicalJson {
 				return comparison;
 		}
 		return Integer.compare(left.length, right.length);
+	}
+
+	record Canonicalization(@NonNull McpJsonValue normalizedValue,
+			byte @NonNull [] canonicalUtf8) {
+		Canonicalization {
+			requireNonNull(normalizedValue);
+			requireNonNull(canonicalUtf8);
+		}
 	}
 
 	@NotThreadSafe

@@ -17,12 +17,11 @@
 package com.soklet;
 
 /**
- * Fixture-only package peer for the official JSON Schema conformance tool.
+ * Fixture-only registration for the official JSON Schema conformance tool.
  *
  * <p>This class is compiled into the unpublished conformance fixture, not
- * Soklet itself. Its sole purpose is to reach Soklet's package-private,
- * Profile-1-enforcing conformance seam without making authored schemas part of
- * the public application API.</p>
+ * Soklet itself. It exercises the same public, Profile-1-enforcing authored
+ * input-schema API available to applications.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -39,7 +38,7 @@ public final class McpOfficialSchemaConformanceTool {
 	 */
 	public static McpToolRegistration<McpJsonObject> create() {
 		return McpToolRegistration.withName(TOOL_NAME)
-				.conformanceInputSchema(inputSchema())
+				.inputSchema(inputSchema())
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("Schema input accepted."))
 				.description("Tool with JSON Schema 2020-12 features")

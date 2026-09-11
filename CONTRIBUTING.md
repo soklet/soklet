@@ -11,6 +11,10 @@ $ mvn install
 ```
 
 This will build artifacts and install to your local system's Maven repository.
+Both `mvn verify` and `mvn install` invoke repository verifier scripts through
+`node`. The reviewed toolchain uses Node.js 26.5.0; the official MCP
+conformance toolchain also pins npm 11.17.0 in
+`conformance/official/upstream-pins.json`.
 
 #### Benchmarks
 

@@ -190,6 +190,17 @@
       "preReleaseHedge": "Raw non-browser headers, safe rejection headers, protected-state binding, honest browser limitation",
       "testEvidence": null,
       "trigger": "Concrete deployment/policy need or stable MCP integration contract, according to R5a/R5b"
+    },
+    {
+      "direction": "Typed-schema and annotation expressiveness",
+      "evidenceClassification": "planned",
+      "id": "DF-16",
+      "landingZone": "Additive 4.1 annotation constraints and formats shared by the reflection and annotation-processing schema frontends; UUID and selected java.time scalar bindings with exact format/parse gates; bounded instance-free validation-diagnostic projection; and an annotation-native typed-output plus advanced inline-result declaration",
+      "negativeInventoryKeys": [],
+      "negativeInventoryReason": "Richer derived-schema constraints, scalar conveniences, validation diagnostics, and annotation-native typed-output advanced results are deferred API evolution rather than capabilities advertised for the documented 4.0 closed Java family.",
+      "preReleaseHedge": "4.0 exposes the already bounded Profile 1 authored input-schema path when Java derivation cannot express a constraint, advertises finite float/double bounds, documents the closed scalar family and generic validation failure, and supports typed-output inline isError results through the programmatic builder",
+      "testEvidence": null,
+      "trigger": "4.1 typed-schema and annotation API design, including a reviewed diagnostic privacy envelope and parity across runtime reflection, annotation processing, generated registration, and JSON binding"
     }
   ],
   "formatVersion": 1,

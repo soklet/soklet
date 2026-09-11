@@ -519,7 +519,7 @@ class McpLocalizationRenderingRuntimeTests {
 						.build())
 				.instructions("Endpoint instructions")
 				.addTool(McpToolRegistration.withName("render.search")
-						.conformanceInputSchema(inputSchema)
+						.inputSchema(inputSchema)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")

@@ -98,7 +98,7 @@ compatibility inventory.
 ## Current local evidence
 
 The final 2026-09-10 reconciliation is green at 646 incompatibilities, 299
-exact owners, 1,131/200/425 Phase 4/5/6 signature records, and 98 provisional
+exact owners, 1,132/200/425 Phase 4/5/6 signature records, and 98 provisional
 Tasks signature records. The aggregate API-freeze verifier passes against the
 reviewed snapshots. These results revalidate the current API and local
 development artifact; they are not immutable release-candidate provenance,
@@ -376,9 +376,9 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
-freezes 1,131 canonical records across all 134 selected owners: 134 classes,
-one constructor, 94 fields, and 902 methods. Its SHA-256 is
-`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`.
+freezes 1,132 canonical records across all 134 selected owners: 134 classes,
+one constructor, 94 fields, and 903 methods. Its SHA-256 is
+`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`.
 `phase-5.signatures.jsonl` freezes 200 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
 Its SHA-256 is
@@ -392,7 +392,7 @@ the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
 Its SHA-256 is
 `70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
 The Phase 4/5/6 reflection/nullability digests are respectively
-`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`,
+`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`,
 `36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13`,
 and
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
@@ -1569,11 +1569,11 @@ CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
 646 reviewed incompatibilities across 299 owners: 248 MCP and 51 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
-contain 1,131 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
-134 classes, one constructor, 94 fields, and 902 methods, with SHA-256
-`fd579534d58c87e4d91981ff7e83529e0f26194ffeca95b3a36e57a0ce8afc47`
+contain 1,132 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
+134 classes, one constructor, 94 fields, and 903 methods, with SHA-256
+`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`
 and exact nullability digest
-`61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9`.
+`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 145 methods,
 with SHA-256
 `4f7bad400859f39ad0de51a30ec663ad09519ddb5cf7b600bf9d3924f7cd3736`
@@ -2518,3 +2518,23 @@ The 646-record compatibility ledger has SHA-256
 `8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 The 134/36/64/14 owner partition and all four include inventories remain
 unchanged.
+
+### 2026-09-10 authored input-schema remediation amendment
+
+The remediation review intentionally adds
+`McpToolRegistration.ArgumentTypeStage.inputSchema(McpJsonObject)`. It exposes
+the production Profile 1 compiler and evaluator to applications that need an
+object-root input constraint the closed Java-derived schema family cannot
+express. The official JSON Schema fixture now exercises this public path.
+
+This amendment supersedes the immediately preceding 1,131-record Phase 4
+checkpoint for the active release surface. The Phase 4 snapshot now contains
+1,132 records: 134 classes, one constructor, 94 fields, and 903 methods. Its
+SHA-256 is
+`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`;
+the reflection/nullability SHA-256 is
+`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`.
+The owner/include inventories and the 646-record 3.5.1 compatibility ledger
+are unchanged. The historical D1p preview seal remains immutable; the final
+release candidate must capture this amended active snapshot as fresh API-freeze
+evidence.

@@ -155,14 +155,37 @@ class DiagnosticRedactionTests {
 				"Access-Control-Request-Method", Set.of("PATCH"),
 				"Access-Control-Request-Headers", Set.of(requestedHeader)))
 				.orElseThrow();
+		Request request = Request.withPath(HttpMethod.OPTIONS, "/cors").build();
+		CorsResponse response = CorsAuthorizer.acceptAllInstance()
+				.authorize(request, cors).orElseThrow();
+		CorsPreflightResponse preflightResponse = CorsAuthorizer.acceptAllInstance()
+				.authorizePreflight(request, preflight, Set.of(HttpMethod.PATCH))
+				.orElseThrow();
+		HttpRequestResult requestResult = HttpRequestResult.withMarshaledResponse(
+				MarshaledResponse.withStatusCode(204).build())
+				.corsPreflightResponse(preflightResponse).build();
 
 		assertEquals("Cors{httpMethod=GET, origin=<redacted>}", cors.toString());
 		assertEquals("CorsPreflight{origin=<redacted>, "
 				+ "accessControlRequestMethod=PATCH, "
 				+ "accessControlRequestHeaders=<redacted>}",
 				preflight.toString());
+		assertEquals("CorsResponse{accessControlAllowOrigin=<redacted>, "
+				+ "accessControlAllowCredentials=Optional[true], "
+				+ "accessControlExposeHeaders=[]}", response.toString());
+		assertEquals("CorsPreflightResponse{accessControlAllowOrigin=<redacted>, "
+				+ "accessControlAllowCredentials=Optional[true], "
+				+ "accessControlMaxAge=Optional[PT10M], "
+				+ "accessControlAllowMethods=[PATCH], "
+				+ "accessControlAllowHeaders=<redacted>}",
+				preflightResponse.toString());
 		assertFalse(cors.toString().contains(origin));
 		assertFalse(preflight.toString().contains(origin));
 		assertFalse(preflight.toString().contains(requestedHeader));
+		assertFalse(response.toString().contains(origin));
+		assertFalse(preflightResponse.toString().contains(origin));
+		assertFalse(preflightResponse.toString().contains(requestedHeader));
+		assertFalse(requestResult.toString().contains(origin));
+		assertFalse(requestResult.toString().contains(requestedHeader));
 	}
 }

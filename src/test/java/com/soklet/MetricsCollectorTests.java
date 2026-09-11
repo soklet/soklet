@@ -365,6 +365,27 @@ public class MetricsCollectorTests {
 	}
 
 	@Test
+	public void sseStreamDurationUsesMonotonicCollectorClock() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
+		ResourceMethod resourceMethod = resourceMethodFor(
+				"/events/{id}", HttpMethod.GET, "events", true);
+		Request request = Request.withPath(HttpMethod.GET, "/events/42").build();
+		SseConnection connection = new TestSseConnection(
+				request, resourceMethod, Instant.now(), null);
+
+		collector.didEstablishSseConnection(connection);
+		collector.didTerminateSseConnection(connection, StreamTermination
+				.with(StreamTerminationReason.CLIENT_DISCONNECTED,
+						Duration.ofDays(365)).build());
+
+		HistogramSnapshot duration = collector.snapshot().orElseThrow()
+				.getSseStreamDurations().values().iterator().next();
+		assertEquals(1L, duration.getCount());
+		assertTrue(duration.getSum() < Duration.ofHours(1).toNanos(),
+				"The caller's wall-clock duration must not feed the histogram");
+	}
+
+	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	public void httpMetricsSnapshot_overNetwork() throws Exception {
 		int port = findFreePort();

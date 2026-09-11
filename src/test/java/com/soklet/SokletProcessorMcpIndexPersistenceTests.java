@@ -75,7 +75,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 	}
 
 	@Test
-	void staleFormatThreeSidecarIsInvalidatedAndRegenerated(
+	void staleFormatThreeSoleSidecarFailsWithoutDiscardingRetainedRows(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Fixture fixture = createFixture(temporaryDirectory);
 		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint()),
@@ -97,12 +97,22 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				public final class Plain {}
 				""", StandardCharsets.UTF_8);
 
-		Assertions.assertTrue(fixture.compile(List.of(unrelated),
-				"-Asoklet.cacheMode=sidecar"));
-		Assertions.assertTrue(Files.readAllLines(sidecar,
-				StandardCharsets.UTF_8).isEmpty());
-		Assertions.assertTrue(Files.readAllLines(classOutputIndex,
-				StandardCharsets.UTF_8).isEmpty());
+		CompilationResult result = compileWithSokletProcessorDiagnostics(
+				fixture.classDirectory(),
+				temporaryDirectory.resolve("generated-second"),
+				List.of(unrelated), List.of("-Asoklet.cacheMode=sidecar"));
+
+		Assertions.assertFalse(result.successful(), result.diagnostics().toString());
+		String expected = "index at " + sidecar.toRealPath()
+				+ ":1 is malformed; delete it and rebuild.";
+		Assertions.assertTrue(result.diagnostics().stream()
+				.filter(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR)
+				.anyMatch(diagnostic -> diagnostic.getMessage(null)
+						.contains(expected)), result.diagnostics().toString());
+		assertIndexVersion(sidecar, "3");
+		Assertions.assertEquals(List.of("example.AEndpoint"),
+				endpointNames(sidecar));
+		Assertions.assertFalse(Files.exists(classOutputIndex));
 	}
 
 	@Test

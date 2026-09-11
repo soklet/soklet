@@ -705,7 +705,7 @@ class McpLocalizationCatalogExtractionTests {
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("catalog.search")
-				.conformanceInputSchema(inputSchema)
+				.inputSchema(inputSchema)
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
 				.title("Tool title")

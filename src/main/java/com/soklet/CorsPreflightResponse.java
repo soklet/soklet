@@ -90,10 +90,10 @@ public final class CorsPreflightResponse {
 	@Override
 	@NonNull
 	public String toString() {
-		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, " +
-						"accessControlMaxAge=%s, accessControlAllowMethods=%s, accessControlAllowHeaders=%s}",
-				getClass().getSimpleName(), getAccessControlAllowOrigin(), getAccessControlAllowCredentials(),
-				getAccessControlMaxAge(), getAccessControlAllowMethods(), getAccessControlAllowHeaders());
+		return format("%s{accessControlAllowOrigin=<redacted>, accessControlAllowCredentials=%s, " +
+						"accessControlMaxAge=%s, accessControlAllowMethods=%s, accessControlAllowHeaders=<redacted>}",
+				getClass().getSimpleName(), getAccessControlAllowCredentials(),
+				getAccessControlMaxAge(), getAccessControlAllowMethods());
 	}
 
 	@Override

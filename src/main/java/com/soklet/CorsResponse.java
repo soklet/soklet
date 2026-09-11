@@ -82,8 +82,8 @@ public final class CorsResponse {
 	@Override
 	@NonNull
 	public String toString() {
-		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, accessControlExposeHeaders=%s}",
-				getClass().getSimpleName(), getAccessControlAllowOrigin(), getAccessControlAllowCredentials(),
+		return format("%s{accessControlAllowOrigin=<redacted>, accessControlAllowCredentials=%s, accessControlExposeHeaders=%s}",
+				getClass().getSimpleName(), getAccessControlAllowCredentials(),
 				getAccessControlExposeHeaders());
 	}
 

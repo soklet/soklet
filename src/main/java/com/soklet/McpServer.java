@@ -444,7 +444,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Sets the dedicated bind host. The default is {@code 127.0.0.1}.
+		 * Sets the dedicated bind host. The default is {@code 127.0.0.1}. A
+		 * loopback literal or {@code localhost} may use the default empty Host
+		 * allowlist; every other bind host requires at least one explicit
+		 * {@link #allowedHosts(Set) allowed host}. Soklet parses literal spellings
+		 * for this decision without resolving an arbitrary hostname.
 		 *
 		 * @param host nonblank bind host, or null to restore the default
 		 * @return this builder
@@ -502,7 +506,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the maximum accepted MCP request-body size. The default is 10 MiB;
-		 * the reviewed JSON implementation supports values through 16 MiB.
+		 * the reviewed JSON implementation supports values through 16 MiB. This
+		 * aggregate byte limit does not change the independent limit of 1,048,576
+		 * characters for any single JSON string or token.
 		 *
 		 * @param maximumRequestSizeInBytes positive byte limit no greater than
 		 *                                  16 MiB, or null to restore the default
@@ -1175,7 +1181,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Replaces the hostname-only values accepted by MCP Host validation. Host
 		 * ports must still equal the effective bound port. Each invocation replaces,
 		 * rather than appends to, the previous set. Soklet snapshots the supplied
-		 * values during the call. The default is the empty set.
+		 * values during the call. The default is the empty set, which is valid only
+		 * when the configured bind host is a loopback literal or {@code localhost}.
+		 * A non-loopback bind host requires at least one explicit value.
 		 *
 		 * @param allowedHosts allowed hostnames or IP literals, or null to restore
 		 *                     the empty set
@@ -1207,6 +1215,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               task-required tool exists without a task manager;
 		 *                               or a configured localization response exceeds its
 		 *                               provider-lookup limit
+		 * @throws IllegalArgumentException if a configured allowed host is invalid or
+		 *                                  a non-loopback bind host has no explicit
+		 *                                  allowed host
 		 */
 		@NonNull
 		public McpServer build() {

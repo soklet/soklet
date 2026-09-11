@@ -24,6 +24,7 @@ import com.soklet.internal.mcp.protocol.McpLocalizationContextUnavailableExcepti
 import com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter;
 import com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
+import com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
@@ -1358,7 +1359,8 @@ final class DefaultMcpServer implements McpServer {
 			McpJsonRpcError error = exception.getError();
 			return ToolInvocationResult.jsonRpcError(error.getCode(),
 					error.getMessage(), error.getData());
-		} catch (McpInvalidToolArgumentsException exception) {
+		} catch (McpInvalidToolArgumentsException
+				| McpTaskOriginBoundaryException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
 
@@ -1373,7 +1375,8 @@ final class DefaultMcpServer implements McpServer {
 			McpTaskOrigin taskOrigin;
 			try {
 				taskOrigin = control.getTaskOrigin();
-			} catch (McpInvalidToolArgumentsException exception) {
+			} catch (McpInvalidToolArgumentsException
+					| McpTaskOriginBoundaryException exception) {
 				return ToolInvocationResult.invalidInput();
 			}
 			String taskId = taskCreatedResult.getTaskId();
@@ -1500,7 +1503,8 @@ final class DefaultMcpServer implements McpServer {
 			throw invalidTaskOrigin();
 		if (!(fields.get("rawArguments") instanceof McpJsonObject rawArguments))
 			throw invalidTaskOrigin();
-		McpPublicJsonValueConverter.toInternalObject(rawArguments);
+		McpTaskOriginPersistedStateCodec.requireRestorableRawArguments(
+				rawArguments);
 		McpJsonValue persistedOutputSchema = fields.get("outputSchema");
 		Optional<McpRuntimeToolOutputSchemaBridge> outputSchemaBridge;
 		if (persistedOutputSchema == McpJsonNull.INSTANCE)
@@ -1947,11 +1951,8 @@ final class DefaultMcpServer implements McpServer {
 				tool.isStructuredContentMirroredAsText());
 		persistedState.put("inputRequestDeclarations",
 				taskInputRequestDeclarations(tool.getInputRequestDeclarations()));
-		McpTaskOrigin taskOrigin = McpTaskOrigin.fromPersistedState(
-				persistedState.build());
-
 		return Optional.of(new DefaultMcpTaskControl<>(requestContext, tool,
-				rawArguments, taskOrigin));
+				rawArguments, persistedState.build()));
 	}
 
 	@NonNull
@@ -2012,11 +2013,10 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	/**
-	 * Lazily validates and memoizes typed arguments at the first point that
-	 * either application code requests a durable origin or the handler
-	 * continuation begins. This preserves the interceptor-before-complete-input-
-	 * validation contract while making an origin impossible to use for invalid
-	 * typed arguments.
+	 * Lazily validates and memoizes typed arguments and durable origin state.
+	 * This preserves the interceptor-before-complete-input-validation contract,
+	 * makes an origin impossible to use for invalid typed arguments, and avoids
+	 * serializing an origin for a task-eligible invocation that completes inline.
 	 */
 	@ThreadSafe
 	private static final class DefaultMcpTaskControl<A>
@@ -2028,20 +2028,26 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private final McpJsonObject rawArguments;
 		@NonNull
+		private final McpJsonObject basePersistedState;
+		@Nullable
 		private volatile McpTaskOrigin taskOrigin;
 		@Nullable
 		private volatile McpToolArguments<A> decodedArguments;
+		@Nullable
+		private volatile String selectedLocale;
 		private volatile boolean argumentDecodingFailed;
+		private volatile boolean selectedLocalePinned;
+		private volatile boolean taskOriginEncodingFailed;
 
 		private DefaultMcpTaskControl(
 				@NonNull McpRequestContext requestContext,
 				@NonNull McpToolRegistration<A> tool,
 				@NonNull McpJsonObject rawArguments,
-				@NonNull McpTaskOrigin taskOrigin) {
+				@NonNull McpJsonObject basePersistedState) {
 			this.requestContext = requireNonNull(requestContext);
 			this.tool = requireNonNull(tool);
 			this.rawArguments = requireNonNull(rawArguments);
-			this.taskOrigin = requireNonNull(taskOrigin);
+			this.basePersistedState = requireNonNull(basePersistedState);
 		}
 
 		@Override
@@ -2054,19 +2060,55 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		public McpTaskOrigin getTaskOrigin() {
 			decodedArguments();
-			return this.taskOrigin;
+			McpTaskOrigin exactTaskOrigin = this.taskOrigin;
+			if (exactTaskOrigin != null)
+				return exactTaskOrigin;
+			if (this.taskOriginEncodingFailed)
+				throw previouslyFailedTaskOriginEncoding();
+			synchronized (this) {
+				exactTaskOrigin = this.taskOrigin;
+				if (exactTaskOrigin != null)
+					return exactTaskOrigin;
+				if (this.taskOriginEncodingFailed)
+					throw previouslyFailedTaskOriginEncoding();
+				if (!this.selectedLocalePinned)
+					throw new IllegalStateException(
+							"MCP task origin was requested before locale selection completed.");
+
+				McpJsonObject persistedState = this.basePersistedState;
+				if (this.selectedLocale != null) {
+					Map<String, McpJsonValue> members = new LinkedHashMap<>(
+							persistedState.getMembers());
+					members.put("selectedLocale",
+							McpJsonString.fromValue(this.selectedLocale));
+					persistedState = McpJsonObject.fromMembers(members);
+				}
+				try {
+					exactTaskOrigin = McpTaskOrigin.fromPersistedState(
+							persistedState);
+				} catch (IllegalArgumentException exception) {
+					this.taskOriginEncodingFailed = true;
+					throw new McpTaskOriginBoundaryException(exception);
+				}
+				this.taskOrigin = exactTaskOrigin;
+				return exactTaskOrigin;
+			}
 		}
 
 		private void pinSelectedLocale(@Nullable String selectedLocale) {
-			if (selectedLocale == null)
-				return;
 			synchronized (this) {
-				Map<String, McpJsonValue> persistedState = new LinkedHashMap<>(
-						this.taskOrigin.getPersistedState().getMembers());
-				persistedState.put("selectedLocale",
-						McpJsonString.fromValue(selectedLocale));
-				this.taskOrigin = McpTaskOrigin.fromPersistedState(
-						McpJsonObject.fromMembers(persistedState));
+				if (this.selectedLocalePinned) {
+					if (!java.util.Objects.equals(this.selectedLocale,
+							selectedLocale))
+						throw new IllegalStateException(
+								"MCP task locale selection changed after it was pinned.");
+					return;
+				}
+				if (this.taskOrigin != null || this.taskOriginEncodingFailed)
+					throw new IllegalStateException(
+							"MCP task locale selection completed after origin materialization.");
+				this.selectedLocale = selectedLocale;
+				this.selectedLocalePinned = true;
 			}
 		}
 
@@ -2101,6 +2143,24 @@ final class DefaultMcpServer implements McpServer {
 			return new McpInvalidToolArgumentsException(
 					new IllegalArgumentException(
 							"MCP tool arguments were already found invalid."));
+		}
+
+		@NonNull
+		private static McpTaskOriginBoundaryException
+				previouslyFailedTaskOriginEncoding() {
+			return new McpTaskOriginBoundaryException(
+					new IllegalArgumentException(
+							"MCP task origin encoding previously exceeded a boundary."));
+		}
+	}
+
+	@NotThreadSafe
+	private static final class McpTaskOriginBoundaryException
+			extends IllegalArgumentException {
+		private McpTaskOriginBoundaryException(
+				@NonNull IllegalArgumentException cause) {
+			super("MCP task origin cannot be represented durably.",
+					requireNonNull(cause));
 		}
 	}
 

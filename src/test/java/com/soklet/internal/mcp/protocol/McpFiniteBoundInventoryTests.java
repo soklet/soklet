@@ -187,6 +187,12 @@ public class McpFiniteBoundInventoryTests {
 				fieldValue(publicBuilder, "requestBodyTimeout"));
 		put(values, "headers.mirrored-maximum-decoded-bytes",
 				McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES);
+		put(values, "headers.admission-rejection-maximum-bytes", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_ADMISSION_REJECTION_HEADER_BYTES"));
+		put(values, "headers.admission-rejection-maximum-count", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+				"MAXIMUM_ADMISSION_REJECTION_HEADER_COUNT"));
 		put(values, "headers.custom-integer-maximum",
 				staticBigInteger("com.soklet.internal.mcp.protocol."
 						+ "McpCustomMirroredHeaderValidator", "MAXIMUM_SAFE_INTEGER"));
@@ -261,6 +267,12 @@ public class McpFiniteBoundInventoryTests {
 
 		McpJsonLimits json = McpJsonLimits.productionDefaults();
 		McpJsonLimits jsonHard = McpJsonLimits.maximumSupported();
+		McpJsonLimits taskArgumentsJson = McpJsonLimits.durableTaskArguments();
+		McpJsonLimits taskOriginJson = McpJsonLimits.durableTaskOrigin();
+		Assertions.assertEquals(taskArgumentsJson, staticValue(
+				"com.soklet.internal.mcp.protocol."
+						+ "McpTaskOriginPersistedStateCodec",
+				"RESTORED_ARGUMENT_LIMITS"));
 		Assertions.assertEquals(json, staticValue(
 				"com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter",
 				"PRODUCTION_LIMITS"));
@@ -286,9 +298,27 @@ public class McpFiniteBoundInventoryTests {
 		Number taskOriginPersistedBytes = staticNumber(
 				"com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec",
 				"MAXIMUM_PERSISTED_BYTES");
-		Assertions.assertEquals(json.maximumOutputBytes(),
+		Assertions.assertEquals(taskOriginJson.maximumOutputBytes(),
 				taskOriginPersistedBytes.intValue());
 		put(values, "task.origin.persisted-bytes", taskOriginPersistedBytes);
+		put(values, "task.origin.persisted-nodes",
+				taskOriginJson.maximumNodeCount());
+		put(values, "task.origin.restored-arguments.depth",
+				taskArgumentsJson.maximumNestingDepth());
+		put(values, "task.origin.restored-arguments.exponent-magnitude",
+				taskArgumentsJson.maximumExponentMagnitude());
+		put(values, "task.origin.restored-arguments.input-bytes",
+				taskArgumentsJson.maximumInputBytes());
+		put(values, "task.origin.restored-arguments.nodes",
+				taskArgumentsJson.maximumNodeCount());
+		put(values, "task.origin.restored-arguments.number-characters",
+				taskArgumentsJson.maximumNumberLengthInCharacters());
+		put(values, "task.origin.restored-arguments.output-bytes",
+				taskArgumentsJson.maximumOutputBytes());
+		put(values, "task.origin.restored-arguments.string-characters",
+				taskArgumentsJson.maximumStringLengthInCharacters());
+		put(values, "task.origin.restored-arguments.token-characters",
+				taskArgumentsJson.maximumTokenLengthInCharacters());
 
 		Object compiler = invokeStatic(
 				"com.soklet.internal.mcp.schema.McpSchemaCompilationLimits",
@@ -473,6 +503,10 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "output.localization-lookups.hard", staticNumber(
 				McpLocalizer.class.getName(),
 				"MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE"));
+		put(values, "output.resource-list-diagnostic-value-characters",
+				staticNumber(
+						"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+						"MAXIMUM_RESOURCE_LIST_DIAGNOSTIC_VALUE_CHARACTERS"));
 		Assertions.assertEquals(
 				staticNumber(McpLocalizer.class.getName(),
 						"MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE"),

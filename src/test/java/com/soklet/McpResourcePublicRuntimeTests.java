@@ -32,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -515,6 +518,17 @@ public class McpResourcePublicRuntimeTests {
 
 	@Test
 	public void dynamicListRejectsInvalidApplicationOutputSafely() throws Exception {
+		BlockingQueue<Throwable> resourceListFailures = new LinkedBlockingQueue<>();
+		LifecycleObserver observer = new LifecycleObserver() {
+			@Override
+			public void didFinishMcpRequestHandling(McpRequestContext context,
+					McpRequestOutcome outcome, McpJsonRpcError error,
+					Duration duration, List<Throwable> throwables) {
+				if ("resources/list".equals(context.getJsonRpcMethod())
+						&& !throwables.isEmpty())
+					resourceListFailures.add(throwables.get(0));
+			}
+		};
 		McpResourceRegistration exact = McpResourceRegistration
 				.withUriAndName(URI.create("test://registered"), "Registered")
 				.handler((request, resource, features) ->
@@ -579,7 +593,7 @@ public class McpResourcePublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		Soklet soklet = managedSoklet(server, observer);
 
 		try {
 			soklet.start();
@@ -600,6 +614,19 @@ public class McpResourcePublicRuntimeTests {
 				assertError(response, 500, -32603, cursor);
 				Assertions.assertFalse(response.body().contains("secret"),
 						response.body());
+				Throwable failure = resourceListFailures.poll(5, TimeUnit.SECONDS);
+				Assertions.assertNotNull(failure,
+						"Missing resource-list failure for " + cursor);
+				if ("duplicate".equals(cursor))
+					Assertions.assertEquals(
+							"A resource-list page for endpoint '/mcp' contains a duplicate "
+									+ "URI 'test://registered'.",
+							failure.getMessage());
+				else if ("unreadable".equals(cursor))
+					Assertions.assertEquals(
+							"A resource-list page for endpoint '/mcp' contains an unreadable "
+									+ "URI 'secret://not-registered'.",
+							failure.getMessage());
 			}
 
 			HttpResponse<String> invalidContent = read(port,
@@ -970,6 +997,15 @@ public class McpResourcePublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+	}
+
+	private static Soklet managedSoklet(McpServer server,
+			LifecycleObserver lifecycleObserver) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObservers(List.of(lifecycleObserver))
 				.build());
 	}
 

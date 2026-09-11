@@ -89,6 +89,91 @@
     },
     {
       "accounting": [
+        "Arguments restored from an application-owned task manager are revalidated before dispatch with production depth, token, string, number, exponent, and node limits.",
+        "The input-byte field remains aligned with the public transport ceiling, but the already-materialized immutable argument tree is not reparsed.",
+        "The 32 MiB canonical-output allowance prevents restoration from reintroducing the narrower 4 MiB production serialization ceiling."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskOriginRetainsArgumentsAndSchemaPastProductionNodeBudget",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionJsonLimitsAndHardCeilingsAreFrozen"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpTasksPublicRuntimeTests.java#taskOriginLargerThanProductionJsonRestoresAtTaskBoundary",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionJsonLimitsAndHardCeilingsAreFrozen"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-JSON-001"
+      ],
+      "id": "LIMITS-DURABLE-TASK-ARGUMENTS",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "member": "resolveTaskOrigin",
+          "owner": "com.soklet.DefaultMcpServer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "member": "durableTaskArguments",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
+          "member": "RESTORED_ARGUMENT_LIMITS/requireRestorableRawArguments",
+          "owner": "com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec"
+        }
+      ],
+      "rationale": "Task restoration preserves the transport-admitted shape contract while allowing the canonical byte headroom required by a durable origin that also retains framework schema and wrapper state.",
+      "topic": "DURABLE_TASK_ARGUMENTS",
+      "values": [
+        {
+          "key": "depth",
+          "unit": "LEVELS",
+          "value": "128"
+        },
+        {
+          "key": "exponent-magnitude",
+          "unit": "INTEGER",
+          "value": "10000"
+        },
+        {
+          "key": "input-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "16777216"
+        },
+        {
+          "key": "nodes",
+          "unit": "NODES",
+          "value": "100000"
+        },
+        {
+          "key": "number-characters",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        },
+        {
+          "key": "output-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "33554432"
+        },
+        {
+          "key": "string-characters",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1048576"
+        },
+        {
+          "key": "token-characters",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1048576"
+        }
+      ]
+    },
+    {
+      "accounting": [
         "Number length counts raw JSON token UTF-16 code units, including sign, decimal point, exponent marker, and exponent sign.",
         "Exponent magnitude is the absolute parsed decimal exponent and is independent of token length.",
         "Production defaults and implementation hard ceilings are inclusive."
@@ -448,15 +533,17 @@
     },
     {
       "accounting": [
-        "The aggregate request ceiling is body bytes plus header bytes plus request-target bytes plus 1024 framing bytes.",
+        "Each aggregate request ceiling is body bytes plus the applicable header bytes plus request-target bytes plus 1024 framing bytes.",
         "Header count includes transport fields parsed by the listener; header bytes include the terminating empty line.",
-        "Direct transport write, shutdown, and stream defaults are distinct from effective public-server subscription defaults."
+        "Direct transport request-body, write, shutdown, and stream defaults are distinct from effective public-server defaults."
       ],
       "adversarialTests": [
         "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java#maximumConnectionCapacityRejectsOnlyAndRecoversAfterRelease",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java#partialRequestBodyTimeoutIsRecordedAtTheMcpBoundary"
       ],
       "boundaryTests": [
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
+        "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#directTransportDefaultsAndAggregateAccountingAreFrozen",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#headerCountAndEncodedByteLimitsHaveExactListenerBoundaries",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#request_body_limit_has_an_exact_body_only_boundary"
@@ -491,7 +578,7 @@
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge"
         }
       ],
-      "rationale": "The listener has finite socket, parser, worker, queue, byte, and time ownership, and the public bridge deliberately replaces three lower-level defaults.",
+      "rationale": "The listener has finite socket, parser, worker, queue, byte, and time ownership, and the public bridge deliberately replaces four lower-level defaults.",
       "topic": "TRANSPORT",
       "values": [
         {
@@ -503,6 +590,16 @@
           "key": "connection-writer-concurrency",
           "unit": "WORKERS",
           "value": "1"
+        },
+        {
+          "key": "direct-maximum-aggregate-request-bytes",
+          "unit": "WIRE_BYTES",
+          "value": "4269056"
+        },
+        {
+          "key": "direct-maximum-request-body-bytes",
+          "unit": "BYTES",
+          "value": "4194304"
         },
         {
           "key": "direct-shutdown-timeout-nanos",
@@ -525,6 +622,16 @@
           "value": "15000000000"
         },
         {
+          "key": "effective-maximum-aggregate-request-bytes",
+          "unit": "WIRE_BYTES",
+          "value": "10560512"
+        },
+        {
+          "key": "effective-maximum-request-body-bytes",
+          "unit": "BYTES",
+          "value": "10485760"
+        },
+        {
           "key": "effective-shutdown-timeout-nanos",
           "unit": "NANOSECONDS",
           "value": "30000000000"
@@ -545,11 +652,6 @@
           "value": "1024"
         },
         {
-          "key": "maximum-aggregate-request-bytes",
-          "unit": "WIRE_BYTES",
-          "value": "4269056"
-        },
-        {
           "key": "maximum-connections",
           "unit": "CONNECTIONS",
           "value": "8192"
@@ -565,14 +667,14 @@
           "value": "100"
         },
         {
-          "key": "maximum-request-body-bytes",
-          "unit": "BYTES",
-          "value": "4194304"
-        },
-        {
           "key": "maximum-request-target-bytes",
           "unit": "ASCII_BYTES",
           "value": "8192"
+        },
+        {
+          "key": "maximum-supported-request-body-bytes",
+          "unit": "BYTES",
+          "value": "16777216"
         },
         {
           "key": "read-buffer-bytes",
@@ -714,7 +816,7 @@
   "formatVersion": 1,
   "numericBoundsAuthority": {
     "path": "../mcp/PROFILE_1_NUMERIC_BOUNDS.md",
-    "sha256": "9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70"
+    "sha256": "c0d54bf7d5411df5d60dfbc9485c2a3c02878189fe2faceb482e6ebe57fead2e"
   },
   "productionProfile": "2026-07-28",
   "releaseTarget": "4.0.0"

@@ -23,8 +23,11 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,6 +92,56 @@ public class McpTaskPublicApiTests {
 				() -> McpTaskOrigin.fromPersistedString("[]"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpTaskOrigin.fromPersistedString("not-json"));
+	}
+
+	@Test
+	public void taskOriginRetainsWholeOriginNearDurableByteCeiling() {
+		int publicEnvelopeBytes = 16 * 1_024 * 1_024;
+		String argumentChunk = "a".repeat((publicEnvelopeBytes - 4_096) / 4);
+		String schemaChunk = "s".repeat((4 * 1_024 * 1_024 - 4_096) / 4);
+		McpJsonObject rawArguments = McpJsonObject.builder()
+				.put("a", argumentChunk)
+				.put("b", argumentChunk)
+				.put("c", argumentChunk)
+				.put("d", argumentChunk)
+				.build();
+		McpJsonObject outputSchema = McpJsonObject.builder()
+				.put("x-a", schemaChunk)
+				.put("x-b", schemaChunk)
+				.put("x-c", schemaChunk)
+				.put("x-d", schemaChunk)
+				.build();
+		McpTaskOrigin source = McpTaskOrigin.fromPersistedState(
+				McpJsonObject.builder()
+						.put("formatVersion", 1)
+						.put("operationType", "tools_call")
+						.put("rawArguments", rawArguments)
+						.put("outputSchema", outputSchema)
+						.build());
+
+		String persisted = source.toPersistedString();
+		Assertions.assertTrue(persisted.getBytes(StandardCharsets.UTF_8).length
+				> publicEnvelopeBytes);
+		Assertions.assertEquals(source,
+				McpTaskOrigin.fromPersistedString(persisted));
+	}
+
+	@Test
+	public void taskOriginRetainsArgumentsAndSchemaPastProductionNodeBudget() {
+		McpJsonArray argumentNodes = McpJsonArray.fromElements(
+				Collections.nCopies(90_000, McpJsonNull.INSTANCE));
+		McpJsonArray schemaNodes = McpJsonArray.fromElements(
+				Collections.nCopies(90_000, McpJsonNull.INSTANCE));
+		McpTaskOrigin source = McpTaskOrigin.fromPersistedState(
+				McpJsonObject.builder()
+						.put("rawArguments", McpJsonObject.builder()
+								.put("nodes", argumentNodes).build())
+						.put("outputSchema", McpJsonObject.builder()
+								.put("nodes", schemaNodes).build())
+						.build());
+
+		Assertions.assertEquals(source,
+				McpTaskOrigin.fromPersistedString(source.toPersistedString()));
 	}
 
 	@Test

@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 248;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"61e5baa74f7da923a5a76a7e8e40edcda794378d643ba7ce92c8f3da71bf85f9";
+			"c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"36e07de0bcb287e16d75036f103c916cdac9e45c1fd98d0760014fe1b3365c13";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -580,6 +580,22 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertEquals(McpJsonObject.class, arguments[0].getType());
 		Assertions.assertTrue(hasExactNullness(arguments[0], NonNull.class),
 				"jsonObjectArguments() payload must be exactly @NonNull");
+
+		AnnotatedType authoredReturnType =
+				McpToolRegistration.ArgumentTypeStage.class
+						.getMethod("inputSchema", McpJsonObject.class)
+						.getAnnotatedReturnType();
+		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
+				authoredReturnType);
+		AnnotatedType[] authoredArguments =
+				((AnnotatedParameterizedType) authoredReturnType)
+						.getAnnotatedActualTypeArguments();
+		Assertions.assertEquals(1, authoredArguments.length);
+		Assertions.assertEquals(McpJsonObject.class,
+				authoredArguments[0].getType());
+		Assertions.assertTrue(
+				hasExactNullness(authoredArguments[0], NonNull.class),
+				"inputSchema() payload must be exactly @NonNull");
 	}
 
 	@Test

@@ -58,6 +58,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.build();
 
 	@Test
+	@Timeout(120)
 	public void sequentialRequestsExerciseCreateGetInputUpdateAndCancelation()
 			throws Exception {
 		Fixture fixture = new Fixture();
@@ -148,6 +149,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void admittedTaskRequestsPublishExactLifecycleAndMetricsOffNetwork()
 			throws Exception {
 		Fixture fixture = new Fixture();
@@ -221,6 +223,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void taskSubscriptionUsesCurrentStateAndReconnectDoesNotReplay()
 			throws Exception {
 		Fixture fixture = new Fixture();

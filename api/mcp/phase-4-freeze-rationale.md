@@ -1010,3 +1010,27 @@ final compatibility ledger therefore contains 646 records with SHA-256
 `8fc3deae63cd77cc0ff73259137552a4f957ed23b4237f5c500cf0b5c5a413a0`.
 The focused reflection and aggregate freeze checks remain local development
 evidence until captured for an immutable release candidate.
+
+## 2026-09-10 authored input-schema remediation amendment
+
+The remediation review intentionally adds
+`McpToolRegistration.ArgumentTypeStage.inputSchema(McpJsonObject)`. The method
+exposes the existing production Profile 1 compilation, tool-input-use,
+mirrored-header, and bounded invocation-evaluation path to applications whose
+object-root constraints cannot be expressed by the closed Java-derived schema
+family. The official JSON Schema fixture now reaches that same public path
+rather than a package-private fixture seam.
+
+This amendment supersedes the immediately preceding 1,131-record checkpoint
+for the active release surface. The Phase 4 snapshot now contains 1,132
+records: 134 classes, one constructor, 94 fields, and 903 methods. Its
+signature SHA-256 is
+`da37cc9aac839c5b60befdfd34fef7407ae3479420fb3a7a412c1b105b103ce3`;
+the reviewed reflection/nullability SHA-256 is
+`c639c1a3dc0d6a36908ea0cd25e8f472e92105908f68148f8ee800ef90aa829c`;
+and the unchanged include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The owner partition and 646-record released-3.5.1 compatibility ledger remain
+unchanged. The historical D1p preview seal is not rewritten; this local
+amendment remains development evidence until a fresh final release-candidate
+API-freeze capture records it.

@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.converter.ValueConverterRegistry;
+import com.soklet.exception.IllegalRequestBodyException;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -58,10 +59,18 @@ import static java.util.Objects.requireNonNull;
  *     // about the request, which provides the opportunity to, for example,
  *     // examine annotations on the method/parameter which might
  *     // inform custom marshaling strategies.
- *     return Optional.of(GSON.fromJson(
- *       request.getBodyAsString().orElseThrow(),
- *       requestBodyType
- *     ));
+	 *     try {
+	 *       return Optional.of(GSON.fromJson(
+	 *         request.getBodyAsString().orElseThrow(),
+	 *         requestBodyType
+	 *       ));
+	 *     } catch (JsonParseException e) {
+	 *       // Expected parse failures are client errors. Keep request data and
+	 *       // the parser's input-bearing cause out of the public diagnostic.
+	 *       throw new IllegalRequestBodyException(
+	 *         "Request body is not valid JSON."
+	 *       );
+	 *     }
  *   }
  * }).build();}</pre>
  * <p>
@@ -84,6 +93,8 @@ public interface RequestBodyMarshaler {
 	 * @param parameter       the <em>Resource Method</em> parameter into which the returned instance will be injected
 	 * @param requestBodyType the type of the <em>Resource Method</em> parameter (provided for convenience)
 	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the <em>Resource Method</em> parameter, or {@link Optional#empty()} if no instance should be marshaled
+	 * @throws IllegalRequestBodyException when the body is present but malformed
+	 *                                     or incompatible with the requested type
 	 */
 	@NonNull
 	Optional<@NonNull Object> marshalRequestBody(@NonNull Request request,

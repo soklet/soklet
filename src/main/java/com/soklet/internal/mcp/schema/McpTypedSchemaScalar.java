@@ -40,8 +40,10 @@ enum McpTypedSchemaScalar {
 	LONG("integer", BigDecimal.valueOf(Long.MIN_VALUE),
 			BigDecimal.valueOf(Long.MAX_VALUE)),
 	BIG_INTEGER("integer"),
-	FLOAT("number"),
-	DOUBLE("number"),
+	FLOAT("number", new BigDecimal(Float.toString(-Float.MAX_VALUE)),
+			new BigDecimal(Float.toString(Float.MAX_VALUE))),
+	DOUBLE("number", BigDecimal.valueOf(-Double.MAX_VALUE),
+			BigDecimal.valueOf(Double.MAX_VALUE)),
 	BIG_DECIMAL("number"),
 	STRING("string");
 

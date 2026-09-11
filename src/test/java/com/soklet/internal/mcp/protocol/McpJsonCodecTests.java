@@ -450,8 +450,18 @@ public class McpJsonCodecTests {
 				16 * 1_024 * 1_024};
 		Assertions.assertEquals(jsonLimits(maximum),
 				McpJsonLimits.maximumSupported());
-		for (int index = 0; index < maximum.length; ++index) {
-			int[] oneOver = maximum.clone();
+		int[] durableArgumentsMaximum = {16 * 1_024 * 1_024, 128,
+				1_024 * 1_024, 1_024 * 1_024, 1_024, 10_000, 100_000,
+				32 * 1_024 * 1_024};
+		Assertions.assertEquals(jsonLimits(durableArgumentsMaximum),
+				McpJsonLimits.durableTaskArguments());
+		int[] durableOriginMaximum = {32 * 1_024 * 1_024, 256,
+				4 * 1_024 * 1_024, 4 * 1_024 * 1_024, 4_096, 100_000,
+				2_000_000, 32 * 1_024 * 1_024};
+		Assertions.assertEquals(jsonLimits(durableOriginMaximum),
+				McpJsonLimits.durableTaskOrigin());
+		for (int index = 0; index < durableOriginMaximum.length; ++index) {
+			int[] oneOver = durableOriginMaximum.clone();
 			oneOver[index]++;
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> jsonLimits(oneOver), "field " + index);

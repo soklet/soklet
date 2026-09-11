@@ -144,6 +144,257 @@ class BuiltInTransportLifecycleAdapterTests {
 	}
 
 	@Test
+	void delegatedRuntimeNeverStartedProvesTerminationWithoutTransportWork() {
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> false, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		AdmissionFence ownerFence = new AdmissionFence();
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				ownerFence, () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		AtomicBoolean startActionCalled = new AtomicBoolean();
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal,
+				() -> startActionCalled.set(true));
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+
+		ownerGroup.recordShutdownIntent();
+		runtime.shutdownGracefully(graceful);
+		runtime.shutdownForcibly(forced);
+
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.PROOF),
+				ownerGroup.primaryEventsInSequence().stream()
+						.map(InternalTerminationEvent::type).toList());
+		IllegalStateException lateStart = Assertions.assertThrows(
+				IllegalStateException.class, () -> runtime.start(startup));
+		Assertions.assertEquals("Delegated transport was shut down before start",
+				lateStart.getMessage());
+		Assertions.assertFalse(startActionCalled.get());
+		Assertions.assertTrue(adapter.generation().isEmpty());
+		Assertions.assertEquals(0, operations.quiesceCount.get());
+		Assertions.assertEquals(0, operations.forceCount.get());
+		Assertions.assertEquals(0, operations.awaitCount.get());
+		Assertions.assertEquals(0, operations.releaseCount.get());
+	}
+
+	@Test
+	void delegatedRuntimeDefersOverlappingShutdownAndCatchesUpAtStrongestPhase()
+			throws Exception {
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		AdmissionFence ownerFence = new AdmissionFence();
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				ownerFence, () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			startEntered.countDown();
+			awaitUninterruptibly(releaseStart);
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.markReady(generation);
+		});
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+		AtomicReference<Throwable> startFailure = new AtomicReference<>();
+		Thread startThread = new Thread(() -> {
+			try {
+				runtime.start(startup);
+			} catch (Throwable failure) {
+				startFailure.set(failure);
+			}
+		}, "adapter-delegated-start-shutdown-race");
+
+		startThread.start();
+		try {
+			Assertions.assertTrue(startEntered.await(1, TimeUnit.SECONDS));
+			ownerGroup.recordShutdownIntent();
+			runtime.shutdownGracefully(graceful);
+			runtime.shutdownForcibly(forced);
+
+			Assertions.assertTrue(ownerGroup.primaryEventsInSequence().isEmpty(),
+					"A null generation while start is live is not termination proof");
+			Assertions.assertTrue(adapter.generation().isEmpty());
+			Assertions.assertEquals(0, operations.quiesceCount.get());
+			Assertions.assertEquals(0, operations.forceCount.get());
+		} finally {
+			releaseStart.countDown();
+			startThread.join(2_000L);
+		}
+
+		Assertions.assertFalse(startThread.isAlive());
+		Assertions.assertNull(startFailure.get());
+		Assertions.assertEquals(List.of(forced), operations.gracefulContexts);
+		Assertions.assertEquals(List.of(forced), operations.forcedContexts);
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		Assertions.assertEquals(1, operations.forceCount.get());
+		Assertions.assertEquals(1, operations.awaitCount.get());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.PROOF),
+				ownerGroup.primaryEventsInSequence().stream()
+						.map(InternalTerminationEvent::type).toList());
+	}
+
+	@Test
+	void delegatedRuntimeSerializesForcedUpgradeDuringStartupCatchUp()
+			throws Exception {
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> attempt == 2, Set.of());
+		CountDownLatch gracefulEntered = new CountDownLatch(1);
+		CountDownLatch releaseGraceful = new CountDownLatch(1);
+		operations.onQuiesce = () -> {
+			gracefulEntered.countDown();
+			awaitUninterruptibly(releaseGraceful);
+		};
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		AdmissionFence ownerFence = new AdmissionFence();
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				ownerFence, () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			startEntered.countDown();
+			awaitUninterruptibly(releaseStart);
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.markReady(generation);
+		});
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+		AtomicReference<Throwable> startFailure = new AtomicReference<>();
+		Thread startThread = new Thread(() -> {
+			try {
+				runtime.start(startup);
+			} catch (Throwable failure) {
+				startFailure.set(failure);
+			}
+		}, "adapter-delegated-start-catch-up-race");
+
+		startThread.start();
+		try {
+			Assertions.assertTrue(startEntered.await(1, TimeUnit.SECONDS));
+			ownerGroup.recordShutdownIntent();
+			runtime.shutdownGracefully(graceful);
+			releaseStart.countDown();
+			Assertions.assertTrue(gracefulEntered.await(1, TimeUnit.SECONDS));
+
+			runtime.shutdownForcibly(forced);
+			Assertions.assertEquals(0, operations.forceCount.get(),
+					"Force must not overtake graceful startup catch-up");
+		} finally {
+			releaseStart.countDown();
+			releaseGraceful.countDown();
+			startThread.join(2_000L);
+		}
+
+		Assertions.assertFalse(startThread.isAlive());
+		Assertions.assertNull(startFailure.get());
+		Assertions.assertEquals(List.of(graceful), operations.gracefulContexts);
+		Assertions.assertEquals(List.of(forced), operations.forcedContexts);
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		Assertions.assertEquals(1, operations.forceCount.get());
+		Assertions.assertEquals(2, operations.awaitCount.get());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+	}
+
+	@Test
+	void delegatedRuntimePreservesStartupFailureWhenCatchUpShutdownAlsoFails()
+			throws Exception {
+		RuntimeException startupFailure = new IllegalStateException(
+				"expected startup failure");
+		RuntimeException catchUpFailure = new IllegalStateException(
+				"expected catch-up failure");
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of());
+		operations.quiesceFailure = catchUpFailure;
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		AdmissionFence ownerFence = new AdmissionFence();
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				ownerFence, () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			BuiltInTransportLifecycleAdapter.Generation generation =
+					adapter.beginStart();
+			adapter.markReady(generation);
+			startEntered.countDown();
+			awaitUninterruptibly(releaseStart);
+			throw startupFailure;
+		});
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+		AtomicReference<Throwable> observedStartFailure = new AtomicReference<>();
+		Thread startThread = new Thread(() -> {
+			try {
+				runtime.start(startup);
+			} catch (Throwable failure) {
+				observedStartFailure.set(failure);
+			}
+		}, "adapter-delegated-dual-failure-race");
+
+		startThread.start();
+		try {
+			Assertions.assertTrue(startEntered.await(1, TimeUnit.SECONDS));
+			ownerGroup.recordShutdownIntent();
+			runtime.shutdownGracefully(graceful);
+		} finally {
+			releaseStart.countDown();
+			startThread.join(2_000L);
+		}
+
+		Assertions.assertFalse(startThread.isAlive());
+		Assertions.assertSame(startupFailure, observedStartFailure.get());
+		Assertions.assertArrayEquals(new Throwable[]{catchUpFailure},
+				startupFailure.getSuppressed());
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		runtime.shutdownForcibly(forced);
+		Assertions.assertEquals(1, operations.forceCount.get(),
+				"A failed catch-up must not strand the later forced phase");
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+	}
+
+	@Test
 	void positiveResidualAndUnknownBothRetainEvidenceWithoutRelease() {
 		RecordingOperations residualOperations = new RecordingOperations(
 				attempt -> false, Set.of(InternalResidualActivityType.EVENT_LOOP));

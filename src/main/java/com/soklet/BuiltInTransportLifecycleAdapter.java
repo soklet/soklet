@@ -52,6 +52,14 @@ final class BuiltInTransportLifecycleAdapter {
 		EXTERNAL
 	}
 
+	private enum DelegatedRuntimeState {
+		NOT_STARTED,
+		STARTING,
+		STARTED,
+		START_FAILED,
+		TERMINATED_WITHOUT_START
+	}
+
 	interface Operations {
 		/** Prompt, signal-only graceful wind-up. */
 		void quiesce();
@@ -310,6 +318,204 @@ final class BuiltInTransportLifecycleAdapter {
 						}
 						return null;
 					});
+		}
+	}
+
+	@ThreadSafe
+	private static final class DelegatedRuntime implements TransportRuntime {
+		@NonNull
+		private final BuiltInTransportLifecycleAdapter owner;
+		@NonNull
+		private final TransportTerminationSignal signal;
+		@NonNull
+		private final Runnable startAction;
+		@NonNull
+		private DelegatedRuntimeState state;
+		@Nullable
+		private Generation generation;
+		@Nullable
+		private ShutdownContext requestedShutdown;
+		@Nullable
+		private ShutdownPhase claimedShutdownPhase;
+		private boolean shutdownDeliveryActive;
+
+		private DelegatedRuntime(@NonNull BuiltInTransportLifecycleAdapter owner,
+				@NonNull TransportTerminationSignal signal,
+				@NonNull Runnable startAction) {
+			this.owner = requireNonNull(owner);
+			this.signal = requireNonNull(signal);
+			this.startAction = requireNonNull(startAction);
+			this.state = DelegatedRuntimeState.NOT_STARTED;
+		}
+
+		@Override
+		public void start(@NonNull StartupContext context) {
+			requireNonNull(context);
+			synchronized (this) {
+				if (this.state == DelegatedRuntimeState.TERMINATED_WITHOUT_START)
+					throw new IllegalStateException(
+							"Delegated transport was shut down before start");
+				if (this.state != DelegatedRuntimeState.NOT_STARTED)
+					throw new IllegalStateException(
+							"Delegated transport was already started");
+				this.state = DelegatedRuntimeState.STARTING;
+			}
+
+			boolean returned = false;
+			Generation startedGeneration = null;
+			Throwable startFailure = null;
+			this.owner.delegatedStartSignal.set(this.signal);
+			try {
+				this.startAction.run();
+				returned = true;
+			} catch (RuntimeException | Error failure) {
+				startFailure = failure;
+				throw failure;
+			} finally {
+				this.owner.delegatedStartSignal.remove();
+				try {
+					Generation candidate = this.owner.current.get();
+					if (candidate != null
+							&& candidate.delegatedTerminationSignal == this.signal)
+						startedGeneration = candidate;
+					completeStart(startedGeneration);
+				} catch (RuntimeException | Error catchUpFailure) {
+					if (startFailure == null)
+						throw catchUpFailure;
+					if (startFailure != catchUpFailure)
+						startFailure.addSuppressed(catchUpFailure);
+				}
+			}
+			if (returned && startedGeneration == null)
+				throw new IllegalStateException(
+						"Delegated transport start did not create its lifecycle generation");
+		}
+
+		@Override
+		public void shutdownGracefully(@NonNull ShutdownContext context) {
+			requestShutdown(requireNonNull(context));
+		}
+
+		@Override
+		public void shutdownForcibly(@NonNull ShutdownContext context) {
+			requestShutdown(requireNonNull(context));
+		}
+
+		private void completeStart(@Nullable Generation startedGeneration) {
+			boolean proveWithoutStart;
+			synchronized (this) {
+				this.generation = startedGeneration;
+				if (startedGeneration == null) {
+					proveWithoutStart = this.requestedShutdown != null;
+					this.state = proveWithoutStart
+							? DelegatedRuntimeState.TERMINATED_WITHOUT_START
+							: DelegatedRuntimeState.START_FAILED;
+				} else {
+					proveWithoutStart = false;
+					this.shutdownDeliveryActive = true;
+				}
+			}
+
+			if (proveWithoutStart)
+				this.signal.signalTerminated();
+			else if (startedGeneration != null)
+				drainShutdowns(startedGeneration, true);
+		}
+
+		private void requestShutdown(@NonNull ShutdownContext context) {
+			Generation startedGeneration = null;
+			boolean proveWithoutStart;
+			boolean deliverShutdowns = false;
+			synchronized (this) {
+				switch (this.state) {
+					case NOT_STARTED, START_FAILED -> {
+						this.state = DelegatedRuntimeState.TERMINATED_WITHOUT_START;
+						startedGeneration = null;
+						proveWithoutStart = true;
+					}
+					case STARTING -> {
+						retainStrongestShutdownWhileLocked(context);
+						return;
+					}
+					case STARTED -> {
+						retainStrongestShutdownWhileLocked(context);
+						if (this.requestedShutdown == null
+								|| this.shutdownDeliveryActive)
+							return;
+						this.shutdownDeliveryActive = true;
+						startedGeneration = requireNonNull(this.generation);
+						proveWithoutStart = false;
+						deliverShutdowns = true;
+					}
+					case TERMINATED_WITHOUT_START -> {
+						return;
+					}
+					default -> throw new IllegalStateException(
+							"Unhandled delegated runtime state");
+				}
+			}
+
+			if (proveWithoutStart)
+				this.signal.signalTerminated();
+			else if (deliverShutdowns)
+				drainShutdowns(requireNonNull(startedGeneration), false);
+		}
+
+		private void retainStrongestShutdownWhileLocked(
+				@NonNull ShutdownContext context) {
+			if (!Thread.holdsLock(this))
+				throw new IllegalStateException(
+						"The delegated runtime lock is required");
+			ShutdownPhase phase = requireNonNull(context).getShutdownPhase();
+			if (this.claimedShutdownPhase == ShutdownPhase.FORCED
+					|| (this.claimedShutdownPhase == ShutdownPhase.GRACEFUL
+							&& phase == ShutdownPhase.GRACEFUL))
+				return;
+			if (this.requestedShutdown == null || phase == ShutdownPhase.FORCED)
+				this.requestedShutdown = context;
+		}
+
+		private void drainShutdowns(@NonNull Generation startedGeneration,
+				boolean completingStart) {
+			Throwable firstFailure = null;
+			for (;;) {
+				ShutdownContext context;
+				synchronized (this) {
+					context = this.requestedShutdown;
+					this.requestedShutdown = null;
+					if (context == null) {
+						this.shutdownDeliveryActive = false;
+						if (completingStart)
+							this.state = DelegatedRuntimeState.STARTED;
+						break;
+					}
+					this.claimedShutdownPhase = context.getShutdownPhase();
+				}
+
+				try {
+					deliverShutdown(startedGeneration, context);
+				} catch (RuntimeException | Error failure) {
+					if (firstFailure == null)
+						firstFailure = failure;
+					else
+						firstFailure.addSuppressed(failure);
+				}
+			}
+
+			if (firstFailure instanceof RuntimeException runtimeException)
+				throw runtimeException;
+			if (firstFailure != null)
+				throw (Error) firstFailure;
+		}
+
+		private void deliverShutdown(@NonNull Generation startedGeneration,
+				@NonNull ShutdownContext context) {
+			Generation exactGeneration = requireNonNull(startedGeneration);
+			exactGeneration.group.recordShutdownIntent();
+			if (requireNonNull(context).getShutdownPhase() == ShutdownPhase.FORCED)
+				exactGeneration.runtime.shutdownForcibly(context);
+			else
+				exactGeneration.runtime.shutdownGracefully(context);
 		}
 	}
 
@@ -598,47 +804,8 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	TransportRuntime delegatedRuntime(@NonNull TransportTerminationSignal signal,
 			@NonNull Runnable startAction) {
-		TransportTerminationSignal exactSignal = requireNonNull(signal);
-		Runnable exactStartAction = requireNonNull(startAction);
-		AtomicReference<Generation> generationRef = new AtomicReference<>();
-		AtomicBoolean startClaimed = new AtomicBoolean();
-		return new TransportRuntime() {
-			@Override
-			public void start(@NonNull StartupContext context) {
-				requireNonNull(context);
-				if (!startClaimed.compareAndSet(false, true))
-					throw new IllegalStateException("Delegated transport was already started");
-				delegatedStartSignal.set(exactSignal);
-				try {
-					exactStartAction.run();
-				} finally {
-					Generation generation = current.get();
-					if (generation != null
-							&& generation.delegatedTerminationSignal == exactSignal)
-						generationRef.compareAndSet(null, generation);
-					delegatedStartSignal.remove();
-				}
-				if (generationRef.get() == null)
-					throw new IllegalStateException(
-							"Delegated transport start did not create its lifecycle generation");
-			}
-
-			@Override
-			public void shutdownGracefully(@NonNull ShutdownContext context) {
-				Generation generation = requireNonNull(generationRef.get(),
-						"Delegated transport was not started");
-				generation.group.recordShutdownIntent();
-				generation.runtime.shutdownGracefully(requireNonNull(context));
-			}
-
-			@Override
-			public void shutdownForcibly(@NonNull ShutdownContext context) {
-				Generation generation = requireNonNull(generationRef.get(),
-						"Delegated transport was not started");
-				generation.group.recordShutdownIntent();
-				generation.runtime.shutdownForcibly(requireNonNull(context));
-			}
-		};
+		return new DelegatedRuntime(this, requireNonNull(signal),
+				requireNonNull(startAction));
 	}
 
 	private void proveTermination(@NonNull Generation generation) {

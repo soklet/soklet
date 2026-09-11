@@ -69,10 +69,14 @@ public class McpRuntimeTypedSchemaTests {
 				Map.entry(Long.class,
 						"{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}"),
 				Map.entry(BigInteger.class, "{\"type\":\"integer\"}"),
-				Map.entry(float.class, "{\"type\":\"number\"}"),
-				Map.entry(Float.class, "{\"type\":\"number\"}"),
-				Map.entry(double.class, "{\"type\":\"number\"}"),
-				Map.entry(Double.class, "{\"type\":\"number\"}"),
+				Map.entry(float.class,
+						"{\"type\":\"number\",\"minimum\":-3.4028235E+38,\"maximum\":3.4028235E+38}"),
+				Map.entry(Float.class,
+						"{\"type\":\"number\",\"minimum\":-3.4028235E+38,\"maximum\":3.4028235E+38}"),
+				Map.entry(double.class,
+						"{\"type\":\"number\",\"minimum\":-1.7976931348623157E+308,\"maximum\":1.7976931348623157E+308}"),
+				Map.entry(Double.class,
+						"{\"type\":\"number\",\"minimum\":-1.7976931348623157E+308,\"maximum\":1.7976931348623157E+308}"),
 				Map.entry(BigDecimal.class, "{\"type\":\"number\"}"),
 				Map.entry(String.class, "{\"type\":\"string\"}"));
 

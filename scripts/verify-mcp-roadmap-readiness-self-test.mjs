@@ -180,7 +180,7 @@ try {
   assert.deepEqual(snapshotTree(fixture), initialSnapshot,
     'A clean roadmap verification must not mutate candidate or signature bytes/metadata.');
   assert.equal(result.negativeInventoryCount, 14);
-  assert.equal(result.deferredFeatureCount, 15);
+  assert.equal(result.deferredFeatureCount, 16);
   assert.equal(result.opennessValidatorCount, 53);
   assert.equal(result.activeTextRuleCount, 22);
 

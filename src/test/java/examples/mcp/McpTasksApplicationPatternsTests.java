@@ -86,6 +86,7 @@ public class McpTasksApplicationPatternsTests {
 	private static final Duration WAIT = Duration.ofSeconds(5);
 
 	@Test
+	@Timeout(120)
 	void applicationOwnedManagerSurvivesTheOriginalRequestBoundary()
 			throws Exception {
 		TestReportTaskRepository repository = new TestReportTaskRepository();

@@ -47,7 +47,7 @@ exactly which host/tool versions were manually exercised.
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
 | Trace logging | Default-off pseudonymous correlation and a separate raw-validated-trace-ID opt-in through bounded `MCP_TRACE_CORRELATION` log records; no trace metric dimensions |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
-| Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
+| Schema | Closed Soklet MCP Tool Schema Profile 1 with Java-derived schemas and public authored input-schema registration |
 
 `McpLocalizationContext` is a Soklet-owned final request value built through
 `withLocale(locale, localizationLookup)`, with an optional revision and a
@@ -145,13 +145,16 @@ is fixed, `McpRequestContext.getEndpointPathParameters()` and
 The built-in listener retains the 3.5.1 hardening controls on
 `McpServer.Builder`. Request-header and request-body read timeouts each default
 to 60 seconds; the request-body limit defaults to 10 MiB and may be configured
-only from 1 byte through the reviewed 16 MiB production-JSON ceiling. The
-defaults are 100 headers, 64 KiB of aggregate headers, an 8,192-byte request
-target, a 64 KiB request-read buffer, and 8,192 concurrent connections. A
-zero concurrent-connection limit disables Soklet's cap and therefore requires
-an effective external bound. `connectionQueueCapacity(...)` is the historical
-name for `streamQueueCapacity(...)`; both configure the same per-stream
-outbound queue, whose default is 128, and the most recent call wins.
+only from 1 byte through the reviewed 16 MiB production-JSON ceiling. That
+aggregate body limit does not widen the independent 1,048,576-character limit
+on any single JSON string or token; larger logical documents must be divided
+across fields or transferred out of band. The defaults are 100 headers, 64 KiB
+of aggregate headers, an 8,192-byte request target, a 64 KiB request-read
+buffer, and 8,192 concurrent connections. A zero concurrent-connection limit
+disables Soklet's cap and therefore requires an effective external bound.
+`connectionQueueCapacity(...)` is the historical name for
+`streamQueueCapacity(...)`; both configure the same per-stream outbound queue,
+whose default is 128, and the most recent call wins.
 
 JSON-RPC requires a sender not to reuse an ID while an earlier request from
 that sender is still in flight. That is a sender obligation, not a receiver-
@@ -174,9 +177,11 @@ or tool override. Each tool call is charged by exactly one limiter, resolved in
 tool, endpoint, then server-fallback order; requiring the fallback makes that
 resolution total without relying on override coverage.
 
-The listener binds to `127.0.0.1` by default. Use `host(...)` deliberately for
-a container or remote deployment, and configure the deployment's Host names
-with `allowedHosts(...)`. Soklet does not terminate TLS.
+The listener binds to `127.0.0.1` by default. A loopback literal or
+`localhost` seeds its effective authority into Host validation. A non-loopback
+`host(...)` requires at least one explicit deployment hostname or IP literal
+in `allowedHosts(...)`, or server construction fails. Soklet does not
+terminate TLS.
 
 ## Construction and builder conventions
 
@@ -265,10 +270,20 @@ For 4.0.0, `@McpTool` declarations cannot publish tool icons or the
 `readOnly`, `destructive`, `idempotent`, and `openWorld` behavioral hints.
 Those values are intentionally deferred on the annotation surface until 4.1.
 When a client needs them for presentation or approval policy, declare that
-tool with `McpToolRegistration`, which supports `icons(...)` and
+tool with `McpToolRegistration`, which supports `addIcon(...)` and
 `annotations(...)`, and add the registration to a programmatic endpoint.
 Annotations on inherited methods are not MCP operations: place each MCP
 operation annotation directly on a method declared by the endpoint class.
+
+The 4.0 annotation surface also derives schemas only from its documented Java
+shape family: it does not translate validation annotations into numeric,
+string, collection, or format constraints, and it does not derive UUID or
+`java.time` scalar formats. Invalid annotated shapes fail deterministically,
+but richer source-location diagnostics are deferred to 4.1. An annotated
+`@McpTool` cannot simultaneously publish a typed output schema and return an
+inline structured result with an explicit `isError` value; use the
+programmatic typed-output `inlineOperationHandler(...)` path when that
+combination is required. An annotation-native equivalent is deferred to 4.1.
 
 ### Programmatic registration
 
@@ -326,9 +341,10 @@ before a handler can be supplied:
 
 | Stage | Use it when |
 | --- | --- |
-| `types(argumentType, resultType)` | The tool always completes with a supported structured Java result. Soklet derives and enforces both schemas and converts in both directions. |
+| `argumentAndOutputTypes(argumentType, resultType)` | The tool always completes with a supported structured Java result. Soklet derives and enforces both schemas and converts in both directions. |
 | `argumentType(argumentType)` | Input should be converted to Java, but the advanced handler needs to return a recognized `McpOperationResult` directly. |
 | `jsonObjectArguments()` | The handler wants the immutable `McpJsonObject` directly. Soklet publishes and enforces the fixed `{"type":"object"}` input schema. |
+| `inputSchema(inputSchema)` | The handler wants the validated immutable `McpJsonObject` directly under an authored Profile 1 object-root schema, including constraints or mirrored headers that Java derivation cannot express. |
 
 Class tokens cover ordinary types; `TypeReference<T>` preserves nested generic
 types such as `List<Item>`. Advanced handlers may produce supported text,
@@ -346,6 +362,10 @@ Typed derivation accepts this closed Java shape family:
 - records, including supported generic record instantiations; and
 - `Optional<T>` only at a record-property or annotated-argument boundary.
 
+Derived `float` and `double` schemas publish finite minimum and maximum values,
+matching the binder's rejection of non-finite results. `BigDecimal` remains an
+unbounded JSON number subject to the ordinary JSON number limits.
+
 A typed tool input root must be a record, a `Map<String, T>`, or the synthetic
 object formed from annotated tool arguments. A bare typed `String` output is
 rejected because it is ambiguous with text content. Arbitrary beans,
@@ -353,12 +373,22 @@ rejected because it is ambiguous with text content. Arbitrary beans,
 variables, unsupported `CharSequence` implementations, and unsafe recursive
 record shapes fail at registration or annotation processing.
 
+Runtime schema evaluation in 4.0 deliberately exposes only the generic
+invalid-arguments result; its internal, bounded instance-free diagnostics are
+not projected into the public exception or JSON-RPC error. A reviewed
+diagnostic carrier that preserves the privacy and byte-limit contract is
+deferred to 4.1.
+
 ### Tool Schema Profile 1
 
 Soklet MCP Tool Schema Profile 1 is a closed generation and evaluation profile
 based on JSON Schema Draft 2020-12. It is not complete Draft 2020-12 support.
-Applications may inspect an `McpToolSchema`, but cannot construct, compile, or
-replace one, and Soklet never fetches a network reference.
+Applications may inspect an `McpToolSchema` and may provide an authored
+object-root input document through `inputSchema(...)`; Soklet compiles it
+synchronously, publishes the exact immutable document, and evaluates every
+invocation before the handler runs. Applications cannot construct or replace
+an `McpToolSchema` directly or author an output schema, and Soklet never fetches
+a network reference.
 
 Profile 1 recognizes `$schema`, `$defs`, `$anchor`, `$ref`, `$comment`,
 `properties`, `additionalProperties`, `items`, `allOf`, `anyOf`, `if`, `then`,
@@ -374,12 +404,14 @@ constraints, `multipleOf`, exclusive numeric bounds, unevaluated keywords, and
 content-schema keywords. `$ref` is limited to same-document `#` JSON Pointer
 fragments and local plain-name anchors.
 
-Production parsing and evaluation are bounded independently. Important fixed
-defaults include 4 MiB input/output JSON, JSON depth 128, 100,000 JSON or typed
-binding nodes, 4,096 compiled schema nodes, schema depth 64, 32,768 keywords,
-one million evaluation operations, and 128 active evaluation calls. These are
-resource ceilings, not recommended payload sizes. Soklet charges bounded work
-before allocation and returns sanitized validation failures.
+Production parsing and evaluation are bounded independently. The HTTP JSON
+input-byte limit follows the configured request-body limit (10 MiB by default,
+at most 16 MiB); JSON output remains capped at 4 MiB. Independent defaults
+include 1,048,576 characters per string or token, JSON depth 128, 100,000 JSON
+or typed binding nodes, 4,096 compiled schema nodes, schema depth 64, 32,768
+keywords, one million evaluation operations, and 128 active evaluation calls.
+These are resource ceilings, not recommended payload sizes. Soklet charges
+bounded work before allocation and returns sanitized validation failures.
 
 ## Prompts
 
@@ -801,9 +833,12 @@ returned origin to match. Returning a Java callback, retaining the request
 context, or publishing work before it can be recovered does not satisfy this
 contract.
 
-Store the string returned by `toPersistedString()` as opaque sensitive JSON.
-When any manager node reads the row, reconstruct the origin before building
-the authoritative task snapshot:
+Store the exact UTF-8 representation returned by `toPersistedString()`
+byte-for-byte in a non-normalizing text or binary field. Treat it as opaque,
+sensitive data: do not use a database JSON/JSONB column or another
+parse-and-render cycle that may rewrite the representation. When any manager
+node reads the row, reconstruct the origin before building the authoritative
+task snapshot:
 
 ```java
 McpTaskOrigin taskOrigin =
@@ -830,7 +865,10 @@ whitespace, member reordering, and decimal-scale normalization, and emits one
 canonical form. Do not parse and selectively rebuild the origin, depend on its
 members, or use `toString()` for persistence; `toString()` is deliberately
 redacted. Protect the stored text with the same confidentiality and integrity
-controls as the task row.
+controls as the task row. The internal durable-origin codec has separate
+headroom for the accepted request plus framework wrapper and schema state: 32
+MiB, 2,000,000 JSON nodes, and depth 256. This is not an expanded transport
+acceptance limit.
 
 The type argument on `McpTaskCreatedResult<R>` is operational. Soklet retains
 the original tool's output schema and, when a later `tasks/get` observes a
@@ -971,6 +1009,15 @@ queue closes only the affected stream with a backpressure reason. Soklet closes
 its listener registration during shutdown and never closes the
 application-owned publisher.
 
+The 256-task-ID filter limit is a validation ceiling, not a reservation of 256
+pending projection slots. One server has a fixed 128-job task-projection queue;
+a simultaneous burst across a large filter can therefore close that
+subscription with backpressure even when the filter itself is valid. Overflow
+victim selection retires only the subscriber contributing the most queued
+work, with the incoming subscriber selected on a tie. Other subscriptions and
+their queued work remain intact. Clients must continue to treat `tasks/get`
+polling as authoritative.
+
 ### Public Tasks API map
 
 | Concern | Public API |
@@ -1061,7 +1108,10 @@ HTTP 429, `Retry-After`, and MCP error `-31999` for a request; a notification
 has the HTTP status but no JSON-RPC body. The first denial wins and successful
 charges are never refunded after a later denial, failure, timeout,
 cancellation, or write failure. Refill accounting uses a private monotonic
-clock; there is no public clock or reset/test-mode seam.
+clock; there is no public clock or reset/test-mode seam. At the retained
+partition cap, each new-partition acquisition examines only a bounded rotating
+sample. It may fail closed even when a fully replenished partition exists
+outside that sample; a later acquisition continues from the advanced cursor.
 
 The built-in limiter partitions only on the key in the accepted
 `McpAdmissionIdentity`; it has no hidden client-IP or forwarded-header mode.
@@ -1083,10 +1133,13 @@ HTTP 503 with JSON-RPC `-32603`. A queued request keeps its original absolute
 deadline. If that deadline owns while the request is still queued and writable,
 Soklet removes it without application dispatch and returns the same fixed
 503/`-32603` response; a client disconnect owns without writing a response.
-Promotion first ends the queued state and follows the separately documented
-active-request deadline behavior. These transitions produce one queue-depth
-removal and one observable request outcome even when a reserved deadline
-response becomes unwritable before transport handoff.
+Promotion first ends the queued state. If the absolute deadline then owns an
+active request, Soklet returns HTTP 504 with a correlated JSON-RPC `-32603`
+error; if an SSE response stream is already open, that error is its terminal
+frame. Only an unwritable terminal falls back to stream failure. These
+transitions produce one queue-depth removal and one observable request outcome
+even when a reserved deadline response becomes unwritable before transport
+handoff.
 
 An absolute request timeout, disconnect, forced shutdown after the graceful
 budget, or response-stream backpressure failure cancels the invocation's
@@ -1285,8 +1338,9 @@ subscribers. Because a subscription is intentionally indefinite, graceful HTTP
 server shutdown completes it promptly with only the tagged empty terminal
 `complete` result when writable. This differs from finite request-scoped
 progress SSE, which retains its response path through the graceful-drain
-budget. Soklet never emits the stdio-only server `notifications/cancelled`
-message on HTTP.
+budget. The HTTP subscription graceful-closure contract is that terminal
+`subscriptions/listen` result; server-sent `notifications/cancelled` is the
+stdio counterpart, so Soklet does not additionally emit it on HTTP.
 
 ## Off-network simulation
 
@@ -1447,6 +1501,8 @@ Implemented framework mappings are stable:
 | Rate-limit denial | 429 | `-31999` |
 | Strict unknown mirrored header | 400 | `-31998` |
 | Handler capacity exhausted | 503 | `-32603` |
+| Queued request deadline | 503 | `-32603` |
+| Active request deadline | 504 | `-32603` |
 | Standard or custom header mismatch | 400 | `-32020` |
 | Unsupported protocol version | 400 | `-32022` |
 | Missing required capability | 400 | `-32021` |
@@ -1463,9 +1519,11 @@ reserved codes, and framework failures omit unsafe application diagnostics.
 ## Host, Origin, and CORS
 
 Host validation is independent of CORS and runs before protocol parsing or
-application side effects. The listener's effective authority is accepted;
-`McpServer.Builder.allowedHosts(...)` adds deployment-specific hostnames or IP
-literals.
+application side effects. A loopback bind literal or `localhost` seeds the
+listener's effective authority. Every non-loopback bind requires at least one
+explicit `McpServer.Builder.allowedHosts(...)` hostname or IP literal, or
+server construction fails; Soklet does not implicitly accept the bind
+authority in that case.
 
 An absent `Origin` is allowed by default and may instead be required with
 `McpAbsentOriginPolicy.REQUIRE_ORIGIN`. A present Origin is rejected unless
@@ -1510,6 +1568,11 @@ corresponding `McpMetricsEvent.RequestStarted` and
 `McpMetricsEvent.RequestFinished` events for framework and application
 operations. Callback failures are logged and contained, and user callbacks do
 not run under MCP runtime or dispatcher locks.
+
+The 4.0 release pairing is `com.soklet:soklet:4.0.0` with
+`com.soklet:soklet-otel:2.0.0`. Versioned snapshot coordinates in the Phase 6
+checkpoint narrative below record the exact artifacts used at those historical
+checkpoints; they are provenance, not current dependency guidance.
 
 ### Tasks observability boundary
 

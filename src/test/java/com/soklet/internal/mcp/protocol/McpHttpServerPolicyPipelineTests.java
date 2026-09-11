@@ -168,6 +168,44 @@ public class McpHttpServerPolicyPipelineTests {
 	}
 
 	@Test
+	public void tightenedInboundHeaderLimitsDoNotConstrainAdmissionRejectionHeaders()
+			throws Exception {
+		Map<String, List<String>> rejectionHeaders = new LinkedHashMap<>();
+		String headerValue = "x".repeat(80);
+		for (int index = 0; index < 9; index++)
+			rejectionHeaders.put("X-Policy-" + index, List.of(headerValue));
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				ignored -> McpAdmissionDecision.rejected(
+						new McpAdmissionRejection(401,
+								new McpJsonRpcError(1_001,
+										"Authentication required", Optional.empty()),
+								rejectionHeaders)));
+		McpHttpServerRuntime runtime = runtime(policy,
+				invocation -> result("unreachable"),
+				McpApplicationExecutionConfiguration.productionDefaults(),
+				transportWithInboundHeaderLimits(8, 512));
+
+		try {
+			int port = runtime.start().getPort();
+			FixedResponse response = sendFixed(port, "\"blocked\"",
+					APPLICATION_METHOD);
+			Assertions.assertEquals(401, response.head().status(),
+					response.head().raw());
+			Assertions.assertEquals(headerValue,
+					response.head().singleHeader("X-Policy-8"));
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"blocked\","
+							+ "\"error\":{\"code\":1001,"
+							+ "\"message\":\"Authentication required\"}}",
+					response.body());
+			awaitClean(runtime);
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void request_limiter_denial_has_the_provisional_exact_wire_shape()
 			throws Exception {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
@@ -472,6 +510,14 @@ public class McpHttpServerPolicyPipelineTests {
 	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy,
 			McpApplicationRequestHandler handler,
 			McpApplicationExecutionConfiguration executionConfiguration) {
+		return runtime(policy, handler, executionConfiguration,
+				McpHttpTransportConfiguration.productionDefaults(0));
+	}
+
+	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy,
+			McpApplicationRequestHandler handler,
+			McpApplicationExecutionConfiguration executionConfiguration,
+			McpHttpTransportConfiguration transportConfiguration) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"policy-pipeline-test", "4.0.0"))
@@ -480,9 +526,28 @@ public class McpHttpServerPolicyPipelineTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));
 		return new McpHttpServerRuntime(
-				McpHttpTransportConfiguration.productionDefaults(0),
+				transportConfiguration,
 				policy, endpoint, router, executionConfiguration,
 				McpApplicationClock.SYSTEM);
+	}
+
+	private static McpHttpTransportConfiguration transportWithInboundHeaderLimits(
+			int maximumHeaderCount, int maximumHeaderBytes) {
+		McpHttpTransportConfiguration defaults =
+				McpHttpTransportConfiguration.productionDefaults(0);
+		return new McpHttpTransportConfiguration(defaults.host(), defaults.port(),
+				defaults.selectorResolution(), defaults.requestHeaderTimeout(),
+				defaults.requestBodyTimeout(), defaults.responseWriteIdleTimeout(),
+				defaults.keepAliveInterval(), defaults.shutdownTimeout(),
+				defaults.readBufferSize(), defaults.acceptBacklog(),
+				defaults.maximumAggregateRequestBytes(),
+				defaults.maximumRequestBodyBytes(), maximumHeaderCount,
+				maximumHeaderBytes, defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(),
+				defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity(),
+				defaults.streamQueueCapacity());
 	}
 
 	private static FixedResponse sendFixed(int port, String idJson, String method)

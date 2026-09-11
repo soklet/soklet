@@ -69,9 +69,9 @@ verification instead uses the explicit checksum-locked main JAR. Its runtime
 classpath contains only fixture classes plus the selected JAR, never
 `target/classes` or `target/test-classes`. Normal configuration and handlers
 use public APIs.
-One audited same-package, package-private seam registers and enforces the exact
-official JSON Schema fixture because Soklet intentionally has no public
-hand-authored-schema API. The fixture imports no `com.soklet.internal` type.
+The public `McpToolRegistration.ArgumentTypeStage.inputSchema(...)` path
+registers and enforces the exact official Profile 1 schema. The fixture imports
+no `com.soklet.internal` type.
 The same candidate-JAR-only build also compiles and runs the published
 `com.soklet.conformance.transport` reference fixture. It exercises independent
 HTTP/SSE engines, transparent decorators, termination-owning decorators, and

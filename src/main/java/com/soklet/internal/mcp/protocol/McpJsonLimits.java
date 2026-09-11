@@ -24,9 +24,12 @@ import javax.annotation.concurrent.ThreadSafe;
  * Explicit resource bounds for the internal JSON codec.
  *
  * <p>The package-private production and maximum-supported profiles are fixed
- * from pinned-corpus, adversarial-boundary, and cross-JDK evidence. Public
- * callers may construct a stricter profile, but cannot raise a field beyond
- * the implementation's reviewed hard ceiling.</p>
+ * from pinned-corpus, adversarial-boundary, and cross-JDK evidence. The
+ * maximum-supported profile is the public transport ceiling. A separate,
+ * package-private durable-task-origin profile provides deterministic headroom
+ * for a maximum public request plus framework-retained schema and wrapper
+ * state. Public callers may construct a stricter profile, but cannot raise a
+ * field beyond the implementation's reviewed internal hard ceiling.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -57,6 +60,10 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 	private static final int MAXIMUM_SUPPORTED_NODE_COUNT = 1_000_000;
 	private static final int MAXIMUM_SUPPORTED_OUTPUT_BYTES = 16 * 1_024 * 1_024;
 
+	private static final int DURABLE_TASK_ORIGIN_MAXIMUM_BYTES =
+			32 * 1_024 * 1_024;
+	private static final int DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT = 2_000_000;
+
 	public McpJsonLimits {
 		requirePositive(maximumInputBytes, "maximumInputBytes");
 		requirePositive(maximumNestingDepth, "maximumNestingDepth");
@@ -70,7 +77,7 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 		requirePositive(maximumNodeCount, "maximumNodeCount");
 		requirePositive(maximumOutputBytes, "maximumOutputBytes");
 
-		requireAtMost(maximumInputBytes, MAXIMUM_SUPPORTED_INPUT_BYTES,
+		requireAtMost(maximumInputBytes, DURABLE_TASK_ORIGIN_MAXIMUM_BYTES,
 				"maximumInputBytes");
 		requireAtMost(maximumNestingDepth, MAXIMUM_SUPPORTED_NESTING_DEPTH,
 				"maximumNestingDepth");
@@ -86,9 +93,10 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 		requireAtMost(maximumExponentMagnitude,
 				MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE,
 				"maximumExponentMagnitude");
-		requireAtMost(maximumNodeCount, MAXIMUM_SUPPORTED_NODE_COUNT,
+		requireAtMost(maximumNodeCount,
+				DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT,
 				"maximumNodeCount");
-		requireAtMost(maximumOutputBytes, MAXIMUM_SUPPORTED_OUTPUT_BYTES,
+		requireAtMost(maximumOutputBytes, DURABLE_TASK_ORIGIN_MAXIMUM_BYTES,
 				"maximumOutputBytes");
 	}
 
@@ -108,6 +116,12 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				DEFAULT_MAXIMUM_NODE_COUNT, DEFAULT_MAXIMUM_OUTPUT_BYTES);
 	}
 
+	/**
+	 * Returns the reviewed ceiling for public transport JSON. Internal wrapper
+	 * state must use its dedicated profile rather than widening this contract.
+	 *
+	 * @return transport-supported limit profile
+	 */
 	@NonNull
 	static McpJsonLimits maximumSupported() {
 		return new McpJsonLimits(MAXIMUM_SUPPORTED_INPUT_BYTES,
@@ -117,6 +131,46 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				MAXIMUM_SUPPORTED_NUMBER_LENGTH_IN_CHARACTERS,
 				MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE,
 				MAXIMUM_SUPPORTED_NODE_COUNT, MAXIMUM_SUPPORTED_OUTPUT_BYTES);
+	}
+
+	/**
+	 * Returns the internal profile used to validate arguments recovered from a
+	 * durable task origin. A transport may raise only its aggregate input-byte
+	 * allowance; all structural and scalar limits remain the production
+	 * defaults. The durable output allowance accommodates canonical rendering,
+	 * whose byte length need not equal the admitted wire representation.
+	 *
+	 * @return restored task-argument limit profile
+	 */
+	@NonNull
+	static McpJsonLimits durableTaskArguments() {
+		return new McpJsonLimits(MAXIMUM_SUPPORTED_INPUT_BYTES,
+				DEFAULT_MAXIMUM_NESTING_DEPTH,
+				DEFAULT_MAXIMUM_TOKEN_LENGTH_IN_CHARACTERS,
+				DEFAULT_MAXIMUM_STRING_LENGTH_IN_CHARACTERS,
+				DEFAULT_MAXIMUM_NUMBER_LENGTH_IN_CHARACTERS,
+				DEFAULT_MAXIMUM_EXPONENT_MAGNITUDE,
+				DEFAULT_MAXIMUM_NODE_COUNT,
+				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES);
+	}
+
+	/**
+	 * Returns the internal durable-origin profile. This is not a transport
+	 * acceptance profile: it exists only to hold an accepted public request plus
+	 * framework-retained task state without introducing a narrower hidden bound.
+	 *
+	 * @return durable-task-origin limit profile
+	 */
+	@NonNull
+	static McpJsonLimits durableTaskOrigin() {
+		return new McpJsonLimits(DURABLE_TASK_ORIGIN_MAXIMUM_BYTES,
+				MAXIMUM_SUPPORTED_NESTING_DEPTH,
+				MAXIMUM_SUPPORTED_TOKEN_LENGTH_IN_CHARACTERS,
+				MAXIMUM_SUPPORTED_STRING_LENGTH_IN_CHARACTERS,
+				MAXIMUM_SUPPORTED_NUMBER_LENGTH_IN_CHARACTERS,
+				MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE,
+				DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT,
+				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES);
 	}
 
 	private static void requirePositive(int value, @NonNull String name) {

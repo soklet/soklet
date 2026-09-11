@@ -31,7 +31,6 @@ import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
 import com.soklet.exception.IllegalPathParameterException;
 import com.soklet.exception.IllegalQueryParameterException;
-import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestCookieException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.exception.MissingFormParameterException;
@@ -265,12 +264,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				Object requestBodyObject;
 				Type requestBodyType = parameterType.getNormalizedType();
 
-				try {
-					Optional<Object> marshaledRequestBody = getSokletConfig().getRequestBodyMarshaler().marshalRequestBody(request, resourceMethod, parameter, requestBodyType);
-					requestBodyObject = marshaledRequestBody == null ? null : marshaledRequestBody.orElse(null);
-				} catch (IllegalRequestBodyException e) {
-					throw e;
-				}
+				Optional<Object> marshaledRequestBody = getSokletConfig()
+						.getRequestBodyMarshaler().marshalRequestBody(request,
+								resourceMethod, parameter, requestBodyType);
+				requestBodyObject = marshaledRequestBody == null
+						? null : marshaledRequestBody.orElse(null);
 
 				if (parameterType.isWrappedInOptional())
 					return Optional.ofNullable(requestBodyObject);

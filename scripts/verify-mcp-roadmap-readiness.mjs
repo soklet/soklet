@@ -111,7 +111,7 @@ const EXPECTED_NI_IDS = Object.freeze(
   Array.from({ length: 14 }, (_, index) =>
     `NI-${String(index + 1).padStart(2, '0')}`));
 const EXPECTED_DF_IDS = Object.freeze(
-  Array.from({ length: 15 }, (_, index) =>
+  Array.from({ length: 16 }, (_, index) =>
     `DF-${String(index + 1).padStart(2, '0')}`));
 const SCAN_ROOTS = Object.freeze([
   'src/main/java/com/soklet/internal/mcp/**/*.java',

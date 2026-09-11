@@ -36,13 +36,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable programmatic registration for one MCP tool.
  *
- * <p>Registration is staged: choose a name, choose typed or raw-JSON
- * arguments, provide a handler, configure optional metadata, and explicitly
- * call {@code build()}. Typed schemas and intrinsic binding plans compile
- * synchronously while the type tokens are still in hand. A typed-output stage
- * can select an always-complete handler, an inline advanced handler, or a
- * statically task-required operation handler while retaining the same output
- * contract.
+ * <p>Registration is staged: choose a name, choose typed, fixed raw-JSON, or
+ * authored-schema raw-JSON arguments, provide a handler, configure optional
+ * metadata, and explicitly call {@code build()}. Typed and authored schemas
+ * and their binding plans compile synchronously while the required inputs are
+ * still in hand. A typed-output stage can select an always-complete handler,
+ * an inline advanced handler, or a statically task-required operation handler
+ * while retaining the same output contract.
  *
  * @param <A> bound argument type
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -102,7 +102,8 @@ public final class McpToolRegistration<A> {
 	/**
 	 * Begins a staged registration for a named tool.
 	 *
-	 * <p>The next stage selects typed or raw-JSON arguments. Supplying both
+	 * <p>The next stage selects typed, fixed raw-JSON, or authored-schema
+	 * raw-JSON arguments. Supplying both
 	 * argument and output types selects a typed-output path whose next stage
 	 * chooses inline completion or a statically task-required operation;
 	 * supplying only an argument type selects the untyped advanced
@@ -493,19 +494,26 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
-		 * Selects a package-private authored Profile 1 input schema for Soklet's
-		 * official conformance fixture.
+		 * Selects raw JSON-object arguments governed by an authored Soklet MCP
+		 * Tool Schema Profile 1 input schema.
 		 *
-		 * <p>This deliberately inaccessible seam runs the production compiler,
-		 * tool-input use validation, mirrored-header derivation, and bounded
-		 * invocation-time evaluation without creating a public hand-authored
-		 * schema API.
+		 * <p>The schema is compiled and validated synchronously. The exact
+		 * immutable document is published for the tool, and every invocation is
+		 * evaluated against the compiled schema before the handler receives its
+		 * validated {@link McpJsonObject}. This path supports Profile 1 schema
+		 * features that cannot be expressed by Soklet's Java-type derivation,
+		 * including authored constraints and {@code x-mcp-header} declarations.
+		 * Soklet never resolves network references.
 		 *
-		 * @param inputSchema authored conformance-fixture input schema
+		 * @param inputSchema authored Profile 1 input schema
 		 * @return advanced handler-selection stage
+		 * @throws NullPointerException if {@code inputSchema} is {@code null}
+		 * @throws IllegalArgumentException if the document exceeds a production
+		 * limit, is outside Profile 1, is not a direct object-root tool input, or
+		 * has an invalid mirrored-header declaration
 		 */
 		@NonNull
-		OperationHandlerStage<McpJsonObject> conformanceInputSchema(
+		public OperationHandlerStage<@NonNull McpJsonObject> inputSchema(
 				@NonNull McpJsonObject inputSchema) {
 			McpRuntimeToolInputSchemaBridge bridge =
 					McpRuntimeToolInputSchemaBridge.compileToolInput(

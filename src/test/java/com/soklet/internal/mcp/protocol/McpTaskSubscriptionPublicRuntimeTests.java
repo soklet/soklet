@@ -915,6 +915,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void sharedTaskPublisherRegistersOncePerServerGeneration()
 			throws Exception {
 		RecordingTaskEventPublisher publisher =

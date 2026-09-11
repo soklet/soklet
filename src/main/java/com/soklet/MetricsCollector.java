@@ -533,7 +533,14 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Resets any in-memory metrics state, if supported.
+	 * Resets cumulative in-memory metrics for a new observation window, if
+	 * supported.
+	 * <p>
+	 * Implementations that track live work must preserve current gauge values
+	 * and any request or connection identity state needed to match later
+	 * lifecycle callbacks. A reset must not cause a matching terminal callback
+	 * to underflow a live gauge. The default collector follows this contract;
+	 * this default implementation is a no-op.
 	 */
 	default void reset() {
 		// No-op by default
@@ -1066,9 +1073,14 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns HTTP time-to-first-byte histograms keyed by server route and status class.
+		 * Returns HTTP time-to-first-byte approximation histograms keyed by server
+		 * route and status class.
+		 * <p>
+		 * The default collector measures from handler start until Soklet begins the
+		 * response-write path. It does not measure the instant at which the first byte
+		 * reaches the network.
 		 *
-		 * @return HTTP time-to-first-byte histograms
+		 * @return HTTP response-write-start latency histograms
 		 */
 		@NonNull
 		public Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
@@ -1533,7 +1545,10 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Replaces all previously configured HTTP time-to-first-byte histograms keyed by server route and status class.
+			 * Replaces all previously configured HTTP time-to-first-byte approximation
+			 * histograms keyed by server route and status class. The default collector
+			 * measures from handler start until Soklet begins the response-write path,
+			 * not until the first byte reaches the network.
 			 * <p>
 			 * Passing {@code null} or an empty map clears these histograms; the default is an empty map.
 			 *

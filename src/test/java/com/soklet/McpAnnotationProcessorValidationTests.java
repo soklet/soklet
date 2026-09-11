@@ -91,7 +91,9 @@ public class McpAnnotationProcessorValidationTests {
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
 				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
-				public final class InheritedEndpoint extends BaseOperations {}
+				public final class InheritedEndpoint extends BaseOperations {
+				  @Override public BaseOperations.Result tool() { return null; }
+				}
 				""", StandardCharsets.UTF_8);
 
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -141,6 +143,10 @@ public class McpAnnotationProcessorValidationTests {
 							diagnostic.getSource().toUri())
 							&& diagnostic.getLineNumber() > 0),
 					operation + ": " + inherited);
+		Assertions.assertTrue(inherited.stream().anyMatch(diagnostic ->
+				diagnostic.getMessage(Locale.ROOT).contains(
+						"method example.InheritedEndpoint.tool without redeclaring @McpTool")),
+				inherited.toString());
 	}
 
 	@Test

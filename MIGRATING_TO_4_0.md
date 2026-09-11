@@ -233,6 +233,13 @@ headers, an 8,192-byte request target, a 64 KiB read buffer, and 8,192 concurren
 connections. Setting the connection limit to zero disables Soklet's cap and
 requires an effective deployment-layer bound.
 
+A loopback bind literal or `localhost` seeds the listener's effective Host
+authority. A non-loopback `host(...)` now requires at least one explicit
+deployment hostname or IP literal in `allowedHosts(...)`, or server
+construction fails. Existing container or remote-listener configurations must
+add that allowlist during migration; the non-loopback bind address itself is
+not implicitly accepted.
+
 If migrating from an earlier 4.0 snapshot, update lifecycle result and exception
 names as a hard cutover:
 
@@ -432,10 +439,14 @@ are:
   admission authenticates and authorizes. The header alone is untrusted. The
   retained request/admission endpoint-path-parameter maps are always empty in
   4.0.0. This is separate from resource URI templates, which remain supported.
-- Use Java-first typed schemas. Soklet derives the closed Tool Schema Profile 1
-  schema from supported records, maps, lists, arrays, scalars, enums, and
-  bounded optional properties. Applications cannot install a hand-authored
-  schema, and Profile 1 is not universal JSON Schema Draft 2020-12 support.
+- Prefer Java-first typed schemas. Soklet derives the closed Tool Schema
+  Profile 1 schema from supported records, maps, lists, arrays, scalars,
+  enums, and bounded optional properties. When Java derivation cannot express
+  the required input constraints, use
+  `McpToolRegistration.ArgumentTypeStage.inputSchema(...)` with a direct
+  object-root authored Profile 1 document and a raw `McpJsonObject` handler.
+  Profile 1 remains a bounded closed subset, not universal JSON Schema Draft
+  2020-12 support, and authored output schemas are not supported.
 - Replace old handler/context pairs with the operation-specific current
   contexts and registrations. Interceptors receive an explicit
   `McpRequestContext`, `McpInvocationFeatures`, and
@@ -505,6 +516,14 @@ input-bearing conversion failure as a cause. If application code parsed
 `Request.toString()`, exception messages, or cause chains, replace that with
 typed `Request` and structured exception accessors and apply application-owned
 redaction before logging.
+
+Custom `RequestBodyMarshaler` implementations now distinguish expected client
+parse failures from unexpected implementation failures. Catch the JSON/parser
+library's malformed-input exception and throw `IllegalRequestBodyException`
+with a bounded, non-input-bearing message to produce HTTP 400. Other runtime
+failures propagate as server faults, are logged through the configured logger,
+and produce HTTP 500; Soklet no longer converts every arbitrary marshaler
+failure into a client error.
 
 ## Final verification checklist
 

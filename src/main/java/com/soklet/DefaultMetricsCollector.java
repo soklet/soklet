@@ -784,7 +784,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				state.getRouteType(), state.getRoute(), termination.getReason());
 
 		histogramFor(this.sseStreamDurationByRouteAndReason, key, SSE_STREAM_DURATION_BUCKETS_NANOS)
-				.record(nonNegativeNanos(termination.getDuration()));
+				.record(elapsedNanosSince(state.getEstablishedAtNanos()));
 	}
 
 	@Override
@@ -1061,7 +1061,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 		appendHistogram(sb, "soklet_http_handler_duration_nanos", "HTTP handler duration in nanoseconds",
 				snapshot.getHttpHandlerDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
-		appendHistogram(sb, "soklet_http_ttfb_nanos", "HTTP time to first byte in nanoseconds",
+		appendHistogram(sb, "soklet_http_ttfb_nanos",
+				"HTTP handler-start to response-write-start duration in nanoseconds",
 				snapshot.getHttpTimeToFirstByte(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 		appendHistogram(sb, "soklet_http_request_body_bytes", "HTTP request body size in bytes",
 				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey, options);
@@ -1500,17 +1501,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	private static boolean decrementIfPositive(@NonNull AtomicLong value) {
 		requireNonNull(value);
-		long current;
-		do {
-			current = value.get();
+		while (true) {
+			long current = value.get();
 			if (current <= 0L) {
-				if (current < 0L && !value.compareAndSet(current, 0L))
-					continue;
-				return false;
+				if (current == 0L || value.compareAndSet(current, 0L))
+					return false;
+				continue;
 			}
-		} while (!value.compareAndSet(current, current - 1L));
-
-		return true;
+			if (value.compareAndSet(current, current - 1L))
+				return true;
+		}
 	}
 
 	@NonNull

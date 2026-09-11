@@ -1041,9 +1041,22 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void literal_loopback_bind_spellings_do_not_require_allowed_hosts() {
+		for (String host : List.of(
+				"0:0:0:0:0:0:0:1", "[0:0:0:0:0:0:0:1]", "::0.0.0.1",
+				"127.1", "127.0.1", "2130706433")) {
+			McpHttpServerRuntime runtime = Assertions.assertDoesNotThrow(
+					() -> runtime(configurationWithHost(0, host), defaultPolicy()),
+					host);
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void nonloopback_and_wildcard_binds_require_explicit_allowed_hosts() {
 		for (String host : List.of(
-				"0.0.0.0", "::", "192.0.2.1", "example.test")) {
+				"0.0.0.0", "::", "0:0:0:0:0:0:0:2", "128.1",
+				"192.0.2.1", "example.test")) {
 			IllegalArgumentException exception = Assertions.assertThrows(
 					IllegalArgumentException.class,
 					() -> runtime(configurationWithHost(0, host), defaultPolicy()),
@@ -1388,7 +1401,7 @@ public class McpHttpServerRuntimeTests {
 
 			byte[] oneOver = Arrays.copyOf(valid, valid.length + 1);
 			oneOver[oneOver.length - 1] = ' ';
-			Assertions.assertEquals(413, send(port, "POST", "/mcp",
+			Assertions.assertEquals(413, sendEarlyLimitResponse(port, "POST", "/mcp",
 					standardHeaders(port, DISCOVER_METHOD), oneOver).status());
 		} finally {
 			runtime.close();
@@ -1833,11 +1846,11 @@ public class McpHttpServerRuntimeTests {
 				while ((read = input.read(buffer)) >= 0)
 					response.write(buffer, 0, read);
 			} catch (SocketException exception) {
-				// A peer that rejects headers before consuming the already-sent body
-				// may close with TCP RST on some kernels. Only the two early-limit
-				// probes accept that close, and only after response bytes arrived;
-				// parsing plus the caller's zero-length assertion still require a
-				// complete 431 response.
+				// A peer that rejects declared request bounds before consuming the
+				// already-sent body may close with TCP RST on some kernels. Only the
+				// explicit early-limit probes accept that close, and only after response
+				// bytes arrived; parsing plus the caller's zero-length assertion still
+				// require a complete rejection response.
 				if (!allowResetAfterResponse || response.size() == 0)
 					throw exception;
 			}

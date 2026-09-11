@@ -92,6 +92,27 @@ class McpRuntimeTypedSchemaBridgeTests {
 	}
 
 	@Test
+	void floatingPointSchemasAcceptTheirOwnFiniteBoundaryEncoding() {
+		McpRuntimeTypedSchemaBridge<Float> floatBridge =
+				McpRuntimeTypedSchemaBridge.compileToolOutput(Float.class);
+		McpJsonNumber encodedMaximum = assertInstanceOf(McpJsonNumber.class,
+				floatBridge.encode(Float.MAX_VALUE));
+
+		assertEquals(new BigDecimal(Float.toString(Float.MAX_VALUE)),
+				encodedMaximum.getValue());
+		assertTrue(floatBridge.isValid(encodedMaximum));
+		assertEquals(Float.MAX_VALUE, floatBridge.decode(encodedMaximum));
+
+		McpRuntimeTypedSchemaBridge<Double> doubleBridge =
+				McpRuntimeTypedSchemaBridge.compileToolOutput(Double.class);
+		McpJsonNumber encodedDoubleMaximum = assertInstanceOf(McpJsonNumber.class,
+				doubleBridge.encode(Double.MAX_VALUE));
+		assertTrue(doubleBridge.isValid(encodedDoubleMaximum));
+		assertEquals(Double.MAX_VALUE,
+				doubleBridge.decode(encodedDoubleMaximum));
+	}
+
+	@Test
 	void invalidPublicJsonFailsValidationAndDecode() {
 		McpRuntimeTypedSchemaBridge<Arguments> bridge =
 				McpRuntimeTypedSchemaBridge.compileToolInput(Arguments.class);

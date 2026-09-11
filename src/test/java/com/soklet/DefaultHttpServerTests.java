@@ -6,6 +6,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -70,6 +71,7 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void requestControlledTransportFailuresAreRedactedFromHttpLogs()
 			throws Exception {
 		String methodSecret = "method-secret-7a912fe4";

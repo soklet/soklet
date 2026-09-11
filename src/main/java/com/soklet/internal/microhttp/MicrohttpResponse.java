@@ -278,11 +278,44 @@ public final class MicrohttpResponse {
 
     private static void appendHeaders(HeadWriter writer, List<Header> headers) {
         for (Header header : headers) {
+            validateHeaderForSerialization(header);
             writeHeaderName(writer, header.name());
             writer.write(COLON_SPACE);
             writer.writeLatin1(header.value());
             writer.write(CRLF);
         }
+    }
+
+    private static void validateHeaderForSerialization(Header header) {
+        requireNonNull(header);
+        String name = requireNonNull(header.name());
+        String value = requireNonNull(header.value());
+
+        if (name.isEmpty())
+            throw new IllegalArgumentException("Response header name must not be empty.");
+        for (int index = 0; index < name.length(); index++) {
+            if (!isHeaderNameCharacter(name.charAt(index)))
+                throw new IllegalArgumentException(
+                    "Response header name contains an illegal character.");
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (Character.isISOControl(character) && character != '\t')
+                throw new IllegalArgumentException(
+                    "Response header value contains an illegal control character.");
+        }
+    }
+
+    private static boolean isHeaderNameCharacter(char character) {
+        if ((character >= 'A' && character <= 'Z')
+            || (character >= 'a' && character <= 'z')
+            || (character >= '0' && character <= '9'))
+            return true;
+
+        return switch (character) {
+            case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' -> true;
+            default -> false;
+        };
     }
 
     private static void writeHeaderName(HeadWriter writer, String name) {

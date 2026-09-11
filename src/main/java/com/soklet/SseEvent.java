@@ -110,6 +110,11 @@ public final class SseEvent {
 		this.retry = builder.retry;
 
 		// Ensure legal construction
+		if (this.id == null && this.event == null && this.data == null
+				&& this.retry == null)
+			throw new IllegalArgumentException(format(
+					"%s must specify at least one of 'id', 'event', 'data', or 'retry'.",
+					SseEvent.class.getSimpleName()));
 
 		if (this.retry != null && this.retry.isNegative())
 			throw new IllegalArgumentException(format("%s 'retry' values must be non-negative. You supplied '%s'",
