@@ -275,6 +275,42 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called when a server exposes a parser rejection that occurred before a
+	 * valid {@link Request} could be constructed.
+	 * <p>
+	 * Captured bytes are untrusted and may contain credentials or other sensitive
+	 * values. Implementations should apply appropriate redaction and retention
+	 * policies before logging or storing them.
+	 * <p>
+	 * The built-in standard HTTP transport uses this callback for malformed
+	 * requests, overlong request targets, unsupported expectations, and oversized
+	 * request headers. Other failures before request construction, such as a
+	 * partial-request read timeout or an aggregate-size violation before the request
+	 * line can be trusted, may close the connection without this callback.
+	 * <p>
+	 * The transport invokes this callback at most once for a rejected request whose
+	 * detail task is accepted. It dispatches the callback to the configured
+	 * request-handler executor and never invokes it inline on the selector thread.
+	 * The framework-managed default executor has bounded
+	 * concurrency and queue capacity; a custom executor controls its own capacity.
+	 * If timeout budget remains afterward, the transport invokes
+	 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}. The callback
+	 * should perform bounded work and must not block. The request-handler timeout
+	 * bounds how long the transport waits; cancellation interrupts the worker but
+	 * is cooperative if application code ignores interruption. If application
+	 * capacity is unavailable, both callbacks may be skipped and the transport
+	 * writes its built-in bodyless response instead. Exceptions are contained and
+	 * reported as
+	 * {@link LogEventType#LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED};
+	 * they do not alter the rejection response.
+	 *
+	 * @param request immutable snapshot of the rejected unparsed request
+	 */
+	default void didRejectUnparsedRequest(@NonNull UnparsedRequest request) {
+		// No-op by default
+	}
+
+	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 *
 	 * @param serverType the server type that received the request

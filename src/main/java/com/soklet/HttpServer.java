@@ -177,6 +177,8 @@ public interface HttpServer {
 		@Nullable
 		Integer maximumRequestSizeInBytes;
 		@Nullable
+		Integer maximumRequestBodySizeInBytes;
+		@Nullable
 		Integer maximumHeaderCount;
 		@Nullable
 		Integer maximumHeadersSizeInBytes;
@@ -439,6 +441,30 @@ public interface HttpServer {
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted HTTP request-body size in bytes, independently
+		 * from the aggregate request-size limit.
+		 * <p>
+		 * This limit is measured on the received body payload after HTTP transfer
+		 * framing has been removed and before optional {@code Content-Encoding}
+		 * decompression. Transfer-framing bytes remain subject to the aggregate limit.
+		 * <p>
+		 * The body-only limit must not exceed the effective
+		 * {@link #maximumRequestSizeInBytes(Integer) aggregate request limit}.
+		 * Passing {@code null} makes it track that aggregate limit, whose built-in
+		 * default is 10 MiB. Setter order does not affect either configured value.
+		 *
+		 * @param maximumRequestBodySizeInBytes the maximum request-body size, or
+		 * {@code null} to track the aggregate request limit
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumRequestBodySizeInBytes(
+				@Nullable Integer maximumRequestBodySizeInBytes) {
+			this.maximumRequestBodySizeInBytes = maximumRequestBodySizeInBytes;
 			return this;
 		}
 

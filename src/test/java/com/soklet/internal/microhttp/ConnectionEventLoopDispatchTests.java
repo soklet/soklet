@@ -1,6 +1,10 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.HttpMethod;
+import com.soklet.MetricsCollector;
+import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
+import com.soklet.StreamingResponseBody;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -13,7 +17,11 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -223,6 +231,83 @@ public class ConnectionEventLoopDispatchTests {
 	@Test
 	public void callbackWriteFailureAfterCommitClosesSourceWithWriteFailed() throws Exception {
 		assertCommittedWriteFailure(true);
+	}
+
+	@Test
+	public void producerFailureAfterCommitRetainsReasonWithoutWriteFailureTelemetry()
+			throws Exception {
+		ExecutorService producerExecutor = Executors.newSingleThreadExecutor();
+		ScheduledExecutorService timeoutExecutor =
+				Executors.newSingleThreadScheduledExecutor();
+		IOException producerFailure = new IOException("Expected producer failure");
+		AtomicReference<StreamTerminationReason> terminationReason =
+				new AtomicReference<>();
+		AtomicReference<Throwable> terminationCause = new AtomicReference<>();
+		CountDownLatch terminated = new CountDownLatch(1);
+		List<MetricsCollector.TransportFailureReason> recordedFailures =
+				new CopyOnWriteArrayList<>();
+		StreamingResponseBody body = StreamingResponseBody.fromWriter(
+				(output, context) -> {
+					throw producerFailure;
+				});
+		MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(
+				200,
+				"OK",
+				List.of(),
+				Request.withPath(HttpMethod.GET, "/producer-failure").build(),
+				body,
+				producerExecutor,
+				timeoutExecutor,
+				1_024,
+				1_024,
+				null,
+				null,
+				(establishedAt, streamDuration, reason, cause) -> {
+					terminationReason.set(reason);
+					terminationCause.set(cause);
+					terminated.countDown();
+				},
+				throwable -> Assertions.fail(
+						"Unexpected cancelation callback failure", throwable));
+		Handler handler = (request, callback) -> callback.accept(response);
+		TransportFailureObserver failureObserver = reason -> {
+			AtomicBoolean discarded = new AtomicBoolean();
+			return new TransportFailureObserver.Observation() {
+				@Override
+				public void discard() {
+					discarded.set(true);
+				}
+
+				@Override
+				public void close() {
+					if (!discarded.get())
+						recordedFailures.add(reason);
+				}
+			};
+		};
+		EventLoop eventLoop = new EventLoop(testOptions(), NoopLogger.instance(),
+				handler, NoopConnectionListener.instance(), failureObserver);
+
+		try {
+			eventLoop.start();
+			sendRequestAndReadResponse(eventLoop.getPort(),
+					"GET /producer-failure HTTP/1.1\r\nHost: localhost\r\n"
+							+ "Connection: close\r\n\r\n");
+
+			Assertions.assertTrue(terminated.await(3, TimeUnit.SECONDS),
+					"Stream termination lifecycle hook was not invoked");
+			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
+					terminationReason.get());
+			Assertions.assertSame(producerFailure, terminationCause.get());
+			Assertions.assertFalse(recordedFailures.contains(
+					MetricsCollector.TransportFailureReason.WRITE_ERROR),
+					recordedFailures.toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+			producerExecutor.shutdownNow();
+			timeoutExecutor.shutdownNow();
+		}
 	}
 
 	private void assertCommittedWriteFailure(boolean deferFailureUntilCallback) throws Exception {

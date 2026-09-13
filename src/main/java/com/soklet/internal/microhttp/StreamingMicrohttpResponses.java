@@ -681,7 +681,11 @@ public final class StreamingMicrohttpResponses {
 
 				effectiveReason = this.cancelationToken.getCancelationReason().orElse(reason);
 				effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
-				this.failure = effectiveCause == null ? new StreamingResponseCanceledException(effectiveReason) : effectiveCause;
+				// Preserve the reserved stream reason even when an underlying cause is
+				// available.  The connection event loop distinguishes reasoned stream
+				// termination from a socket write failure by this exception type.
+				this.failure = new StreamingResponseCanceledException(effectiveReason,
+						effectiveCause);
 				this.producerDone = true;
 				this.lock.notifyAll();
 			}

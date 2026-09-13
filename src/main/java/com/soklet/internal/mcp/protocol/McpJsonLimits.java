@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -25,21 +26,16 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p>The production and maximum-supported profiles are fixed from
  * pinned-corpus, adversarial-boundary, and cross-JDK evidence. The
- * maximum-supported profile's input-byte bound is the 16 MiB public transport
- * ceiling, which the supported server builder and runtime bridge enforce
- * independently. The compact constructor also admits larger, package-owned
- * durable-task profiles so an accepted public request can be retained with
- * framework schema and wrapper state. Those internal allowances do not widen
- * transport acceptance; direct construction of this internal type is not a
- * supported way to configure an MCP server transport.</p>
+ * maximum-supported profile is the 16 MiB public transport ceiling. The public
+ * constructor enforces that ceiling for every field. Dedicated package-private
+ * factories create the two larger durable-task profiles needed to retain an
+ * accepted request with framework schema and wrapper state; those profiles do
+ * not widen transport acceptance.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
-		int maximumTokenLengthInCharacters, int maximumStringLengthInCharacters,
-		int maximumNumberLengthInCharacters, int maximumExponentMagnitude,
-		int maximumNodeCount, int maximumOutputBytes) {
+public final class McpJsonLimits {
 	private static final int DEFAULT_MAXIMUM_INPUT_BYTES = 4 * 1_024 * 1_024;
 	private static final int DEFAULT_MAXIMUM_NESTING_DEPTH = 128;
 	private static final int DEFAULT_MAXIMUM_TOKEN_LENGTH_IN_CHARACTERS =
@@ -66,7 +62,40 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 			32 * 1_024 * 1_024;
 	private static final int DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT = 2_000_000;
 
-	public McpJsonLimits {
+	private final int maximumInputBytes;
+	private final int maximumNestingDepth;
+	private final int maximumTokenLengthInCharacters;
+	private final int maximumStringLengthInCharacters;
+	private final int maximumNumberLengthInCharacters;
+	private final int maximumExponentMagnitude;
+	private final int maximumNodeCount;
+	private final int maximumOutputBytes;
+
+	/**
+	 * Creates a transport-safe JSON limit profile.
+	 *
+	 * @throws IllegalArgumentException if a value is invalid or exceeds the
+	 * reviewed public transport ceiling
+	 */
+	public McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
+			int maximumTokenLengthInCharacters,
+			int maximumStringLengthInCharacters,
+			int maximumNumberLengthInCharacters,
+			int maximumExponentMagnitude, int maximumNodeCount,
+			int maximumOutputBytes) {
+		this(maximumInputBytes, maximumNestingDepth,
+				maximumTokenLengthInCharacters,
+				maximumStringLengthInCharacters,
+				maximumNumberLengthInCharacters, maximumExponentMagnitude,
+				maximumNodeCount, maximumOutputBytes, false);
+	}
+
+	private McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
+			int maximumTokenLengthInCharacters,
+			int maximumStringLengthInCharacters,
+			int maximumNumberLengthInCharacters,
+			int maximumExponentMagnitude, int maximumNodeCount,
+			int maximumOutputBytes, boolean allowDurableTaskHeadroom) {
 		requirePositive(maximumInputBytes, "maximumInputBytes");
 		requirePositive(maximumNestingDepth, "maximumNestingDepth");
 		requirePositive(maximumTokenLengthInCharacters,
@@ -79,7 +108,13 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 		requirePositive(maximumNodeCount, "maximumNodeCount");
 		requirePositive(maximumOutputBytes, "maximumOutputBytes");
 
-		requireAtMost(maximumInputBytes, DURABLE_TASK_ORIGIN_MAXIMUM_BYTES,
+		int maximumBytes = allowDurableTaskHeadroom
+				? DURABLE_TASK_ORIGIN_MAXIMUM_BYTES
+				: MAXIMUM_SUPPORTED_INPUT_BYTES;
+		int maximumNodes = allowDurableTaskHeadroom
+				? DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT
+				: MAXIMUM_SUPPORTED_NODE_COUNT;
+		requireAtMost(maximumInputBytes, maximumBytes,
 				"maximumInputBytes");
 		requireAtMost(maximumNestingDepth, MAXIMUM_SUPPORTED_NESTING_DEPTH,
 				"maximumNestingDepth");
@@ -95,11 +130,105 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 		requireAtMost(maximumExponentMagnitude,
 				MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE,
 				"maximumExponentMagnitude");
-		requireAtMost(maximumNodeCount,
-				DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT,
+		requireAtMost(maximumNodeCount, maximumNodes,
 				"maximumNodeCount");
-		requireAtMost(maximumOutputBytes, DURABLE_TASK_ORIGIN_MAXIMUM_BYTES,
+		requireAtMost(maximumOutputBytes, maximumBytes,
 				"maximumOutputBytes");
+
+		this.maximumInputBytes = maximumInputBytes;
+		this.maximumNestingDepth = maximumNestingDepth;
+		this.maximumTokenLengthInCharacters =
+				maximumTokenLengthInCharacters;
+		this.maximumStringLengthInCharacters =
+				maximumStringLengthInCharacters;
+		this.maximumNumberLengthInCharacters =
+				maximumNumberLengthInCharacters;
+		this.maximumExponentMagnitude = maximumExponentMagnitude;
+		this.maximumNodeCount = maximumNodeCount;
+		this.maximumOutputBytes = maximumOutputBytes;
+	}
+
+	public int maximumInputBytes() {
+		return this.maximumInputBytes;
+	}
+
+	public int maximumNestingDepth() {
+		return this.maximumNestingDepth;
+	}
+
+	public int maximumTokenLengthInCharacters() {
+		return this.maximumTokenLengthInCharacters;
+	}
+
+	public int maximumStringLengthInCharacters() {
+		return this.maximumStringLengthInCharacters;
+	}
+
+	public int maximumNumberLengthInCharacters() {
+		return this.maximumNumberLengthInCharacters;
+	}
+
+	public int maximumExponentMagnitude() {
+		return this.maximumExponentMagnitude;
+	}
+
+	public int maximumNodeCount() {
+		return this.maximumNodeCount;
+	}
+
+	public int maximumOutputBytes() {
+		return this.maximumOutputBytes;
+	}
+
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof McpJsonLimits limits
+				&& this.maximumInputBytes == limits.maximumInputBytes
+				&& this.maximumNestingDepth == limits.maximumNestingDepth
+				&& this.maximumTokenLengthInCharacters
+						== limits.maximumTokenLengthInCharacters
+				&& this.maximumStringLengthInCharacters
+						== limits.maximumStringLengthInCharacters
+				&& this.maximumNumberLengthInCharacters
+						== limits.maximumNumberLengthInCharacters
+				&& this.maximumExponentMagnitude
+						== limits.maximumExponentMagnitude
+				&& this.maximumNodeCount == limits.maximumNodeCount
+				&& this.maximumOutputBytes == limits.maximumOutputBytes;
+	}
+
+	@Override
+	public int hashCode() {
+		int result = Integer.hashCode(this.maximumInputBytes);
+		result = 31 * result + Integer.hashCode(this.maximumNestingDepth);
+		result = 31 * result
+				+ Integer.hashCode(this.maximumTokenLengthInCharacters);
+		result = 31 * result
+				+ Integer.hashCode(this.maximumStringLengthInCharacters);
+		result = 31 * result
+				+ Integer.hashCode(this.maximumNumberLengthInCharacters);
+		result = 31 * result
+				+ Integer.hashCode(this.maximumExponentMagnitude);
+		result = 31 * result + Integer.hashCode(this.maximumNodeCount);
+		result = 31 * result + Integer.hashCode(this.maximumOutputBytes);
+		return result;
+	}
+
+	@Override
+	public String toString() {
+		return "McpJsonLimits[maximumInputBytes=" + this.maximumInputBytes
+				+ ", maximumNestingDepth=" + this.maximumNestingDepth
+				+ ", maximumTokenLengthInCharacters="
+				+ this.maximumTokenLengthInCharacters
+				+ ", maximumStringLengthInCharacters="
+				+ this.maximumStringLengthInCharacters
+				+ ", maximumNumberLengthInCharacters="
+				+ this.maximumNumberLengthInCharacters
+				+ ", maximumExponentMagnitude="
+				+ this.maximumExponentMagnitude
+				+ ", maximumNodeCount=" + this.maximumNodeCount
+				+ ", maximumOutputBytes=" + this.maximumOutputBytes + "]";
 	}
 
 	/**
@@ -153,7 +282,7 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				DEFAULT_MAXIMUM_NUMBER_LENGTH_IN_CHARACTERS,
 				DEFAULT_MAXIMUM_EXPONENT_MAGNITUDE,
 				DEFAULT_MAXIMUM_NODE_COUNT,
-				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES);
+				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES, true);
 	}
 
 	/**
@@ -172,7 +301,7 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				MAXIMUM_SUPPORTED_NUMBER_LENGTH_IN_CHARACTERS,
 				MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE,
 				DURABLE_TASK_ORIGIN_MAXIMUM_NODE_COUNT,
-				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES);
+				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES, true);
 	}
 
 	private static void requirePositive(int value, @NonNull String name) {

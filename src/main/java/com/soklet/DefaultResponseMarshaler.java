@@ -29,6 +29,7 @@ import com.soklet.ResponseMarshaler.Builder.PostProcessor;
 import com.soklet.ResponseMarshaler.Builder.ResourceMethodHandler;
 import com.soklet.ResponseMarshaler.Builder.ServiceUnavailableHandler;
 import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
+import com.soklet.ResponseMarshaler.Builder.UnparsedRequestHandler;
 import com.soklet.exception.BadRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
@@ -72,6 +73,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@NonNull
 	private final Charset charset;
 	@Nullable
+	private final UnparsedRequestHandler unparsedRequestHandler;
+	@Nullable
 	private final ResourceMethodHandler resourceMethodHandler;
 	@Nullable
 	private final NotFoundHandler notFoundHandler;
@@ -102,6 +105,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(builder);
 
 		this.charset = builder.charset;
+		this.unparsedRequestHandler = builder.unparsedRequestHandler;
 		this.resourceMethodHandler = builder.resourceMethodHandler;
 		this.notFoundHandler = builder.notFoundHandler;
 		this.methodNotAllowedHandler = builder.methodNotAllowedHandler;
@@ -115,6 +119,35 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		this.corsPreflightRejectedHandler = builder.corsPreflightRejectedHandler;
 		this.corsAllowedHandler = builder.corsAllowedHandler;
 		this.postProcessor = builder.postProcessor;
+	}
+
+	@NonNull
+	@Override
+	public MarshaledResponse forUnparsedRequest(
+			@NonNull UnparsedRequest request) {
+		requireNonNull(request);
+
+		UnparsedRequestHandler unparsedRequestHandler =
+				getUnparsedRequestHandler().orElse(null);
+		PostProcessor postProcessor = getPostProcessor().orElse(null);
+		MarshaledResponse marshaledResponse;
+
+		if (unparsedRequestHandler != null) {
+			marshaledResponse = unparsedRequestHandler.handle(request);
+		} else {
+			Integer statusCode = switch (request.getReason()) {
+				case MALFORMED_REQUEST -> StatusCode.HTTP_400.getStatusCode();
+				case REQUEST_TARGET_TOO_LONG -> StatusCode.HTTP_414.getStatusCode();
+				case EXPECTATION_FAILED -> StatusCode.HTTP_417.getStatusCode();
+				case REQUEST_HEADERS_TOO_LARGE -> StatusCode.HTTP_431.getStatusCode();
+			};
+			marshaledResponse = MarshaledResponse.fromStatusCode(statusCode);
+		}
+
+		if (postProcessor != null)
+			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+
+		return marshaledResponse;
 	}
 
 	@NonNull
@@ -595,6 +628,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@NonNull
 	protected Charset getCharset() {
 		return this.charset;
+	}
+
+	@NonNull
+	protected Optional<UnparsedRequestHandler> getUnparsedRequestHandler() {
+		return Optional.ofNullable(this.unparsedRequestHandler);
 	}
 
 	@NonNull

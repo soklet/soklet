@@ -28,6 +28,7 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
 import com.soklet.internal.microhttp.StreamingMicrohttpResponses;
+import com.soklet.internal.microhttp.UnparsedRequestRejection;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -59,6 +60,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -131,6 +133,8 @@ final class DefaultHttpServer implements HttpServer {
 	private static final Duration DEFAULT_STREAMING_RESPONSE_TIMEOUT;
 	@NonNull
 	private static final Integer DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER;
+	private static final Integer UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES;
+	private static final Integer UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -155,6 +159,8 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_STREAMING_CHUNK_SIZE_IN_BYTES = 1_024 * 16;
 		DEFAULT_STREAMING_RESPONSE_TIMEOUT = Duration.ZERO;
 		DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER = 4;
+		UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES = 64 * 1_024;
+		UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES = 64 * 1_024;
 	}
 
 	@NonNull
@@ -183,6 +189,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Duration socketSelectTimeout;
 	@NonNull
 	private final Integer maximumRequestSizeInBytes;
+	@NonNull
+	private final Integer maximumRequestBodySizeInBytes;
 	@NonNull
 	private final Integer maximumHeaderCount;
 	@NonNull
@@ -236,6 +244,8 @@ final class DefaultHttpServer implements HttpServer {
 	@Nullable
 	private volatile MetricsCollector metricsCollector;
 	@Nullable
+	private volatile ResponseMarshaler responseMarshaler;
+	@Nullable
 	private volatile EventLoop eventLoop;
 
 	DefaultHttpServer(@NonNull Builder builder) {
@@ -247,6 +257,8 @@ final class DefaultHttpServer implements HttpServer {
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+		this.maximumRequestBodySizeInBytes = builder.maximumRequestBodySizeInBytes != null
+				? builder.maximumRequestBodySizeInBytes : this.maximumRequestSizeInBytes;
 		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
 		this.maximumHeadersSizeInBytes = builder.maximumHeadersSizeInBytes != null ? builder.maximumHeadersSizeInBytes : DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
 		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
@@ -295,6 +307,12 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (this.maximumRequestSizeInBytes < 1)
 			throw new IllegalArgumentException("Maximum request size must be > 0");
+
+		if (this.maximumRequestBodySizeInBytes < 1)
+			throw new IllegalArgumentException("Maximum request body size must be > 0");
+
+		if (this.maximumRequestBodySizeInBytes > this.maximumRequestSizeInBytes)
+			throw new IllegalArgumentException("Maximum request body size must not exceed maximum request size");
 
 		if (this.maximumHeaderCount < 1)
 			throw new IllegalArgumentException("Maximum header count must be > 0");
@@ -456,7 +474,7 @@ final class DefaultHttpServer implements HttpServer {
 			try {
 				this.startSetupHook.run();
 
-			Options options = OptionsBuilder.newBuilder()
+			OptionsBuilder optionsBuilder = OptionsBuilder.newBuilder()
 					.withHost(getHost())
 					.withPort(getPort())
 					.withConcurrency(getConcurrency())
@@ -466,12 +484,17 @@ final class DefaultHttpServer implements HttpServer {
 					.withResolution(getSocketSelectTimeout())
 					.withReadBufferSize(getRequestReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
+					.withMaxRequestBodySize(getMaximumRequestBodySizeInBytes())
 					.withMaxHeaderCount(getMaximumHeaderCount())
 					.withMaxHeadersSize(getMaximumHeadersSizeInBytes())
 					.withMaxRequestTargetLength(getMaximumRequestTargetLengthInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit())
 					.withMaxConnections(getConcurrentConnectionLimit())
-					.build();
+					.withUnparsedRequestCaptureLimitInBytes(
+							UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES)
+					.withUnparsedResponseSizeLimitInBytes(
+							UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES);
+			Options options = optionsBuilder.build();
 
 			Logger logger = transportLogger();
 
@@ -798,6 +821,31 @@ final class DefaultHttpServer implements HttpServer {
 						@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 					releaseLifecycleAdmission(lifecycleAdmissions, request);
 				}
+
+				@Override
+				public boolean handleUnparsedRequest(
+						@NonNull UnparsedRequestRejection rejection,
+						@NonNull Consumer<byte[]> responseConsumer) {
+					AdmissionFence.Admission admission = getLifecycleAdapter()
+							.tryAdmit(lifecycleGeneration).orElse(null);
+					if (admission == null)
+						return false;
+					if (!getLifecycleAdapter().admissionOpen(lifecycleGeneration)) {
+						admission.close();
+						return false;
+					}
+
+					try {
+						boolean accepted = submitUnparsedRequest(rejection,
+								responseConsumer, admission);
+						if (!accepted)
+							admission.close();
+						return accepted;
+					} catch (RuntimeException | Error throwable) {
+						admission.close();
+						throw throwable;
+					}
+				}
 			};
 
 				this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
@@ -936,6 +984,312 @@ final class DefaultHttpServer implements HttpServer {
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.lifecyclePolicy = sokletConfig.getLifecyclePolicy();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
+		this.responseMarshaler = sokletConfig.getResponseMarshaler();
+	}
+
+	private boolean submitUnparsedRequest(
+			@NonNull UnparsedRequestRejection rejection,
+			@NonNull Consumer<byte[]> responseConsumer,
+			AdmissionFence.@NonNull Admission admission) {
+		requireNonNull(rejection);
+		requireNonNull(responseConsumer);
+		requireNonNull(admission);
+
+		ExecutorService executor = this.requestHandlerExecutorService;
+		TimeoutScheduler timeoutScheduler = this.requestHandlerTimeoutScheduler;
+		if (executor == null || executor.isShutdown()
+				|| timeoutScheduler == null || timeoutScheduler.isShutdown())
+			return false;
+
+		AtomicBoolean responseClaimed = new AtomicBoolean();
+		AtomicBoolean executedInline = new AtomicBoolean();
+		AtomicReference<FutureTask<Void>> applicationTaskReference =
+				new AtomicReference<>();
+		AtomicReference<TimeoutScheduler.ScheduledTask> timeoutReference =
+				new AtomicReference<>();
+		Thread submittingThread = Thread.currentThread();
+
+		try {
+			timeoutReference.set(timeoutScheduler.schedule(() -> {
+				if (!responseClaimed.compareAndSet(false, true))
+					return;
+				try {
+					responseConsumer.accept(null);
+				} finally {
+					admission.close();
+					FutureTask<Void> applicationTask =
+							applicationTaskReference.get();
+					if (applicationTask != null)
+						applicationTask.cancel(true);
+				}
+			}, getRequestHandlerTimeout()));
+
+			FutureTask<Void> applicationTask = new FutureTask<>(() -> {
+				MarshaledResponse marshaledResponse = null;
+				try {
+					if (responseClaimed.get())
+						return;
+
+					UnparsedRequest request = UnparsedRequest
+							.withServerTypeAndReason(ServerType.STANDARD_HTTP,
+									unparsedRequestReason(rejection.reason()))
+							.remoteAddress(rejection.remoteAddress())
+							.capturedBytes(rejection.capturedBytesForTransfer())
+							.observedByteCount(rejection.observedByteCount())
+							.captureTruncated(rejection.captureTruncated())
+							.build();
+
+					if (responseClaimed.get())
+						return;
+					notifyDidRejectUnparsedRequest(request);
+					if (responseClaimed.get())
+						return;
+
+					ResponseMarshaler responseMarshaler = requireNonNull(
+							this.responseMarshaler,
+							"Response marshaler is unavailable.");
+					marshaledResponse = requireNonNull(
+							responseMarshaler.forUnparsedRequest(request),
+							"Response marshaler returned null for an unparsed request.");
+					byte[] serializedResponse =
+							serializeUnparsedRequestResponse(marshaledResponse);
+
+					if (responseClaimed.compareAndSet(false, true)) {
+						cancelTimeout(timeoutReference.getAndSet(null));
+						try {
+							responseConsumer.accept(serializedResponse);
+						} finally {
+							admission.close();
+						}
+					}
+				} catch (Throwable throwable) {
+					releaseRejectedUnparsedResponseResources(marshaledResponse);
+					if (responseClaimed.compareAndSet(false, true)) {
+						cancelTimeout(timeoutReference.getAndSet(null));
+						try {
+							responseConsumer.accept(null);
+						} finally {
+							admission.close();
+						}
+						safelyLog(LogEvent.with(
+								LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED,
+								"Unable to marshal a response for an unparsed request; using the built-in response")
+								.throwable(throwable)
+								.build());
+					}
+				}
+			}, null);
+			applicationTaskReference.set(applicationTask);
+			executor.execute(() -> {
+				// A caller-runs or direct executor must not turn malformed input
+				// into application work on the selector thread. Check before
+				// entering the FutureTask so timeout cancellation can never
+				// interrupt the selector through the task's runner reference.
+				if (Thread.currentThread() == submittingThread) {
+					executedInline.set(true);
+					return;
+				}
+				applicationTask.run();
+			});
+			if (executedInline.get()) {
+				cancelTimeout(timeoutReference.getAndSet(null));
+				return false;
+			}
+			return true;
+		} catch (RejectedExecutionException exception) {
+			cancelTimeout(timeoutReference.getAndSet(null));
+			return false;
+		} catch (RuntimeException | Error throwable) {
+			try {
+				cancelTimeout(timeoutReference.getAndSet(null));
+			} catch (RuntimeException | Error cancelationFailure) {
+				throwable.addSuppressed(cancelationFailure);
+			}
+			throw throwable;
+		}
+	}
+
+	private void notifyDidRejectUnparsedRequest(
+			@NonNull UnparsedRequest request) {
+		try {
+			getLifecycleObserver().didRejectUnparsedRequest(requireNonNull(request));
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(
+						LogEventType.LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED,
+						"An exception occurred while invoking LifecycleObserver::didRejectUnparsedRequest")
+					.throwable(throwable)
+					.build());
+		}
+	}
+
+	@NonNull
+	private static UnparsedRequestReason unparsedRequestReason(
+			UnparsedRequestRejection.@NonNull Reason reason) {
+		return switch (requireNonNull(reason)) {
+			case MALFORMED_REQUEST -> UnparsedRequestReason.MALFORMED_REQUEST;
+			case REQUEST_TARGET_TOO_LONG ->
+					UnparsedRequestReason.REQUEST_TARGET_TOO_LONG;
+			case EXPECTATION_FAILED -> UnparsedRequestReason.EXPECTATION_FAILED;
+			case REQUEST_HEADERS_TOO_LARGE ->
+					UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE;
+		};
+	}
+
+	private byte @NonNull [] serializeUnparsedRequestResponse(
+			@NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(marshaledResponse);
+
+		if (marshaledResponse.getStream().isPresent())
+			throw new IllegalArgumentException(
+					"Unparsed-request responses may not stream a body.");
+
+		int statusCode = marshaledResponse.getStatusCode();
+		if (statusCode < 200 || statusCode > 599)
+			throw new IllegalArgumentException(
+					"Unparsed-request response status must be a final HTTP "
+							+ "status from 200 through 599.");
+		if (statusMustNotIncludeBody(statusCode)
+				&& marshaledResponse.getBody().isPresent())
+			throw new IllegalArgumentException(format(
+					"HTTP status %d must not include an unparsed-request response body.",
+					statusCode));
+
+		byte[] body = unparsedRequestResponseBody(marshaledResponse);
+		String reasonPhrase = reasonPhraseForStatusCode(statusCode);
+		long serializedSize = body.length
+				+ "HTTP/1.1".length() + 1L
+				+ Integer.toString(statusCode).length() + 1L
+				+ reasonPhrase.length() + 2L
+				+ serializedHeaderSize("Connection", "close") + 2L;
+		if (!statusMustNotIncludeBody(statusCode))
+			serializedSize += serializedHeaderSize("Content-Length",
+					Integer.toString(body.length));
+		ensureUnparsedResponseSize(serializedSize);
+
+		Set<String> connectionNamedHeaders = new TreeSet<>(
+				String.CASE_INSENSITIVE_ORDER);
+		Set<String> connectionValues = marshaledResponse.getHeaders()
+				.get("Connection");
+
+		if (connectionValues != null) {
+			for (String value : connectionValues) {
+				for (String token : value.split(",", -1)) {
+					String normalized = trimAggressivelyToEmpty(token);
+					if (!normalized.isEmpty())
+						connectionNamedHeaders.add(normalized);
+				}
+			}
+		}
+
+		List<Header> headers = new ArrayList<>();
+		for (Map.Entry<String, Set<String>> entry :
+				marshaledResponse.getHeaders().entrySet()) {
+			String name = entry.getKey();
+			if (unparsedResponseHeaderIsTransportOwned(name)
+					|| connectionNamedHeaders.contains(name))
+				continue;
+
+			for (String value : entry.getValue()) {
+				serializedSize += serializedHeaderSize(name, value);
+				ensureUnparsedResponseSize(serializedSize);
+				headers.add(new Header(name, value));
+			}
+		}
+
+		Set<ResponseCookie> cookies = marshaledResponse.getCookies();
+		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
+		if (!isAlreadySorted(cookies))
+			sortedCookies.sort(Comparator.comparing(ResponseCookie::getName));
+		if (!connectionNamedHeaders.contains("Set-Cookie")) {
+			for (ResponseCookie cookie : sortedCookies) {
+				String value = cookie.toSetCookieHeaderRepresentation();
+				serializedSize += serializedHeaderSize("Set-Cookie", value);
+				ensureUnparsedResponseSize(serializedSize);
+				headers.add(new Header("Set-Cookie", value));
+			}
+		}
+
+		headers.sort(Comparator.comparing(Header::name,
+				String.CASE_INSENSITIVE_ORDER)
+				.thenComparing(Header::name)
+				.thenComparing(Header::value));
+
+		MicrohttpResponse response = new MicrohttpResponse(statusCode,
+				reasonPhrase, headers, body);
+		List<Header> transportHeaders = new ArrayList<>();
+		transportHeaders.add(new Header("Connection", "close"));
+		if (!statusMustNotIncludeBody(statusCode))
+			transportHeaders.add(new Header("Content-Length",
+					Integer.toString(body.length)));
+		return response.serialize("HTTP/1.1", transportHeaders,
+				UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES);
+	}
+
+	private static long serializedHeaderSize(@NonNull String name,
+			@NonNull String value) {
+		return (long) requireNonNull(name).length() + 2L
+				+ requireNonNull(value).length() + 2L;
+	}
+
+	private static void ensureUnparsedResponseSize(long serializedSize) {
+		if (serializedSize > UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES)
+			throw new IllegalArgumentException(
+					"Serialized unparsed-request response exceeds its size limit.");
+	}
+
+	private static byte @NonNull [] unparsedRequestResponseBody(
+			@NonNull MarshaledResponse marshaledResponse) {
+		MarshaledResponseBody body = requireNonNull(marshaledResponse)
+				.getBody().orElse(null);
+
+		if (body == null)
+			return emptyByteArray();
+		if (body.getLength() > UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES)
+			throw new IllegalArgumentException(
+					"Unparsed-request response body exceeds its size limit.");
+		if (body instanceof MarshaledResponseBody.Bytes bytes)
+			return bytes.getBytes().clone();
+		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer) {
+			ByteBuffer source = byteBuffer.getBuffer();
+			byte[] bytes = new byte[source.remaining()];
+			source.get(bytes);
+			return bytes;
+		}
+
+		throw new IllegalArgumentException(format(
+				"Unsupported unparsed-request response body type: %s",
+				body.getClass().getName()));
+	}
+
+	private static boolean unparsedResponseHeaderIsTransportOwned(
+			@NonNull String name) {
+		return switch (requireNonNull(name).toLowerCase(ENGLISH)) {
+			case "connection", "content-length", "keep-alive",
+					"proxy-connection", "te", "trailer", "transfer-encoding",
+					"upgrade" -> true;
+			default -> false;
+		};
+	}
+
+	private static boolean statusMustNotIncludeBody(int statusCode) {
+		return statusCode == 204 || statusCode == 205 || statusCode == 304;
+	}
+
+	private static void releaseRejectedUnparsedResponseResources(
+			@Nullable MarshaledResponse marshaledResponse) {
+		if (marshaledResponse == null)
+			return;
+
+		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
+		if (!(body instanceof MarshaledResponseBody.FileChannel fileChannel)
+				|| !fileChannel.getCloseOnComplete())
+			return;
+
+		try {
+			fileChannel.getChannel().close();
+		} catch (IOException ignored) {
+			// Best effort: this is already a response-validation fallback path.
+		}
 	}
 
 	@NonNull
@@ -2070,6 +2424,11 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
+	}
+
+	@NonNull
+	protected Integer getMaximumRequestBodySizeInBytes() {
+		return this.maximumRequestBodySizeInBytes;
 	}
 
 	@NonNull

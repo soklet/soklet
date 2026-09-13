@@ -101,6 +101,11 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#didRejectUnparsedRequest(UnparsedRequest)}
+	 * threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#didStartRequestHandling(ServerType, Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
@@ -172,6 +177,12 @@ public enum LogEventType {
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
+	/**
+	 * Indicates
+	 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)} failed or
+	 * returned an unusable response.
+	 */
+	RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED,
 	/**
 	 * Indicates <em>Resource Method</em> resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request, ServerType)} threw an exception.
 	 */

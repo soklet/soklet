@@ -71,6 +71,39 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
+	public void requestBodyLimitTracksAggregateByDefaultAndIsOrderIndependentWhenExplicit() {
+		DefaultHttpServer defaults = (DefaultHttpServer) HttpServer.withPort(0).build();
+		DefaultHttpServer aggregateThenBody = (DefaultHttpServer) HttpServer.withPort(0)
+				.maximumRequestSizeInBytes(4_096)
+				.maximumRequestBodySizeInBytes(1_024)
+				.build();
+		DefaultHttpServer bodyThenAggregate = (DefaultHttpServer) HttpServer.withPort(0)
+				.maximumRequestBodySizeInBytes(1_024)
+				.maximumRequestSizeInBytes(4_096)
+				.build();
+		DefaultHttpServer resetBody = (DefaultHttpServer) HttpServer.withPort(0)
+				.maximumRequestBodySizeInBytes(1_024)
+				.maximumRequestBodySizeInBytes(null)
+				.maximumRequestSizeInBytes(4_096)
+				.build();
+
+		Assertions.assertEquals(defaults.getMaximumRequestSizeInBytes(),
+				defaults.getMaximumRequestBodySizeInBytes());
+		Assertions.assertEquals(1_024,
+				aggregateThenBody.getMaximumRequestBodySizeInBytes());
+		Assertions.assertEquals(aggregateThenBody.getMaximumRequestBodySizeInBytes(),
+				bodyThenAggregate.getMaximumRequestBodySizeInBytes());
+		Assertions.assertEquals(4_096, resetBody.getMaximumRequestBodySizeInBytes());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpServer
+				.withPort(0).maximumRequestBodySizeInBytes(0).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpServer
+				.withPort(0)
+				.maximumRequestBodySizeInBytes(4_097)
+				.maximumRequestSizeInBytes(4_096)
+				.build());
+	}
+
+	@Test
 	@Timeout(120)
 	public void requestControlledTransportFailuresAreRedactedFromHttpLogs()
 			throws Exception {

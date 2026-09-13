@@ -23,7 +23,8 @@ the 2026-09-06 typed-operation amendment, and the 2026-09-09 provisional MCP
 Tasks implementation checkpoint, followed by the 2026-09-10 release-review
 API amendment and provisional Tasks signature freeze, and the
 lifecycle-observer and public-value amendment, followed by the authored
-input-schema remediation and 2026-09-11 pre-release naming amendment. The
+input-schema remediation and 2026-09-11 pre-release naming and unparsed-request
+observation/response amendments. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
@@ -76,9 +77,9 @@ scope has exactly one owner:
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
-| `non-mcp-public-api.allowlist` | 52 | reviewed lifecycle, runner, transport-SPI, CORS, and metrics owners |
+| `non-mcp-public-api.allowlist` | 59 | reviewed lifecycle, runner, transport-SPI, CORS, and metrics owners |
 
-The 248-entry MCP union plus the 52-entry non-MCP allowlist owns exactly 300 current types.
+The 248-entry MCP union plus the 59-entry non-MCP allowlist owns exactly 307 current types.
 Ownership alone does not freeze a type. The three phase snapshots freeze their
 phase inventories, and the separate `provisional.signatures.jsonl` snapshot
 now freezes the 14 Tasks owners while retaining their explicit provisional
@@ -98,8 +99,9 @@ compatibility inventory.
 
 ## Current local evidence
 
-The 2026-09-11 naming reconciliation is green at 648 incompatibilities, 300
-exact owners, 1,132/200/425 Phase 4/5/6 signature records, and 98 provisional
+The 2026-09-11 unparsed-request API reconciliation is green at 648
+incompatibilities, 307 exact owners, 1,135/200/425 Phase 4/5/6 signature
+records, and 98 provisional
 Tasks signature records. The aggregate API-freeze verifier passes against the
 reviewed snapshots. These results revalidate the current API and local
 development artifact; they are not immutable release-candidate provenance,
@@ -377,9 +379,9 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
-freezes 1,132 canonical records across all 134 selected owners: 134 classes,
-one constructor, 94 fields, and 903 methods. Its SHA-256 is
-`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`.
+freezes 1,135 canonical records across all 134 selected owners: 134 classes,
+one constructor, 96 fields, and 904 methods. Its SHA-256 is
+`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`.
 `phase-5.signatures.jsonl` freezes 200 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
 Its SHA-256 is
@@ -393,7 +395,7 @@ the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
 Its SHA-256 is
 `70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
 The Phase 4/5/6 reflection/nullability digests are respectively
-`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`,
+`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`,
 `79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`,
 and
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
@@ -1568,13 +1570,13 @@ reviewed file.
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-648 reviewed incompatibilities across 300 owners: 248 MCP and 52 non-MCP.
+648 reviewed incompatibilities across 307 owners: 248 MCP and 59 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
-contain 1,132 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
-134 classes, one constructor, 94 fields, and 903 methods, with SHA-256
-`2f6ba441efa9b5bd1131cc97d47ce866fd86e59498dc55cf4a0d5a7c2c352acf`
+contain 1,135 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
+134 classes, one constructor, 96 fields, and 904 methods, with SHA-256
+`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`
 and exact nullability digest
-`a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7`.
+`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`.
 Phase 5 contains 36 classes, zero constructors, 19 fields, and 145 methods,
 with SHA-256
 `950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`
@@ -2569,5 +2571,46 @@ The 648-record compatibility ledger has SHA-256
 the 52-entry non-MCP allowlist has SHA-256
 `9dce1550f8596f66b482da39c397858a4f68861f53d7fd7ba5d8e60caf1be519`.
 All include inventories, Phase 6, and the provisional Tasks snapshot remain
-unchanged. The historical D1p preview seal is not rewritten; a release
-candidate must capture the active snapshots as fresh API-freeze evidence.
+unchanged. The historical D1p preview seal is not rewritten. This checkpoint
+is superseded by the unparsed-request amendment below.
+
+### 2026-09-11 unparsed-request observation and response amendment
+
+The release review adds one compatible default callback to the frozen Phase 4
+`LifecycleObserver` host,
+`didRejectUnparsedRequest(UnparsedRequest)`, plus the
+`LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED` and
+`RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED` values on the frozen shared
+`LogEventType` host. The callback observes the same immutable rejection value
+subsequently offered, if timeout budget remains, to
+`ResponseMarshaler.forUnparsedRequest(...)`; its wire bytes are bounded,
+untrusted application-owned diagnostic input. The reason is
+a failure classification, not a fixed response status. The standard marshaler
+supplies the conventional status, while an application marshaler retains
+response-policy ownership.
+
+The complete current-side ownership refresh adds seven non-MCP owners:
+`HttpServer.Builder`, `ResponseMarshaler`, `ResponseMarshaler.Builder`,
+`ResponseMarshaler.Builder.UnparsedRequestHandler`, `UnparsedRequest`,
+`UnparsedRequest.Builder`, and `UnparsedRequestReason`. The first reflects the
+separately reviewed body-only request-size control in the same release pass;
+the other six own the unparsed-request response and immutable observation
+surface. The non-MCP allowlist therefore contains 59 owners and has SHA-256
+`831173f5f87c4e1815fbe7121d97ccfac7c912c1b33c66ac458fed93bc9533fe`.
+Together with the unchanged 248-owner MCP union, the exact current-side owner
+count is 307.
+
+The three deliberate additions on frozen Phase 4 hosts raise its active
+snapshot to 1,135 records: 134 classes, one constructor, 96 fields, and 904
+methods. Its signature SHA-256 is
+`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`;
+the reviewed reflection/nullability SHA-256 is
+`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`;
+and the unchanged Phase 4 include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+The Phase 5, Phase 6, provisional Tasks, and include snapshots are unchanged.
+The compatible additions do not change the 648-record released-3.5.1
+compatibility ledger or its SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+The historical D1p preview seal remains immutable; a release candidate must
+capture these active snapshots as fresh API-freeze evidence.

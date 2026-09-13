@@ -40,6 +40,8 @@ Authored input-schema remediation amendment reviewed: 2026-09-10
 
 Pre-release naming amendment reviewed: 2026-09-11
 
+Unparsed-request observation and response amendment reviewed: 2026-09-11
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -92,18 +94,18 @@ transitions without compatibility aliases.
 
 ## Frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,075 canonical records:
+`phase-4.signatures.jsonl` contains exactly 1,135 canonical records:
 
 - 134 classes;
 - one constructor;
-- 90 fields; and
-- 850 methods.
+- 96 fields; and
+- 904 methods.
 
 The reviewed file's SHA-256 is
-`7ebba4e319624f57fbbbe82ec23d4cad9185bce26988d32b6600516ce1d10f49`.
+`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`ac51029bd55d854200bd97aa63cf414183b130127a9962676677da0f75ba6bc1`.
+`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`.
 The 134-entry `phase-4.includes` inventory has SHA-256
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 
@@ -1065,5 +1067,50 @@ and the unchanged include-inventory SHA-256 is
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 The released-3.5.1 compatibility ledger now contains 648 records with SHA-256
 `d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
-The historical D1p preview seal remains immutable; a release-candidate capture
-must use this active snapshot.
+The historical D1p preview seal remains immutable. This checkpoint is
+superseded by the unparsed-request amendment below.
+
+## 2026-09-11 unparsed-request observation and response amendment
+
+The owner-approved release pass adds the compatible default
+`LifecycleObserver.didRejectUnparsedRequest(UnparsedRequest)` callback to the
+frozen Phase 4 lifecycle host. It also adds two failure-classification values
+to the frozen shared `LogEventType` host:
+
+- `LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED`; and
+- `RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED`.
+
+The callback receives the immutable, bounded, and explicitly untrusted
+`UnparsedRequest` diagnostic value before that same value is passed, when
+timeout budget remains, to `ResponseMarshaler.forUnparsedRequest(...)`.
+`UnparsedRequestReason` remains a
+pure failure classification rather than prescribing a response status. The
+standard marshaler maps each reason to its conventional HTTP status, while a
+custom marshaler owns the application response policy.
+
+The three additions on frozen Phase 4 owners raise the active snapshot to
+1,135 records: 134 classes, one constructor, 96 fields, and 904 methods. Its
+signature SHA-256 is
+`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`;
+the reviewed reflection/nullability SHA-256 is
+`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`;
+and the unchanged 134-owner include-inventory SHA-256 is
+`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
+
+The current-side ownership refresh also admits seven non-MCP owners:
+`HttpServer.Builder`, `ResponseMarshaler`, `ResponseMarshaler.Builder`,
+`ResponseMarshaler.Builder.UnparsedRequestHandler`, `UnparsedRequest`,
+`UnparsedRequest.Builder`, and `UnparsedRequestReason`. `HttpServer.Builder`
+owns the separately reviewed body-only request-size control from the same
+release pass; the other six own the response and observation surface. The
+non-MCP allowlist therefore contains 59 owners with SHA-256
+`831173f5f87c4e1815fbe7121d97ccfac7c912c1b33c66ac458fed93bc9533fe`.
+Together with the unchanged 134/36/64/14 MCP partition, the complete reviewed
+current-side universe contains 307 owners.
+
+The compatible additions leave the released-3.5.1 comparison at 648 records
+with SHA-256
+`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+Phase 5, Phase 6, provisional Tasks, and all include inventories remain
+unchanged. The historical D1p preview seal is not rewritten; a release
+candidate must capture this active snapshot as fresh API-freeze evidence.

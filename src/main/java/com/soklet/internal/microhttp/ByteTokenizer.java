@@ -71,6 +71,27 @@ class ByteTokenizer {
         totalBytesAdded += bufferLen;
     }
 
+    CapturedPrefix capturePrefixAndRelease(int endExclusive, int maximumBytes) {
+        if (endExclusive < base || endExclusive > size) {
+            throw new IllegalArgumentException("Capture boundary is outside the buffered request.");
+        }
+        if (maximumBytes < 0) {
+            throw new IllegalArgumentException("Maximum capture size must not be negative.");
+        }
+
+        int observedByteCount = endExclusive - base;
+        int capturedByteCount = Math.min(observedByteCount, maximumBytes);
+        byte[] capturedBytes = Arrays.copyOfRange(array, base, base + capturedByteCount);
+
+        array = new byte[0];
+        base = 0;
+        position = 0;
+        size = 0;
+
+        return new CapturedPrefix(capturedBytes, observedByteCount,
+                capturedByteCount < observedByteCount);
+    }
+
     byte @Nullable [] next(int length) {
         if (size - position < length) {
             return null;
@@ -186,6 +207,9 @@ class ByteTokenizer {
                 ? currentCapacity * 2
                 : Integer.MAX_VALUE;
         return Math.max((int) requiredCapacity, doubledCapacity);
+    }
+
+    record CapturedPrefix(byte[] bytes, long observedByteCount, boolean truncated) {
     }
 
 }

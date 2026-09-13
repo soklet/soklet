@@ -13,6 +13,7 @@ class RequestParser {
 
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
+    private static final String HTTP_VERSION_PREFIX = "HTTP/1.";
 
     private static final String HEADER_CONTENT_LENGTH = "Content-Length";
     private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
@@ -69,6 +70,7 @@ class RequestParser {
     private int chunkSize;
     private long chunkBodySize;
     private int chunkTrailersStartPosition;
+    private int failureBoundaryExclusive;
     @Nullable
     private ByteMerger chunks;
 
@@ -170,6 +172,7 @@ class RequestParser {
         chunkSize = 0;
         chunkBodySize = 0L;
         chunkTrailersStartPosition = -1;
+        failureBoundaryExclusive = tokenizer.rawPosition();
         chunks = null;
         method = null;
         uri = null;
@@ -206,6 +209,7 @@ class RequestParser {
     }
 
     private boolean parseMethod() {
+        markRequestLineTokenFailureBoundary();
         String token = tokenizer.nextAsciiString(SPACE, "method");
         if (token == null) {
             return false;
@@ -216,6 +220,24 @@ class RequestParser {
     }
 
     private boolean parseUri() {
+        int start = tokenizer.rawPosition();
+        int delimiterStart = tokenizer.indexOf(SPACE);
+        int lineEnd = tokenizer.indexOf(CRLF);
+        boolean unterminated = delimiterStart < 0 && lineEnd < 0;
+        boolean malformedLineEndsBeforeDelimiter = lineEnd >= 0
+                && (delimiterStart < 0 || lineEnd < delimiterStart);
+
+        // Enforce the target bound as bytes arrive instead of waiting for a
+        // trailing space. Stop exactly at the first over-limit byte so a
+        // delimiter in a later pipelined request can never extend the capture.
+        if ((unterminated && tokenizer.remaining() > maxRequestTargetLength)
+                || (malformedLineEndsBeforeDelimiter
+                && lineEnd - start > maxRequestTargetLength)) {
+            failureBoundaryExclusive = start + maxRequestTargetLength + 1;
+            throw requestTooLarge(RequestTooLargeException.Reason.URI_TOO_LONG);
+        }
+
+        markRequestLineTokenFailureBoundary();
         String token = tokenizer.nextAsciiString(SPACE, "uri");
         if (token == null) {
             return false;
@@ -229,14 +251,43 @@ class RequestParser {
     }
 
     private boolean parseVersion() {
-        String token = tokenizer.nextAsciiString(CRLF, "version");
-        if (token == null) {
+        int start = tokenizer.rawPosition();
+        int available = tokenizer.remaining();
+        int prefixBytesAvailable = Math.min(available, HTTP_VERSION_PREFIX.length());
+
+        for (int i = 0; i < prefixBytesAvailable; i++) {
+            failureBoundaryExclusive = start + i + 1;
+            if (!asciiByteEqualsIgnoreCase(tokenizer.rawByte(start + i),
+                    HTTP_VERSION_PREFIX.charAt(i)))
+                throw new MalformedRequestException("unsupported http version");
+        }
+
+        if (available <= HTTP_VERSION_PREFIX.length())
             return false;
-        }
-        version = token;
-        if (!version.equalsIgnoreCase("HTTP/1.0") && !version.equalsIgnoreCase("HTTP/1.1")) {
+
+        failureBoundaryExclusive = start + HTTP_VERSION_PREFIX.length() + 1;
+        byte minorVersion = tokenizer.rawByte(
+                start + HTTP_VERSION_PREFIX.length());
+        if (minorVersion != '0' && minorVersion != '1')
             throw new MalformedRequestException("unsupported http version");
-        }
+
+        int versionLength = HTTP_VERSION_PREFIX.length() + 1;
+        if (available == versionLength)
+            return false;
+
+        failureBoundaryExclusive = start + versionLength + 1;
+        if (tokenizer.rawByte(start + versionLength) != '\r')
+            throw new MalformedRequestException("unsupported http version");
+        if (available == versionLength + 1)
+            return false;
+
+        failureBoundaryExclusive = start + versionLength + CRLF.length;
+        if (tokenizer.rawByte(start + versionLength + 1) != '\n')
+            throw new MalformedRequestException("unsupported http version");
+
+        version = tokenizer.string(start, start + versionLength,
+                StandardCharsets.US_ASCII);
+        tokenizer.advanceTo(start + versionLength + CRLF.length);
         headersStartPosition = tokenizer.rawPosition();
         state = State.HEADER;
         return true;
@@ -246,9 +297,12 @@ class RequestParser {
         int start = tokenizer.rawPosition();
         int end = tokenizer.indexOf(CRLF);
         if (end < 0) {
+            this.failureBoundaryExclusive = start + tokenizer.remaining();
             rejectHeadersTooLarge(start + tokenizer.remaining());
             return false;
         }
+
+        this.failureBoundaryExclusive = end + CRLF.length;
 
         rejectHeadersTooLarge(end + CRLF.length);
 
@@ -443,6 +497,7 @@ class RequestParser {
         if (end < 0) {
             return false;
         }
+        this.failureBoundaryExclusive = end + CRLF.length;
 
         int sizeEnd = end;
         for (int i = start; i < end; i++) {
@@ -504,13 +559,22 @@ class RequestParser {
     }
 
     private boolean parseChunkDataEnd() {
-        int length = tokenizer.nextLength(CRLF);
-        if (length < 0) {
+        int start = tokenizer.rawPosition();
+        int available = tokenizer.remaining();
+        if (available == 0)
             return false;
-        }
-        if (length != 0) {
+
+        failureBoundaryExclusive = start + 1;
+        if (tokenizer.rawByte(start) != '\r')
             throw new MalformedRequestException("invalid chunk data terminator");
-        }
+        if (available == 1)
+            return false;
+
+        failureBoundaryExclusive = start + CRLF.length;
+        if (tokenizer.rawByte(start + 1) != '\n')
+            throw new MalformedRequestException("invalid chunk data terminator");
+
+        tokenizer.advanceTo(start + CRLF.length);
         state = State.CHUNK_SIZE;
         return true;
     }
@@ -519,9 +583,11 @@ class RequestParser {
         int start = tokenizer.rawPosition();
         int end = tokenizer.indexOf(CRLF);
         if (end < 0) {
+            this.failureBoundaryExclusive = start + tokenizer.remaining();
             rejectChunkTrailersTooLarge(start + tokenizer.remaining());
             return false;
         }
+        this.failureBoundaryExclusive = end + CRLF.length;
         rejectChunkTrailersTooLarge(end + CRLF.length);
         if (end == start) { // blank line indicates end of trailers
             tokenizer.advanceTo(end + CRLF.length);
@@ -645,6 +711,34 @@ class RequestParser {
 
     private boolean hasOnlyChunkedEncoding(@Nullable List<String> transferEncodings) {
         return transferEncodings != null && transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
+    }
+
+    int failureBoundaryExclusive() {
+        return this.failureBoundaryExclusive;
+    }
+
+    private static boolean asciiByteEqualsIgnoreCase(byte actual,
+                                                      char expected) {
+        int normalized = actual & 0xFF;
+        if (normalized >= 'a' && normalized <= 'z')
+            normalized -= 'a' - 'A';
+        return normalized == expected;
+    }
+
+    private void markRequestLineTokenFailureBoundary() {
+        int delimiterStart = tokenizer.indexOf(SPACE);
+        int lineEnd = tokenizer.indexOf(CRLF);
+
+        // A missing request-line separator must not borrow a space from a
+        // later pipelined request. The completed malformed line is the only
+        // parser-proven failure boundary in that case.
+        if (lineEnd >= 0 && (delimiterStart < 0 || lineEnd < delimiterStart)) {
+            this.failureBoundaryExclusive = lineEnd + CRLF.length;
+            throw new MalformedRequestException("malformed request line");
+        }
+
+        if (delimiterStart >= 0)
+            this.failureBoundaryExclusive = delimiterStart + SPACE.length;
     }
 
 }

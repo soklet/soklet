@@ -1,5 +1,6 @@
 com.soklet.CorsPreflight
 com.soklet.HttpServer
+com.soklet.HttpServer$Builder
 com.soklet.HttpTransportAttachmentContext
 com.soklet.LifecyclePolicy
 com.soklet.LifecyclePolicy$Builder
@@ -18,6 +19,9 @@ com.soklet.MetricsCollector$SseStreamRouteTerminationKey
 com.soklet.MetricsCollector$TransportFailureKey
 com.soklet.ResidualActivityEvidence
 com.soklet.ResidualActivityType
+com.soklet.ResponseMarshaler
+com.soklet.ResponseMarshaler$Builder
+com.soklet.ResponseMarshaler$Builder$UnparsedRequestHandler
 com.soklet.ShutdownCleanup
 com.soklet.ShutdownCleanup$Action
 com.soklet.ShutdownCleanupFailureReason
@@ -50,3 +54,6 @@ com.soklet.TransportOwnershipException
 com.soklet.TransportRuntime
 com.soklet.TransportTerminationSignal
 com.soklet.UnexpectedShutdownComponentTermination
+com.soklet.UnparsedRequest
+com.soklet.UnparsedRequest$Builder
+com.soklet.UnparsedRequestReason

@@ -1009,14 +1009,21 @@ queue closes only the affected stream with a backpressure reason. Soklet closes
 its listener registration during shutdown and never closes the
 application-owned publisher.
 
-The 256-task-ID filter limit is a validation ceiling, not a reservation of 256
-pending projection slots. One server has a fixed 128-job task-projection queue;
-a simultaneous burst across a large filter can therefore close that
-subscription with backpressure even when the filter itself is valid. Overflow
-victim selection retires only the subscriber contributing the most queued
-work, with the incoming subscriber selected on a tie. Other subscriptions and
-their queued work remain intact. Clients must continue to treat `tasks/get`
-polling as authoritative.
+Each subscription owns a bounded FIFO over its accepted task IDs and contributes
+at most one queued or running job to the shared task-projection scheduler.
+Distinct IDs retain first-event order. Repeated hints for one ID coalesce to its
+newest generation, including one that arrives while the manager lookup is in
+progress, and each continuation returns to the scheduler tail. A conforming
+256-ID subscription therefore cannot fill the shared queue by itself. The
+scheduler admits at most 128 queued subscription owners and up to four workers;
+either bound may be lower when the request-processor configuration is lower.
+
+Manager lookups are serialized within one subscription, so a slow or hung
+lookup delays that subscription's other task IDs. Other subscriptions retain
+bounded parallel progress, and ordinary `tasks/get` work keeps separately
+reserved execution capacity. Shared scheduler or per-stream output exhaustion
+can still close only the affected subscription with a backpressure reason.
+Clients must continue to treat `tasks/get` polling as authoritative.
 
 ### Public Tasks API map
 

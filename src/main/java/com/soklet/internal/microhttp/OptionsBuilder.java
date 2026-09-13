@@ -30,6 +30,8 @@ public class OptionsBuilder {
     private int maxConnections;
     private int concurrency;
     private List<Header> earlyErrorResponseHeaders;
+    private int unparsedRequestCaptureLimitInBytes;
+    private int unparsedResponseSizeLimitInBytes;
 
     private OptionsBuilder() {
         this.host = "localhost";
@@ -50,6 +52,8 @@ public class OptionsBuilder {
         this.maxConnections = 0;
         this.concurrency = Runtime.getRuntime().availableProcessors();
         this.earlyErrorResponseHeaders = List.of();
+        this.unparsedRequestCaptureLimitInBytes = 0;
+        this.unparsedResponseSizeLimitInBytes = 64 * 1024;
     }
 
     public static OptionsBuilder newBuilder() {
@@ -74,6 +78,10 @@ public class OptionsBuilder {
             throw new IllegalArgumentException("Maximum request-body size must be positive.");
         if (resolvedMaxRequestBodySize > this.maxRequestSize)
             throw new IllegalArgumentException("Maximum request-body size must not exceed the aggregate request size.");
+        if (this.unparsedRequestCaptureLimitInBytes < 0)
+            throw new IllegalArgumentException("Unparsed-request capture limit must not be negative.");
+        if (this.unparsedResponseSizeLimitInBytes < 1)
+            throw new IllegalArgumentException("Unparsed-response size limit must be positive.");
 
         return new Options(this.host,
             this.port,
@@ -92,7 +100,9 @@ public class OptionsBuilder {
             this.maxRequestTargetLength,
             this.maxConnections,
             this.concurrency,
-            this.earlyErrorResponseHeaders);
+            this.earlyErrorResponseHeaders,
+            this.unparsedRequestCaptureLimitInBytes,
+            this.unparsedResponseSizeLimitInBytes);
     }
 
     public OptionsBuilder withHost(String host) {
@@ -190,6 +200,16 @@ public class OptionsBuilder {
     public OptionsBuilder withEarlyErrorResponseHeaders(List<Header> headers) {
         requireNonNull(headers);
         this.earlyErrorResponseHeaders = List.copyOf(headers);
+        return this;
+    }
+
+    public OptionsBuilder withUnparsedRequestCaptureLimitInBytes(int limit) {
+        this.unparsedRequestCaptureLimitInBytes = limit;
+        return this;
+    }
+
+    public OptionsBuilder withUnparsedResponseSizeLimitInBytes(int limit) {
+        this.unparsedResponseSizeLimitInBytes = limit;
         return this;
     }
 }

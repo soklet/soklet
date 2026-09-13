@@ -224,6 +224,45 @@ public class StreamingMicrohttpResponsesRaceTests {
 		}
 	}
 
+	@Test
+	public void producer_failure_rethrows_reasoned_cancelation_with_original_cause() throws Exception {
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		ScheduledExecutorService timeoutExecutorService = Executors.newSingleThreadScheduledExecutor();
+		AtomicReference<StreamTerminationReason> terminationReasonRef = new AtomicReference<>();
+		AtomicReference<Throwable> terminationThrowableRef = new AtomicReference<>();
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		IOException producerFailure = new IOException("Expected producer failure");
+		WritableSource source = null;
+
+		try (RecordingSocketChannel socketChannel = new RecordingSocketChannel()) {
+			StreamingResponseBody body = StreamingResponseBody.fromWriter((output, context) -> {
+				throw producerFailure;
+			});
+			source = newStreamingSource(body, executorService, timeoutExecutorService,
+					terminationReasonRef, terminationThrowableRef, terminatedLatch);
+			source.start();
+
+			IOException failure = writeUntilIOException(source, socketChannel);
+
+			StreamingResponseCanceledException canceled = Assertions.assertInstanceOf(
+					StreamingResponseCanceledException.class, failure);
+			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
+					canceled.getCancelationReason());
+			Assertions.assertSame(producerFailure,
+					canceled.getCancelationCause().orElseThrow());
+			Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS),
+					"Stream termination lifecycle hook was not invoked");
+			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
+					terminationReasonRef.get());
+			Assertions.assertSame(producerFailure, terminationThrowableRef.get());
+		} finally {
+			if (source != null)
+				source.close();
+			executorService.shutdownNow();
+			timeoutExecutorService.shutdownNow();
+		}
+	}
+
 	private ExerciseResult exerciseTerminalWriteRace(AtomicReference<StreamTerminationReason> callbackReasonRef,
 																									AtomicReference<StreamTerminationReason> terminationReasonRef,
 																									AtomicReference<Throwable> terminationThrowableRef,

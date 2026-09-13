@@ -216,8 +216,21 @@ public final class MicrohttpResponse {
     static final byte[] SET_COOKIE_HEADER_NAME = "Set-Cookie".getBytes(StandardCharsets.US_ASCII);
     static final byte[] VARY_HEADER_NAME = "Vary".getBytes(StandardCharsets.US_ASCII);
 
-    byte[] serialize(String version, List<Header> headers) {
-        byte[] head = serializeHead(version, headers);
+    public byte[] serialize(String version, List<Header> headers) {
+        return serialize(version, headers, Integer.MAX_VALUE);
+    }
+
+    public byte[] serialize(String version, List<Header> headers,
+                            int maximumSizeInBytes) {
+        if (maximumSizeInBytes < 1)
+            throw new IllegalArgumentException("Maximum serialized response size must be positive.");
+        if (body == null)
+            throw new IllegalStateException("Response body is not byte-array-backed.");
+        if (body.length > maximumSizeInBytes)
+            throw new IllegalArgumentException("Serialized response exceeds its configured size limit.");
+
+        byte[] head = serializeHead(version, headers,
+                maximumSizeInBytes - body.length);
         byte[] responseBody = body();
         byte[] result = Arrays.copyOf(head, head.length + responseBody.length);
         System.arraycopy(responseBody, 0, result, head.length, responseBody.length);
@@ -225,7 +238,14 @@ public final class MicrohttpResponse {
     }
 
     byte[] serializeHead(String version, List<Header> headers) {
-        HeadWriter writer = new HeadWriter(initialHeadCapacity((long) headers.size() + this.headers.size()));
+        return serializeHead(version, headers, Integer.MAX_VALUE);
+    }
+
+    private byte[] serializeHead(String version, List<Header> headers,
+                                 int maximumSizeInBytes) {
+        HeadWriter writer = new HeadWriter(
+                initialHeadCapacity((long) headers.size() + this.headers.size()),
+                maximumSizeInBytes);
         appendHead(version, headers, writer);
         return writer.toByteArray();
     }
@@ -346,9 +366,14 @@ public final class MicrohttpResponse {
     private static final class HeadWriter {
         private byte[] bytes;
         private int size;
+        private final int maximumSize;
 
-        private HeadWriter(int initialCapacity) {
-            this.bytes = new byte[Math.max(64, initialCapacity)];
+        private HeadWriter(int initialCapacity, int maximumSize) {
+            if (maximumSize < 0)
+                throw new IllegalArgumentException("Maximum response-head size must not be negative.");
+            this.maximumSize = maximumSize;
+            this.bytes = new byte[Math.min(maximumSize,
+                    Math.max(64, initialCapacity))];
         }
 
         private void write(byte[] bytes) {
@@ -394,16 +419,20 @@ public final class MicrohttpResponse {
         private void ensureCapacity(int additionalBytes) {
             long requiredCapacity = (long) this.size + additionalBytes;
 
-            if (requiredCapacity > Integer.MAX_VALUE)
-                throw new IllegalStateException("Serialized response head length exceeds maximum supported size.");
+            if (requiredCapacity > this.maximumSize)
+                throw new IllegalArgumentException("Serialized response exceeds its configured size limit.");
 
             if (requiredCapacity <= this.bytes.length)
                 return;
 
             int newCapacity = this.bytes.length;
 
-            while (newCapacity < requiredCapacity)
-                newCapacity = newCapacity <= Integer.MAX_VALUE / 2 ? newCapacity * 2 : Integer.MAX_VALUE;
+            while (newCapacity < requiredCapacity) {
+                int doubled = newCapacity <= Integer.MAX_VALUE / 2
+                        ? newCapacity * 2 : Integer.MAX_VALUE;
+                newCapacity = Math.min(this.maximumSize,
+                        Math.max((int) requiredCapacity, doubled));
+            }
 
             this.bytes = Arrays.copyOf(this.bytes, newCapacity);
         }

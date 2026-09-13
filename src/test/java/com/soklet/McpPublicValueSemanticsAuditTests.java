@@ -243,6 +243,7 @@ class McpPublicValueSemanticsAuditTests {
 	@Test
 	void auditPinsDeclaredValueAndIdentitySemantics() {
 		for (Class<?> valueType : List.of(
+				LifecyclePolicy.class,
 				McpTextResourceContents.class,
 				McpBlobResourceContents.class,
 				McpResourceDescriptor.class,

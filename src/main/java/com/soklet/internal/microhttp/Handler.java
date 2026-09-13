@@ -25,6 +25,19 @@ public interface Handler {
     void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback);
 
     /**
+     * Handles bytes rejected before a valid request could be constructed. This
+     * method is called on the event-loop thread and must only arrange
+     * asynchronous work. Returning {@code false} asks the transport to write its
+     * built-in response immediately. If {@code true} is returned, the callback
+     * must eventually be invoked at most once; a {@code null} callback value asks
+     * the transport to use its built-in response.
+     */
+    default boolean handleUnparsedRequest(UnparsedRequestRejection rejection,
+                                          Consumer<byte[]> callback) {
+        return false;
+    }
+
+    /**
      * Notifies the handler that a dispatched request whose response has not been committed can no longer
      * produce a response. This method may race with the response callback, is invoked at most once for a
      * request, and must not block the connection event loop.

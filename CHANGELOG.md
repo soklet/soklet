@@ -128,34 +128,54 @@ maintenance or security fixes afterward. See the explicit
 
 ### Reviewed Non-Blocking Deferrals
 
-The 4.0 release review also recorded the following deliberate post-release work;
-none is claimed as fixed by 4.0.0:
+The 4.0 release review also recorded the following deliberate post-release
+work; it is not claimed as fixed by 4.0.0:
 
-- **S2-1:** add an owner-level lifecycle integration test that exercises the
-  real coordinator-to-`DelegatedRuntime` wiring. The state machine and its
-  relevant shutdown interleavings remain covered by lower-level tests.
-- **S4-1:** task-notification projection uses bounded global capacity and
-  heaviest-owner victim selection, but does not coalesce projections per
-  subscription. A conforming 256-ID subscription can therefore exhaust the
-  128-slot projection queue and close its own stream with `BACKPRESSURE`.
 - **S7-1 / R12-2:** persisted output schemas are still compiled eagerly during
   task lookup, including subscription authorization. This is bounded extra CPU
   work, not a correctness or isolation failure.
-- **S9-2 / R11-4:** body-only request sizing and early-error response headers
-  remain internal MCP-listener controls; equivalent public `HttpServer.Builder`
-  controls are intentionally not part of the 4.0 API.
-- **R11-3:** a streaming producer failure with an attached cause can still be
-  metered as generic `WRITE_ERROR` / `WRITE_FAILED` instead of the producer's
-  reserved stream-termination reason. Termination remains bounded and safe.
-- **R13-1:** immutable `LifecyclePolicy` instances retain reference identity;
-  structural `equals`/`hashCode` semantics are not introduced in 4.0.
-
-`McpJsonLimits` (S13-4) is internal. Its larger durable-origin profile does not
-widen the independently enforced and tested 16 MiB public MCP transport
-ceiling; its Javadoc now makes that separation explicit.
 
 ### Detailed Implementation Record
 
+- Owner-level lifecycle coverage now drives a real built-in HTTP delegate
+  through the coordinator's attach-before-start shutdown path and proves
+  graceful `NOT_STARTED` termination without a built-in generation, force, or
+  residual activity. Immutable `LifecyclePolicy` instances now use structural
+  equality and hashing across all four timeout fields.
+- Task-change hints are coalesced per subscription behind one shared-scheduler
+  job. Distinct accepted task IDs retain first-event FIFO order, repeated hints
+  collapse to the newest generation without losing a hint that arrives during
+  lookup, and each continuation returns to the scheduler tail. A conforming
+  256-ID subscription therefore cannot fill the 128-slot shared queue by
+  itself; lookups remain serialized within that subscription while other
+  subscriptions retain bounded parallel progress.
+- The public constructor of internal `McpJsonLimits` again enforces the reviewed
+  16 MiB / one-million-node transport profile. Package-private durable-task
+  factories alone can request the larger 32 MiB / two-million-node retention
+  headroom, without widening listener acceptance.
+- The standard `HttpServer.Builder` now exposes an independent
+  `maximumRequestBodySizeInBytes(...)` limit. The body-only
+  limit counts received payload bytes before optional content decompression,
+  tracks the aggregate request limit unless explicitly configured, and is
+  setter-order independent. `ResponseMarshaler.forUnparsedRequest(...)`
+  now customizes four parser-owned rejection categories for which no valid
+  request exists: malformed requests, overlong request targets, unsupported
+  expectations, and oversized request headers.
+  Its immutable `UnparsedRequest` provides the typed reason, best-effort remote
+  address, at most 64 KiB of read-only captured input, the byte count attributed
+  through the parser-proven failure boundary, and truncation relative to that
+  count. For admitted rejection-detail work, Soklet invokes
+  `LifecycleObserver.didRejectUnparsedRequest(...)` and then, if timeout budget
+  remains, the marshaler on the configured request-handler executor under
+  `requestHandlerTimeout`. The framework-managed default executor has bounded
+  concurrency and queue capacity. Executor
+  saturation, timeout, or application failure uses a conventional bodyless
+  fallback while retaining transport-framing ownership. Raw capture and the
+  complete serialized custom response are each capped at 64 KiB.
+  Streaming producer failures now carry their reserved
+  `StreamTerminationReason` through the socket-writer boundary even when an
+  underlying cause is present, so they are no longer misreported as transport
+  `WRITE_ERROR` / stream `WRITE_FAILED` failures.
 - SSE client-initializer catch-up buffering is hard-bounded by
   `connectionQueueCapacity`; uncaught overflows are now logged and metered
   instead of silently dropping an accepted connection. The framework's optional

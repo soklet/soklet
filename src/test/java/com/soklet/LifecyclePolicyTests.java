@@ -85,4 +85,50 @@ class LifecyclePolicyTests {
 				LifecyclePolicy.builder().forcedShutdownTimeout(
 						Duration.ofSeconds(Long.MAX_VALUE)));
 	}
+
+	@Test
+	void policiesUseStructuralEqualityAcrossAllFourTimeouts() {
+		LifecyclePolicy policy = LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(3))
+				.forcedShutdownTimeout(Duration.ofSeconds(4))
+				.build();
+		LifecyclePolicy equalPolicy = LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(3))
+				.forcedShutdownTimeout(Duration.ofSeconds(4))
+				.build();
+
+		Assertions.assertNotSame(policy, equalPolicy);
+		Assertions.assertEquals(policy, equalPolicy);
+		Assertions.assertEquals(policy.hashCode(), equalPolicy.hashCode());
+		Assertions.assertNotEquals(policy, LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(5))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(3))
+				.forcedShutdownTimeout(Duration.ofSeconds(4))
+				.build());
+		Assertions.assertNotEquals(policy, LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(5))
+				.gracefulShutdownTimeout(Duration.ofSeconds(3))
+				.forcedShutdownTimeout(Duration.ofSeconds(4))
+				.build());
+		Assertions.assertNotEquals(policy, LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(5))
+				.forcedShutdownTimeout(Duration.ofSeconds(4))
+				.build());
+		Assertions.assertNotEquals(policy, LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(3))
+				.forcedShutdownTimeout(Duration.ofSeconds(5))
+				.build());
+		Assertions.assertNotEquals(policy, null);
+		Assertions.assertNotEquals(policy, "lifecycle-policy");
+	}
 }

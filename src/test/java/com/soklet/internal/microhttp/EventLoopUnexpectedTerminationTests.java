@@ -204,6 +204,16 @@ class EventLoopUnexpectedTerminationTests {
 	}
 
 	@Test
+	void unparsed_request_limits_are_validated_when_options_are_built() {
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Options.builder()
+						.withUnparsedRequestCaptureLimitInBytes(-1).build());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Options.builder()
+						.withUnparsedResponseSizeLimitInBytes(0).build());
+	}
+
+	@Test
 	void legacy_options_constructor_preserves_original_defaults() {
 		Duration timeout = Duration.ofSeconds(1);
 		Options options = new Options("127.0.0.1", 0, true, false, timeout,
@@ -212,6 +222,9 @@ class EventLoopUnexpectedTerminationTests {
 
 		Assertions.assertEquals(options.maxRequestSize(), options.maxRequestBodySize());
 		Assertions.assertEquals(List.of(), options.earlyErrorResponseHeaders());
+		Assertions.assertEquals(0, options.unparsedRequestCaptureLimitInBytes());
+		Assertions.assertEquals(64 * 1_024,
+				options.unparsedResponseSizeLimitInBytes());
 	}
 
 	private static Selector connectionSelector(EventLoop eventLoop) throws Exception {

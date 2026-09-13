@@ -424,6 +424,18 @@ public final class McpFiniteBoundFixture {
 
   record RequestLimits(int maximumNodes) {}
 
+  public static final class ResponseLimits {
+    private final int maximumBytes;
+
+    ResponseLimits(int maximumBytes) {
+      this.maximumBytes = maximumBytes;
+    }
+
+    public int maximumBytes() {
+      return this.maximumBytes;
+    }
+  }
+
   static int maximumFrameBytes(RequestLimits limits) {
     return Math.addExact(limits.maximumNodes(), 8);
   }
@@ -483,7 +495,7 @@ final class McpFiniteBoundSyntax {
     finiteBoundProjectRoot,
     finiteBoundScanRoots,
   );
-  assert.equal(finiteBoundCandidates.length, FINITE_BOUND_MATCHER_RULES.length);
+  assert.equal(finiteBoundCandidates.length, FINITE_BOUND_MATCHER_RULES.length + 1);
   assert.deepEqual(
     Object.fromEntries(FINITE_BOUND_MATCHER_RULES.map(({ id }) => [
       id,
@@ -491,7 +503,7 @@ final class McpFiniteBoundSyntax {
     ])),
     {
       'FINITE-MATCH-001': 1,
-      'FINITE-MATCH-002': 1,
+      'FINITE-MATCH-002': 2,
       'FINITE-MATCH-003': 1,
       'FINITE-MATCH-004': 1,
     },
@@ -512,6 +524,11 @@ final class McpFiniteBoundSyntax {
         matcherRuleId: 'FINITE-MATCH-002',
         member: 'maximumNodes',
         owner: 'com.soklet.McpFiniteBoundFixture.RequestLimits',
+      },
+      {
+        matcherRuleId: 'FINITE-MATCH-002',
+        member: 'maximumBytes',
+        owner: 'com.soklet.McpFiniteBoundFixture.ResponseLimits',
       },
       {
         matcherRuleId: 'FINITE-MATCH-003',
@@ -949,6 +966,30 @@ public class Request {
   public static final class Builder {
     public Builder rawPath(String rawPath) { return this; }
   }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'UnparsedRequest.java'),
+    `package com.soklet;
+
+import java.nio.ByteBuffer;
+
+public final class UnparsedRequest {
+  public ByteBuffer getCapturedBytes() { return ByteBuffer.allocate(0); }
+  public Long getObservedByteCount() { return 0L; }
+
+  @Override
+  public String toString() { return "UnparsedRequest{<redacted>}"; }
+
+  public static final class Builder {
+    public Builder capturedBytes(byte[] capturedBytes) { return this; }
+  }
+}
+
+interface SyntheticUnparsedCallbacks {
+  void didRejectUnparsedRequest(UnparsedRequest request);
+  Object forUnparsedRequest(UnparsedRequest request);
 }
 `,
   );
@@ -1609,10 +1650,10 @@ final class McpPrivacyBoundaryFuzzTests {
       'PRIV-MATCH-002': 9,
       'PRIV-MATCH-003': 3,
       'PRIV-MATCH-004': 1,
-      'PRIV-MATCH-005': 52,
+      'PRIV-MATCH-005': 57,
       'PRIV-MATCH-006': 11,
       'PRIV-MATCH-007': 10,
-      'PRIV-MATCH-008': 24,
+      'PRIV-MATCH-008': 25,
       'PRIV-MATCH-009': 20,
       'PRIV-MATCH-010': 9,
       'PRIV-MATCH-011': 14,
@@ -1974,6 +2015,30 @@ final class McpPrivacyBoundaryFuzzTests {
           && sink === 'ApplicationRequestCarrier.surface.getHeaders',
     ],
     [
+      'UnparsedRequest exact raw-byte surface',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.UnparsedRequest'
+          && member === 'getCapturedBytes()'
+          && sink === 'ApplicationRequestCarrier.surface.getCapturedBytes',
+    ],
+    [
+      'UnparsedRequest lifecycle callback signature',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.SyntheticUnparsedCallbacks'
+          && member === 'didRejectUnparsedRequest(UnparsedRequest)'
+          && sink === 'ApplicationRequestCarrier.declaration',
+    ],
+    [
+      'UnparsedRequest marshaler callback signature',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.SyntheticUnparsedCallbacks'
+          && member === 'forUnparsedRequest(UnparsedRequest)'
+          && sink === 'ApplicationRequestCarrier.declaration',
+    ],
+    [
       'MCP state-protection exact visible surface',
       ({ matcherRuleId, member, owner, sink }) =>
         matcherRuleId === 'PRIV-MATCH-005'
@@ -2243,6 +2308,23 @@ final class McpPrivacyBoundaryFuzzTests {
       /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getAssociatedData/,
     ],
     [
+      'privacy-unparsed-request-bytes-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) => owner === 'com.soklet.UnparsedRequest'
+        && member === 'getCapturedBytes()'
+        && sink === 'ApplicationRequestCarrier.surface.getCapturedBytes',
+      /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getCapturedBytes/,
+    ],
+    [
+      'privacy-unparsed-request-marshaler-signature-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) =>
+        owner === 'com.soklet.SyntheticUnparsedCallbacks'
+          && member === 'forUnparsedRequest(UnparsedRequest)'
+          && sink === 'ApplicationRequestCarrier.declaration',
+      /omitted=\[[^\]]*SyntheticUnparsedCallbacks#forUnparsedRequest/,
+    ],
+    [
       'privacy-carrier-implementation-surface-omitted',
       'PRIV-MATCH-005',
       ({ member, owner, sink }) => owner === 'com.soklet.DefaultToolArguments'
@@ -2330,6 +2412,28 @@ final class McpPrivacyBoundaryFuzzTests {
     /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getNewSecret/,
   );
   writeFileSync(applicationCarrierFixturePath, originalApplicationCarrierFixture);
+
+  const unparsedRequestFixturePath = join(
+    privacySourceDirectory,
+    'UnparsedRequest.java',
+  );
+  const originalUnparsedRequestFixture = readFileSync(
+    unparsedRequestFixturePath,
+    'utf8',
+  );
+  writeFileSync(
+    unparsedRequestFixturePath,
+    originalUnparsedRequestFixture.replace(
+      'public Long getObservedByteCount() { return 0L; }',
+      `public Long getObservedByteCount() { return 0L; }
+  public byte[] getNewRawBytes() { return new byte[0]; }`,
+    ),
+  );
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getNewRawBytes/,
+  );
+  writeFileSync(unparsedRequestFixturePath, originalUnparsedRequestFixture);
 
   const eventLoopWiringFixturePath = join(
     privacyInternalSourceDirectory,

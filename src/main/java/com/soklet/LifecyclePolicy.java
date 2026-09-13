@@ -103,6 +103,30 @@ public final class LifecyclePolicy {
 		return this.forcedShutdownTimeout;
 	}
 
+	/** @return whether this policy is structurally equal to the other policy */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return this == other
+				|| other instanceof LifecyclePolicy policy
+				&& this.startupTimeout.equals(policy.startupTimeout)
+				&& this.startupCancelationTimeout.equals(
+						policy.startupCancelationTimeout)
+				&& this.gracefulShutdownTimeout.equals(
+						policy.gracefulShutdownTimeout)
+				&& this.forcedShutdownTimeout.equals(
+						policy.forcedShutdownTimeout);
+	}
+
+	/** @return structural lifecycle-policy hash code */
+	@Override
+	public int hashCode() {
+		int result = this.startupTimeout.hashCode();
+		result = 31 * result + this.startupCancelationTimeout.hashCode();
+		result = 31 * result + this.gracefulShutdownTimeout.hashCode();
+		result = 31 * result + this.forcedShutdownTimeout.hashCode();
+		return result;
+	}
+
 	@NonNull
 	InternalLifecyclePolicy toInternal() {
 		return new InternalLifecyclePolicy(getStartupTimeout(),

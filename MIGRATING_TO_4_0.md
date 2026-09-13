@@ -166,6 +166,12 @@ built-in default. Passing `null` to either
 `SimulatorConfig.Builder.lifecyclePolicy(...)` restores the complete default
 policy.
 
+`LifecyclePolicy` is a value type in 4.0.0: `equals(...)` and `hashCode()` use
+all four timeout values. Equal independently-built policies therefore compare
+equal and behave as one key in sets and maps; code written against an earlier
+4.0 prerelease that deliberately depended on object identity should use an
+identity-based collection instead.
+
 Review the builder Javadocs before selecting zero-duration phases or changing
 the finite startup timeout. A normal running shutdown with defaults is bounded
 by 18 seconds; shutdown intent during startup is bounded by 20 seconds from
@@ -249,6 +255,73 @@ For accepted SSE handshakes, Soklet now ignores application-provided
 headers. `Content-Length`, `Transfer-Encoding`, and other unsupported hop-by-hop
 headers still fail the accepted handshake because they can conflict with
 stream framing.
+
+The standard HTTP server now separates its body-only request bound from its
+aggregate request bound. Configure
+`HttpServer.Builder.maximumRequestBodySizeInBytes(...)` when payload capacity
+should be lower than `maximumRequestSizeInBytes(...)`; if omitted, the
+body-only bound tracks the aggregate bound regardless of setter order. The
+body-only bound counts received payload bytes after HTTP transfer framing is
+removed and before optional `Content-Encoding` decompression; transfer framing
+remains part of the aggregate bound.
+
+`ResponseMarshaler` now provides a separate hook for four parser-owned failures
+that occur before the standard HTTP transport can construct a valid request:
+malformed requests, overlong request targets, unsupported expectations, and
+oversized request headers. Direct implementations of the interface inherit the
+bodyless default for `forUnparsedRequest(UnparsedRequest)` and may override it;
+applications using `ResponseMarshaler.builder()` may keep the default
+implementation or configure `unparsedRequestHandler(...)`. The immutable value
+supplies `ServerType`, an `UnparsedRequestReason`, a best-effort remote address,
+a fresh read-only view of the bounded raw-input capture, the byte count
+attributed to the rejected request through the parser-proven failure boundary,
+and whether the capture omits any of those attributed bytes. The built-in HTTP
+capture is capped at 64 KiB. Bytes already read from the socket beyond the
+failure boundary are neither captured nor counted because they might belong to
+a pipelined request.
+
+The default marshaler and built-in fallback use these conventional statuses:
+
+- `MALFORMED_REQUEST` (`400`)
+- `REQUEST_TARGET_TOO_LONG` (`414`)
+- `EXPECTATION_FAILED` (`417`)
+- `REQUEST_HEADERS_TOO_LARGE` (`431`)
+
+The enum does not own a status: a custom marshaler may return any final response
+status from `200` through `599`. It deliberately receives no synthetic or
+nullable `Request`, parsed headers or target, or parser exception. Captured
+bytes are raw, unredacted network input and can contain credentials, cookies,
+body fragments, control bytes, or non-text data; do not log, meter, reflect, or
+persist them without application-specific redaction and retention controls.
+
+For each eligible parser rejection, Soklet submits one task to the configured
+request-handler executor. The framework-managed default executor has bounded
+concurrency and queue capacity; a custom executor controls its own capacity. If
+admitted, Soklet calls
+`LifecycleObserver.didRejectUnparsedRequest(UnparsedRequest)` before the
+marshaler; observer failures are contained, both operations share
+`requestHandlerTimeout`, and the marshaler runs only if budget remains after
+observation. That timeout bounds how long the transport waits and interrupts the
+worker; application code that ignores interruption can continue until executor
+shutdown. Neither callback runs inline on the socket selector.
+If executor admission is rejected, the work times out, or response generation
+fails, Soklet writes the conventional bodyless fallback. The detailed observer
+callback is therefore best-effort under overload; the existing low-cardinality
+transport metric still records the rejection. The transport retains control of
+connection closing and `Connection`, `Content-Length`, and
+`Transfer-Encoding` framing. The complete serialized custom response is capped
+at 64 KiB and must use a finite in-memory body; an oversized, streaming, or
+file-backed response uses the bodyless fallback.
+
+Other failures before request construction, such as a partial-request read
+timeout or an aggregate-size violation before the request line can be trusted,
+may close the connection without either detailed callback.
+
+`forContentTooLarge(Request, ResourceMethod)` is unchanged. It remains the
+route-aware `413` path when Soklet parsed enough input to construct a real
+request, including body-only and post-decompression size violations. The new
+method is only for failures where that trustworthy request context does not
+exist.
 
 MCP is intentionally different in 4.0.0. `McpServer` is sealed to Soklet's
 built-in request-scoped HTTP/1.1 implementation, and there is no public MCP
@@ -428,6 +501,15 @@ fallback, or legacy adapter.
 | Session-scoped client/capability state | Validated protocol metadata and client capabilities are supplied per request. |
 | Legacy operation set | `server/discover`, current list/read/get/call methods, input responses, listening/subscriptions, and profile-defined notifications. |
 | Experimental or application-specific task shapes | The negotiated `io.modelcontextprotocol/tasks` extension uses server-directed task creation plus `tasks/get`, `tasks/update`, and `tasks/cancel`; legacy `task`, `tasks/list`, and `tasks/result` forms are not revived. |
+
+Task-change hints are a bounded, advisory projection; `tasks/get` remains
+authoritative. Soklet now coalesces repeated hints per accepted subscription,
+keeps distinct task IDs in first-event order, and contributes at most one
+queued or running projection job per subscription to the shared scheduler. A
+256-ID filter can no longer exhaust that scheduler by itself. Lookups are
+serialized within one subscription, however, so a slow or hung task-manager
+lookup delays that subscription's other task IDs while unrelated subscriptions
+continue through the scheduler's bounded parallel workers.
 
 A readable legacy `initialize` request receives a narrow modern-only migration
 diagnostic naming `2026-07-28`. It is not negotiation or a compatibility

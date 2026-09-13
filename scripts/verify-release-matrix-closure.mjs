@@ -124,7 +124,7 @@ const ROW_KEYS = Object.freeze([
 ]);
 const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json';
 const EXPECTED_FINITE_BOUND_SEMANTICS_SHA256 =
-  '261c9794636d4e9f4f4e99605cd967860cb6a4152082f19b827e5d719f383a51';
+  '919b9316cf17ea9bdcf9202077c0297a1602136b39f4df2cd54e24b4ede1aa3e';
 const EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256 =
   'e163b4624f489f61e3d9b11f7e75aed4d22b88730486c977a644b070f49f3e9a';
 const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
@@ -203,7 +203,7 @@ export const FINITE_BOUND_MATCHER_RULES = Object.freeze([
     id: 'FINITE-MATCH-001',
   }),
   Object.freeze({
-    description: 'Components named maximum*, minimum*, *Capacity, *Concurrency, *Timeout, *Deadline, *Duration, *Interval, *Resolution, *Backlog, or *BufferSize on MCP records whose type name ends in Config, Configuration, or Limits.',
+    description: 'Components named maximum*, minimum*, *Capacity, *Concurrency, *Timeout, *Deadline, *Duration, *Interval, *Resolution, *Backlog, or *BufferSize on MCP records whose type name ends in Config, Configuration, or Limits, plus equivalent public no-argument accessors backed by same-named final finite fields on final *Limits classes.',
     family: 'BOUND_BEARING_CONFIGURATION_COMPONENT',
     id: 'FINITE-MATCH-002',
   }),
@@ -229,7 +229,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  'a0f0f0794abf242b2861ffb536fca8c7061aa4739b7fef4d9b5fce478b28e74c';
+  '7f2d8704bffec7084cb5c94f7d9d1cd2872d7536a3d2b2f3cbce854c639d27d9';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -339,7 +339,7 @@ export const PRIVACY_MATCHER_RULES = Object.freeze([
     id: 'PRIV-MATCH-004',
   }),
   Object.freeze({
-    description: 'Exact Request/Throwable accessors and lifecycle callback invocations; every public/protected field, method, or constructor whose type/signature exposes Throwable or a frozen Request/context carrier seed; every non-rendering visible declared surface of those seeds, nested builders/copiers, and transitive implementations; and canonical constructors, carrier accessors, and implicit renderers for every record with such a component regardless of record visibility. Explicit toString overrides are represented only by the diagnostic-renderer family. Seeds include Request, trace/multipart carriers, all top-level Mcp*Context owners, localization/invocation/tool/request-id/propagation/admission/input-response carriers. Throws clauses alone are not exposure candidates.',
+    description: 'Exact Request/Throwable accessors and lifecycle callback invocations; every public/protected field, method, or constructor whose type/signature exposes Throwable or a frozen Request/context carrier seed; every non-rendering visible declared surface of those seeds, nested builders/copiers, and transitive implementations; and canonical constructors, carrier accessors, and implicit renderers for every record with such a component regardless of record visibility. Explicit toString overrides are represented only by the diagnostic-renderer family. Seeds include Request and UnparsedRequest, trace/multipart carriers, all top-level Mcp*Context owners, localization/invocation/tool/request-id/propagation/admission/input-response carriers. Throws clauses alone are not exposure candidates.',
     family: 'REQUEST_OR_THROWABLE_EXPOSURE',
     id: 'PRIV-MATCH-005',
   }),
@@ -1183,6 +1183,14 @@ export function deriveFiniteBoundCandidates(root, scanRoots) {
     const structure = maskJava(source);
     const packageName = structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '';
     const typeScopes = javaTypeScopes(structure);
+    const finalLimitsClasses = new Map(typeScopes
+      .filter(({ header, kind, name }) => kind === 'class'
+        && name.endsWith('Limits')
+        && new RegExp(`\\bfinal\\s+class\\s+${name}\\b`, 'u').test(header))
+      .map((type) => [
+        ownerAt(packageName, typeScopes, type.opening, type.name),
+        type,
+      ]));
     const lineAt = (index) => source.slice(0, index).split(/\r?\n/u).length;
 
     const finiteFieldPattern = /\b((?:(?:public|protected|private|static|final|transient|volatile)\s+|(?:@[A-Za-z_$][\w$]*(?:\([^)]*\))?)\s+)*)(?:(?:[A-Za-z_$][\w$]*\.)*(?:BigInteger|Duration)|byte|short|int|long)\s+([A-Za-z_$][\w$]*)\s*(?==|,|;)/gu;
@@ -1278,6 +1286,33 @@ export function deriveFiniteBoundCandidates(root, scanRoots) {
 
     const methods = javaMethodScopes(source, structure, typeScopes);
     for (const scope of methods) {
+      const finalLimitsClass = finalLimitsClasses.get(scope.owner);
+      const sameNamedFiniteField = finalLimitsClass === undefined ? false
+        : new RegExp(
+          `\\bfinal\\s+(?:(?:@[A-Za-z_$][\\w$]*(?:\\([^)]*\\))?)\\s+)*(?:(?:[A-Za-z_$][\\w$]*\\.)*(?:BigInteger|Duration)|byte|short|int|long)\\s+${scope.method}\\s*;`,
+          'u',
+        ).test(structure.slice(
+          finalLimitsClass.opening + 1,
+          finalLimitsClass.closing,
+        ));
+      const exactFieldAccessor = sameNamedFiniteField
+        && scope.publicMethod
+        && scope.parameters.trim().length === 0
+        && BOUND_NAME_PATTERN.test(scope.method)
+        && new RegExp(
+          `^\\s*return\\s+(?:this\\s*\\.\\s*)?${scope.method}\\s*;\\s*$`,
+          'u',
+        ).test(scope.body);
+      if (exactFieldAccessor) {
+        add({
+          file,
+          line: scope.line,
+          matcherRuleId: 'FINITE-MATCH-002',
+          member: scope.method,
+          owner: scope.owner,
+        });
+        continue;
+      }
       if (derivedMethod(scope)) {
         const member = methodMember(scope.method, scope.parameters, file, scope.line);
         add({
@@ -2014,6 +2049,7 @@ export function derivePrivacyBoundaryCandidates(root, scanRoots,
     'com.soklet.Request',
     'com.soklet.TraceContext',
     'com.soklet.TraceStateEntry',
+    'com.soklet.UnparsedRequest',
   ]);
   for (const { file } of sourceModels) {
     const contextName = file.match(

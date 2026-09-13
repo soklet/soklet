@@ -64,6 +64,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -3374,6 +3375,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (this.shutdown)
 					rejected.add(requiredJob);
 				else if (!this.jobs.offer(requiredJob)) {
+					// RequestControl normally contributes at most one queued job per
+					// subscription. Keep owner-aware eviction as a fail-safe if a future
+					// caller violates that invariant, rather than letting its duplicates
+					// displace an unrelated stream.
 					int currentOwnerCount = queuedOwnerCountWhileLocked(
 							requiredJob.owner());
 					Object mostRepresentedOwner = mostRepresentedOwnerWhileLocked();
@@ -3514,7 +3519,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
-		private void shutdown() {
+		void shutdown() {
 			List<TaskNotificationProjectionJob> rejected;
 			synchronized (this.lock) {
 				if (this.shutdown)
@@ -7381,8 +7386,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private List<@NonNull Header> deadlineResponseHeaders;
 		@NonNull
-		private final Map<@NonNull String, @NonNull TaskNotificationProjectionState>
-				taskNotificationProjectionStates;
+		private final TaskNotificationProjectionQueue
+				taskNotificationProjectionQueue;
 		private long nextKeepAliveNanos;
 		private long streamOpenedAtNanos;
 		private long subscriptionOpenedAtNanos;
@@ -7431,7 +7436,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.responseCallback = requireNonNull(responseCallback);
 			this.publicRequestContext = Optional.empty();
 			this.deadlineResponseHeaders = decorateResponseHeaders(List.of());
-			this.taskNotificationProjectionStates = new LinkedHashMap<>();
+			this.taskNotificationProjectionQueue =
+					new TaskNotificationProjectionQueue();
 			this.lifecycleWorkOwners = lifecycleAdmission == null ? 0 : 1;
 		}
 
@@ -7831,7 +7837,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void scheduleTaskSubscriptionEvent(
 				McpSubscriptionEventSource.Event.@NonNull TaskChanged event) {
 			String taskId = requireNonNull(event).taskId();
-			TaskNotificationProjectionState state;
 			boolean submit = false;
 			synchronized (lock) {
 				if (!subscriptionOwned || canceled || terminal
@@ -7840,47 +7845,41 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						|| responseStream == null
 						|| !subscriptionRegistration.filter().containsTask(taskId))
 					return;
-				state = taskNotificationProjectionStates.computeIfAbsent(taskId,
-						ignored -> new TaskNotificationProjectionState());
-				state.requestedGeneration++;
-				if (!state.scheduled) {
-					state.scheduled = true;
-					submit = true;
-				}
+				submit = taskNotificationProjectionQueue.request(taskId);
 			}
 			if (submit)
-				submitTaskNotificationProjection(taskId, state);
+				submitTaskNotificationProjection();
 		}
 
-		private void submitTaskNotificationProjection(@NonNull String taskId,
-				@NonNull TaskNotificationProjectionState state) {
+		private void submitTaskNotificationProjection() {
 			processor.executeTaskNotificationProjection(
 					new TaskNotificationProjectionJob(
 							this,
-							() -> projectTaskNotification(taskId, state),
-							() -> failTaskNotificationProjection(state,
+							this::projectTaskNotification,
+							() -> failTaskNotificationProjection(
 									StreamTerminationReason.BACKPRESSURE, null)));
 		}
 
-		private void projectTaskNotification(@NonNull String taskId,
-				@NonNull TaskNotificationProjectionState state) {
-			long projectionGeneration;
+		private void projectTaskNotification() {
+			TaskNotificationProjection projection;
 			SubscriptionRegistration registration;
 			McpRequestSseStream stream;
 			McpRequestContext requestContext;
 			TaskManagerAdapter taskManagerAdapter;
 			synchronized (lock) {
-				if (!taskNotificationProjectionActiveWhileLocked(taskId, state)) {
-					state.scheduled = false;
+				if (!taskNotificationProjectionOwnerActiveWhileLocked()) {
+					taskNotificationProjectionQueue.reset();
 					return;
 				}
-				projectionGeneration = state.requestedGeneration;
+				projection = taskNotificationProjectionQueue.poll();
+				if (projection == null)
+					return;
 				registration = requireNonNull(subscriptionRegistration);
 				stream = requireNonNull(responseStream);
 				requestContext = publicRequestContext.orElse(null);
 			}
 			if (requestContext == null) {
-				failTaskNotificationProjection(state,
+				failTaskNotificationProjection(
 						StreamTerminationReason.INTERNAL_ERROR, null);
 				return;
 			}
@@ -7888,7 +7887,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					registration.endpointPath());
 			if (endpointRuntime == null
 					|| endpointRuntime.binding().taskManagerAdapter().isEmpty()) {
-				failTaskNotificationProjection(state,
+				failTaskNotificationProjection(
 						StreamTerminationReason.INTERNAL_ERROR, null);
 				return;
 			}
@@ -7898,7 +7897,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Optional<TaskSnapshot> taskSnapshot;
 			try {
 				taskSnapshot = requireNonNull(
-						taskManagerAdapter.findTask(requestContext, taskId),
+						taskManagerAdapter.findTask(requestContext,
+								projection.taskId()),
 						"The MCP task manager adapter returned null.");
 			} catch (Throwable throwable) {
 				// Projection is advisory. A transient application-owned lookup failure
@@ -7906,31 +7906,31 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				// coalesced generation for retry.
 				if (throwable instanceof InterruptedException)
 					Thread.currentThread().interrupt();
-				finishTaskNotificationProjection(taskId, state,
-						projectionGeneration);
+				finishTaskNotificationProjection(projection);
 				return;
 			}
 
 			try {
 				if (taskSnapshot.isPresent()) {
 					TaskSnapshot snapshot = taskSnapshot.orElseThrow();
-					if (!taskId.equals(snapshot.task().getTaskId()))
+					if (!projection.taskId().equals(snapshot.task().getTaskId()))
 						throw new IllegalStateException(
 								"The MCP task manager returned a mismatched task ID.");
 					try {
 						McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
 								registration.filter().clientCapabilities());
 					} catch (McpProtocolJsonRpcException exception) {
-						finishTaskNotificationProjection(taskId, state,
-								projectionGeneration);
+						finishTaskNotificationProjection(projection);
 						return;
 					}
 					boolean deliver;
 					synchronized (lock) {
 						deliver = taskNotificationProjectionActiveWhileLocked(
-								taskId, state)
-								&& state.requestedGeneration == projectionGeneration
-								&& shouldDeliverTaskSnapshot(state, snapshot);
+								projection)
+								&& projection.state().requestedGeneration
+								== projection.generation()
+								&& shouldDeliverTaskSnapshot(
+										projection.state(), snapshot);
 					}
 					if (deliver) {
 						McpOutboundChannel.OfferResult result;
@@ -7940,43 +7940,49 @@ final class McpHttpServerRuntime implements AutoCloseable {
 									registration.subscriptionId(), snapshot);
 							result = stream.offerMessage(notification);
 						} catch (IllegalArgumentException exception) {
-							failTaskNotificationProjection(state,
+							failTaskNotificationProjection(
 									StreamTerminationReason.BACKPRESSURE, exception);
 							return;
 						}
 						if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
 							synchronized (lock) {
 								if (taskNotificationProjectionActiveWhileLocked(
-										taskId, state))
-									state.lastDeliveredSnapshot = snapshot;
+										projection))
+									projection.state().lastDeliveredSnapshot = snapshot;
 							}
 						} else if (result == McpOutboundChannel.OfferResult.FULL
 								|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
-							failTaskNotificationProjection(state,
+							failTaskNotificationProjection(
 									StreamTerminationReason.BACKPRESSURE, null);
 							return;
 						}
 					}
 				}
-				finishTaskNotificationProjection(taskId, state,
-						projectionGeneration);
+				finishTaskNotificationProjection(projection);
 			} catch (Throwable throwable) {
-				failTaskNotificationProjection(state,
+				failTaskNotificationProjection(
 						StreamTerminationReason.INTERNAL_ERROR, throwable);
 			}
 		}
 
-		private boolean taskNotificationProjectionActiveWhileLocked(
-				@NonNull String taskId,
-				@NonNull TaskNotificationProjectionState state) {
+		private boolean taskNotificationProjectionOwnerActiveWhileLocked() {
 			if (!Thread.holdsLock(lock))
 				throw new IllegalStateException(
 						"The request-control lock is required for task notification state.");
 			return subscriptionOwned && !canceled && !terminal
 					&& !streamAbortOwned && !streamTerminalResponseOwned
-					&& subscriptionRegistration != null && responseStream != null
-					&& taskNotificationProjectionStates.get(taskId) == state
-					&& subscriptionRegistration.filter().containsTask(taskId);
+					&& subscriptionRegistration != null && responseStream != null;
+		}
+
+		private boolean taskNotificationProjectionActiveWhileLocked(
+				@NonNull TaskNotificationProjection projection) {
+			if (!Thread.holdsLock(lock))
+				throw new IllegalStateException(
+						"The request-control lock is required for task notification state.");
+			return taskNotificationProjectionOwnerActiveWhileLocked()
+					&& taskNotificationProjectionQueue.owns(projection)
+					&& requireNonNull(subscriptionRegistration).filter()
+							.containsTask(projection.taskId());
 		}
 
 		private boolean shouldDeliverTaskSnapshot(
@@ -7995,36 +8001,40 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return true;
 		}
 
-		private void finishTaskNotificationProjection(@NonNull String taskId,
-				@NonNull TaskNotificationProjectionState state,
-				long projectionGeneration) {
-			boolean submitAgain = false;
+		private void finishTaskNotificationProjection(
+				@NonNull TaskNotificationProjection projection) {
+			boolean submitAgain;
 			synchronized (lock) {
-				if (!taskNotificationProjectionActiveWhileLocked(taskId, state)) {
-					state.scheduled = false;
-					return;
-				}
-				if (state.requestedGeneration == projectionGeneration)
-					state.scheduled = false;
-				else
-					submitAgain = true;
+				submitAgain = taskNotificationProjectionQueue.finish(
+						projection,
+						taskNotificationProjectionActiveWhileLocked(projection));
 			}
 			if (submitAgain)
-				submitTaskNotificationProjection(taskId, state);
+				submitTaskNotificationProjection();
 		}
 
 		private void failTaskNotificationProjection(
-				@NonNull TaskNotificationProjectionState state,
 				@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
 			McpRequestSseStream stream;
 			synchronized (lock) {
-				state.scheduled = false;
 				stream = subscriptionOwned && responseStream != null
 						? responseStream : null;
+				if (stream == null)
+					taskNotificationProjectionQueue.reset();
 			}
-			if (stream != null)
-				scheduleSubscriptionStreamFailure(stream, reason, cause);
+			if (stream != null) {
+				// Fence new events before clearing the owner job. An event racing this
+				// failure then coalesces into the still-outstanding job and is discarded
+				// by reset instead of submitting work after stream failure owns cleanup.
+				try {
+					scheduleSubscriptionStreamFailure(stream, reason, cause);
+				} finally {
+					synchronized (lock) {
+						taskNotificationProjectionQueue.reset();
+					}
+				}
+			}
 		}
 
 		private void offerSubscriptionEvent(
@@ -9763,9 +9773,166 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Per-subscription task IDs awaiting authoritative projection. Access is
+	 * serialized by the owning request-control lock.
+	 */
+	static final class TaskNotificationProjectionQueue {
+		private final int maximumTaskIds;
+		@NonNull
+		private final Map<@NonNull String, @NonNull TaskNotificationProjectionState>
+				states;
+		@NonNull
+		private final ArrayDeque<@NonNull String> pendingTaskIds;
+		private boolean jobOutstanding;
+		private @Nullable TaskNotificationProjection active;
+
+		TaskNotificationProjectionQueue() {
+			this(MAXIMUM_TASK_SUBSCRIPTION_IDS);
+		}
+
+		TaskNotificationProjectionQueue(int maximumTaskIds) {
+			if (maximumTaskIds < 1)
+				throw new IllegalArgumentException(
+						"Task-notification projection capacity must be positive.");
+			this.maximumTaskIds = maximumTaskIds;
+			this.states = new LinkedHashMap<>();
+			this.pendingTaskIds = new ArrayDeque<>(maximumTaskIds);
+		}
+
+		/**
+		 * Records a generation and reports whether the owner must submit its sole
+		 * scheduler job.
+		 */
+		boolean request(@NonNull String taskId) {
+			String requiredTaskId = requireNonNull(taskId);
+			TaskNotificationProjectionState state = this.states.get(requiredTaskId);
+			if (state == null) {
+				if (this.states.size() >= this.maximumTaskIds)
+					throw new IllegalStateException(
+							"A task-notification projection exceeded its subscription filter bound.");
+				state = new TaskNotificationProjectionState();
+				this.states.put(requiredTaskId, state);
+			}
+			state.requestedGeneration++;
+			if (!state.pending) {
+				state.pending = true;
+				this.pendingTaskIds.addLast(requiredTaskId);
+			}
+			if (this.jobOutstanding)
+				return false;
+			this.jobOutstanding = true;
+			return true;
+		}
+
+		@Nullable
+		TaskNotificationProjection poll() {
+			if (!this.jobOutstanding)
+				throw new IllegalStateException(
+						"A task-notification projection job is not outstanding.");
+			if (this.active != null)
+				throw new IllegalStateException(
+						"A task-notification projection is already active.");
+			String taskId = this.pendingTaskIds.pollFirst();
+			if (taskId == null) {
+				this.jobOutstanding = false;
+				return null;
+			}
+			TaskNotificationProjectionState state = requireNonNull(
+					this.states.get(taskId));
+			state.pending = false;
+			this.active = new TaskNotificationProjection(taskId, state,
+					state.requestedGeneration);
+			return this.active;
+		}
+
+		boolean owns(@NonNull TaskNotificationProjection projection) {
+			TaskNotificationProjection requiredProjection =
+					requireNonNull(projection);
+			return this.active == requiredProjection
+					&& this.states.get(requiredProjection.taskId())
+					== requiredProjection.state();
+		}
+
+		/**
+		 * Finishes one task and reports whether the owner must re-enter the shared
+		 * scheduler at its tail.
+		 */
+		boolean finish(@NonNull TaskNotificationProjection projection,
+				boolean ownerActive) {
+			TaskNotificationProjection requiredProjection =
+					requireNonNull(projection);
+			if (!ownerActive || !owns(requiredProjection)) {
+				reset();
+				return false;
+			}
+			this.active = null;
+			TaskNotificationProjectionState state = requiredProjection.state();
+			if (state.requestedGeneration != requiredProjection.generation()
+					&& !state.pending) {
+				state.pending = true;
+				this.pendingTaskIds.addLast(requiredProjection.taskId());
+			}
+			if (this.pendingTaskIds.isEmpty()) {
+				this.jobOutstanding = false;
+				return false;
+			}
+			return true;
+		}
+
+		void reset() {
+			for (TaskNotificationProjectionState state : this.states.values())
+				state.pending = false;
+			this.pendingTaskIds.clear();
+			this.active = null;
+			this.jobOutstanding = false;
+		}
+
+		int pendingTaskIdCount() {
+			return this.pendingTaskIds.size();
+		}
+
+		boolean jobOutstanding() {
+			return this.jobOutstanding;
+		}
+	}
+
+	static final class TaskNotificationProjection {
+		@NonNull
+		private final String taskId;
+		@NonNull
+		private final TaskNotificationProjectionState state;
+		private final long generation;
+
+		TaskNotificationProjection(@NonNull String taskId,
+				@NonNull TaskNotificationProjectionState state,
+				long generation) {
+			this.taskId = requireNonNull(taskId);
+			this.state = requireNonNull(state);
+			if (generation < 1L)
+				throw new IllegalArgumentException(
+						"A task-notification projection generation must be positive.");
+			this.generation = generation;
+		}
+
+		@NonNull
+		String taskId() {
+			return this.taskId;
+		}
+
+		@NonNull
+		TaskNotificationProjectionState state() {
+			return this.state;
+		}
+
+		long generation() {
+			return this.generation;
+		}
+	}
+
 	private static final class TaskNotificationProjectionState {
 		private long requestedGeneration;
-		private boolean scheduled;
+		private boolean pending;
 		private @Nullable TaskSnapshot lastDeliveredSnapshot;
 	}
 

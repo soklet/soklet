@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 248;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"a2edb5fa6dfc40d43fecbfcb33e8b41594539db7a0c3616c86c74ad637c2eab7";
+			"001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =

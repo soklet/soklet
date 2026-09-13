@@ -545,10 +545,26 @@ public class MicrohttpInternalTests {
 		byte[] request = ascii("GET /too-long HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
 		add(tokenizer, request);
-		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 4);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(),
+				1024, 100, 4);
 
 		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
 		Assertions.assertEquals(RequestTooLargeException.Reason.URI_TOO_LONG, exception.reason());
+	}
+
+	@Test
+	public void parserRejectsUnterminatedRequestTargetAtFirstOverLimitByte() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET /1234");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 4);
+
+		RequestTooLargeException exception = Assertions.assertThrows(
+				RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.URI_TOO_LONG,
+				exception.reason());
+		Assertions.assertEquals(request.length, parser.failureBoundaryExclusive());
 	}
 
 	@Test
@@ -599,20 +615,67 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
-	public void chunkDataTerminatorRejectsBytesBeforeCrLf() {
+	public void chunkDataTerminatorStopsCaptureAtFirstMismatchingByte() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
-		byte[] request = ascii("POST / HTTP/1.1\r\n"
+		String safePrefix = "POST / HTTP/1.1\r\n"
 				+ "Host: localhost\r\n"
 				+ "Transfer-Encoding: chunked\r\n"
 				+ "\r\n"
 				+ "3\r\n"
-				+ "abcx\r\n"
-				+ "0\r\n"
-				+ "\r\n");
+				+ "abcX";
+		byte[] request = ascii(safePrefix
+				+ "GET /pipelined-secret HTTP/1.1\r\n"
+				+ "Authorization: must-not-be-captured\r\n\r\n");
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
 
 		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+		ByteTokenizer.CapturedPrefix capture = tokenizer.capturePrefixAndRelease(
+				parser.failureBoundaryExclusive(), Integer.MAX_VALUE);
+		Assertions.assertEquals(safePrefix, ascii(capture.bytes()));
+		Assertions.assertEquals(safePrefix.length(), capture.observedByteCount());
+		Assertions.assertFalse(capture.truncated());
+	}
+
+	@Test
+	public void chunkDataTerminatorValidatesSecondByteIncrementally() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		String partial = "POST / HTTP/1.1\r\n"
+				+ "Host: localhost\r\n"
+				+ "Transfer-Encoding: chunked\r\n"
+				+ "\r\n"
+				+ "3\r\n"
+				+ "abc\r";
+		add(tokenizer, ascii(partial));
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertFalse(parser.parse());
+		add(tokenizer, ascii("XGET /pipelined-secret HTTP/1.1\r\n\r\n"));
+		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+
+		String safePrefix = partial + "X";
+		ByteTokenizer.CapturedPrefix capture = tokenizer.capturePrefixAndRelease(
+				parser.failureBoundaryExclusive(), Integer.MAX_VALUE);
+		Assertions.assertEquals(safePrefix, ascii(capture.bytes()));
+		Assertions.assertEquals(safePrefix.length(), capture.observedByteCount());
+		Assertions.assertFalse(capture.truncated());
+	}
+
+	@Test
+	public void httpVersionStopsCaptureAtFirstMismatchingByte() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		String safePrefix = "GET / HTTX";
+		add(tokenizer, ascii(safePrefix
+				+ "GET /pipelined-secret HTTP/1.1\r\n"
+				+ "Authorization: must-not-be-captured\r\n\r\n"));
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+		ByteTokenizer.CapturedPrefix capture = tokenizer.capturePrefixAndRelease(
+				parser.failureBoundaryExclusive(), Integer.MAX_VALUE);
+		Assertions.assertEquals(safePrefix, ascii(capture.bytes()));
+		Assertions.assertEquals(safePrefix.length(), capture.observedByteCount());
+		Assertions.assertFalse(capture.truncated());
 	}
 
 	@Test

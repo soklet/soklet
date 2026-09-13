@@ -819,7 +819,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
-	public void blockedTaskEventStormLeavesCapacityForOrdinaryRequests()
+	public void maximumTaskIdStormCoalescesWithoutClosingItsSubscription()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		TaskStreamCloseMetrics metrics = new TaskStreamCloseMetrics();
@@ -836,7 +836,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			McpTaskOrigin origin = taskManager
 					.requireTask("task-storm-origin").getTaskOrigin();
 			List<String> taskIds = new ArrayList<>();
-			for (int index = 0; index < 140; index++) {
+			for (int index = 0; index < 256; index++) {
 				String taskId = "task-storm-" + index;
 				taskIds.add(taskId);
 				taskManager.putTask(workingTask(taskId, origin),
@@ -850,20 +850,29 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					client.readChunkText());
 			taskManager.resetFindInvocations();
 
-			Set<String> blockedTaskIds = new HashSet<>(taskIds.subList(0, 4));
-			taskManager.blockTaskFindsAfterSnapshot(blockedTaskIds);
-			for (String taskId : blockedTaskIds)
-				taskManager.publishTaskChanged(taskId);
+			taskManager.blockTaskFindsAfterSnapshot(Set.of(taskIds.get(0)));
+			taskManager.publishTaskChanged(taskIds.get(0));
 			taskManager.awaitBlockedTaskFinds();
-			for (String taskId : taskIds.subList(4, taskIds.size()))
+			for (String taskId : taskIds.subList(1, taskIds.size()))
 				taskManager.publishTaskChanged(taskId);
 
-			metrics.awaitBackpressureClose();
 			assertDiscoverCompletes(port);
-			Assertions.assertEquals(4, taskManager.findInvocations(),
-					"The blocked projection workers must remain bounded while an "
-							+ "ordinary MCP request completes independently.");
-			awaitRecoveredTaskSubscription(port, "task-storm-origin");
+			Assertions.assertEquals(1, taskManager.findInvocations(),
+					"One subscription must occupy only one projection worker and "
+							+ "one shared scheduler slot.");
+			Assertions.assertEquals(1,
+					server.getDiagnostics().getActiveSubscriptions());
+			metrics.assertOpen();
+
+			taskManager.releaseBlockedTaskFinds();
+			for (String taskId : taskIds)
+				Assertions.assertEquals(workingNotification("\"bounded-storm\"",
+						taskId), client.readChunkText(),
+						"Unique task IDs must retain first-event order.");
+			Assertions.assertEquals(taskIds.size(), taskManager.findInvocations());
+			Assertions.assertEquals(1,
+					server.getDiagnostics().getActiveSubscriptions());
+			metrics.assertOpen();
 		} finally {
 			taskManager.releaseBlockedTaskFinds();
 			if (client != null)
@@ -1532,6 +1541,12 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					this.requestStreamReason.get());
 			Assertions.assertSame(McpStreamTerminationReason.BACKPRESSURE,
 					this.subscriptionReason.get());
+		}
+
+		private void assertOpen() {
+			Assertions.assertEquals(1L, this.subscriptionClosed.getCount());
+			Assertions.assertNull(this.requestStreamReason.get());
+			Assertions.assertNull(this.subscriptionReason.get());
 		}
 	}
 

@@ -207,6 +207,60 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	@Test
+	void installedBuiltInDelegateGracefullyTerminatesBeforeStart()
+			throws Exception {
+		CountDownLatch attachmentSettled = new CountDownLatch(1);
+		CountDownLatch releaseAttachmentWrapper = new CountDownLatch(1);
+		TransparentBuiltInHttpEndpoint http =
+				new TransparentBuiltInHttpEndpoint();
+		OwnerHarness harness = OwnerHarness.create(config(http, phasePolicy()).build(),
+				new LifecycleWorkers(), () -> {
+					attachmentSettled.countDown();
+					awaitIgnoringInterrupts(releaseAttachmentWrapper);
+				});
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() ->
+				captureFailure(harness.owner()::start));
+
+		try (harness) {
+			Assertions.assertTrue(attachmentSettled.await(5, TimeUnit.SECONDS),
+					"The built-in delegate was not installed before its wrapper gate");
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
+			Assertions.assertTrue(http.awaitQuiesce(),
+					"The owner did not quiesce the installed built-in delegate");
+			Assertions.assertEquals(0, http.startCalls());
+			Assertions.assertEquals(0, http.forceCalls());
+			Assertions.assertTrue(http.delegate().getLifecycleAdapter()
+					.generation().isEmpty(),
+					"Shutdown-before-start must not create a built-in generation");
+			releaseAttachmentWrapper.countDown();
+
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(5, TimeUnit.SECONDS));
+			InternalShutdownResult result = stage.toCompletableFuture()
+					.get(5, TimeUnit.SECONDS).internalResult();
+			assertExactCancellation(startupFailure, result);
+			Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
+					result.disposition());
+			InternalLifecycleComponentShutdownResult participant =
+					assertParticipant(result,
+							InternalLifecycleComponentType.HTTP,
+							InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
+			Assertions.assertTrue(participant.failures().isEmpty());
+			Assertions.assertTrue(participant.residualActivity().isEmpty());
+			Assertions.assertEquals(1, http.quiesceCalls());
+			Assertions.assertEquals(0, http.forceCalls());
+			Assertions.assertFalse(http.delegate().isStarted());
+			assertServiceUnavailable(http.invoke("/late-startup"));
+			assertStableTerminalIdentity(harness.owner(), stage, result);
+		} finally {
+			releaseAttachmentWrapper.countDown();
+			drainFuture(start);
+		}
+	}
+
+	@Test
 	void installedAttachmentProvenOnlyAfterForceIsForced() throws Exception {
 		assertAttachedNeverStarted(ProofMode.FORCED,
 				InternalShutdownDisposition.FORCED,
@@ -1097,10 +1151,18 @@ final class SokletDirectLateStartupIntegrationTests {
 
 	private abstract static class AbstractHttpEndpoint implements HttpServer {
 		@NonNull
-		private final TransportIdentity identity = TransportIdentity.create();
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicReference<RequestHandler> requestHandler =
 				new AtomicReference<>();
+
+		private AbstractHttpEndpoint() {
+			this(TransportIdentity.create());
+		}
+
+		private AbstractHttpEndpoint(@NonNull TransportIdentity identity) {
+			this.identity = java.util.Objects.requireNonNull(identity);
+		}
 
 		final void captureHandler(
 				@NonNull HttpTransportAttachmentContext context) {
@@ -1204,6 +1266,85 @@ final class SokletDirectLateStartupIntegrationTests {
 			captureHandler(context);
 			this.runtime.install(context.getTerminationSignal());
 			return this.runtime;
+		}
+	}
+
+	private static final class TransparentBuiltInHttpEndpoint
+			extends AbstractHttpEndpoint {
+		@NonNull
+		private final DefaultHttpServer delegate;
+		@NonNull
+		private final AtomicInteger startCalls = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger quiesceCalls = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger forceCalls = new AtomicInteger();
+		@NonNull
+		private final CountDownLatch quiesceEntered = new CountDownLatch(1);
+
+		private TransparentBuiltInHttpEndpoint() {
+			this((DefaultHttpServer) HttpServer.fromPort(0));
+		}
+
+		private TransparentBuiltInHttpEndpoint(
+				@NonNull DefaultHttpServer delegate) {
+			super(delegate.getTransportIdentity());
+			this.delegate = delegate;
+		}
+
+		@NonNull
+		DefaultHttpServer delegate() {
+			return this.delegate;
+		}
+
+		int startCalls() {
+			return this.startCalls.get();
+		}
+
+		int quiesceCalls() {
+			return this.quiesceCalls.get();
+		}
+
+		int forceCalls() {
+			return this.forceCalls.get();
+		}
+
+		boolean awaitQuiesce() throws InterruptedException {
+			return this.quiesceEntered.await(5, TimeUnit.SECONDS);
+		}
+
+		@Override
+		@NonNull
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			captureHandler(context);
+			TransportRuntime delegated = context.attachTransparentDelegate(
+					this.delegate,
+					context.getAdmissionFencedRequestHandler());
+			return new TransportRuntime() {
+				@Override
+				public void start(@NonNull StartupContext context) {
+					startCalls.incrementAndGet();
+					delegated.start(context);
+				}
+
+				@Override
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
+					quiesceCalls.incrementAndGet();
+					try {
+						delegated.shutdownGracefully(context);
+					} finally {
+						quiesceEntered.countDown();
+					}
+				}
+
+				@Override
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
+					forceCalls.incrementAndGet();
+					delegated.shutdownForcibly(context);
+				}
+			};
 		}
 	}
 

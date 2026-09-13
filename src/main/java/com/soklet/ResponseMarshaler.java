@@ -134,6 +134,56 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public interface ResponseMarshaler {
 	/**
+	 * Prepares a response for incoming bytes that a transport has rejected before
+	 * it can construct a valid {@link Request}.
+	 * <p>
+	 * This method is invoked at most once for each rejected request. It runs only
+	 * if the rejection-detail task is accepted and timeout budget remains after
+	 * {@link LifecycleObserver#didRejectUnparsedRequest(UnparsedRequest)}.
+	 * Captured bytes are untrusted and may contain
+	 * credentials or other sensitive values;
+	 * applications should apply their own redaction and retention policies before
+	 * logging or storing them.
+	 * <p>
+	 * The built-in standard HTTP transport dispatches this method to the
+	 * configured request-handler executor and never invokes it inline on the
+	 * selector thread. The framework-managed default executor has bounded
+	 * concurrency and queue capacity; a custom executor controls its own capacity.
+	 * The method should perform bounded work and must not block. The request-handler
+	 * timeout bounds how long the transport waits for the combined observation and
+	 * marshaling pipeline; cancellation interrupts the worker but remains
+	 * cooperative if application code ignores interruption. If application capacity
+	 * is unavailable, both callbacks may be skipped and the transport writes its
+	 * built-in bodyless response instead.
+	 * <p>
+	 * Transport-owned HTTP framing, including connection closure and message-body
+	 * length, is applied after marshaling. A transport may reject a response-body
+	 * representation that cannot be safely written on this pre-dispatch path.
+	 * <p>
+	 * The default implementation returns the conventional bodyless response for
+	 * the rejection reason ({@code 400}, {@code 414}, {@code 417}, or {@code 431}).
+	 * Custom implementations may return any final response status from {@code 200}
+	 * through {@code 599}, consistent with this interface's other methods. This
+	 * default method preserves
+	 * compatibility for direct implementations of this interface; applications that use
+	 * {@link #builder()} may customize the behavior with
+	 * {@link Builder#unparsedRequestHandler(Builder.UnparsedRequestHandler)}.
+	 * <p>
+	 * Detailed documentation is available at
+	 * <a href="https://www.soklet.com/docs/response-writing#advanced-response-marshaling">https://www.soklet.com/docs/response-writing#advanced-response-marshaling</a>.
+	 *
+	 * @param request the rejected unparsed request
+	 * @return the response to be sent over the wire
+	 */
+	@NonNull
+	default MarshaledResponse forUnparsedRequest(
+			@NonNull UnparsedRequest request) {
+		requireNonNull(request);
+		return DefaultResponseMarshaler.defaultInstance()
+				.forUnparsedRequest(request);
+	}
+
+	/**
 	 * Prepares a response for a request that was matched to a <em>Resource Method</em> and returned normally (i.e., without throwing an exception).
 	 * <p>
 	 * <strong>Note that the returned {@link Response} may represent any HTTP status (e.g., 200, 403, 404), and is not restricted to "successful" outcomes.</strong>
@@ -357,6 +407,40 @@ public interface ResponseMarshaler {
 	 */
 	@NotThreadSafe
 	final class Builder {
+		/**
+		 * Function used to support pluggable implementations of
+		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}.
+		 */
+		@FunctionalInterface
+		@ThreadSafe
+		public interface UnparsedRequestHandler {
+			/**
+			 * Prepares a response for incoming bytes rejected before a valid
+			 * {@link Request} can be constructed.
+			 * <p>
+			 * This method is invoked at most once for each rejected request, only if
+			 * the rejection-detail task is accepted and timeout budget remains after
+			 * lifecycle observation. Captured bytes are untrusted and may contain
+			 * sensitive values. The built-in standard HTTP transport dispatches it to
+			 * the configured request-handler executor and never invokes it inline on
+			 * the selector thread. The framework-managed default executor has bounded
+			 * concurrency and queue capacity; a custom executor controls its own
+			 * capacity. The handler should perform bounded work and must not block. The
+			 * request-handler timeout bounds how long the transport waits; cancellation
+			 * interrupts the worker but is cooperative if application code ignores
+			 * interruption. When application capacity or timeout budget is unavailable,
+			 * the handler may be skipped in favor of a built-in response.
+			 * <p>
+			 * Detailed documentation is available at
+			 * <a href="https://www.soklet.com/docs/response-writing#advanced-response-marshaling">https://www.soklet.com/docs/response-writing#advanced-response-marshaling</a>.
+			 *
+			 * @param request the rejected unparsed request
+			 * @return the response to be sent over the wire
+			 */
+			@NonNull
+			MarshaledResponse handle(@NonNull UnparsedRequest request);
+		}
+
 		/**
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forResourceMethod(Request, Response, ResourceMethod)}.
 		 */
@@ -637,6 +721,8 @@ public interface ResponseMarshaler {
 		@NonNull
 		Charset charset;
 		@Nullable
+		UnparsedRequestHandler unparsedRequestHandler;
+		@Nullable
 		ResourceMethodHandler resourceMethodHandler;
 		@Nullable
 		NotFoundHandler notFoundHandler;
@@ -666,6 +752,22 @@ public interface ResponseMarshaler {
 		private Builder(@NonNull Charset charset) {
 			requireNonNull(charset);
 			this.charset = charset;
+		}
+
+		/**
+		 * Sets the handler used when incoming bytes are rejected before a valid
+		 * {@link Request} can be constructed. Passing {@code null} restores the
+		 * built-in default response before any configured post-processing.
+		 *
+		 * @param unparsedRequestHandler the handler, or {@code null} for the
+		 * built-in default response before post-processing
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder unparsedRequestHandler(
+				@Nullable UnparsedRequestHandler unparsedRequestHandler) {
+			this.unparsedRequestHandler = unparsedRequestHandler;
+			return this;
 		}
 
 		@NonNull

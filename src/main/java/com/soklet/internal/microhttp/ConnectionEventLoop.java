@@ -335,6 +335,7 @@ class ConnectionEventLoop {
         boolean closeAfterResponse;
         boolean inputHalfClosed;
         boolean monitorClientDisconnectsDuringStreamingResponse;
+        boolean unparsedResponsePending;
         int streamingResponseBytesDiscarded;
         final AtomicBoolean closed;
 
@@ -656,12 +657,16 @@ class ConnectionEventLoop {
 
         private void respondToRequestTooLarge(RequestTooLargeException.Reason reason) {
             if (reason == RequestTooLargeException.Reason.HEADERS) {
-                respondWithRawError(requestHeaderFieldsTooLargeResponse);
+                respondToUnparsedRequest(
+                        UnparsedRequestRejection.Reason.REQUEST_HEADERS_TOO_LARGE,
+                        requestHeaderFieldsTooLargeResponse);
                 return;
             }
 
             if (reason == RequestTooLargeException.Reason.URI_TOO_LONG) {
-                respondWithRawError(requestUriTooLongResponse);
+                respondToUnparsedRequest(
+                        UnparsedRequestRejection.Reason.REQUEST_TARGET_TOO_LONG,
+                        requestUriTooLongResponse);
                 return;
             }
 
@@ -692,14 +697,67 @@ class ConnectionEventLoop {
         }
 
         private void respondToMalformedRequest() {
-            respondWithRawError(badRequestResponse);
+            respondToUnparsedRequest(
+                    UnparsedRequestRejection.Reason.MALFORMED_REQUEST,
+                    badRequestResponse);
         }
 
         private void respondToExpectationFailed() {
-            respondWithRawError(expectationFailedResponse);
+            respondToUnparsedRequest(
+                    UnparsedRequestRejection.Reason.EXPECTATION_FAILED,
+                    expectationFailedResponse);
         }
 
-        private void respondWithRawError(byte[] response) {
+        private void respondToUnparsedRequest(
+                UnparsedRequestRejection.Reason reason, byte[] fallbackResponse) {
+            prepareForRawErrorResponse();
+
+            int failureBoundaryExclusive = requestParser.failureBoundaryExclusive();
+            ByteTokenizer.CapturedPrefix capture = byteTokenizer.capturePrefixAndRelease(
+                    failureBoundaryExclusive,
+                    options.unparsedRequestCaptureLimitInBytes());
+            requestParser.reset();
+
+            UnparsedRequestRejection rejection = new UnparsedRequestRejection(
+                    reason, remoteAddress, capture.bytes(), capture.observedByteCount(),
+                    capture.truncated());
+            AtomicBoolean responseClaimed = new AtomicBoolean();
+            unparsedResponsePending = true;
+
+            Consumer<byte[]> callback = response -> {
+                byte[] exactResponse = response;
+                if (exactResponse == null
+                        || exactResponse.length > options.unparsedResponseSizeLimitInBytes())
+                    exactResponse = fallbackResponse;
+                else
+                    exactResponse = exactResponse.clone();
+
+                if (!responseClaimed.compareAndSet(false, true) || closed.get())
+                    return;
+
+                byte[] responseSnapshot = exactResponse;
+                taskQueue.add(() -> {
+                    unparsedResponsePending = false;
+                    if (!closed.get())
+                        writeRawErrorResponse(responseSnapshot);
+                });
+                selector.wakeup();
+            };
+
+            boolean accepted;
+            try {
+                accepted = handler.handleUnparsedRequest(rejection, callback);
+            } catch (Throwable ignored) {
+                accepted = false;
+            }
+
+            if (!accepted && responseClaimed.compareAndSet(false, true)) {
+                unparsedResponsePending = false;
+                writeRawErrorResponse(fallbackResponse);
+            }
+        }
+
+        private void prepareForRawErrorResponse() {
             if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
@@ -709,6 +767,12 @@ class ConnectionEventLoop {
             }
             cancelResponseWriteIdleTimeout();
             closeAfterResponse = true;
+        }
+
+        private void writeRawErrorResponse(byte[] response) {
+            responseWriteIdleTimeoutEnabled = !options.responseWriteIdleTimeout().isZero();
+            if (responseWriteIdleTimeoutEnabled)
+                resetResponseWriteIdleTimeoutIfNeeded();
             writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(response));
             try {
                 doOnWritable();
@@ -1501,6 +1565,12 @@ class ConnectionEventLoop {
                 closeAfterResponse = true;
                 if (!monitorClientDisconnectsDuringStreamingResponse)
                     disableReadInterest();
+                return;
+            }
+
+            if (unparsedResponsePending) {
+                closeAfterResponse = true;
+                disableReadInterest();
                 return;
             }
 

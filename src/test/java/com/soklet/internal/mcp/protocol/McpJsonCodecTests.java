@@ -450,22 +450,40 @@ public class McpJsonCodecTests {
 				16 * 1_024 * 1_024};
 		Assertions.assertEquals(jsonLimits(maximum),
 				McpJsonLimits.maximumSupported());
+		for (int index = 0; index < maximum.length; ++index) {
+			int[] oneOver = maximum.clone();
+			oneOver[index]++;
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> jsonLimits(oneOver), "transport field " + index);
+		}
 		int[] durableArgumentsMaximum = {16 * 1_024 * 1_024, 128,
 				1_024 * 1_024, 1_024 * 1_024, 1_024, 10_000, 100_000,
 				32 * 1_024 * 1_024};
-		Assertions.assertEquals(jsonLimits(durableArgumentsMaximum),
+		assertLimits(durableArgumentsMaximum,
 				McpJsonLimits.durableTaskArguments());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> jsonLimits(durableArgumentsMaximum),
+				"The general constructor must not admit durable output headroom");
 		int[] durableOriginMaximum = {32 * 1_024 * 1_024, 256,
 				4 * 1_024 * 1_024, 4 * 1_024 * 1_024, 4_096, 100_000,
 				2_000_000, 32 * 1_024 * 1_024};
-		Assertions.assertEquals(jsonLimits(durableOriginMaximum),
-				McpJsonLimits.durableTaskOrigin());
-		for (int index = 0; index < durableOriginMaximum.length; ++index) {
-			int[] oneOver = durableOriginMaximum.clone();
-			oneOver[index]++;
-			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> jsonLimits(oneOver), "field " + index);
-		}
+		assertLimits(durableOriginMaximum, McpJsonLimits.durableTaskOrigin());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> jsonLimits(durableOriginMaximum),
+				"The general constructor must not admit durable origin headroom");
+	}
+
+	private static void assertLimits(int[] expected,
+			McpJsonLimits actual) {
+		Assertions.assertArrayEquals(expected, new int[]{
+				actual.maximumInputBytes(),
+				actual.maximumNestingDepth(),
+				actual.maximumTokenLengthInCharacters(),
+				actual.maximumStringLengthInCharacters(),
+				actual.maximumNumberLengthInCharacters(),
+				actual.maximumExponentMagnitude(),
+				actual.maximumNodeCount(),
+				actual.maximumOutputBytes()});
 	}
 
 	private static void assertMalformed(String json) {
