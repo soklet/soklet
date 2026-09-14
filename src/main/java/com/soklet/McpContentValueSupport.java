@@ -37,13 +37,7 @@ final class McpContentValueSupport {
 
 	static boolean annotationsEqual(@Nullable McpContentAnnotations first,
 			@Nullable McpContentAnnotations second) {
-		if (first == second)
-			return true;
-		if (first == null || second == null)
-			return false;
-		return first.getAudience().equals(second.getAudience())
-				&& first.getPriority().equals(second.getPriority())
-				&& first.getLastModified().equals(second.getLastModified());
+		return Objects.equals(first, second);
 	}
 
 	static int annotationsHashCode(@Nullable McpContentAnnotations annotations) {
@@ -116,12 +110,7 @@ final class McpContentValueSupport {
 
 	private static boolean iconsEqual(@NonNull McpIcon first,
 			@NonNull McpIcon second) {
-		if (first == second)
-			return true;
-		return first.getSource().equals(second.getSource())
-				&& first.getMimeType().equals(second.getMimeType())
-				&& first.getSizes().equals(second.getSizes())
-				&& first.getTheme().equals(second.getTheme());
+		return first.equals(second);
 	}
 
 	private static int iconHashCode(@NonNull McpIcon icon) {

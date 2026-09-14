@@ -43,6 +43,7 @@ public final class McpTaskOriginPersistedStateCodec {
 	private static final McpJsonLimits RESTORED_ARGUMENT_LIMITS =
 			McpJsonLimits.durableTaskArguments();
 	// Read reflectively by the finite-bound inventory test.
+	@SuppressWarnings("UnusedVariable")
 	private static final int MAXIMUM_PERSISTED_BYTES =
 			LIMITS.maximumOutputBytes();
 

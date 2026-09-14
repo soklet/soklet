@@ -361,32 +361,35 @@ final class BuiltInTransportLifecycleAdapter {
 				this.state = DelegatedRuntimeState.STARTING;
 			}
 
-			boolean returned = false;
-			Generation startedGeneration = null;
 			Throwable startFailure = null;
 			this.owner.delegatedStartSignal.set(this.signal);
 			try {
 				this.startAction.run();
-				returned = true;
 			} catch (RuntimeException | Error failure) {
 				startFailure = failure;
-				throw failure;
 			} finally {
 				this.owner.delegatedStartSignal.remove();
-				try {
-					Generation candidate = this.owner.current.get();
-					if (candidate != null
-							&& candidate.delegatedTerminationSignal == this.signal)
-						startedGeneration = candidate;
-					completeStart(startedGeneration);
-				} catch (RuntimeException | Error catchUpFailure) {
-					if (startFailure == null)
-						throw catchUpFailure;
-					if (startFailure != catchUpFailure)
-						startFailure.addSuppressed(catchUpFailure);
-				}
 			}
-			if (returned && startedGeneration == null)
+
+			Generation startedGeneration = null;
+			try {
+				Generation candidate = this.owner.current.get();
+				if (candidate != null
+						&& candidate.delegatedTerminationSignal == this.signal)
+					startedGeneration = candidate;
+				completeStart(startedGeneration);
+			} catch (RuntimeException | Error catchUpFailure) {
+				if (startFailure == null)
+					throw catchUpFailure;
+				if (startFailure != catchUpFailure)
+					startFailure.addSuppressed(catchUpFailure);
+			}
+
+			if (startFailure instanceof RuntimeException runtimeException)
+				throw runtimeException;
+			if (startFailure != null)
+				throw (Error) startFailure;
+			if (startedGeneration == null)
 				throw new IllegalStateException(
 						"Delegated transport start did not create its lifecycle generation");
 		}

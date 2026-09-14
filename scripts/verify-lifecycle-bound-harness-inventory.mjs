@@ -305,7 +305,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["testSseServerClearsCachesOnStop","0900dfd859757aae61d2d17a81bd0fd7209cd03a0841bb911c2cdb4a5d7aa7fa",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["testLargeRequestBodyMemoryHandling","a29c5cfe2b3af88e8f4dfaa05b9d78558e0908a9d58ed102c1d25b2fdc0a2fc0",{"generation":{"count":11,"mode":"SEQUENTIAL","complete":11,"prior":10,"incomplete":1},"controlJoinMillis":100,"requiredAction":"RAISE_OUTER_BOUND"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "5b41b007f1a94a512894a713e53025494377fd9082dfcff27caca38e363af1be", [
+  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "861e68c75018767ad1a383b69957082d63e2d7726dfb1bfa9d3386582123f6d5", [
     ["admissionIsClosedUntilReadinessAndShutdownBeforeReadinessSealsIt","b0fbc6599143c7cf95856f40ca7a5bb2593d8ce8d79b371f3e13700f9f9b863f",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["positiveResidualAndUnknownBothRetainEvidenceWithoutRelease","eed0e5efd87ca55d8b6edd92b1e48f9eaa4bc07b044818317ba84539e7bdde0e",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["completedResultIsPublishedOnlyAfterCoordinatorRoleRelease","4a728c54f345a68a3ac1c2ead8e2a6def0076690bbb748cfe60e1d36446ec933",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
@@ -712,7 +712,7 @@ const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
 ], 'lifecycle phase policy');
 
 const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
-  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "5b41b007f1a94a512894a713e53025494377fd9082dfcff27caca38e363af1be", [
+  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "861e68c75018767ad1a383b69957082d63e2d7726dfb1bfa9d3386582123f6d5", [
     ["failureRacingNormalShutdownIsRetainedWithoutReclassifyingRequestedProof","d5b8e568c287856debb44e45137ebaa592ca10ece32eb55ee6be5c748bcd9e15",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["requestedProofThenLateFailureBeforeFreezePreservesBothInSequence","0486a99df1c9b6163e90faa067fb5cc24f94f2aaa2a1d586bc815614211943bb",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
@@ -960,7 +960,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpStreamSubscriptionDiagnosticsPublicRuntimeTests.java", "ced985535c94ce800f0a1f7e849999b204ad6ca12f221846ffb3cb86871ea432", [
     ["residualHandlerStopPublishesZeroStreamsBeforeLateHandlerExit","9b8d0f401f61b81f2a4eff908e7ba1855a0f6d9161b49907ecf72f79df1c4f5c",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":20000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "5b41b007f1a94a512894a713e53025494377fd9082dfcff27caca38e363af1be", [
+  ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "861e68c75018767ad1a383b69957082d63e2d7726dfb1bfa9d3386582123f6d5", [
     ["delegatedRuntimeDefersOverlappingShutdownAndCatchesUpAtStrongestPhase","ecddaee114a6401a5946400f867ddf2a76bc67d7f061390ec5c147b75c9a3235",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["delegatedRuntimeSerializesForcedUpgradeDuringStartupCatchUp","83ce2088246f1dcb4f1f5a01c268683832d59f3ebe7ed36ef17385b5a0e24da0",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["delegatedRuntimePreservesStartupFailureWhenCatchUpShutdownAlsoFails","8a63bce72eb61c1b38c94ce3449a8838e6e9760417979b79dbf55a70500d12af",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],

@@ -63,13 +63,6 @@ final class McpWireResult {
 	private McpWireResult(@NonNull McpResultType resultType,
 			@NonNull McpJsonObject fields,
 			@NonNull Optional<@NonNull McpResultMetadata> metadata,
-			@Nullable McpJsonObject precomputedJsonObject) {
-		this(resultType, fields, metadata, precomputedJsonObject, null);
-	}
-
-	private McpWireResult(@NonNull McpResultType resultType,
-			@NonNull McpJsonObject fields,
-			@NonNull Optional<@NonNull McpResultMetadata> metadata,
 			@Nullable McpJsonObject precomputedJsonObject,
 			@Nullable McpJsonObject compatibilityMirrorFallbackFields) {
 		this.resultType = requireNonNull(resultType);

@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "cb4abf269991a4284de3065a60d0f15cb60c27877993a3ee8db604eb7bfca946",
+    "censusSha256": "7eed28b5308bc57e0b05634914f75ddef08ed334d9b20e2cd232cb7fb48f0517",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4150,7 +4150,7 @@
       "src/main/java/com/soklet/SokletProcessor.java\tab06a732d0f4697dbaae247abf741c456e8465841c822fdaf631d4b8b069910e",
       "src/main/java/com/soklet/internal/mcp/protocol/Mcp20260728ProtocolProfile.java\t2017b86624dadbe1f4d77a02442e4f76a51c5c5febbd4817b2f62df70799c57e",
       "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java\t546688441e9a7fd0a494b6174620c60f7b690fbe66dc60c5c223b3df507fe20a",
-      "src/main/java/com/soklet/internal/mcp/protocol/McpWireResult.java\t670ce8cdc7b082f397f0200f455897c5c681cfdae2f30ba58893016a17180697",
+      "src/main/java/com/soklet/internal/mcp/protocol/McpWireResult.java\t694f04426bb26b8e255261f8ef8dcc17f1e28bd5f455b2e308792c5cd9abca03",
       "src/test/java/com/soklet/McpAnnotatedResourceProcessorRuntimeTests.java\t78baed4288394044b6a6c4e22a6ad5648ab91d73425e5d2dedfea7b9bfc20c80",
       "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java\td6d54af97828cff91fe10144c3c4261eb58385ee7a3c75e9cf51bd0e1f495b65",
       "src/test/java/com/soklet/McpAnnotationContractTests.java\t6d110c06e50325665c1465409a7a617c95b47e5d6a284e42d12597ac19f02abd",

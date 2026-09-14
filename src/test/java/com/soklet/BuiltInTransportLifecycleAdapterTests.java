@@ -395,6 +395,98 @@ class BuiltInTransportLifecycleAdapterTests {
 	}
 
 	@Test
+	void delegatedRuntimeRethrowsCatchUpErrorAfterSuccessfulStartup() {
+		Error catchUpFailure = new AssertionError("expected catch-up error");
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of());
+		operations.onQuiesce = () -> {
+			throw catchUpFailure;
+		};
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				new AdmissionFence(), () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		ShutdownContext forced = new ShutdownContext(ShutdownPhase.FORCED,
+				NanoClock.system(), 202L);
+		AtomicReference<TransportRuntime> runtimeReference = new AtomicReference<>();
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.markReady(generation);
+			ownerGroup.recordShutdownIntent();
+			runtimeReference.get().shutdownGracefully(graceful);
+		});
+		runtimeReference.set(runtime);
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+
+		Assertions.assertSame(catchUpFailure, Assertions.assertThrows(
+				AssertionError.class, () -> runtime.start(startup)));
+		Assertions.assertEquals(0, catchUpFailure.getSuppressed().length);
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		Assertions.assertFalse(ownerGroup.isBarrierComplete());
+
+		runtime.shutdownForcibly(forced);
+
+		Assertions.assertEquals(1, operations.forceCount.get());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+	}
+
+	@Test
+	void delegatedRuntimePreservesPreGenerationStartupErrorAndClearsStartSignal() {
+		Error startupFailure = new AssertionError("expected startup error");
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		LifecycleWorkers ownerWorkers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		InternalTerminationGroup ownerGroup = new InternalTerminationGroup(
+				new AdmissionFence(), () -> {}, ownerWorkers);
+		ownerGroup.commit();
+		TransportTerminationSignal ownerSignal =
+				new InternalTransportTerminationSignal(ownerGroup,
+						ownerGroup.root()).publicSignal();
+		ShutdownContext graceful = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				NanoClock.system(), 101L);
+		AtomicReference<TransportRuntime> runtimeReference = new AtomicReference<>();
+		TransportRuntime runtime = adapter.delegatedRuntime(ownerSignal, () -> {
+			ownerGroup.recordShutdownIntent();
+			runtimeReference.get().shutdownGracefully(graceful);
+			throw startupFailure;
+		});
+		runtimeReference.set(runtime);
+		StartupContext startup = new StartupContext(NanoClock.system(),
+				Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
+
+		Assertions.assertSame(startupFailure, Assertions.assertThrows(
+				AssertionError.class, () -> runtime.start(startup)));
+		Assertions.assertEquals(0, startupFailure.getSuppressed().length);
+		Assertions.assertTrue(adapter.generation().isEmpty());
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+		Assertions.assertEquals(0, operations.quiesceCount.get());
+		Assertions.assertEquals(0, operations.releaseCount.get());
+
+		BuiltInTransportLifecycleAdapter.Generation subsequentGeneration =
+				adapter.beginStart();
+		adapter.markReady(subsequentGeneration);
+		adapter.signalUnexpectedFailure(subsequentGeneration,
+				new IllegalStateException("unrelated subsequent generation failure"));
+
+		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.PROOF),
+				ownerGroup.primaryEventsInSequence().stream()
+						.map(InternalTerminationEvent::type).toList(),
+				"A subsequent generation must not inherit the cleared delegated signal");
+		Assertions.assertTrue(adapter.result(subsequentGeneration).orElseThrow().isComplete());
+	}
+
+	@Test
 	void positiveResidualAndUnknownBothRetainEvidenceWithoutRelease() {
 		RecordingOperations residualOperations = new RecordingOperations(
 				attempt -> false, Set.of(InternalResidualActivityType.EVENT_LOOP));

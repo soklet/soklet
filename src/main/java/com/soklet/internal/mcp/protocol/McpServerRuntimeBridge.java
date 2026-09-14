@@ -3672,7 +3672,7 @@ public final class McpServerRuntimeBridge {
 				resultFields;
 		com.soklet.internal.mcp.protocol.McpJsonObject mirroredFields =
 				withStructuredContentTextMirror(unmirroredFields);
-		if (mirroredFields == unmirroredFields)
+		if (mirroredFields.equals(unmirroredFields))
 			return McpWireResult.complete(unmirroredFields, optionalMetadata);
 		return McpWireResult.completeWithCompatibilityMirror(mirroredFields,
 				unmirroredFields, optionalMetadata);

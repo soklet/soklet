@@ -213,6 +213,39 @@ class McpResultContentTests {
 	}
 
 	@Test
+	void contentEqualityDistinguishesAbsentAnnotationsAndDifferentIconProperties() {
+		McpTextContent absent = McpTextContent.fromText("text");
+		McpTextContent empty = McpTextContent.withText("text")
+				.annotations(McpContentAnnotations.builder().build()).build();
+		assertStructurallyEqual(absent, McpTextContent.fromText("text"));
+		assertStructurallyEqual(empty, McpTextContent.withText("text")
+				.annotations(McpContentAnnotations.builder().build()).build());
+		assertNotEquals(absent, empty);
+		assertNotEquals(empty, absent);
+		assertNotEquals(McpTextContent.withText("text")
+				.annotations(annotations(0.25)).build(),
+				McpTextContent.withText("text")
+						.annotations(annotations(0.75)).build());
+
+		URI source = URI.create("https://catalog.example/icon.png");
+		URI resource = URI.create("catalog://linked");
+		McpIcon dark = McpIcon.withSource(source)
+				.theme(McpIconTheme.DARK).build();
+		McpIcon light = McpIcon.withSource(source)
+				.theme(McpIconTheme.LIGHT).build();
+		assertStructurallyEqual(
+				McpResourceLink.withUriAndName(resource, "linked")
+						.addIcon(dark).build(),
+				McpResourceLink.withUriAndName(resource, "linked")
+						.addIcon(dark).build());
+		assertNotEquals(
+				McpResourceLink.withUriAndName(resource, "linked")
+						.addIcon(dark).build(),
+				McpResourceLink.withUriAndName(resource, "linked")
+						.addIcon(light).build());
+	}
+
+	@Test
 	void toolAnnotationBooleansPreserveAbsentAndExplicitFalse() {
 		McpToolAnnotations annotations = McpToolAnnotations.builder()
 				.readOnlyHint(false)
