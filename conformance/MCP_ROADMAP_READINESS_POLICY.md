@@ -30,11 +30,11 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 
 ## Deferred features
 
-### DF-01 — Same-revision spec/conformance growth, including Tasks gate coverage
+### DF-01 — Future same-revision spec/conformance growth
 
-- Trigger: A release decision to gate the existing Tasks scenarios, or a newly published upstream package/scenario, erratum, or compatible addition for `2026-07-28`
-- Landing zone: Existing 2026 profile plus reviewed openness disposition and regenerated pins/goldens; for Tasks, repin to a reviewed Tasks-capable suite commit, add the runnable scenario profiles, and record the notification scenario through reviewed-SKIPPED until the upstream runner observes its stream
-- Pre-release hedge: The alpha.10 release gate is documented as pre-Tasks; the separate alpha.11 nine-scenario Tasks run is retained only as local non-gated evidence, alongside the R2A index, openness inventory, and RC upstream-release check
+- Trigger: A newly published upstream package/scenario, replacement of the Tasks notification skip, erratum, or compatible addition for `2026-07-28`
+- Landing zone: Existing 2026 profile plus reviewed openness disposition and regenerated pins/goldens; alpha.11 Tasks coverage is now selected, and notification coverage must be re-reviewed when upstream replaces its explicit harness skip
+- Pre-release hedge: The alpha.11 release gate selects 49 reviewed profiles including ten Tasks rows; tasks-status-notifications remains an exact reviewed-SKIPPED upstream harness gap with independent production-listener supplements. The R2A index, openness inventory, toolchain-risk review and RC upstream-release check remain required.
 - Evidence classification: `planned`
 - Test evidence: None.
 - Negative-inventory keys: None.

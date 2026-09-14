@@ -102,7 +102,7 @@ final class FileResponse {
 		this.rangeRequests = builder.rangeRequests == null ? true : builder.rangeRequests;
 		this.attributes = builder.attributes;
 
-		rejectControlledHeaderConflicts(this.headers);
+		rejectControlledHeaderConflicts(this.headers, "file response headers");
 	}
 
 	@NonNull
@@ -126,7 +126,7 @@ final class FileResponse {
 					: ByteRangeSelection.fromHeaderValue(null, fileLength);
 
 			if (rangeSelection.getType() == ByteRangeSelectionType.UNSATISFIABLE)
-				return bodylessResponse(416, Map.of("Content-Range", Set.of(format("bytes */%d", fileLength))));
+				return bodylessResponse(416, Map.of("Content-Range", Set.of("bytes */" + fileLength)));
 
 			if (rangeSelection.getType() == ByteRangeSelectionType.SATISFIABLE) {
 				ByteRange range = rangeSelection.getRange().orElseThrow();
@@ -332,14 +332,16 @@ final class FileResponse {
 		return Collections.unmodifiableMap(copiedHeaders);
 	}
 
-	private static void rejectControlledHeaderConflicts(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	static void rejectControlledHeaderConflicts(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+			@NonNull String source) {
 		requireNonNull(headers);
+		requireNonNull(source);
 
 		for (String headerName : headers.keySet()) {
-			String normalizedHeaderName = headerName.toLowerCase(Locale.US);
+			String normalizedHeaderName = headerName.toLowerCase(Locale.ROOT);
 
 			if (CONTROLLED_HEADER_NAMES.contains(normalizedHeaderName))
-				throw new IllegalArgumentException(format("Header '%s' is controlled by file responses; use the dedicated builder method when available.", headerName));
+				throw new IllegalArgumentException(format("Header '%s' is controlled by file responses; %s must use a dedicated file-response setting when available.", headerName, source));
 		}
 	}
 

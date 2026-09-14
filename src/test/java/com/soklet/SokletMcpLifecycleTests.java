@@ -49,9 +49,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SokletMcpLifecycleTests {
 	@NonNull
 	private static final String NO_RESOURCE_METHODS =
-			"No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your "
+			"No Soklet Resource Methods were found. For default classpath discovery, configure com.soklet.SokletProcessor using Gradle annotationProcessor or Maven annotationProcessorPaths/annotationProcessors, compile with -parameters, and preserve META-INF/soklet/resource-method-lookup-table when packaging your application. If you supplied a custom "
 					+ ResourceMethodResolver.class.getSimpleName()
-					+ " is configured correctly. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.";
+					+ ", ensure its getResourceMethods() returns the configured HTTP/SSE Resource Methods. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.";
 
 	@Test
 	@Timeout(60)

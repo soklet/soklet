@@ -228,6 +228,14 @@ public final class LifecyclePolicy {
 		/**
 		 * Sets the graceful shutdown timeout. Zero means an immediate boundary.
 		 * Passing {@code null} restores the built-in default of 15 seconds.
+		 * <p>
+		 * This budget is independent of the server request-handler timeout (60 seconds by default).
+		 * To let all permitted in-flight requests finish, allow their maximum remaining work and
+		 * response transmission time. A shorter drain intentionally permits interruption and
+		 * connection closure at the forced boundary. Interruption cannot guarantee that
+		 * noncooperative application code stops. Long-lived streams need an explicit termination
+		 * policy; the surrounding process/container budget must also include forced shutdown
+		 * and operational margin.
 		 *
 		 * @param gracefulShutdownTimeout graceful shutdown timeout, or
 		 * {@code null} to use the default

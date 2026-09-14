@@ -112,6 +112,27 @@ public class McpTaskNotificationProjectionSchedulerTests {
 	}
 
 	@Test
+	public void resetReleasesTaskIdentitiesAndFencesOutstandingWorkers() {
+		McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
+				new McpHttpServerRuntime.TaskNotificationProjectionQueue(2);
+		Assertions.assertTrue(queue.request("old-alpha"));
+		queue.request("old-beta");
+		McpHttpServerRuntime.TaskNotificationProjection oldWorker =
+				projection(queue);
+
+		queue.reset();
+		Assertions.assertFalse(queue.owns(oldWorker));
+		Assertions.assertTrue(queue.request("new-alpha"),
+				"Reset must release old task identities, not just pending work.");
+		McpHttpServerRuntime.TaskNotificationProjection newWorker =
+				projection(queue);
+		Assertions.assertFalse(queue.finish(oldWorker, false));
+		Assertions.assertTrue(queue.owns(newWorker),
+				"A late old worker must not clear a newer owner's active state.");
+		Assertions.assertFalse(queue.finish(newWorker, true));
+	}
+
+	@Test
 	public void oneSubscriberOverflowCannotRejectAnUnrelatedSubscriber() {
 		CapturingExecutor executor = new CapturingExecutor();
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =

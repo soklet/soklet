@@ -311,7 +311,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["completedResultIsPublishedOnlyAfterCoordinatorRoleRelease","4a728c54f345a68a3ac1c2ead8e2a6def0076690bbb748cfe60e1d36446ec933",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "498d84c9750340035a885b9b2c43bf3fa6cac529300ba014f09660cdd970a852", [
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "37c2e9c1586111733f7f90ff21f4b3f4e61ee67aacf32f7b49a69d2719209f2c", [
     ["earlySetupErrorRetainsIdentityCleansGenerationAndAllowsHttpRestart","8686b0fce8b5bb5579eee51892ce418c6ee7c03b1a3a013b4e7bb885e368b843",{"generation":{"count":2,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":5000}],
     ["staleHttpEventLoopFailureDoesNotClobberRestartedServer","cec3c46b78a87dd61c5fc5fe49b5ea59e9c13f4e2250a7948428bffa8c12ba4e",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
@@ -443,7 +443,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["blockedFrameworkSetupSynthesizesFrameworkDiagnosticsAndSkipsCleanup","af6dfe671f5cdbee55a96e15ef1c30a7d0abaccfa01a35e626b17eb5ce3b96f1",{"phasePolicy":{"forcedShutdownMillis":0,"gracefulShutdownMillis":0,"startupCancellationMillis":0,"startupMillis":5000},"controlledLifecycleCoreMillis":5000,"applicationCleanupMillis":1000}],
     ["blockedNestedCustomHttpAttachProjectsBoundedTransportDiagnostics","249f2f85e0eb41339908681e4fae0cc21df3c119ea4fa18a9db1d8e1b8cd8f17",{"phasePolicy":{"forcedShutdownMillis":0,"gracefulShutdownMillis":0,"startupCancellationMillis":0,"startupMillis":5000},"controlledLifecycleCoreMillis":5000,"applicationCleanupMillis":1000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "a2086c527253877a94ae2bd48806eee7a150ea99f3d4057c7f613686e5a3f9a0", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "9c2486062cbc7002545a045517342848730a3d06a5702ed1b008b47da4f31152", [
     ["mixedIncompleteAndNotStartedTerminalTraceIsOrderedAndComplete","3e21f5223d4f60a4ce8bf780b4597b23ebafcc80ddd4af617e815bb04895a78c",{"phasePolicy":{"forcedShutdownMillis":0,"gracefulShutdownMillis":0,"startupCancellationMillis":0,"startupMillis":5000},"controlledLifecycleCoreMillis":5000,"controlJoinMillis":20000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/SokletDirectLateStartupIntegrationTests.java", "c40fa81b0ca43a3ed3ac96323169ef680c50a855a73cc918eed212c007719008", [
@@ -718,20 +718,25 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
     ["launchedThenThrowingCoordinatorCannotRepublishOrReleaseEvidence","b03f92588538cd5cf7ce738deb0df255146cbe88d855fa64e643e0bc50965ef4",{"controlJoinMillis":2000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "498d84c9750340035a885b9b2c43bf3fa6cac529300ba014f09660cdd970a852", [
-    ["httpServerCleansUpAfterUnexpectedEventLoopTermination","2b2c4db9ffe7412bac5d2bb617a9e80d997ef4d4ab3819b4133cad67311c7022",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "37c2e9c1586111733f7f90ff21f4b3f4e61ee67aacf32f7b49a69d2719209f2c", [
+    ["httpServerCleansUpAfterUnexpectedEventLoopTermination","c0b3c2429b828d7d6b97cc5d324abf4e1bb75c12ec4b6473a7ff080dab147086",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["stopCannotPublishAnEmptyGenerationWhileStartInstallsHttpResources","daa38ff9c7f3f1effcc52664813c709b9eb9b4ad38458546dff9dd23de556bd0",{"controlJoinMillis":7100,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["startRejectsRunningHttpGenerationWhileItsStopIsInProgress","468e5c2b4365d5a53148b8525487911d065bcd75075ffac281f4cd6b149d25be",{"controlJoinMillis":6000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/UnparsedRequestTransportTests.java", "a757a6c990cbf4531b850412a8514e2eaf7142b7dbc73d4856e3b1654de8d02c", [
-    ["allParserRejectionsAreObservedAndMarshaledOffTheEventLoop","fdd8be7df67e8cb0088f0887960a6a53d7853ed0ca4341c2d4e6c3169c6b7198",{"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  // The three invalid-length exchanges are sequential: each has a 2-second
+  // connection retry and a 4-second socket read timeout. Retain the conservative
+  // 18-second control allowance in addition to the explicit lifecycle policy.
+  // Existing reviewed scopes and their control topology are unchanged.
+  ...reviewedScopeFile("src/test/java/com/soklet/UnparsedRequestTransportTests.java", "f31dedf04ca13a1381cb7eb7f2008aec1b53de5b7ccd3d9d76624ffe4cf28288", [
+    ["invalidContentLengthsUseTheMalformedRequestObserverAndResponsePath","cc0ccac843956492caa3234150614be8ef7fc9ede8575597bf55e2fba5145bd1",{"controlJoinMillis":18000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["allParserRejectionsAreObservedAndMarshaledOffTheEventLoop","16dd1e0f6491632cd986f303a314aa0315a4d0efe06e46750672bc27573569ee",{"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["timeoutsAndUnsafeExecutorDispatchUseTheBuiltInFallback","20c6dc35cb575f66b6cce0ca69f99002dab5460762a9e2844f2c311baadd458c",{"controlJoinMillis":17000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
     ["unparsedWorkOwnsOneLifecycleAdmissionUntilItCompletes","7f465aa9eefd15d7a0e31b630995a403edd000811448399867fa630a13affaeb",{"controlJoinMillis":18000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/ExternallyCoordinatedTransportLifecycleAdapterTests.java", "7be4c5d1b5fe67a92e4457584bf75f6c854953f14b21daaa36521e216b1575b7", [
     ["externalSelfStopPublishesIntentBeforeOwnerScopedWaitFailsFast","80b2f130651f5b7f7a03444787899e2b42e6e82c05f7b3ec251201b0444ae4e0",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/HttpServerLifecycleTests.java", "f9f8c0bc749a3b8149580e06efe1bc8fd4cfa337b7313f518eb19d8bf9066561", [
+  ...reviewedScopeFile("src/test/java/com/soklet/HttpServerLifecycleTests.java", "666de09c5200fc245c3761595022782f2343b484cb875a803c7ce5c56ae3a5c5", [
     ["ownerLifecycleAttachesServesAndPublishesOneGracefulResult","bdc79f45c02504b7a9e480a89bc117cf22955dd98679b94b89b676619bc3c86b",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
     ["ownerShutdownDrainsInFlightResponseBeforeClosingConnection","c0dfba7292562aa6e42757c9286e5bb19a56abfdd51dfe893c5b36f7438fb47b",{"controlJoinMillis":9000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
@@ -754,7 +759,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/McpProtocolProfileMetricsTests.java", "7ed8caa3559ac3cfd0cae677e52677d4f031fb49adf00c1b173b3f1e51d7c32b", [
     ["unsupportedMissingMetadataRecordsUnsupportedVersionNotInvalidParams","2f00b2977d3c7ed715487cc9fc1575c8e2cf7a94b61237b3d2187c96d1709af3",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/MetricsCollectorTests.java", "1b9a1088b403d30a2241ed2a07bc386548d81fec0b84a7ffbc7a73890ccc6293", [
+  ...reviewedScopeFile("src/test/java/com/soklet/MetricsCollectorTests.java", "807a2ac8722969983fc9e846055e1e3ef28a868ff0e576f386d977f77f34c98f", [
     ["httpMetricsSnapshot_overNetwork","4cc77aea3d044fd9130367bcd75065f860204a5306f7736a88febd183dfdbd51",{"controlJoinMillis":2000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["sseMetricsSnapshot_overNetwork","87d1120ea6c5e33318796af562a528bc04b562ccbdd822786af0c0b5f83f39a7",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
@@ -833,9 +838,9 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression","527e1495a7b27842684e2d0ee1ab4a5100de3dadc4ba9f807e78fd52d4fedac9",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":10000}],
     ["nonDrainingCaptureLimitDoesNotBlockUnrelatedSimulationOrCreateTransportFailure","3d43a2c52347b814d7b642c4b16079d8f4b471dd680f47ef9517830f9a061ae3",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":35000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "a2086c527253877a94ae2bd48806eee7a150ea99f3d4057c7f613686e5a3f9a0", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "9c2486062cbc7002545a045517342848730a3d06a5702ed1b008b47da4f31152", [
     ["transportLogDuringAttachIsInlineNonqueuedAndTracked","ffcad197704a26871607ea10bbc70ca4545809e637918ce6e427bd4b955065a6",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":30000}],
-    ["blockedTransitionCannotDelayRunnerCleanupOrTerminalReport","80a4b0fb8dca4e5e29ce04dce07e955d48f2afe47a62f62089f875f95f2fe388",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":40000}],
+    ["blockedTransitionCannotDelayRunnerCleanupOrTerminalReport","951c7c9c2ed19df7ca42583c10472f0424c9fb9d905b4ab4530956cccfc7e9f2",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":40000}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/SokletApplicationProcessTests.java", "85b493f9d67f53858a76316793df4c88ffdde37b9e0db8d487880f2cab0c8cc0", [
     ["concurrentHookEnterInterruptionAndExplicitShutdownShareOneAttempt","2b081d56a37034ad07a1b7560ba6bcbcd4486d9505cc0f9f7449d85e27aee126",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":0}],
@@ -876,7 +881,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SokletDirectTerminationPrecedenceTests.java", "4803d9fb89add3afeb02b2f4d0642e1075e3aae959e34f677f02dd38381fac03", [
     ["ownerShutdownIntentWinsFormerGroupFanoutGap","da9453ddd92e3d10cfe8cb15476bf271efd399c14e41292a2edf1ac54b142ef9",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":8000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletMcpLifecycleTests.java", "00762704fb2517a719685cdb28f5228d4f809f36a53a54a8fb3920871e453c59", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletMcpLifecycleTests.java", "df93f6c0dba772aa5cb84d41b8b413f56b9b06312cafd45d810f84c65d62f0ea", [
     ["noncooperativeMcpHandlerFreezesOneResidualOutcomeAcrossLaterCalls","1be226f9f0014a57ebd87378e7e9bd7aca38dc6ef097e13b4c54e921e2fb024d",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":20000}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "de3b2b8e11548ee2eef6da3365e3a33c52e72c4963ca1d5e33086900d7233281", [
@@ -977,6 +982,11 @@ const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_CONTROL_OVERRIDES);
 
 const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
+  ...reviewedOrphanFile("src/test/java/com/soklet/HeaderLocaleTests.java", "a45682218a6c00b85e51eca0fd3dd9b45ec1fd9dc62192fea986e3d970549976", [
+    ["main",92,"319a4bcde2e368e1dd515ab828bb838d69521bcc422861ec4bd252ac6bdc1b1d",{"path":"src/test/java/com/soklet/HeaderLocaleTests.java","line":74,"lineSha256":"4fb90ede31f41e09dafeb6b6ac48ed005e8f618ae0cc68a82e34ed3102312eb0","rationale":"The isolated-locale JUnit driver starts this exact main class for tr, az, ar_EG, fa_IR and en with matching FORMAT locale pins. Each child has a 25-second wait and finally forced destruction with a two-second termination wait. The method-level 150-second guard covers five sequential 27-second process/cleanup budgets plus 15 seconds of reserve. The child main invokes bounded HTTP and Java-21-plus SSE wire probes; it remains externally bounded helper evidence, not a synthetic JUnit lifecycle scope."}],
+    ["assertHttpWire",194,"2249dba7d39d27c04c51ed3be818aa7e1780295c4f9d7a0dfe2c7fbfa44437b5",{"path":"src/test/java/com/soklet/HeaderLocaleTests.java","line":111,"lineSha256":"a4363014c1e8fc28d22483cd9e4319fbcda958c8bc389ab00584c7307f1a23b9","rationale":"The source-hashed locale child main invokes this exact HTTP wire helper through assertAll. Its loopback reads/connects are timed, its Soklet owner has explicit three-second startup, two-second graceful and one-second forced shutdown settings, and the entire child is owned by the parent's 25-second process deadline and two-second forced cleanup. No synthetic JUnit guard or independently reusable execution claim is assigned to the helper."}],
+    ["assertSseWire",218,"56633c7671ae5d5dcaae08214ae232c950ed821c15bada80ea0be99182dd9f83",{"path":"src/test/java/com/soklet/HeaderLocaleTests.java","line":114,"lineSha256":"7089b89ea77d850deed28f3c84b09d71122e029fb085c58c29ee1e429b6f6c1d","rationale":"The source-hashed locale child main invokes this exact SSE wire helper only on Java 21+. It exercises accepted, rejected, unknown-status and overload responses with timed loopback operations and a three-second establishment latch. Its Soklet owner uses three-second startup, two-second graceful and one-second forced shutdown settings; the entire child remains under the parent's 25-second process deadline and two-second forced cleanup. No synthetic JUnit guard is assigned to this helper."}],
+  ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java", "89141d7627fc3329742dfe3bb66364fdda2c509291b87cf4094efea180aeb992", [
     ["attach",31,"1883bfa6fe73fdd47cd502d6daeee8cb86c6860a345a5b7d5e40fe04fa5da300",{"path":"src/main/java/com/soklet/SokletDirectLifecycle.java","line":2489,"lineSha256":"788aa269a8bc65fb1f7f7460a22f1a124dbdda93b52e0fabc3c3a91472897be3","rationale":"The production direct lifecycle invokes the public HTTP endpoint attach contract."}],
     ["publicRuntime",45,"f360dda2e0fc8a7cb76981a7c6c47b6c79bcbe05f8c841d280de98f75b7164cd",{"path":"src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java","line":36,"lineSha256":"03c392d1a09359e546d74395faec5a2129994402a1e60e337059b35b43b63281","rationale":"The reviewed HTTP compatibility attach default invokes this adapter helper."}],
@@ -993,7 +1003,7 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
     ["stop",515,"1194e749f943c21d3ce81c218884aaaae258a5157a85ba9874b96d35a1f7d720",{"path":"src/test/java/com/soklet/McpLocalizationFleetPublicRuntimeTests.java","line":230,"lineSha256":"31223babeaccf4900f5d16c97ed0d3db4262a1be2bb763ecdf2f634968993f69","rationale":"The fleet lifecycle test invokes the reviewed node stop helper."}],
     ["close",646,"a9e477c06503aa8ca99ce466692d8fa8a71079cbb8b40d227a459f166e963e26",{"path":"src/test/java/com/soklet/McpLocalizationFleetPublicRuntimeTests.java","line":445,"lineSha256":"d998b1ab99968332971844e39c07c3958a461982d28d6849cf6d04a4df1c563c","rationale":"The reviewed two-node fleet close helper invokes each node close helper."}],
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "a2086c527253877a94ae2bd48806eee7a150ea99f3d4057c7f613686e5a3f9a0", [
+  ...reviewedOrphanFile("src/test/java/com/soklet/SokletApplicationObservationTests.java", "9c2486062cbc7002545a045517342848730a3d06a5702ed1b008b47da4f31152", [
     ["start",1110,"8743bc5899534d2657576bdd66d59311499e6ba40769bb325879c3acfee3de6e",{"path":"src/main/java/com/soklet/SokletApplication.java","line":344,"lineSha256":"b2319df033edd17959e515597bc6bf4b346ffcdeb9c7c82ed90ffdd190add5bd","rationale":"The production application runner invokes the wrapped runtime start contract."}],
     ["shutdown",1115,"eef45a37c20721b055e31362bc503628c1bd6eea2a765b56fe50cfbae15a5c7f",{"path":"src/main/java/com/soklet/SokletApplication.java","line":529,"lineSha256":"0ca794b2fa40ccfdbd54f9835b183890f2e8122b30d4504f27987a6fbbffeb3a","rationale":"The production application runner invokes the wrapped runtime shutdown contract."}],
   ]),
@@ -4360,6 +4370,53 @@ export function verifyLifecycleHostWiring(texts) {
   return { ciPath, releasePath };
 }
 
+export function taskNotificationSupplementGuard(texts) {
+  const path = 'conformance/official/run.mjs';
+  const raw = texts.get(path);
+  if (raw === undefined) fail('Tasks notification process guard source is missing.');
+  const masked = maskJavascriptSource(raw);
+  const declaration = requirePattern(masked,
+    /export\s+async\s+function\s+runTaskNotificationSupplement\s*\(options,\s*supervisor\)\s*\{/u,
+    'Tasks notification process guard entrypoint')[0];
+  const openBrace = declaration.index + declaration[0].lastIndexOf('{');
+  const end = matchingBraceEnd(masked, openBrace,
+    'Tasks notification process guard');
+  const body = masked.slice(openBrace, end);
+  requirePattern(body,
+    /const\s+result\s*=\s*await\s+runBoundedCommand\(options\.javaExecutable,\s*\[[\s\S]*?taskNotificationSupplementMain,\s*\],\s*\{\s*timeoutMilliseconds:\s*120_000,\s*workingDirectory:\s*options\.projectRoot,\s*supervisor\s*\}\s*\)/u,
+    'Tasks notification supervised 120-second command');
+  if ([...body.matchAll(/\brunBoundedCommand\s*\(/gu)].length !== 1
+      || [...body.matchAll(/\btimeoutMilliseconds\s*:/gu)].length !== 1
+      || [...masked.matchAll(/\bawait\s+runTaskNotificationSupplement\s*\(/gu)].length !== 1)
+    fail('Tasks notification process guard must have one supervised command and one awaited invocation.');
+  requirePattern(masked,
+    /supervisor\.waitForClose\(child,\s*timeoutMilliseconds\s*\+\s*5_000\)/u,
+    'Tasks notification command close allowance');
+  requirePattern(masked,
+    /constructor\(\{\s*terminationGraceMilliseconds\s*=\s*2_000\s*\}\s*=\s*\{\}\)/u,
+    'Tasks notification supervisor cleanup grace');
+  requirePattern(masked,
+    /async\s+function\s+forceStop\(record,\s*graceMilliseconds\s*=\s*2_000\)\s*\{[\s\S]*?await\s+waitForTreeExit\(record,\s*graceMilliseconds\);[\s\S]*?catch\s*\{[\s\S]*?await\s+waitForTreeExit\(record,\s*graceMilliseconds\);\s*\}\s*\}/u,
+    'Tasks notification two-phase tree cleanup');
+  const evidence = sourceLineEvidence(path, raw,
+    /\{\s*timeoutMilliseconds:\s*120_000,\s*workingDirectory:\s*options\.projectRoot,\s*supervisor\s*\}/u,
+    'Tasks notification process guard', masked);
+  return {
+    closureStatus: 'CLOSED',
+    // Five seconds for process close plus two conservative four-second
+    // termination attempts (timed-out branch and finally cleanup).
+    cleanupFallbackMillis: 13_000,
+    consumerCount: 1,
+    deadlineConsumerCount: 0,
+    evidence,
+    helperSha256: sha256(Buffer.from(raw.slice(declaration.index, end), 'utf8')),
+    id: 'TASK-NOTIFICATION-SOCKET-PROCESS-GUARD',
+    millis: 120_000,
+    requiredAction: 'NONE',
+    variable: 'timeoutMilliseconds',
+  };
+}
+
 export function javascriptGuards(texts) {
   const officialRaw = texts.get('conformance/official/run.mjs');
   const localRaw = texts.get(LOCAL_SIMULATOR_PATH);
@@ -4426,6 +4483,7 @@ export function javascriptGuards(texts) {
       requiredAction: 'NONE',
       variable: 'timeoutMilliseconds',
     },
+    taskNotificationSupplementGuard(texts),
   ];
 }
 

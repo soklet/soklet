@@ -90,7 +90,7 @@ public final class ResourceMethodResolverBenchmark {
 															Request request,
 															int operations) {
 		for (int i = 0; i < operations; i++)
-			consume(resolver.resourceMethodForRequest(request, ServerType.STANDARD_HTTP));
+			consume(resolver.resourceMethodForRequest(request, ServerType.HTTP));
 	}
 
 	private static List<ScenarioConfig> scenarioConfigs() {

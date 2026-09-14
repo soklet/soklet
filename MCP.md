@@ -103,6 +103,13 @@ application may manage HTTP, SSE, and MCP servers together through the
 corresponding `SokletConfig` builder setters, but each retains its own bind
 address and port.
 
+The MCP builder does not expose the HTTP/SSE builders' `IdGenerator` or
+`MultipartParser` settings. Its underlying HTTP `Request` uses the default
+request-ID generator. `McpRequestContext.getRequestId()` is the JSON-RPC ID,
+whereas `getRequest().getId()` identifies the underlying HTTP request. Optional
+trace-correlation keys produce privacy-preserving tokens from validated trace
+metadata; those tokens do not replace either request identifier.
+
 MCP `2026-07-28` is stateless. Clients do not initialize a session and do not
 need to reuse a connection. A client may call `server/discover` immediately.
 Every request restates its protocol version and client capabilities; Soklet
@@ -3013,6 +3020,37 @@ contract is likewise closed: every framework MCP token exposes only a fixed
 bounded category in `StreamingResponseCanceledException`. No reason-valued
 cancellation metric is planned under this contract.
 
+### Current release status — September 13, 2026
+
+The format-v2 manifest has 26 ordered gates: nineteen are `READY`, six remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and `candidate-conformance` is
+`BLOCKED_TOOLCHAIN_SECURITY_REVIEW`. No gate remains `BLOCKED_HARNESS_MISSING`.
+`READY` means an executable validation path is configured, not that the gate
+has passed for an immutable candidate. The external conformance toolchain's
+[security-risk disposition](conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md)
+remains open; local conformance success does not waive that blocker.
+
+The current pinned `0.2.0-alpha.11-descriptive` official suite covers 49 reviewed
+profiles (39 existing plus ten Tasks profiles). Its September 13 local
+development run produced 192 `SUCCESS`, three `SKIPPED`, and one `INFO`
+outcome. Only one of those three skips is Tasks-specific. Eight independent
+Soklet candidate-JAR socket notification checks also passed; these supplement
+the upstream Tasks notification skip and are not counted as upstream passes.
+Both servlet adapters are on the 2.0.0 line requiring Soklet 4.0.0. Their
+default-property and explicit-override validation legs both resolve the same
+exact 4.0.0 candidate, not a separate 3.x compatibility artifact.
+
+These are local development results and configured release requirements, not
+immutable-candidate acceptance or permission to publish. All required gates
+must produce candidate-bound PASS receipts before release. See
+[release/README.md](release/README.md) for the current fail-closed contract.
+
+### Historical development checkpoints
+
+The following results describe earlier source trees and harness configurations;
+their counts and then-current statuses are preserved, not claims about today's
+candidate or supported adapter versions.
+
 The explicit-dispatch release-validation workflow, candidate script,
 downstream/toolchain manifest, release soak profile, and fail-closed evidence
 assembler are checked in. They do not constitute release evidence. The last
@@ -3038,16 +3076,17 @@ run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
 and localization-fleet runtime test sources were added, so it remains prior
 supported-JDK evidence rather than a current 196-source result. The exact six-
 scenario smoke soak passes 6/6 with its strict
-verifier. Carried-forward
-local evidence remains green for candidate localization,
+verifier. Local evidence carried forward at that checkpoint was green for
+candidate localization,
 artifact-backed simulator 39/39, pinned live official CLI 39/39, the website's
 offline clean-install, lint, and 33-route SSG build, and OpenTelemetry 36/36.
-TypeScript and Go are checksum-pinned, `READY`, and green against the local
-snapshot. The six reviewed downstream change sets remain uncommitted local
-work. They are therefore unpublished and unpinned, so the manifest continues
-to carry its old public commits. All four servlet legs pass 158/158 locally:
-the default 3.1.1 and 4.0.0 legs for both javax and Jakarta. ToyStore's completed local
-migration passes 14/14, including six MCP tests. Its per-request credential
+TypeScript and Go were checksum-pinned, `READY`, and green against that local
+snapshot. The six reviewed downstream change sets were uncommitted local
+work and therefore unpublished and unpinned, so the manifest carried its old
+public commits. All four then-configured servlet legs passed 158/158 locally:
+the default 3.1.1 and 4.0.0 legs for both javax and Jakarta. This is historical
+3.x evidence, not the current adapter contract. ToyStore's completed local
+migration passed 14/14, including six MCP tests. Its per-request credential
 proof accepts a valid request, then returns 401 for malformed, missing, expired, and
 wrong-audience credentials and 403 for an insufficient-scope credential; no
 prior request identity or authorization is inherited. Its old manifest pin
@@ -3068,10 +3107,11 @@ toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
 The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
-The format-v2 release contract now enumerates exactly 26 ordered gates.
-Twenty are dispatch-configured, none remain
-`BLOCKED_HARNESS_MISSING`, and the six downstreams remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers;
+At that earlier release-harness checkpoint, the format-v2 contract enumerated
+exactly 26 ordered gates. Twenty were dispatch-configured, none remained
+`BLOCKED_HARNESS_MISSING`, and the six downstreams were
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. That historical configuration predates
+the additional toolchain-security blocker recorded in the current status above.
 `READY` means configured, never passed. The matrix-closure hook is `READY`, and
 the candidate-contained registry and residual evidence produce a canonical
 `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12

@@ -234,6 +234,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
   'barebones-app': Object.freeze({
     toolchain: 'java',
     roles: Object.freeze([
+      evidenceRole('vendored-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       evidenceRole('port-file', 'FILE', 'text/plain', 'barebones-loopback-port.txt'),
       evidenceRole('reservation-log', 'FILE', 'text/plain', 'barebones-port-reservation.log'),
       evidenceRole('runtime-log', 'FILE', 'text/plain', 'barebones-app.log'),
@@ -243,7 +244,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'java',
     roles: Object.freeze([
       evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
-      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-3.1.1.jar', 'gateDefaultArtifact'),
+      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       evidenceRole('default-log', 'FILE', 'text/plain', 'soklet-servlet-javax-default.log'),
       evidenceRole('default-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'soklet-servlet-javax-default-surefire-reports'),
       evidenceRole('candidate-log', 'FILE', 'text/plain', 'soklet-servlet-javax-candidate.log'),
@@ -254,7 +255,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'java',
     roles: Object.freeze([
       evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
-      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-3.1.1.jar', 'gateDefaultArtifact'),
+      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       evidenceRole('default-log', 'FILE', 'text/plain', 'soklet-servlet-jakarta-default.log'),
       evidenceRole('default-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'soklet-servlet-jakarta-default-surefire-reports'),
       evidenceRole('candidate-log', 'FILE', 'text/plain', 'soklet-servlet-jakarta-candidate.log'),
@@ -389,7 +390,7 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
   'candidate-conformance': receiptIdentity(
     'node conformance/official/run.mjs --phase 5 --mode release',
     'release',
-    'ALL_39_CAPABILITY_SELECTED_SCENARIOS_PASS',
+    'ALL_49_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
   ),
   'candidate-localization': receiptIdentity(
     'verification/localization/verify.sh',
@@ -439,7 +440,8 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
 });
 
 function gateEvidenceContractVersion(gateId) {
-  return gateId === 'matrix-closure' ? 2 : 1;
+  return ['matrix-closure', 'candidate-conformance', 'barebones-app', 'soklet-servlet-javax',
+    'soklet-servlet-jakarta'].includes(gateId) ? 2 : 1;
 }
 
 export const GATE_EVIDENCE_CONTRACTS = Object.freeze(Object.fromEntries(
@@ -843,20 +845,6 @@ function requireWorkflowIdentity(workflow, candidateCommit, description) {
   }
 }
 
-function requireGateDefaultArtifact(item, gate, expected, gateId) {
-  const identity = /^com\.soklet:soklet:([0-9]+\.[0-9]+\.[0-9]+)$/.exec(
-    gate.defaultArtifactIdentity ?? '',
-  );
-  if (identity === null
-      || !SHA256_PATTERN.test(gate.defaultArtifactSha256 ?? '')
-      || expected.fileName !== `soklet-${identity[1]}.jar`
-      || item.artifact.type !== 'FILE'
-      || item.artifact.fileName !== expected.fileName
-      || item.artifact.sha256 !== gate.defaultArtifactSha256) {
-    fail(`Gate ${gateId} default JAR evidence does not match its exact identity and SHA-256`);
-  }
-}
-
 function canonicalToolchainDistributionBytes(toolchain, description) {
   requireExactKeys(
     toolchain,
@@ -925,6 +913,11 @@ function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
   const contract = GATE_EVIDENCE_CONTRACTS[gateId];
   if (contract === undefined)
     fail(`Promotion has no typed-evidence contract for gate ${gateId}`);
+  if ((gateId === 'soklet-servlet-javax' || gateId === 'soklet-servlet-jakarta')
+      && (gateEvidence.gate.defaultArtifactIdentity !== 'com.soklet:soklet:4.0.0'
+        || gateEvidence.gate.defaultArtifactSha256 !== null)) {
+    fail(`Gate ${gateId} default must use the descriptor-bound Soklet 4.0.0 candidate`);
+  }
   if (gateEvidence.gate.evidenceContract !== contract.contractId
       || gateEvidence.gate.toolchain !== contract.toolchain) {
     fail(`Gate ${gateId} does not identify its exact typed-evidence contract and toolchain`);
@@ -941,7 +934,6 @@ function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
       fail(`Gate ${gateId} evidence item ${index} does not match role ${expected.role}`);
     }
     if (expected.binding !== null
-        && expected.binding !== 'gateDefaultArtifact'
         && expected.binding !== 'gateToolchainDistribution') {
       const artifact = artifacts[expected.binding];
       if (item.artifact.type !== 'FILE'
@@ -949,8 +941,6 @@ function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
           || item.artifact.sha256 !== artifact.sha256) {
         fail(`Gate ${gateId} evidence role ${expected.role} does not match candidate ${expected.binding}`);
       }
-    } else if (expected.binding === 'gateDefaultArtifact') {
-      requireGateDefaultArtifact(item, gateEvidence.gate, expected, gateId);
     }
   }
 

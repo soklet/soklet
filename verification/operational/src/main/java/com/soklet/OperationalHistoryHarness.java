@@ -1284,7 +1284,7 @@ public final class OperationalHistoryHarness {
     private Object invoke(Method method, Object[] arguments) throws Throwable {
       if (method.getName().equals("didWriteResponse")
           && arguments != null && arguments.length == 5
-          && arguments[0] == ServerType.STANDARD_HTTP) {
+          && arguments[0] == ServerType.HTTP) {
         if (isRegisteredHttpWrite(arguments))
           httpResponsesWritten.incrementAndGet();
         else if (operationalWindowStarted.get())
@@ -1491,11 +1491,11 @@ public final class OperationalHistoryHarness {
           MetricsCollector.HistogramSnapshot> entry
           : snapshot.getHttpRequestDurations().entrySet()) {
         MetricsCollector.HttpServerRouteStatusKey key = entry.getKey();
-        if (key.method() == HttpMethod.GET
-            && key.routeType() == MetricsCollector.RouteType.MATCHED
-            && key.route() != null
-            && key.route().getPath().equals(HTTP_PATH)
-            && key.statusClass().equals("2xx")) {
+        if (key.getHttpMethod() == HttpMethod.GET
+            && key.getRouteType() == MetricsCollector.RouteType.MATCHED
+            && key.getRoute() != null
+            && key.getRoute().getPath().equals(HTTP_PATH)
+            && key.getStatusClass().equals("2xx")) {
           count = Math.addExact(count, entry.getValue().getCount());
         }
       }
@@ -1521,9 +1521,9 @@ public final class OperationalHistoryHarness {
       for (Map.Entry<MetricsCollector.SseEventRouteKey, Long> entry
           : snapshot.getSseHandshakesAccepted().entrySet()) {
         MetricsCollector.SseEventRouteKey key = entry.getKey();
-        if (key.routeType() == MetricsCollector.RouteType.MATCHED
-            && key.route() != null
-            && key.route().getPath().equals(REALTIME_ROUTE)) {
+        if (key.getRouteType() == MetricsCollector.RouteType.MATCHED
+            && key.getRoute() != null
+            && key.getRoute().getPath().equals(REALTIME_ROUTE)) {
           count = Math.addExact(count, entry.getValue());
         }
       }

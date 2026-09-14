@@ -924,9 +924,9 @@ public final class Soklet implements AutoCloseable {
 
 		// Overlay user-supplied headers (prefer user values on key collision)
 		for (Map.Entry<String, Set<String>> e : headers.entrySet()) {
-			String headerName = e.getKey();
-			if (headerName != null && (headerName.equalsIgnoreCase("Connection")
-					|| headerName.equalsIgnoreCase("Keep-Alive")))
+			String headerName = requireNonNull(e.getKey());
+			if (headerName.equalsIgnoreCase("Connection")
+					|| headerName.equalsIgnoreCase("Keep-Alive"))
 				continue;
 			// Defensively copy so callers can't mutate after construction
 			Set<String> values = e.getValue() == null ? Set.of() : Set.copyOf(e.getValue());
@@ -1562,7 +1562,7 @@ public final class Soklet implements AutoCloseable {
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
 			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
-			StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.STANDARD_HTTP,
+			StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.HTTP,
 					request, resourceMethod, marshaledResponse, establishedAt);
 			StreamTermination termination = StreamTermination
 					.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)

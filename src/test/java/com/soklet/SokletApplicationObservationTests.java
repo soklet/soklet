@@ -911,9 +911,9 @@ final class SokletApplicationObservationTests {
 			}
 			Assertions.assertTrue(requestStarted.await(5, TimeUnit.SECONDS));
 			Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS));
-			Assertions.assertEquals(ServerType.STANDARD_HTTP,
+			Assertions.assertEquals(ServerType.HTTP,
 					requestStartServer.get());
-			Assertions.assertEquals(ServerType.STANDARD_HTTP,
+			Assertions.assertEquals(ServerType.HTTP,
 					requestFinishServer.get());
 			Assertions.assertSame(requestStartThread.get(),
 					requestFinishThread.get());

@@ -25,6 +25,18 @@ import {
   verifyToolchain,
 } from './verify.mjs';
 
+export const taskNotificationSupplementChecks = Object.freeze([
+  "cancelAcknowledgesAndPublishesTerminalSnapshot",
+  "acknowledgmentFiltersTaskIdsAndEventCarriesExactCurrentSnapshot",
+  "staleEventReadsTerminalStateAndRevokedAuthorizationIsSuppressed",
+  "inputRequiredTasksAreFilteredByEachSubscribersCapabilities",
+  "duplicateEventsReadCurrentTerminalAndSuppressLaterStates",
+  "maximumTaskIdStormCoalescesWithoutClosingItsSubscription",
+  "disconnectDuringActiveProjectionReleasesSubscriptionAndRecovers",
+  "reconnectUsesNewIdAndDoesNotReplayDisconnectedEvents"
+]);
+const taskNotificationSupplementMain = 'com.soklet.conformance.McpTaskNotificationSocketDriver';
+
 const fixtureMain = 'com.soklet.conformance.McpConformanceFixture';
 const startupTimeoutMilliseconds = 10_000;
 const scenarioTimeoutMilliseconds = 60_000;
@@ -142,7 +154,7 @@ export async function runOfficialConformance(options, { processObject = process 
 			? 1
 			: options.phase === 4
 				? 23
-				: options.phase === 5 ? 39 : null;
+				: options.phase === 5 ? 49 : null;
 		if (expectedScenarioCount !== null && scenarios.length !== expectedScenarioCount)
 			throw new Error(
 				`Phase ${options.phase} must select exactly ${expectedScenarioCount} reviewed scenarios`,
@@ -170,6 +182,10 @@ export async function runOfficialConformance(options, { processObject = process 
     }
 
     if (runFailure !== undefined) throw runFailure;
+    evidence.taskNotificationSupplement = await runTaskNotificationSupplement(
+      scenarioOptions, supervisor,
+    );
+    persistEvidence(evidencePath, evidence);
 		if (releasing)
 			await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
 		if (releasing) assertReleaseCandidateUnchanged(scenarioOptions);
@@ -465,6 +481,36 @@ function startFixture(scenarioName, options, supervisor) {
   const stderr = boundedCollector(child.stderr, 'fixture stderr');
   child.once('error', (error) => lines.fail(error));
   return { child, lines, stderr, supervisor };
+}
+
+export function verifyTaskNotificationSupplementResult(result) {
+  const expected = taskNotificationSupplementChecks.map((name) => `PASS\t${name}\n`).join('');
+  if (result.timedOut || result.status !== 0 || result.signal !== null
+      || result.outputFailure !== null || result.stderr !== '' || result.stdout !== expected)
+    throw new Error('Tasks notification socket supplement failed its exact bounded-output contract');
+  return Object.freeze({ passed: true, checks: [...taskNotificationSupplementChecks] });
+}
+
+export async function runTaskNotificationSupplement(options, supervisor) {
+  if (options.releaseCandidate !== undefined) assertReleaseCandidateUnchanged(options);
+  const { fixtureClasses, candidateJar } = verifyPublicFixtureClasspath(
+    options.classpath, options.projectRoot, options.releaseCandidate?.candidateJar,
+  );
+  const testClasses = resolve(fixtureClasses, '../test-classes');
+  const mainClass = resolve(testClasses, 'com/soklet/conformance/McpTaskNotificationSocketDriver.class');
+  const classStats = existsSync(mainClass) ? lstatSync(mainClass) : null;
+  const testStats = existsSync(testClasses) ? lstatSync(testClasses) : null;
+  if (classStats === null || !classStats.isFile() || classStats.isSymbolicLink()
+      || testStats === null || !testStats.isDirectory() || testStats.isSymbolicLink())
+    throw new Error('Tasks notification socket supplement classes are missing or unsafe');
+  const result = await runBoundedCommand(options.javaExecutable, [
+    '-ea', '-cp', [testClasses, fixtureClasses, candidateJar].join(delimiter),
+    taskNotificationSupplementMain,
+  ], { timeoutMilliseconds: 120_000, workingDirectory: options.projectRoot, supervisor });
+  writeFileSync(resolve(options.workDirectory, 'task-notification-supplement.stdout.log'), result.stdout);
+  writeFileSync(resolve(options.workDirectory, 'task-notification-supplement.stderr.log'), result.stderr);
+  if (options.releaseCandidate !== undefined) assertReleaseCandidateUnchanged(options);
+  return verifyTaskNotificationSupplementResult(result);
 }
 
 export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCandidateJar) {
@@ -1334,6 +1380,7 @@ function createInitialEvidence(phase, mode) {
 		phase,
 		mode,
     goldenMessagesValidated: null,
+    taskNotificationSupplement: null,
     scenarios: [],
     failure: null,
   };

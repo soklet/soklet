@@ -66,6 +66,12 @@ import static java.util.Objects.requireNonNull;
 public final class McpGeneratedEndpointProviderLoader {
 	private static final String ABSENT_OUTPUT_SCHEMA_DIGEST =
 			"NO_OUTPUT_SCHEMA";
+	@NonNull
+	private static final String METADATA_SETUP_GUIDANCE =
+			"Configure com.soklet.SokletProcessor explicitly (Gradle annotationProcessor or Maven "
+					+ "annotationProcessorPaths/annotationProcessors), compile with -parameters, and preserve "
+					+ "META-INF/soklet/mcp-endpoint-descriptor-providers and the generated provider classes "
+					+ "when packaging the application.";
 
 	/**
 	 * Internal request-context contract used only by generated endpoint adapters.
@@ -114,7 +120,7 @@ public final class McpGeneratedEndpointProviderLoader {
 				readEntries(classLoader);
 		if (entries.isEmpty())
 			throw new IllegalStateException(
-					"No generated MCP endpoint descriptors were found.");
+					"No generated MCP endpoint descriptors were found. " + METADATA_SETUP_GUIDANCE);
 		Map<Class<?>, McpEndpoint> endpoints = new LinkedHashMap<>();
 		for (McpGeneratedEndpointProviderIndex.Entry entry : entries.values()) {
 			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry, null);
@@ -172,7 +178,8 @@ public final class McpGeneratedEndpointProviderLoader {
 			if (entry == null)
 				throw new IllegalArgumentException(
 						"No generated MCP endpoint descriptor exists for '"
-								+ endpointClass.getName() + "'.");
+								+ endpointClass.getName() + "'. Verify the selected annotated endpoint class "
+								+ "and its packaging. " + METADATA_SETUP_GUIDANCE);
 			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry,
 					endpointClass);
 			endpoints.put(loadedEndpoint.endpointClass(),

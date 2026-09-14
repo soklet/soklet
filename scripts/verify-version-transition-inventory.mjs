@@ -17,12 +17,32 @@ export const INVENTORY_EXCLUSIONS = Object.freeze([
 export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'MCP_QUICKSTART.md',
   'MIGRATING_TO_4_0.md',
+  'conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md',
+  'conformance/official/public-fixture-test-src/com/soklet/conformance/McpChunkedHttpClient.java',
+  'conformance/official/public-fixture-test-src/com/soklet/conformance/McpTaskNotificationSocketDriver.java',
   'release/G5_RELEASE_RUNBOOK.md',
   'release/MCP_CLIENT_COMPATIBILITY.md',
   'release/MCP_OAUTH_RESOURCE_SERVER.md',
+  'release/OWNER_COMMIT_CHECKLIST.md',
+  'release/PLANNING_AUTHORITY_DRIFT_2026-09-13.md',
   'release/SECURITY_CLAIMS_AUDIT.md',
   'release/THIRD_PARTY_AUDIT.md',
   'release/mcp-residual-closure-evidence.json',
+  'release/scripts/install-pinned-gradle-linux-x64.sh',
+  'scripts/verify-consumer-ci-self-test.mjs',
+  'src/test/java/com/soklet/HeaderLocaleTests.java',
+  'src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java',
+  'verification/consumer-build/README.md',
+  'verification/consumer-build/build.gradle',
+  'verification/consumer-build/consumer-build-lib.mjs',
+  'verification/consumer-build/pom.xml',
+  'verification/consumer-build/self-test.mjs',
+  'verification/consumer-build/settings.gradle',
+  'verification/consumer-build/src/main/java/example/ConsumerEndpoints.java',
+  'verification/consumer-build/src/main/java/example/ConsumerSmoke.java',
+  'verification/consumer-build/src/sse/java/example/ConsumerSseEndpoints.java',
+  'verification/consumer-build/tools/ConsumerJarMutation.java',
+  'verification/consumer-build/verify.mjs',
 ]);
 
 export const ORDERED_PATTERNS = Object.freeze([
@@ -117,7 +137,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'3b951144cf98b5e613f434e26c03b277957e61d48adf7bdd11050c18b2411e38';
+	'cb4abf269991a4284de3065a60d0f15cb60c27877993a3ee8db604eb7bfca946';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

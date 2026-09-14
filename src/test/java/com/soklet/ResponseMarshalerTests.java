@@ -52,7 +52,7 @@ class ResponseMarshalerTests {
 		InetSocketAddress remoteAddress = InetSocketAddress.createUnresolved(
 				"sensitive.example", 8443);
 		UnparsedRequest request = UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP,
+						ServerType.HTTP,
 						UnparsedRequestReason.MALFORMED_REQUEST)
 				.remoteAddress(remoteAddress)
 				.capturedBytes(source)
@@ -60,7 +60,7 @@ class ResponseMarshalerTests {
 				.captureTruncated(false)
 				.build();
 		UnparsedRequest equalRequest = UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP,
+						ServerType.HTTP,
 						UnparsedRequestReason.MALFORMED_REQUEST)
 				.remoteAddress(remoteAddress)
 				.capturedBytes("illegal request".getBytes(
@@ -83,7 +83,7 @@ class ResponseMarshalerTests {
 		Assertions.assertArrayEquals("illegal request".getBytes(
 				StandardCharsets.US_ASCII), bytesFrom(secondView));
 
-		Assertions.assertSame(ServerType.STANDARD_HTTP,
+		Assertions.assertSame(ServerType.HTTP,
 				request.getServerType());
 		Assertions.assertSame(UnparsedRequestReason.MALFORMED_REQUEST,
 				request.getReason());
@@ -101,7 +101,7 @@ class ResponseMarshalerTests {
 
 		String rendering = request.toString();
 		Assertions.assertEquals(
-				"UnparsedRequest{serverType=STANDARD_HTTP, "
+				"UnparsedRequest{serverType=HTTP, "
 						+ "reason=MALFORMED_REQUEST, observedByteCount=15, "
 						+ "captureTruncated=false}", rendering);
 		Assertions.assertFalse(rendering.contains("illegal request"));
@@ -127,11 +127,11 @@ class ResponseMarshalerTests {
 						UnparsedRequestReason.MALFORMED_REQUEST));
 		Assertions.assertThrows(NullPointerException.class, () ->
 				UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP, null));
+						ServerType.HTTP, null));
 
 		UnparsedRequest.Builder builder =
 				UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP,
+						ServerType.HTTP,
 						UnparsedRequestReason.MALFORMED_REQUEST);
 		Assertions.assertThrows(NullPointerException.class, () ->
 				builder.capturedBytes(null));
@@ -143,14 +143,14 @@ class ResponseMarshalerTests {
 				builder.observedByteCount(-1L));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				UnparsedRequest.withServerTypeAndReason(
-								ServerType.STANDARD_HTTP,
+								ServerType.HTTP,
 								UnparsedRequestReason.MALFORMED_REQUEST)
 						.capturedBytes(new byte[]{1, 2})
 						.observedByteCount(1L)
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				UnparsedRequest.withServerTypeAndReason(
-								ServerType.STANDARD_HTTP,
+								ServerType.HTTP,
 								UnparsedRequestReason.MALFORMED_REQUEST)
 						.capturedBytes(new byte[]{1, 2})
 						.observedByteCount(2L)
@@ -158,7 +158,7 @@ class ResponseMarshalerTests {
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				UnparsedRequest.withServerTypeAndReason(
-								ServerType.STANDARD_HTTP,
+								ServerType.HTTP,
 								UnparsedRequestReason.MALFORMED_REQUEST)
 						.capturedBytes(new byte[]{1, 2})
 						.observedByteCount(3L)
@@ -214,7 +214,7 @@ class ResponseMarshalerTests {
 				})
 				.build();
 		UnparsedRequest request = UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP,
+						ServerType.HTTP,
 						UnparsedRequestReason.EXPECTATION_FAILED)
 				.build();
 
@@ -233,7 +233,7 @@ class ResponseMarshalerTests {
 	@Test
 	void nullBuilderHandlerRestoresBuiltInBehavior() {
 		UnparsedRequest request = UnparsedRequest.withServerTypeAndReason(
-						ServerType.STANDARD_HTTP,
+						ServerType.HTTP,
 						UnparsedRequestReason.MALFORMED_REQUEST)
 				.build();
 		ResponseMarshaler marshaler = ResponseMarshaler.builder()
@@ -311,6 +311,43 @@ class ResponseMarshalerTests {
 		Assertions.assertArrayEquals(new Throwable[]{secondFailure},
 				actual.getSuppressed());
 		Assertions.assertEquals(List.of("first", "middle", "last"), calls);
+	}
+
+	@Test
+	void lifecycleObserverAggregatePreservesSharedFailureAndInvokesLaterObservers() {
+		for (boolean duplicateRegistration : List.of(false, true)) {
+			UnparsedRequest request = truncatedRequest();
+			RuntimeException sharedFailure = new RuntimeException("shared");
+			RuntimeException distinctFailure = new RuntimeException("distinct");
+			AtomicInteger calls = new AtomicInteger();
+			LifecycleObserver first = new LifecycleObserver() {
+				@Override
+				public void didRejectUnparsedRequest(@NonNull UnparsedRequest actualRequest) {
+					calls.incrementAndGet();
+					throw sharedFailure;
+				}
+			};
+			LifecycleObserver second = duplicateRegistration ? first : new LifecycleObserver() {
+				@Override
+				public void didRejectUnparsedRequest(@NonNull UnparsedRequest actualRequest) {
+					calls.incrementAndGet();
+					throw sharedFailure;
+				}
+			};
+			LifecycleObserver last = new LifecycleObserver() {
+				@Override
+				public void didRejectUnparsedRequest(@NonNull UnparsedRequest actualRequest) {
+					calls.incrementAndGet();
+					throw distinctFailure;
+				}
+			};
+			RuntimeException actual = Assertions.assertThrows(RuntimeException.class,
+					() -> LifecycleObservers.aggregate(List.of(first, second, last))
+							.didRejectUnparsedRequest(request));
+			Assertions.assertSame(sharedFailure, actual);
+			Assertions.assertEquals(3, calls.get());
+			Assertions.assertArrayEquals(new Throwable[]{distinctFailure}, actual.getSuppressed());
+		}
 	}
 
 	@NonNull

@@ -98,7 +98,7 @@ public final class ByteRange {
 		if (getEndInclusive() >= representationLength)
 			throw new IllegalArgumentException("Range end must be less than representation length.");
 
-		return format("bytes %d-%d/%d", getStart(), getEndInclusive(), representationLength);
+		return "bytes " + getStart() + "-" + getEndInclusive() + "/" + representationLength;
 	}
 
 	@Override

@@ -28,6 +28,29 @@ exact client version and exercise capability negotiation, task creation,
 `tasks/get`, input or cancelation where supported, reconnect recovery, and
 optional `notifications/tasks` independently of the core smoke above.
 
+## September 13 packaged-development recheck
+
+On **2026-09-13**, the generated website quickstart consumer was executed with
+only its consumer JAR and the corrected Soklet 4.0.0 main JAR at runtime. Core
+SHA-256 was
+`b192e36e7d92d319a1f60fa2cd7d6ad6ca2bd8481bd5f46d530a9721b41a0e50`.
+The listener was `http://127.0.0.1:8082/catalog/mcp`, using the same modern
+profile and loopback-only smoke policy described below.
+
+| Client or host | Exact version/state | September 13 observation |
+| --- | --- | --- |
+| MCP Inspector CLI | Cached, installed `@modelcontextprotocol/inspector` 2.3.0; Node 26.5.0 | **PASS (packaged development smoke)**: `tools/list` exposed `catalog.search`; `tools/call` with query `sprocket` returned the fixture's typed `sprocket:10` result. No dependency install or credentials were used. |
+| curl | 8.7.1 | **PASS (packaged development smoke)**: `server/discover` and complete `tools/call` with matching `Mcp-Name`, metadata, and arguments. |
+| Visual Studio Code | 1.137.0, commit `645f29cc3176500b4b5762ba887cf2a7f0ffdf2c`, arm64 | Version rechecked; no model/extension MCP session was exercised. **NOT TESTED**. |
+| Claude Code / Cursor | Neither CLI found on PATH in this environment | No integration run or version asserted. **NOT TESTED**. A separately installed Claude desktop application does not establish Claude Code availability. |
+
+The server ran on Corretto 17 and was stopped after the smoke. Inspector prompt
+and resource catalog checks from the September 1 row were not repeated here;
+neither run establishes host-level Tasks support. The local working record is
+`/private/tmp/soklet-inspector-smoke.SHBwj5/result.json` with adjacent per-command
+logs. This is not immutable-candidate evidence or a durable release receipt;
+repeat on the canonical artifact and retain final results through K/L.
+
 ## Tasks protocol conformance
 
 On 2026-09-09, official MCP conformance CLI `0.2.0-alpha.11` at commit
@@ -44,9 +67,16 @@ The suite's `tasks-status-notifications` scenario reported its one check as
 task subscription authorization, fresh manager lookup, event ordering,
 backpressure, reconnect, and terminal-state races. This is a local pre-release
 protocol check, not a compatibility result for any client or host in the table
-and not a release-candidate gate. The normal pinned conformance CI remains on
-`0.2.0-alpha.10` at commit `49103de6ed70804e940637bf3e9e29e4a3f54e64`
-and does not rerun these Tasks scenarios.
+and not a release-candidate gate result.
+
+On 2026-09-13 the normal conformance gate was repinned to that exact alpha.11
+commit. All 49 selected profiles (the prior 39 core rows plus ten Tasks rows)
+were re-observed against the packaged working-tree JAR. The nine runnable Tasks
+scenarios again produced 44 successful checks; the notification row retains its
+exact declared upstream skip and independent socket-test supplements. The gate
+now replays those profiles, but this development verification does not replace
+candidate provenance, client-host smokes, or the unresolved
+[external-toolchain risk disposition](../conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md).
 
 “PASS (pre-release manual smoke)” means only that the named local interaction
 worked on the stated date. It does not mean every feature of that host was
@@ -128,6 +158,25 @@ curl --fail-with-body --silent --show-error \
   --header 'Mcp-Method: server/discover' \
   --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
+
+To invoke the quickstart tool, mirror its name in `Mcp-Name` as well:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  --request POST http://127.0.0.1:8081/catalog/mcp \
+  --header 'Host: 127.0.0.1:8081' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --header 'MCP-Protocol-Version: 2026-07-28' \
+  --header 'Mcp-Method: tools/call' \
+  --header 'Mcp-Name: catalog.search' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"catalog.search","arguments":{"query":"sprocket"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+The name header is invocation-specific: depending on the selected method it
+mirrors the tool/prompt name, resource URI, or task ID. Discovery and other
+methods with no such selector must omit `Mcp-Name`; an unexpected name header
+is rejected as a header mismatch.
 
 The `Host` value includes the port because Soklet validates both host and
 effective listener port. For local development, use `127.0.0.1` consistently

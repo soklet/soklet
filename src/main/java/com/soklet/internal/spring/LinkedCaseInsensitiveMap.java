@@ -67,7 +67,7 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 
 	/**
 	 * Create a new LinkedCaseInsensitiveMap that stores case-insensitive keys
-	 * according to the default Locale (by default in lower case).
+	 * according to {@link Locale#ROOT} (in lower case).
 	 *
 	 * @see #convertKey(String)
 	 */
@@ -79,7 +79,7 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 	 * Create a new LinkedCaseInsensitiveMap that stores case-insensitive keys
 	 * according to the given Locale (in lower case).
 	 *
-	 * @param locale the Locale to use for case-insensitive key conversion
+	 * @param locale the Locale to use for case-insensitive key conversion, or {@code null} for {@link Locale#ROOT}
 	 * @see #convertKey(String)
 	 */
 	public LinkedCaseInsensitiveMap(@Nullable Locale locale) {
@@ -90,7 +90,7 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 	 * Create a new LinkedCaseInsensitiveMap that wraps a {@link LinkedHashMap}
 	 * with an initial capacity that can accommodate the specified number of
 	 * elements without any immediate resize/rehash operations to be expected,
-	 * storing case-insensitive keys according to the default Locale (in lower case).
+	 * storing case-insensitive keys according to {@link Locale#ROOT} (in lower case).
 	 *
 	 * @param expectedSize the expected number of elements (with a corresponding
 	 *                     capacity to be derived so that no resize/rehash operations are needed)
@@ -108,7 +108,7 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 	 *
 	 * @param expectedSize the expected number of elements (with a corresponding
 	 *                     capacity to be derived so that no resize/rehash operations are needed)
-	 * @param locale       the Locale to use for case-insensitive key conversion
+	 * @param locale       the Locale to use for case-insensitive key conversion, or {@code null} for {@link Locale#ROOT}
 	 * @see #convertKey(String)
 	 */
 	public LinkedCaseInsensitiveMap(int expectedSize, @Nullable Locale locale) {
@@ -129,7 +129,8 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 			}
 		};
 		this.caseInsensitiveKeys = CollectionUtils.newHashMap(expectedSize);
-		this.locale = (locale != null ? locale : Locale.getDefault());
+		// Protocol field names must not change meaning with the process locale.
+		this.locale = (locale != null ? locale : Locale.ROOT);
 	}
 
 	/**

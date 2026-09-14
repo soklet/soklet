@@ -37,6 +37,16 @@ methods. `McpTaskNotFoundException` uses the same fixed message for an unknown
 task and an unauthorized task and retains no task ID, authorization detail, or
 application cause, so the exception does not disclose task existence.
 
+The private task-notification delivery comparator retains only the exact
+client-visible fields needed to distinguish delivered nonterminal updates,
+never the private task origin, persisted arguments, full task, or completed
+result. Its accessors and implicit record rendering are classified as exact
+internal values, not redacted telemetry; built-in logs and metrics do not emit
+the record. Variable-size messages, input requests, and metadata are retained
+only after bounded notification encoding, for at most 256 task IDs per
+subscription. Terminal delivery retains only a marker, and owner cleanup
+releases comparison state even while an old worker remains referenced.
+
 Two disabled-by-default log options deliberately expose limited
 request-derived text:
 

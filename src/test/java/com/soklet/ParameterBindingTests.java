@@ -160,7 +160,7 @@ public class ParameterBindingTests {
 		SpecialLifecycleObserver lifecycleObserver = new SpecialLifecycleObserver("configured-observer");
 		SokletConfig cfg = specialInjectionConfiguration(lifecycleObserver);
 		Request request = Request.withPath(HttpMethod.GET, "/param/lifecycle-mismatch").build();
-		ResourceMethod resourceMethod = cfg.getResourceMethodResolver().resourceMethodForRequest(request, ServerType.STANDARD_HTTP).orElseThrow();
+		ResourceMethod resourceMethod = cfg.getResourceMethodResolver().resourceMethodForRequest(request, ServerType.HTTP).orElseThrow();
 
 		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
 				() -> cfg.getResourceMethodParameterProvider().parameterValuesForResourceMethod(request, resourceMethod));

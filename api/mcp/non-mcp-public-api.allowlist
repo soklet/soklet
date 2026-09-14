@@ -22,6 +22,7 @@ com.soklet.ResidualActivityType
 com.soklet.ResponseMarshaler
 com.soklet.ResponseMarshaler$Builder
 com.soklet.ResponseMarshaler$Builder$UnparsedRequestHandler
+com.soklet.ServerType
 com.soklet.ShutdownCleanup
 com.soklet.ShutdownCleanup$Action
 com.soklet.ShutdownCleanupFailureReason

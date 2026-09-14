@@ -151,7 +151,7 @@ class DefaultResourceMethodResolverLazyTests {
 				Assertions.assertThrows(RuntimeException.class, () ->
 						runtimeResolver.resourceMethodForRequest(
 								Request.withPath(HttpMethod.GET, "/lazy").build(),
-								ServerType.STANDARD_HTTP)));
+								ServerType.HTTP)));
 		Assertions.assertEquals(1, runtimeLoads.get());
 
 		AtomicInteger errorLoads = new AtomicInteger();

@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "reviewedOn": "2026-08-04",
+  "reviewedOn": "2026-09-13",
   "protocolVersion": "2026-07-28",
   "officialConformanceSuite": {
     "repository": "https://github.com/modelcontextprotocol/conformance.git",
-    "commit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+    "commit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
     "package": {
       "name": "@modelcontextprotocol/conformance",
-      "version": "0.2.0-alpha.10",
+      "version": "0.2.0-alpha.11",
       "versionIsDescriptiveOnly": true,
-      "packageJsonSha256": "2fd65cda83b8af49452198944e1924a9dc1a52ed4f56aba18e1d814922150149",
-      "packageLockJsonSha256": "161aef794720d2393a6a3db64e9751f2d52730b49f662e84b23363df5c1196e1"
+      "packageJsonSha256": "f699ac5e56ffeaad1090ee26e126c0d9f9d68e7fad6db30923d30fd7b429c640",
+      "packageLockJsonSha256": "8c30fe8f15735bc4660c682225b12ec84bbd08c22e839127445d06b5476c4945"
     },
     "entryPoint": "dist/index.js",
     "builtEntryPoint": {
       "path": "dist/index.js",
-      "bytes": 779702,
-      "sha256": "b48694977974635ba1bdfa77a4423dd9cafb2419ef70840ce3cee67e8b184aa4"
+      "bytes": 818645,
+      "sha256": "b8355fba248c019b667a9c16289748ebfd85ca2668890812054b7997b8df8f3b"
     },
     "sourceTree": {
       "algorithm": "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
@@ -25,14 +25,12 @@
         "dist",
         "node_modules"
       ],
-      "fileCount": 263,
-      "sha256": "94d3b3de1266796353380122acaf7c1d02257769618d08e7dcc38cfc60fd595b"
+      "fileCount": 279,
+      "sha256": "e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d"
     },
     "listCommandArguments": [
       "list",
-      "--server",
-      "--spec-version",
-      "2026-07-28"
+      "--server"
     ],
     "scenarioCommandArguments": [
       "server",
@@ -54,7 +52,17 @@
       "specificationCommit": "71e306956a4959c9655e5036be215d41986596e6",
       "path": "src/spec-types/draft.schema.json",
       "sha256": "9281c4890630e2d1e61792fa23b4084c4ea360cd58519610cd050545ab7b8708"
-    }
+    },
+    "extensionScenarioCommandArguments": [
+      "server",
+      "--url",
+      "<fixture-url>",
+      "--scenario",
+      "<exact-scenario-name>",
+      "-o",
+      "<scenario-output-directory>",
+      "--verbose"
+    ]
   },
   "finalSpecification": {
     "repository": "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
@@ -86,8 +94,8 @@
     }
   },
   "scenarioInventory": {
-    "fullCount": 40,
-    "selectedRunCount": 39,
+    "fullCount": 50,
+    "selectedRunCount": 49,
     "excludedNames": [
       "completion-complete"
     ],
@@ -99,12 +107,12 @@
       "terminatesLastLine": true,
       "order": "PINNED_CLI_OUTPUT"
     },
-    "fullInventorySha256": "3c41ddedcefd14403c891b5a518dfde19ee9f90ad18d9ca6e012de325a78821a",
-    "selectedRunSetSha256": "4979955e16de137e16d1fe1b1aa5699fe1fc879daec0033ae57629858ec3b8d5"
+    "fullInventorySha256": "25a6351c04df32aa7866e5f962770c00cd14856250ac6c3bf2dbbef8f5985613",
+    "selectedRunSetSha256": "16904eae94d5cda8cc7114d3c05620903b9ea3ef3a99321978ba977fb47c9115"
   },
   "upstreamDriftReview": {
-    "reviewedOn": "2026-08-04",
-    "decision": "RETAIN_REVIEWED_PIN",
+    "reviewedOn": "2026-09-13",
+    "decision": "REPIN_TASKS_CAPABLE_SUITE",
     "suiteLabelsProtocolVersionAsDraft": true,
     "suiteVendoredSchemaMatchesFinalTaggedSchema": false,
     "knownSchemaDifference": "The suite's vendored schema predates the final tagged subscriptions/listen terminal-response correction.",

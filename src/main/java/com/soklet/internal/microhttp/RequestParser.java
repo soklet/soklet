@@ -66,6 +66,8 @@ class RequestParser {
     private boolean continueExpectationRequested;
     private boolean continueExpectationAcknowledged;
     private boolean unsupportedExpectationPresent;
+    // Section starts are request-relative, not raw array offsets: adding bytes
+    // can compact a preceding pipelined request out of the tokenizer's array.
     private int headersStartPosition;
     private int chunkSize;
     private long chunkBodySize;
@@ -288,7 +290,7 @@ class RequestParser {
         version = tokenizer.string(start, start + versionLength,
                 StandardCharsets.US_ASCII);
         tokenizer.advanceTo(start + versionLength + CRLF.length);
-        headersStartPosition = tokenizer.rawPosition();
+        headersStartPosition = tokenizer.position();
         state = State.HEADER;
         return true;
     }
@@ -356,7 +358,8 @@ class RequestParser {
     }
 
     private void rejectHeadersTooLarge(int endExclusive) {
-        if (headersStartPosition >= 0 && endExclusive - headersStartPosition > maxHeadersSize) {
+        int endPosition = tokenizer.position() + (endExclusive - tokenizer.rawPosition());
+        if (headersStartPosition >= 0 && endPosition - headersStartPosition > maxHeadersSize) {
             throw requestTooLarge(RequestTooLargeException.Reason.HEADERS);
         }
     }
@@ -513,7 +516,7 @@ class RequestParser {
         }
         tokenizer.advanceTo(end + CRLF.length);
         if (chunkSize == 0) {
-            chunkTrailersStartPosition = tokenizer.rawPosition();
+            chunkTrailersStartPosition = tokenizer.position();
             state = State.CHUNK_TRAILER;
         } else {
             state = State.CHUNK_DATA;
@@ -605,7 +608,8 @@ class RequestParser {
     }
 
     private void rejectChunkTrailersTooLarge(int endExclusive) {
-        if (chunkTrailersStartPosition >= 0 && endExclusive - chunkTrailersStartPosition > maxHeadersSize) {
+        int endPosition = tokenizer.position() + (endExclusive - tokenizer.rawPosition());
+        if (chunkTrailersStartPosition >= 0 && endPosition - chunkTrailersStartPosition > maxHeadersSize) {
             throw requestTooLarge(RequestTooLargeException.Reason.HEADERS);
         }
     }
@@ -661,10 +665,16 @@ class RequestParser {
             }
 
             String value = header.value() == null ? "" : header.value().trim();
-            long parsed = Long.parseLong(value);
-            if (parsed < 0) {
+            if (value.isEmpty()) {
                 throw new MalformedRequestException("invalid content-length header value");
             }
+            for (int i = 0; i < value.length(); i++) {
+                char digit = value.charAt(i);
+                if (digit < '0' || digit > '9') {
+                    throw new MalformedRequestException("invalid content-length header value");
+                }
+            }
+            long parsed = Long.parseLong(value);
             contentLengthHeader = parsed;
             contentLengthHeaderPresent = true;
         } catch (NumberFormatException e) {

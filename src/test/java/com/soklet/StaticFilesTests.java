@@ -67,6 +67,32 @@ public class StaticFilesTests {
 	}
 
 	@Test
+	public void entityTagFactoriesAndParserRejectNonOctetCharacters() {
+		for (String value : List.of("\u0100", "\u0661", "\u06F1", "\uD83D\uDE00", "\uD800", "\uDC00")) {
+			Assertions.assertThrows(IllegalArgumentException.class, () -> EntityTag.fromStrongValue(value));
+			Assertions.assertThrows(IllegalArgumentException.class, () -> EntityTag.fromWeakValue(value));
+			Assertions.assertTrue(EntityTag.fromHeaderValue("\"" + value + "\"").isEmpty());
+			Assertions.assertTrue(EntityTag.fromHeaderValue("W/\"" + value + "\"").isEmpty());
+		}
+	}
+
+	@Test
+	public void entityTagsPreserveEveryLegalSingleByteCharacter() {
+		Assertions.assertEquals("\"\"", EntityTag.fromStrongValue("").toHeaderValue());
+		for (char character = 0x21; character <= 0xFF; character++) {
+			if (character == '"' || character == 0x7F)
+				continue;
+			String value = String.valueOf(character);
+			for (EntityTag entityTag : List.of(EntityTag.fromStrongValue(value), EntityTag.fromWeakValue(value))) {
+				String header = entityTag.toHeaderValue();
+				Assertions.assertEquals(entityTag, EntityTag.fromHeaderValue(header).orElseThrow());
+				Assertions.assertEquals(Set.of(header), MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("ETag", Set.of(header))).build().getHeaders().get("ETag"));
+			}
+		}
+	}
+
+	@Test
 	public void httpDateFormatsParsesAndKeepsCookieExpiresBehavior() throws InterruptedException {
 		Instant instant = Instant.parse("2026-05-04T01:02:03Z");
 
@@ -873,11 +899,23 @@ public class StaticFilesTests {
 				nullReturningResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
 		Assertions.assertTrue(nullPointerException.getMessage().contains("cacheControlResolver returned null"));
 
-		StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir)
-				.headersResolver(StaticFiles.HeadersResolver.fromHeaders(Map.of("Content-Encoding", Set.of("gzip"))))
-				.build();
-		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				conflictingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
+		for (String name : List.of("content-length", "Content-Range", "aCcEpT-rAnGeS", "Content-Type",
+				"Content-Encoding", "Cache-Control", "eTAG", "Last-Modified", "Transfer-Encoding")) {
+			IllegalArgumentException factoryFailure = Assertions.assertThrows(IllegalArgumentException.class,
+					() -> StaticFiles.HeadersResolver.fromHeaders(Map.of(name, Set.of("value"))));
+			Assertions.assertTrue(factoryFailure.getMessage().contains("StaticFiles.HeadersResolver"));
+			StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir)
+					.headersResolver((path, attributes) -> Map.of(name, Set.of("value"))).build();
+			IllegalArgumentException callbackFailure = Assertions.assertThrows(IllegalArgumentException.class,
+					() -> conflictingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
+			Assertions.assertTrue(callbackFailure.getMessage().contains("StaticFiles.HeadersResolver"));
+		}
+
+		IllegalArgumentException applicationFailure = new IllegalArgumentException("application failure");
+		StaticFiles throwingHeaderResolver = StaticFiles.withRoot(tempDir)
+				.headersResolver((path, attributes) -> { throw applicationFailure; }).build();
+		Assertions.assertSame(applicationFailure, Assertions.assertThrows(IllegalArgumentException.class,
+				() -> throwingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt"))));
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				StaticFiles.CacheControlResolver.fromValue(" "));

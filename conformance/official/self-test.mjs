@@ -38,15 +38,15 @@ try {
 	const manifests = verifyManifestSet();
 	assert.equal(manifests.selection.currentImplementationPhase, 5);
 	assert.equal(activeScenarios(manifests.selection, 4).length, 23);
-	assert.equal(activeScenarios(manifests.selection, 5).length, 39);
-	assert.equal(manifests.expectedChecks.profiles.length, 39);
+	assert.equal(activeScenarios(manifests.selection, 5).length, 49);
+	assert.equal(manifests.expectedChecks.profiles.length, 49);
 	assert.equal(
 		manifests.expectedChecks.profiles.filter((profile) => profile.frozenInPhase < 5).length,
 		23,
 	);
   const syntheticListing = 'Server scenarios (test against a server):\n'
     + manifests.selection.scenarios
-      .map((scenario) => `  - ${scenario.name} [2026-07-28]\n`)
+      .map((scenario) => `  - ${scenario.name} [${scenario.name.startsWith('tasks-') ? 'extension' : '2026-07-28'}]\n`)
       .join('');
   assert.deepEqual(
     parseOfficialScenarioList(syntheticListing),
@@ -68,6 +68,23 @@ try {
     '--scenario', 'dns-rebinding-protection',
     '--spec-version', '2026-07-28', '-o', '/tmp/results', '--verbose',
   ]);
+  for (const scenarioName of ['tasks-lifecycle', 'tasks-status-notifications']) {
+    const arguments_ = officialScenarioArguments(manifests.pins, {
+      fixtureUrl: 'http://127.0.0.1:12345/mcp', scenarioName, outputDirectory: '/tmp/results',
+    });
+    assert.deepEqual(arguments_, ['server', '--url', 'http://127.0.0.1:12345/mcp',
+      '--scenario', scenarioName, '-o', '/tmp/results', '--verbose']);
+  }
+  assert.deepEqual(parseOfficialScenarioList(syntheticListing
+    + '  - historical-only [2025-11-25]\n'), manifests.selection.scenarios.map((s) => s.name));
+  assert.throws(() => parseOfficialScenarioList(syntheticListing
+    + '  - historical-only [2025-11-25]\n  - historical-only [2025-11-25]\n'), /duplicate/);
+  assert.throws(() => parseOfficialScenarioList(syntheticListing
+    + '  - unknown-extension [extension]\n'), /Unreviewed extension/);
+  assert.throws(() => parseOfficialScenarioList(syntheticListing.replace(
+    'tasks-lifecycle [extension]', 'tasks-lifecycle [2026-07-28]')), /extension classification/);
+  assert.throws(() => verifyListedInventory(syntheticListing.replace(
+    '  - tasks-lifecycle [extension]\n', ''), manifests.selection, manifests.pins), /order or names/);
   for (const invalid of [
     syntheticListing.replace('\n  - server-stateless', '\nextra\n  - server-stateless'),
     syntheticListing.replace('server-stateless', 'server_stateless'),

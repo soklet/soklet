@@ -5,7 +5,7 @@ import { existsSync, lstatSync } from 'node:fs';
 import { delimiter, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPublicFixtureClasspath } from './run.mjs';
-import { activeScenarios, verifyManifestSet } from './verify.mjs';
+import { activeScenarios, taskExtensionScenarioNames, verifyManifestSet } from './verify.mjs';
 
 const driverMain = 'com.soklet.conformance.McpLocalSimulatorScenarioDriver';
 const driverRelativePath =
@@ -15,13 +15,15 @@ const maximumOutputBytes = 1024 * 1024;
 const maximumDiagnosticCharacters = 16 * 1024;
 
 export function localSimulatorRows(selection) {
-  const scenarios = activeScenarios(selection, 5);
+  // This pre-existing replay covers core scenarios; Tasks have separate socket/simulator tests.
+  const scenarios = activeScenarios(selection, 5)
+    .filter((scenario) => !taskExtensionScenarioNames.includes(scenario.name));
   if (scenarios.length !== 39)
     throw new Error('Local simulator manifest projection must contain exactly 39 RUN rows');
 
   const names = new Set();
   return Object.freeze(scenarios.map((scenario, index) => {
-    const expectedOrdinal = index === 0 ? 1 : index + 2;
+    const expectedOrdinal = index === 0 ? 1 : index < 25 ? index + 2 : index + 12;
     if (scenario.ordinal !== expectedOrdinal)
       throw new Error('Local simulator rows differ from strict manifest ordinal order');
     if (typeof scenario.name !== 'string'

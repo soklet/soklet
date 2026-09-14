@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "715fb1cc3dd136b608425f5066329603d7790cebc0c1fa9c0fc3f1c27e8a126f"
+      "sha256": "310d7a567a3b6989bf1ebbecc36afa7a51e69fcfb9291ed725ff7953395b25a2"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -50,7 +50,7 @@
     },
     "nodePin": {
       "path": "conformance/official/upstream-pins.json",
-      "sha256": "fb39d00d27982b1d52aac593e9a809006e02c56ed4bf125d0da83523576553a2"
+      "sha256": "0bc9322e48adbf8bbd58ce6ffb47a260f0577d55a35a78e6c31bc21a937369a3"
     },
     "releaseSoakTimeoutSeconds": 3600,
     "toystoreJava": {
@@ -323,16 +323,16 @@
     {
       "access": "PUBLIC_READ_ONLY",
       "artifactChecksum": null,
-      "artifactIdentity": "@modelcontextprotocol/conformance:0.2.0-alpha.10-descriptive",
-      "commit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "artifactIdentity": "@modelcontextprotocol/conformance:0.2.0-alpha.11-descriptive",
+      "commit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.candidate-conformance.v1",
+      "evidenceContract": "soklet.release.candidate-conformance.v2",
       "id": "candidate-conformance",
       "kind": "CANDIDATE_ARTIFACT",
-      "reason": "",
+      "reason": "The reviewed alpha.11 suite pin is implemented, but conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md records an OPEN external npm toolchain audit (including the directly used Undici request path). An explicit security-risk disposition is required before canonical candidate execution or promotion. Development conformance results do not waive this review.",
       "repository": "https://github.com/modelcontextprotocol/conformance.git",
-      "status": "READY",
+      "status": "BLOCKED_TOOLCHAIN_SECURITY_REVIEW",
       "toolchain": "nodePin",
       "versionProperty": null
     },
@@ -359,10 +359,10 @@
       "commit": "0665e2808ecae930d73a59e91d47cc58bed1e9b5",
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.barebones-app.v1",
+      "evidenceContract": "soklet.release.barebones-app.v2",
       "id": "barebones-app",
       "kind": "DOWNSTREAM",
-      "reason": "The local compile and live proof pass with the required noninteractive port override, but its two local source-tree changes are uncommitted; the pinned public commit still hardcodes port 8080.",
+      "reason": "The final source migration and canonical vendored Soklet 4.0.0 JAR must be reviewed, owner-committed, and re-pinned; the existing pin does not establish candidate-byte parity.",
       "repository": "https://github.com/soklet/barebones-app.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -371,14 +371,14 @@
     {
       "access": "PUBLIC_READ_ONLY",
       "artifactChecksum": null,
-      "artifactIdentity": "com.soklet:soklet-servlet-javax:1.2.0",
+      "artifactIdentity": "com.soklet:soklet-servlet-javax:2.0.0",
       "commit": "8bab7a04fc2b45eee1c50e9b989a7963eb2b9a9c",
-      "defaultArtifactIdentity": "com.soklet:soklet:3.1.1",
-      "defaultArtifactSha256": "a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4",
-      "evidenceContract": "soklet.release.soklet-servlet-javax.v1",
+      "defaultArtifactIdentity": "com.soklet:soklet:4.0.0",
+      "defaultArtifactSha256": null,
+      "evidenceContract": "soklet.release.soklet-servlet-javax.v2",
       "id": "soklet-servlet-javax",
       "kind": "DOWNSTREAM",
-      "reason": "The required soklet.version override is implemented only in the uncommitted local POM; the pinned commit still hardcodes Soklet 3.1.1.",
+      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The uncommitted local POM and bodyless-response migration must be owner-committed and re-pinned; the old pin does not implement this contract.",
       "repository": "https://github.com/soklet/soklet-servlet-javax.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -387,14 +387,14 @@
     {
       "access": "PUBLIC_READ_ONLY",
       "artifactChecksum": null,
-      "artifactIdentity": "com.soklet:soklet-servlet-jakarta:1.2.0",
+      "artifactIdentity": "com.soklet:soklet-servlet-jakarta:2.0.0",
       "commit": "5fadb19dbbbf11a8b74164eb9c9980d7c16b4f13",
-      "defaultArtifactIdentity": "com.soklet:soklet:3.1.1",
-      "defaultArtifactSha256": "a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4",
-      "evidenceContract": "soklet.release.soklet-servlet-jakarta.v1",
+      "defaultArtifactIdentity": "com.soklet:soklet:4.0.0",
+      "defaultArtifactSha256": null,
+      "evidenceContract": "soklet.release.soklet-servlet-jakarta.v2",
       "id": "soklet-servlet-jakarta",
       "kind": "DOWNSTREAM",
-      "reason": "The required soklet.version override is implemented only in the uncommitted local POM; the pinned commit still hardcodes Soklet 3.1.1.",
+      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The uncommitted local POM and bodyless-response migration must be owner-committed and re-pinned; the old pin does not implement this contract.",
       "repository": "https://github.com/soklet/soklet-servlet-jakarta.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -419,7 +419,7 @@
     {
       "access": "PUBLIC_READ_ONLY",
       "artifactChecksum": null,
-      "artifactIdentity": "com.soklet:soklet-otel:1.4.0-SNAPSHOT",
+      "artifactIdentity": "com.soklet:soklet-otel:2.0.0",
       "commit": "d4a55b486c4b35a4d1b972ec9c5b4aa9d8d56020",
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,

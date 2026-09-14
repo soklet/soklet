@@ -345,13 +345,13 @@ public class HttpServerLifecycleTests {
 			Assertions.assertEquals(1L,
 					snapshot.getTransportFailures().get(
 							new MetricsCollector.TransportFailureKey(
-									ServerType.STANDARD_HTTP,
+									ServerType.HTTP,
 									MetricsCollector.TransportFailureReason
 											.RESPONSE_READY_ERROR)));
 			Assertions.assertEquals(1L,
 					snapshot.getTransportFailures().get(
 							new MetricsCollector.TransportFailureKey(
-									ServerType.STANDARD_HTTP,
+									ServerType.HTTP,
 									MetricsCollector.TransportFailureReason
 											.RESPONSE_WRITE_IDLE_TIMEOUT)));
 		}

@@ -33,7 +33,7 @@ public class ResourceMethodResolverClasspathTests {
 		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasspathIntrospection();
 
 		Request request = Request.withPath(HttpMethod.GET, "/primitive/123").build();
-		ResourceMethod resourceMethod = resolver.resourceMethodForRequest(request, ServerType.STANDARD_HTTP).orElse(null);
+		ResourceMethod resourceMethod = resolver.resourceMethodForRequest(request, ServerType.HTTP).orElse(null);
 
 		Assertions.assertNotNull(resourceMethod, "Expected classpath resource method lookup to resolve /primitive/{id}");
 		Assertions.assertEquals("getPrimitive", resourceMethod.getMethod().getName());

@@ -151,8 +151,10 @@ public final class McpServerRuntimeBridge {
 				throw new IllegalArgumentException(
 						"MCP transport read timeouts must be positive.");
 			try {
-				requestHeaderTimeout.toNanos();
-				requestBodyTimeout.toNanos();
+				if (requestHeaderTimeout.toNanos() < 1L
+						|| requestBodyTimeout.toNanos() < 1L)
+					throw new IllegalArgumentException(
+							"MCP transport read timeouts must be positive.");
 			} catch (ArithmeticException exception) {
 				throw new IllegalArgumentException(
 						"MCP transport read timeouts must fit in signed nanoseconds.",

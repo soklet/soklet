@@ -2547,9 +2547,9 @@ final class DefaultSseServer implements SseServer {
 				String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
 
 				if (reasonPhrase.length() > 0)
-					printWriter.printf("HTTP/1.1 %d %s\r\n", statusCode, reasonPhrase);
+					printWriter.print("HTTP/1.1 " + statusCode + " " + reasonPhrase + "\r\n");
 				else
-					printWriter.printf("HTTP/1.1 %d\r\n", statusCode);
+					printWriter.print("HTTP/1.1 " + statusCode + "\r\n");
 
 				// Write headers
 				boolean hasContentLength = false;
@@ -2590,7 +2590,7 @@ final class DefaultSseServer implements SseServer {
 
 				// Add Content-Length if body is present and user didn’t set it
 				if (bodyLength > 0 && !hasContentLength && !hasTransferEncoding)
-					printWriter.printf("Content-Length: %d\r\n", bodyLength);
+					printWriter.print("Content-Length: " + bodyLength + "\r\n");
 
 				// Default Connection: close (rejected handshakes do not remain open)
 				printWriter.print("Connection: close\r\n");
@@ -2696,7 +2696,7 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(marshaledResponse);
 
 		// Write Status Line
-		String statusLine = format("HTTP/1.1 %d\r\n", marshaledResponse.getStatusCode());
+		String statusLine = "HTTP/1.1 " + marshaledResponse.getStatusCode() + "\r\n";
 		writeFully(socketChannel, statusLine.getBytes(StandardCharsets.UTF_8));
 
 		// Write Headers

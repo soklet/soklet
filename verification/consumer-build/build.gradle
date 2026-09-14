@@ -1,0 +1,24 @@
+plugins {
+  id 'java'
+}
+
+repositories {
+  // The rehearsal repository contains only the exact candidate core artifact.
+  // Published consumers use mavenCentral() instead.
+  maven { url = uri(providers.systemProperty('soklet.consumer.repository').get()) }
+}
+
+dependencies {
+  implementation 'com.soklet:soklet:4.0.0'
+  annotationProcessor 'com.soklet:soklet:4.0.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.release = 17
+  options.compilerArgs += ['-parameters']
+}
+
+jar {
+  archiveBaseName = 'consumer-build'
+  archiveVersion = '1.0.0'
+}

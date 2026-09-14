@@ -8,25 +8,29 @@ import { fileURLToPath } from 'node:url';
 const officialRoot = resolve(dirname(fileURLToPath(import.meta.url)));
 const allowedStatuses = new Set(['SUCCESS', 'FAILURE', 'WARNING', 'SKIPPED', 'INFO']);
 const expectedPins = Object.freeze({
-  reviewedOn: '2026-08-04',
+  reviewedOn: '2026-09-13',
   protocolVersion: '2026-07-28',
   suiteRepository: 'https://github.com/modelcontextprotocol/conformance.git',
-  suiteCommit: '49103de6ed70804e940637bf3e9e29e4a3f54e64',
+  suiteCommit: 'a983ba93c91e0bb31d0b6849eeb52f0ad1083107',
   packageName: '@modelcontextprotocol/conformance',
-  packageVersion: '0.2.0-alpha.10',
-  packageJsonSha256: '2fd65cda83b8af49452198944e1924a9dc1a52ed4f56aba18e1d814922150149',
-  packageLockSha256: '161aef794720d2393a6a3db64e9751f2d52730b49f662e84b23363df5c1196e1',
+  packageVersion: '0.2.0-alpha.11',
+  packageJsonSha256: 'f699ac5e56ffeaad1090ee26e126c0d9f9d68e7fad6db30923d30fd7b429c640',
+  packageLockSha256: '8c30fe8f15735bc4660c682225b12ec84bbd08c22e839127445d06b5476c4945',
   suiteEntryPoint: 'dist/index.js',
-  suiteEntryPointBytes: 779702,
-  suiteEntryPointSha256: 'b48694977974635ba1bdfa77a4423dd9cafb2419ef70840ce3cee67e8b184aa4',
+  suiteEntryPointBytes: 818645,
+  suiteEntryPointSha256: 'b8355fba248c019b667a9c16289748ebfd85ca2668890812054b7997b8df8f3b',
   sourceTreeAlgorithm:
     "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
   suiteListCommandArguments: Object.freeze([
-    'list', '--server', '--spec-version', '2026-07-28',
+    'list', '--server',
   ]),
   suiteScenarioCommandArguments: Object.freeze([
     'server', '--url', '<fixture-url>', '--scenario', '<exact-scenario-name>',
     '--spec-version', '2026-07-28', '-o', '<scenario-output-directory>', '--verbose',
+  ]),
+  suiteExtensionScenarioCommandArguments: Object.freeze([
+    'server', '--url', '<fixture-url>', '--scenario', '<exact-scenario-name>',
+    '-o', '<scenario-output-directory>', '--verbose',
   ]),
   suiteSchemaSpecificationCommit: '71e306956a4959c9655e5036be215d41986596e6',
   suiteSchemaPath: 'src/spec-types/draft.schema.json',
@@ -40,10 +44,10 @@ const expectedPins = Object.freeze({
   specificationLicensePath: 'LICENSE',
   specificationLicenseVendoredPath: 'final-schema/LICENSE.upstream',
   finalLicenseSha256: '0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a',
-  fullCount: 40,
-  runCount: 39,
-  fullDigest: '3c41ddedcefd14403c891b5a518dfde19ee9f90ad18d9ca6e012de325a78821a',
-  runDigest: '4979955e16de137e16d1fe1b1aa5699fe1fc879daec0033ae57629858ec3b8d5',
+  fullCount: 50,
+  runCount: 49,
+  fullDigest: '25a6351c04df32aa7866e5f962770c00cd14856250ac6c3bf2dbbef8f5985613',
+  runDigest: '16904eae94d5cda8cc7114d3c05620903b9ea3ef3a99321978ba977fb47c9115',
   nodeVersion: '26.5.0',
   npmVersion: '11.17.0',
   nodeChecksumsUrl: 'https://nodejs.org/dist/v26.5.0/SHASUMS256.txt',
@@ -52,9 +56,23 @@ const expectedPins = Object.freeze({
   nodeLinuxX64Sha256: '9f619528f1db5ddc41dccf54211066fb42228d69a156733c69cb9d6cc92e358c',
   ajvVersion: '8.20.0',
   ajvFormatsVersion: '3.0.1',
-  sourceTreeFileCount: 263,
-  sourceTreeSha256: '94d3b3de1266796353380122acaf7c1d02257769618d08e7dcc38cfc60fd595b',
+  sourceTreeFileCount: 279,
+  sourceTreeSha256: 'e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d',
 });
+
+// alpha.11 treats Tasks as extensions, which its dated selector excludes.
+export const taskExtensionScenarioNames = Object.freeze([
+  "tasks-lifecycle",
+  "tasks-capability-negotiation",
+  "tasks-wire-fields",
+  "tasks-request-state-removal",
+  "tasks-mrtr-input",
+  "tasks-request-headers",
+  "tasks-dispatch-and-envelope",
+  "tasks-status-notifications",
+  "tasks-required-task-error",
+  "tasks-mrtr-composition"
+]);
 
 export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -81,15 +99,19 @@ export function parseOfficialScenarioList(stdout) {
   const names = [];
   const seen = new Set();
   for (const [index, line] of lines.entries()) {
-    const match = /^  - ([a-z0-9]+(?:-[a-z0-9]+)*) \[([0-9]{4}-[0-9]{2}-[0-9]{2}(?:,[0-9]{4}-[0-9]{2}-[0-9]{2})*)\]$/.exec(line);
+    const match = /^  - ([a-z0-9]+(?:-[a-z0-9]+)*) \[(extension|[0-9]{4}-[0-9]{2}-[0-9]{2}(?:,[0-9]{4}-[0-9]{2}-[0-9]{2})*)\]$/.exec(line);
     if (match === null)
       throw new Error(`Official scenario listing row ${index + 1} changed format`);
     const [, name, versions] = match;
-    if (!versions.split(',').includes(expectedPins.protocolVersion))
-      throw new Error(`Listed scenario ${name} does not include ${expectedPins.protocolVersion}`);
-    if (!seen.add(name))
+    if (seen.has(name))
       throw new Error(`Official scenario listing contains duplicate ${name}`);
-    names.push(name);
+    seen.add(name);
+    if (versions === 'extension' && !taskExtensionScenarioNames.includes(name))
+      throw new Error(`Unreviewed extension scenario ${name}`);
+    if (taskExtensionScenarioNames.includes(name) && versions !== 'extension')
+      throw new Error(`Tasks scenario ${name} must retain its extension classification`);
+    if (versions === 'extension' || versions.split(',').includes(expectedPins.protocolVersion))
+      names.push(name);
   }
   return names;
 }
@@ -244,7 +266,10 @@ export function officialScenarioArguments(pins,
     ['<exact-scenario-name>', scenarioName],
     ['<scenario-output-directory>', outputDirectory],
   ]);
-  const arguments_ = pins.officialConformanceSuite.scenarioCommandArguments.map(
+  const template = taskExtensionScenarioNames.includes(scenarioName)
+    ? pins.officialConformanceSuite.extensionScenarioCommandArguments
+    : pins.officialConformanceSuite.scenarioCommandArguments;
+  const arguments_ = template.map(
     (argument) => replacements.get(argument) ?? argument,
   );
   if (arguments_.some((argument) => /^<.*>$/.test(argument)))
@@ -263,7 +288,8 @@ function verifyPins(pins) {
   const suite = pins.officialConformanceSuite;
   assertExactKeys(suite, [
     'repository', 'commit', 'package', 'entryPoint', 'builtEntryPoint', 'sourceTree',
-    'listCommandArguments', 'scenarioCommandArguments', 'lockedSchemaDependencies',
+    'listCommandArguments', 'scenarioCommandArguments', 'extensionScenarioCommandArguments',
+    'lockedSchemaDependencies',
     'vendoredProtocolSchema',
   ], 'official suite pin');
   assertExactKeys(suite.package, [
@@ -294,6 +320,8 @@ function verifyPins(pins) {
         !== JSON.stringify(expectedPins.suiteListCommandArguments)
       || JSON.stringify(suite.scenarioCommandArguments)
         !== JSON.stringify(expectedPins.suiteScenarioCommandArguments)
+      || JSON.stringify(suite.extensionScenarioCommandArguments)
+        !== JSON.stringify(expectedPins.suiteExtensionScenarioCommandArguments)
       || suite.vendoredProtocolSchema.specificationCommit
         !== expectedPins.suiteSchemaSpecificationCommit
       || suite.vendoredProtocolSchema.path !== expectedPins.suiteSchemaPath
@@ -369,7 +397,7 @@ function verifyPins(pins) {
     'requiredSupplement',
   ], 'upstream drift review');
   if (pins.upstreamDriftReview.reviewedOn !== expectedPins.reviewedOn
-      || pins.upstreamDriftReview.decision !== 'RETAIN_REVIEWED_PIN'
+      || pins.upstreamDriftReview.decision !== 'REPIN_TASKS_CAPABLE_SUITE'
       || pins.upstreamDriftReview.suiteLabelsProtocolVersionAsDraft !== true
       || pins.upstreamDriftReview.suiteVendoredSchemaMatchesFinalTaggedSchema !== false
       || typeof pins.upstreamDriftReview.knownSchemaDifference !== 'string'
@@ -393,7 +421,7 @@ function verifyScenarioManifest(selection, pins) {
 			|| !Array.isArray(selection.scenarios))
     throw new Error('Scenario manifest identity is invalid');
   if (selection.scenarios.length !== pins.scenarioInventory.fullCount)
-    throw new Error('Scenario manifest must contain the complete 40-row inventory');
+    throw new Error('Scenario manifest must contain the complete 50-row inventory');
 
   const names = [];
   const seen = new Set();
@@ -451,7 +479,7 @@ function verifyScenarioManifest(selection, pins) {
   if (sha256(inventoryBytes(runNames)) !== pins.scenarioInventory.selectedRunSetSha256)
     throw new Error('Scenario manifest RUN digest differs from the reviewed pin');
   if (selection.scenarios.filter((scenario) => scenario.earliestPhase === 4).length !== 23
-      || selection.scenarios.filter((scenario) => scenario.earliestPhase === 5).length !== 16)
+      || selection.scenarios.filter((scenario) => scenario.earliestPhase === 5).length !== 26)
     throw new Error('Phase 4/5 scenario ownership counts changed');
 }
 

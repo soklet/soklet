@@ -60,6 +60,22 @@ headers. It names the origin—the value from which the preflight representation
 is constructed—without misidentifying the preflight's actual HTTP method,
 which is always `OPTIONS`.
 
+### HTTP server type
+
+Replace `ServerType.STANDARD_HTTP` with `ServerType.HTTP`, including static
+imports and enum switch cases. The old constant is removed without an alias;
+recompile custom transports, lifecycle observers, metrics collectors, and
+other integrations that reference it. Migrate stored enum names or
+`ServerType.valueOf("STANDARD_HTTP")` inputs to `HTTP` as well.
+
+The built-in Prometheus and OpenMetrics export now uses
+`soklet_transport_failures_total{server_type="HTTP",reason="..."}` for HTTP
+transport failures. Update filters, dashboards, and alerts that selected
+`server_type="STANDARD_HTTP"`. The metric name and SSE/MCP label values are
+unchanged. This uppercase built-in label is separate from `soklet-otel`'s
+explicit `soklet.server.type` vocabulary, which remains lowercase `http`,
+`sse`, and `mcp`.
+
 ## Lifecycle and process ownership
 
 ### One lifecycle owns all transports
@@ -144,6 +160,15 @@ graceful cap.
 | SSE graceful shutdown | 1 s | 15 s | Idle streams close promptly; outstanding writes, loops, and executors share the 15 s boundary. |
 | MCP graceful shutdown | 5 s | 15 s | MCP receives three times the old graceful interval; recalculate any explicit deployment budget. |
 | Forced shutdown | Not a shared phase | 3 s | Owned work is interrupted/canceled and observed within this separate phase. |
+
+The default 15-second graceful drain is independent of the default 60-second
+request-handler timeout. If deployment policy requires all permitted in-flight
+requests to finish, allow their maximum remaining work plus response transmission
+time. Choosing a shorter drain deliberately permits interrupted work and closed
+connections. Interrupting a handler cannot guarantee that noncooperative code
+stops. Long-lived streams need their own completion policy, and the container or
+process termination budget must include forced shutdown and operational margin
+in addition to graceful drain.
 
 For example:
 
@@ -238,6 +263,18 @@ method for an independently terminating child is
 `attachTransparentDelegate(...)`. Soklet can validate honest evidence presented
 through those contracts; it cannot detect a custom transport that lies about
 its own attestation or behavior.
+
+Protocol numeric fields are now independent of the JVM's formatting locale,
+including file ranges, default weak ETags, cookie Max-Age, SSE error status and
+length fields, and servlet URL ports. Applications do not need to change their
+global locale to obtain valid protocol output; application-facing formatting
+retains its existing behavior.
+
+`EntityTag.fromStrongValue(...)` and `fromWeakValue(...)` now reject characters
+above `0xFF`, including surrogate code units, at construction rather than
+allowing them to fail later during response marshaling. `fromHeaderValue(...)`
+returns empty for such values. Valid `0x80–0xFF` obs-text remains supported;
+this is not an ASCII-only restriction.
 
 The built-in SSE server now hard-bounds client-initializer catch-up buffering
 with `SseServer.Builder.connectionQueueCapacity(...)`, using the same 128-write
@@ -485,6 +522,24 @@ Set lifecycle deadlines with
 Simulation is deterministic and off-network, so it does not prove kernel TCP,
 proxy, TLS, or live write-idle behavior.
 
+## Servlet adapters
+
+Upgrade either adapter to 2.0.0 alongside Soklet 4.0.0:
+
+- `com.soklet:soklet-servlet-javax:2.0.0` for `javax.servlet` containers;
+- `com.soklet:soklet-servlet-jakarta:2.0.0` for `jakarta.servlet` containers.
+
+Both adapters now require core Soklet 4.0.0; compatibility with core 3.x is no
+longer supported. Their Soklet dependency remains `provided`, so the application
+must explicitly supply `com.soklet:soklet:4.0.0`. The adapter entry-point API is
+retained, but this minimum-core change is a breaking dependency migration.
+Empty 204 and 304 responses remain bodyless through either conversion method;
+ordinary empty 200 responses retain their byte-array representation.
+
+See the [javax Javadocs](https://javax.javadoc.soklet.com/com/soklet/servlet/javax/package-summary.html)
+or [Jakarta Javadocs](https://jakarta.javadoc.soklet.com/com/soklet/servlet/jakarta/package-summary.html)
+for the matching container namespace.
+
 ## MCP wire migration
 
 Treat MCP as a new integration, not a rename exercise. Soklet 4.0.0 supports
@@ -542,6 +597,19 @@ choice explicit.
 The 3.5.1 MCP Java API was removed and rebuilt. Important migration patterns
 are:
 
+- Replace `McpServer.fromPort(...)` with `McpServer.withPort(...)` and finish
+  the builder. If any endpoint registers tools, configure `toolRateLimiter(...)`;
+  there is no implicit tool execution quota. For local development:
+
+  ```java
+  McpServer server = McpServer.withPort(8081)
+      .endpointRegistry(endpointRegistry)
+      .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+      .build();
+  ```
+
+  The in-memory limiter is node-local; production deployments must choose an
+  application-appropriate, fleet-aware limiting policy.
 - Replace `McpArray`, `McpObject`, `McpString`, `McpNumber`, `McpBoolean`,
   `McpNull`, and `McpValue` with the immutable `McpJsonArray`,
   `McpJsonObject`, `McpJsonString`, `McpJsonNumber`, `McpJsonBoolean`,
@@ -584,6 +652,12 @@ are:
 - Replace `McpShutdownOutcome`-style reporting with aggregate
   `ShutdownResult`, `ShutdownComponentResult`, and
   `ShutdownComponentDisposition` evidence.
+- Replace the six legacy `MetricsCollector` MCP callbacks—`didCreateMcpSession`,
+  `didTerminateMcpSession`, `didStartMcpRequestHandling`,
+  `didFinishMcpRequestHandling`, `didEstablishMcpSseStream`, and
+  `didTerminateMcpSseStream`—with `didRecordMcpMetricsEvent(McpMetricsEvent)`.
+  Consume the event's bounded fields rather than retaining the old session/stream
+  object model. This replacement is MCP-specific; HTTP/SSE callbacks are separate.
 - To return durable work from `tools/call`, configure one application-wide
   [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
   on
@@ -612,7 +686,8 @@ Common annotation replacements include:
 
 | 3.5.1 | 4.0.0 |
 | --- | --- |
-| `@McpArgument` | `@McpToolArgument` on a tool parameter |
+| `@McpArgument` on a tool parameter | `@McpToolArgument` |
+| `@McpArgument` on a prompt parameter | `@McpPromptArgument`, with `String` or `Optional<String>` values |
 | Hand-described record properties | `@McpToolProperty` on record components when metadata is needed |
 | `@McpListResources` | `@McpResourceList` |
 | `@McpUriParameter` | `@McpResourceUriParameter` on a resource URI-template parameter |

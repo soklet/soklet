@@ -16,15 +16,27 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [G5 promotion runbook](G5_RELEASE_RUNBOOK.md)—checked in but never executed
   without explicit G5 approval
 - [no-rebuild Central promotion mechanics](PROMOTION.md)
+- [packaged Maven, Gradle, and javac consumer smoke](../verification/consumer-build/README.md)
+- [owner commit and publication-preparation checklist](OWNER_COMMIT_CHECKLIST.md)
+- [historical-source dispositions and reviewed semantic anchors](PLANNING_AUTHORITY_DRIFT_2026-09-13.md)
 
 The format-v2 manifest defines an exact ordered universe of 26 release gates.
-Twenty gates now have complete checked-in, executable validation paths;
-none remain `BLOCKED_HARNESS_MISSING`. Six downstream gates remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, so the candidate is still not
-release-runnable end to end. `READY` means only that a gate has an executable,
+Nineteen gates are currently `READY`; none remain `BLOCKED_HARNESS_MISSING`.
+Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and
+`candidate-conformance` is `BLOCKED_TOOLCHAIN_SECURITY_REVIEW` pending the
+explicit disposition described in the [external conformance dependency review](../conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md).
+The candidate is still not release-runnable end to end. `READY` means only that a gate has an executable,
 pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish
 that.
+
+Before the publication decision, the owner must resolve the separate V10 and
+matrix historical-source retention gaps and acknowledge the recorded D1p
+contract discrepancy. The [provenance disposition record](PLANNING_AUTHORITY_DRIFT_2026-09-13.md#required-owner-disposition-record)
+is required by the G5 runbook; neither a green gate nor a matching current
+inventory digest supplies that owner decision. Preserve frozen provenance
+hashes. Current finite/privacy semantic repins and their reviewed reasons are
+recorded separately in that document.
 
 The release-harness registry retains five executable evidence producers. Two
 are blocking imported release gates:
@@ -40,6 +52,15 @@ are blocking imported release gates:
   bytes. A score ratio below 0.90 additionally requires a hashed 4.0.0
   changelog entry describing the regression and a separate project-owner
   approval bound to that same reviewed draft.
+
+Release-scan artifact packaging now uses checksum-pinned Corretto 17, matching
+the canonical candidate build, while analysis explicitly uses checksum-pinned
+Corretto 21. The producer requires `Build-Jdk-Spec: 17` and verifies the main-JAR
+hash before and after analysis. This fixes reliance on ambient `JAVA_HOME`
+during candidate packaging: controlled local 17/21 builds produced different
+JAR bytes, including their `Build-Jdk-Spec` metadata. Local tests of this change
+do not establish that the Linux producer ran or that any immutable candidate
+passed its scan gate.
 
 Three longer-running producers remain available as advisory post-release
 monitoring and are deliberately outside the manifest, candidate validator,
@@ -155,28 +176,34 @@ that does not fit its recorded guard. Its adversarial self-test runs before the
 inventory verifier during release-candidate validation. Ordinary push and pull
 request CI does not run this release-governance census.
 
-D1p public-cutover evidence has a separate deterministic contract in
-`release/d1p-evidence-contract.md` and frozen inputs in
-`release/d1p-evidence-config.json`. The release validator runs the adversarial
-self-test during its candidate build. Preparation and sibling-blind tracked
-verification bind the clean approved preview before the exact-version
-transition. The final candidate's `api-freeze` gate regenerates the
-compiler-backed current reports against exact `4.0.0`; it does not pretend that
-the historical raw-byte preview seal can be rerun after reviewed fixture and
-artifact labels change from snapshot to exact release identity. The exact
-version-transition census permits those label-only changes and rejects other
-context drift. The ordinary push and pull request API-freeze wrapper remains
-API-only. Ordinary pre-G3 remediation commits are supported;
-their evidence must be regenerated from accepted D1 through the new tip before
-that tip can pass candidate verification. After D2, a one-time dedicated
-`release/d1p-approved-preview.json` seal authenticates approved `P` from Git
-history; candidate checks then keep the approved root/leaves fixed at `P` while
-rederiving current protected compiler semantics for the named post-D2 owners.
-`scripts/generate-d1p-approved-preview.mjs` creates that sole seal file from a
-content-addressed durable G3 receipt without staging or committing it.
-The final workspace command additionally verifies the
-untracked retained JAR/report evidence and all seven sibling-workspace rows;
-candidate mode never opens sibling bytes and does not claim otherwise.
+## D1p historical preview scope
+
+D1p public-cutover evidence belongs to the already sealed historical preview,
+not the final exact-version release candidate. Its original contract and
+configuration remain at `release/d1p-evidence-contract.md` and
+`release/d1p-evidence-config.json`; the seal binds approved preview
+`95594f6594eddc499f3dc789d7a19dadf8efccf9`. The historical generation and
+workspace/full verification commands are pre-G3 operations and reject the
+existing seal. Do not regenerate its root/leaves during current preparation.
+
+The current release validator runs the D1p adversarial self-test, not the
+historical preparation/tracked verification chain. Final `api-freeze` evidence
+comes from freshly generated compiler-backed reports against exact `4.0.0`,
+together with the reviewed version-transition census and current candidate
+contracts. The [U8 transition procedure](u8-candidate-flow-rehearsal.md)
+distinguishes these checks from the prior snapshot-preview workflow. The
+historical verifier's use of the word `candidate` and its linear-history rule
+do not create an additional final acceptance gate or a new K/L history policy.
+
+The [September 13 provenance record](PLANNING_AUTHORITY_DRIFT_2026-09-13.md#sealed-d1p-preview-preserved-evidence-separate-documentation-drift)
+documents the matching sealed manifests and the separate September 6 change
+to the historical contract's cardinalities. Current HEAD therefore does not
+pass that historical tracked verifier; the contract's old claim that the
+release validator invokes preparation/tracked is not an instruction for the
+present exact-version workflow. Preserve those historical bytes and disclose
+the discrepancy instead of rebinding the seal or asserting a D1p rerun.
+
+## Retained implementation checkpoints
 
 Candidate conformance also verifies
 `conformance/official/protocol-profile-evidence.json` before setup. That index
@@ -527,7 +554,8 @@ application-telemetry privacy remain owned by `SOK-PRIV-001`.
 
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
-work as evidence:
+work as evidence. The following is historical migration evidence, not the
+acceptance result for the current working tree or a frozen candidate:
 
 - ToyStore's local 4.0 MCP migration passes 14/14 tests, including six MCP
   tests and exact per-request 401/403 coverage, but the migration is
@@ -545,6 +573,13 @@ work as evidence:
   process on port 8080, but its two local source-tree changes, including the
   required noninteractive port override, are uncommitted and absent from the
   pinned public commit.
+
+The 2026-09-13 owner decision supersedes the old servlet compatibility baseline:
+adapters 2.0.0 require core 4.0.0. Their default and explicit-override tests must
+both consume the same exact candidate JAR. The current manifest targets adapter
+and OTel 2.0.0 coordinates but deliberately preserves blocked status and old
+pins until the owner commits reviewed changes and candidate-bound validation
+establishes retrievable replacements.
 
 The checksum-pinned TypeScript and Go interoperability harnesses are checked in,
 pass against the local snapshot candidate, and are `READY`; the release run must
@@ -597,13 +632,25 @@ Once every gate is ready, the validator:
    terminal `PASSED` evidence, then compiles and runs a library-neutral
    localization provider against the candidate JAR alone;
 8. checks out every downstream at its exact manifest commit and invokes its
-   candidate hook, including default/candidate servlet matrices, candidate-only
+   candidate hook, including same-candidate default/override servlet matrices, candidate-only
    ToyStore and OpenTelemetry 4.0 migrations, Barebones startup/probe/termination,
    website generated-artifact cleanliness, and the interoperability entry
    points; ToyStore alone runs under the separately pinned Corretto 25
    compiler/runtime because its POM requires release 25; and
 9. rehashes the candidate and assembles a canonical evidence manifest only
    after the exact ordered 26-gate set has typed PASS evidence.
+
+The version-2 candidate-conformance contract pins the Tasks-capable
+`0.2.0-alpha.11-descriptive` suite and all 49 reviewed Phase 5 scenario
+profiles (39 existing profiles plus 10 Tasks profiles). A profile match is
+not a claim that every upstream check executed: `tasks-status-notifications`
+contains one explicitly reviewed upstream SKIP. Its missing socket coverage
+is supplied by eight independent Soklet candidate-artifact notification checks,
+not counted as an upstream pass. Release evidence must include the exact
+successful `taskNotificationSupplement` result; missing, false, reordered,
+duplicate, or extra checks fail closed. The final-tag schema golden-message
+count remains 48. This coverage does not resolve the external toolchain's open
+security-risk disposition or change its blocked gate status.
 
 Each gate has one immutable evidence-contract ID and one manifest-selected
 toolchain. `record-gate` requires the artifact descriptor plus an exact ordered
@@ -618,9 +665,11 @@ The JDK 17 candidate build and every supported-JDK gate retain verified
 Surefire reports; the JDK-specific gates also bind their checksum-verified
 distribution receipts. The candidate-Javadoc gate runs the exact
 `McpPublicJavadocTests` inventory contract and retains its Surefire reports,
-Javadoc JAR, and standalone doclint output. Servlet baseline JAR roles bind
-directly to each gate's reviewed default identity and SHA-256 during both
-validation and promotion rather than relying on a role name or filename.
+Javadoc JAR, and standalone doclint output. The servlet `default-jar` roles and
+Barebones `vendored-jar` role bind directly to the candidate descriptor's
+`mainJar` bytes and SHA-256 during validation and promotion, not merely to a
+role name or filename. Those three evidence contracts are version 2; prior
+version-1 receipts cannot satisfy the changed contracts.
 
 The `localization-fleet` gate is the real two-listener node-loss, revision-
 drift, failed-reload, rolling-activation, reconnect, and cleanup fixture.
@@ -641,24 +690,33 @@ Corretto 25 is selected only for `core-jdk-25`, `fuzz-replay`, `soak-smoke`,
 and ToyStore; the other currently configured Java gates use Corretto 17.
 ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 4.0
-API and currently default to an unpublished snapshot, while the servlet
-integrations retain their released-default and candidate-version legs. Every
+API. The servlet integrations require core 4.0.0 and retain default-property
+and explicit-override legs to test both build configurations, not older-core
+compatibility. Every
 Maven leg first proves that the downstream POM coordinates match the manifest,
 that `soklet.version` is a concrete property, and that the direct Soklet
-dependency uses it. The servlet default legs additionally pin the exact
-`com.soklet:soklet:3.1.1` identity and its reviewed Maven Central SHA-256. The
-validator checks both the default and candidate JARs as regular, nonsymlink
-archives with the expected checksum and Soklet core marker before and after
-each Maven leg, and rechecks the candidate during finalization. It then sets
+dependency uses it. The servlet POM defaults must be exactly
+`com.soklet:soklet:4.0.0`; both legs resolve the descriptor-bound candidate in
+the isolated repository. `defaultArtifactSha256` is null because there is no
+independently pinned second core artifact, and no 3.x JAR is downloaded.
+The validator checks the candidate as a regular, nonsymlink archive with its
+expected checksum and Soklet core marker before and after each Maven leg,
+and again during finalization. It then sets
 `failIfNoTests` and independently verifies and retains nonempty Surefire XML
 with at least one executed test, zero failures or errors, and exactly the
 expected Soklet core on every test classpath. Every classpath JAR is inspected
 by content regardless of its filename, and directories are rejected if they
 contain a shadowing `com/soklet/Soklet.class`. Both Java archive identities and
-checksums are retained as gate evidence. No `current`, `latest`, branch,
+checksums are retained as gate evidence, with the default and override core
+identities/hashes required to agree. No `current`, `latest`, branch,
 dynamic, or feature-only Java resolver is used.
 
-The Barebones hook asks the operating system for an exclusive ephemeral IPv4
+The Barebones hook first requires the pinned repository's tracked
+`soklet-4.0.0.jar` to match the candidate main JAR. It compiles and runs against
+that vendored file without replacing it, rechecks its bytes and tracked
+checkout afterward, and retains the original JAR as `vendored-jar` evidence.
+A stale, missing, untracked, or symlinked vendored JAR fails before compilation.
+It then asks the operating system for an exclusive ephemeral IPv4
 loopback port and holds that reservation until immediately before process
 startup. It passes the selected port through the sample's scoped
 `SOKLET_BAREBONES_LOOPBACK_PORT` override, requires the matching startup marker,

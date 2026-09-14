@@ -46,6 +46,40 @@ time. Keep Java parameter names and select the processor explicitly:
 </build>
 ```
 
+Merge this configuration with your existing compiler-plugin configuration.
+The explicit processor path replaces compile-classpath discovery, and the named
+processor list selects which processors run. Preserve every other processor
+your build needs (such as Lombok or MapStruct) by keeping its artifact in
+`annotationProcessorPaths` and its processor class name in `annotationProcessors`
+alongside Soklet.
+
+For Gradle, use the Java plugin and configure the processor separately from the
+implementation dependency:
+
+```groovy
+plugins {
+  id 'java'
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'com.soklet:soklet:4.0.0'
+  annotationProcessor 'com.soklet:soklet:4.0.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.compilerArgs += ['-parameters']
+}
+```
+
+Gradle does not discover processors from the implementation classpath. Add
+`testAnnotationProcessor 'com.soklet:soklet:4.0.0'` if test sources also declare
+annotated endpoints. Explicit processor selection also makes the Maven recipe
+work on JDK 23+, which does not enable processing from a dependency alone.
+
 If a build shades or repackages classes, preserve the generated Soklet endpoint
 provider and index resources under `META-INF`. Named Java modules must open or
 export the endpoint package to Soklet; a package containing a non-public record
@@ -164,6 +198,25 @@ curl --fail-with-body --silent --show-error \
   --header 'Mcp-Method: server/discover' \
   --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
+
+Invoke the tool directly with matching method and name headers:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  --request POST http://127.0.0.1:8081/catalog/mcp \
+  --header 'Host: 127.0.0.1:8081' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --header 'MCP-Protocol-Version: 2026-07-28' \
+  --header 'Mcp-Method: tools/call' \
+  --header 'Mcp-Name: catalog.search' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"catalog.search","arguments":{"query":"sprocket"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+`Mcp-Name` must match the envelope's tool/prompt name, resource URI, or task ID
+for methods that select one of those values. Discovery and other methods with
+no such selector must omit `Mcp-Name`; an unexpected name header is rejected as
+a header mismatch.
 
 For MCP Inspector 2.3.0, save this as `inspector.json`:
 

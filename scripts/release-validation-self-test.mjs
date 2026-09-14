@@ -12,6 +12,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import net from 'node:net';
@@ -22,6 +23,7 @@ import {
   activeScenarios,
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
+import { taskNotificationSupplementChecks } from '../conformance/official/run.mjs';
 import {
   EXPECTED_GATE_EVIDENCE_CONTRACTS,
   assembleReleaseEvidence,
@@ -32,6 +34,7 @@ import {
   verifyReleaseConformanceEvidence,
 } from './release-validation-evidence.mjs';
 import { verifyMavenDownstreamPom } from './verify-maven-downstream-pom.mjs';
+import { createDeterministicZip } from './release-promotion.mjs';
 import { createLoopbackPortReservation } from './reserve-loopback-port.mjs';
 import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 import {
@@ -481,7 +484,7 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
-  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 20);
+  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 19);
   assert.equal(
     tracked.gates.filter(({ status }) => status === 'BLOCKED_HARNESS_MISSING').length,
     0,
@@ -503,6 +506,14 @@ try {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
   }
+  assert.equal(
+    tracked.gates.filter(({ status }) => status === 'BLOCKED_TOOLCHAIN_SECURITY_REVIEW').length,
+    1,
+  );
+  assert.equal(
+    tracked.gates.find(({ id }) => id === 'candidate-conformance').status,
+    'BLOCKED_TOOLCHAIN_SECURITY_REVIEW',
+  );
   for (const gateId of [
     'release-scans',
     'mcp-benchmarks',
@@ -569,15 +580,17 @@ try {
     'com.soklet.toystore:toystore:1.0.0',
   );
   const trackedBarebonesGate = tracked.gates.find(({ id }) => id === 'barebones-app');
-  assert.match(trackedBarebonesGate.reason, /two local source-tree changes are uncommitted/);
+  assert.match(trackedBarebonesGate.reason, /canonical vendored Soklet 4.0.0 JAR/);
   for (const gateId of ['soklet-servlet-javax', 'soklet-servlet-jakarta']) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.match(gate.reason, /uncommitted local POM/);
-    assert.equal(gate.defaultArtifactIdentity, 'com.soklet:soklet:3.1.1');
-    assert.equal(
-      gate.defaultArtifactSha256,
-      'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4',
-    );
+    assert.equal(gate.defaultArtifactIdentity, 'com.soklet:soklet:4.0.0');
+    assert.equal(gate.defaultArtifactSha256, null);
+    assert.equal(gate.artifactIdentity, `com.soklet:${gateId}:2.0.0`);
+    const defaultRole = EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId].roles
+      .find(({ role }) => role === 'default-jar');
+    assert.equal(defaultRole.fileName, 'soklet-4.0.0.jar');
+    assert.equal(defaultRole.candidateArtifact, 'mainJar');
   }
   const trackedLocalizationGate = tracked.gates.find(
     ({ id }) => id === 'candidate-localization',
@@ -591,7 +604,7 @@ try {
   assert.equal(trackedLocalizationGate.repository, null);
   assert.throws(
     () => validateReleaseConfiguration(trackedManifestPath, { requireReady: true }),
-    /barebones-app=BLOCKED_UNCOMMITTED_LOCAL_MIGRATION/,
+    /candidate-conformance=BLOCKED_TOOLCHAIN_SECURITY_REVIEW/,
   );
   for (const [gateId, directory] of [
     ['typescript-interop', 'typescript'],
@@ -1364,9 +1377,10 @@ try {
     releaseValidator,
     /"\$surefire_verifier" "\$surefire_reports" "\$gate_id" candidate[\s\\\n\t]+"\$installed_jar" "\$candidate_jar_sha256"/,
   );
-  assert.match(releaseValidator, /prepare_servlet_default_jar/);
-  assert.match(releaseValidator, /repo1\.maven\.org\/maven2\/com\/soklet\/soklet/);
-  assert.match(releaseValidator, /"\$default_jar" "\$default_artifact_sha256"/);
+  assert.doesNotMatch(releaseValidator, /prepare_servlet_default_jar|default_artifact_sha256/);
+  assert.doesNotMatch(releaseValidator, /repo1\.maven\.org\/maven2\/com\/soklet\/soklet/);
+  assert.match(releaseValidator, /local default_jar="\$installed_jar"/);
+  assert.match(releaseValidator, /"\$gate_id" default "\$default_jar" "\$candidate_jar_sha256"/);
   assert.match(
     releaseValidator,
     /"project-pom=\$retained_pom"[\s\\\n]+"default-jar=\$retained_default_jar"/,
@@ -1391,12 +1405,77 @@ try {
   assert.match(barebonesFunction[1], /assert_loopback_port_available "\$barebones_port"/);
   assert.match(
     barebonesFunction[1],
-    /record_gate barebones-app[\s\\\n]+"port-file=\$retained_port_file"[\s\\\n]+"reservation-log=\$reservation_log"[\s\\\n]+"runtime-log=\$log"/,
+    /record_gate barebones-app[\s\\\n]+"vendored-jar=\$retained_vendored_jar"[\s\\\n]+"port-file=\$retained_port_file"[\s\\\n]+"reservation-log=\$reservation_log"[\s\\\n]+"runtime-log=\$log"/,
   );
   assert.ok(
     barebonesFunction[1].indexOf('stop_active_process')
       < barebonesFunction[1].indexOf('SOKLET_BAREBONES_LOOPBACK_PORT="$barebones_port"'),
   );
+  assert.match(barebonesFunction[1], /ls-files --error-unmatch "soklet-\$candidate_version.jar"/);
+  assert.match(barebonesFunction[1], /verify_reviewed_soklet_jar "\$vendored_jar" "\$candidate_jar_sha256"/);
+  assert.ok(barebonesFunction[1].indexOf('verify_reviewed_soklet_jar')
+    < barebonesFunction[1].indexOf('javac --release'));
+  assert.match(barebonesFunction[1], /-classpath "\$vendored_jar"/);
+  assert.doesNotMatch(barebonesFunction[1], /rm -f|candidate_copy/);
+  const reviewedJarVerifier = releaseValidator.match(
+    /\nverify_reviewed_soklet_jar\(\) \{\n([\s\S]*?)\n\}/,
+  );
+  assert.notEqual(reviewedJarVerifier, null);
+  const barebonesCandidateBytes = createDeterministicZip([
+    { path: 'META-INF/MANIFEST.MF', bytes: Buffer.from('Manifest-Version: 1.0\n\n') },
+    { path: 'com/soklet/Soklet.class', bytes: Buffer.from('candidate marker') },
+  ]);
+  const barebonesCandidateHash = sha256(barebonesCandidateBytes);
+  for (const mode of ['valid', 'stale', 'missing', 'symlink', 'untracked']) {
+    const checkout = fixturePath('barebones-preflight', mode);
+    mkdirSync(resolve(checkout, 'src'), { recursive: true });
+    writeFileSync(resolve(checkout, 'src/Fixture.java'), 'class Fixture {}\n');
+    const vendoredJar = resolve(checkout, 'soklet-4.0.0.jar');
+    if (mode === 'symlink') {
+      const target = resolve(checkout, 'alternate.jar');
+      writeFileSync(target, barebonesCandidateBytes);
+      symlinkSync(target, vendoredJar);
+    } else if (mode !== 'missing') {
+      writeFileSync(vendoredJar, mode === 'stale'
+        ? createDeterministicZip([
+          { path: 'META-INF/MANIFEST.MF', bytes: Buffer.from('Manifest-Version: 1.0\n\n') },
+          { path: 'com/soklet/Soklet.class', bytes: Buffer.from('stale marker') },
+        ])
+        : barebonesCandidateBytes);
+    }
+    const compilerMarker = resolve(checkout, 'compiler-invoked');
+    const probe = spawnSync('bash', ['-c', `
+set -e
+fail() { printf '%s\\n' "$*" >&2; exit 1; }
+clone_pinned_gate() { printf '%s\\n' "$TEST_CHECKOUT"; }
+git() { [[ "$TEST_TRACKED" == true ]]; }
+javac() { printf '%s\\n' invoked > "$TEST_COMPILER_MARKER"; exit 77; }
+verify_reviewed_soklet_jar() {
+${reviewedJarVerifier[1]}
+}
+run_barebones() {
+${barebonesFunction[1]}
+}
+run_barebones
+`], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TEST_CHECKOUT: checkout,
+        TEST_COMPILER_MARKER: compilerMarker,
+        TEST_TRACKED: mode === 'untracked' ? 'false' : 'true',
+        candidate_jar_sha256: barebonesCandidateHash,
+        candidate_version: '4.0.0',
+        surefire_verifier: resolve(projectRoot, 'scripts/verify-surefire-reports.mjs'),
+        work_root: checkout,
+      },
+    });
+    assert.equal(probe.status, mode === 'valid' ? 77 : 1,
+      `Barebones ${mode} preflight result: ${probe.stderr}`);
+    assert.equal(existsSync(compilerMarker), mode === 'valid',
+      `Barebones ${mode} JAR must be rejected before compilation`);
+  }
   assert.match(releaseValidator, /scripts\/reserve-loopback-port\.mjs/);
   assert.match(loopbackPortReserver, /host: '127\.0\.0\.1', port: 0/);
   assert.match(loopbackPortReserver, /flag: 'wx'/);
@@ -1485,7 +1564,7 @@ try {
   <groupId>com.soklet</groupId>
   <artifactId>fixture</artifactId>
   <version>1.0.0</version>
-  <properties><soklet.version>3.1.1</soklet.version></properties>
+  <properties><soklet.version>4.0.0</soklet.version></properties>
   <dependencies>
     <dependency>
       <groupId>com.soklet</groupId>
@@ -1501,12 +1580,12 @@ try {
       downstreamPomPath,
       'com.soklet:fixture:1.0.0',
       'soklet.version',
-      'com.soklet:soklet:3.1.1',
+      'com.soklet:soklet:4.0.0',
     ),
     {
       artifactId: 'fixture',
-      defaultArtifactIdentity: 'com.soklet:soklet:3.1.1',
-      defaultSokletVersion: '3.1.1',
+      defaultArtifactIdentity: 'com.soklet:soklet:4.0.0',
+      defaultSokletVersion: '4.0.0',
       groupId: 'com.soklet',
       version: '1.0.0',
     },
@@ -1516,20 +1595,20 @@ try {
       downstreamPomPath,
       'com.soklet:not-fixture:1.0.0',
       'soklet.version',
-      'com.soklet:soklet:3.1.1',
+      'com.soklet:soklet:4.0.0',
     ),
     /project identity is/,
   );
   writeFileSync(
     downstreamPomPath,
-    downstreamPom.replace('<version>\${soklet.version}</version>', '<version>3.1.1</version>'),
+    downstreamPom.replace('<version>\${soklet.version}</version>', '<version>4.0.0</version>'),
   );
   assert.throws(
     () => verifyMavenDownstreamPom(
       downstreamPomPath,
       'com.soklet:fixture:1.0.0',
       'soklet.version',
-      'com.soklet:soklet:3.1.1',
+      'com.soklet:soklet:4.0.0',
     ),
     /dependency version is/,
   );
@@ -1537,8 +1616,8 @@ try {
   writeFileSync(
     downstreamPomPath,
     downstreamPom.replace(
+      '<soklet.version>4.0.0</soklet.version>',
       '<soklet.version>3.1.1</soklet.version>',
-      '<soklet.version>3.1.2</soklet.version>',
     ),
   );
   assert.throws(
@@ -1546,13 +1625,13 @@ try {
       downstreamPomPath,
       'com.soklet:fixture:1.0.0',
       'soklet.version',
-      'com.soklet:soklet:3.1.1',
+      'com.soklet:soklet:4.0.0',
     ),
-    /expected exact stable version 3\.1\.1/,
+    /expected exact stable version 4\.0\.0/,
   );
-  for (const dynamicVersion of ['3.1.1-SNAPSHOT', 'LATEST', 'RELEASE', '[3.1,4.0)']) {
+  for (const dynamicVersion of ['4.0.0-SNAPSHOT', 'LATEST', 'RELEASE', '[4.0,5.0)']) {
     const dynamicPom = downstreamPom.replace(
-      '<soklet.version>3.1.1</soklet.version>',
+      '<soklet.version>4.0.0</soklet.version>',
       `<soklet.version>${dynamicVersion}</soklet.version>`,
     );
     writeFileSync(downstreamPomPath, dynamicPom);
@@ -2105,6 +2184,7 @@ try {
     scenarios: conformanceScenarios,
     status: 'PASSED',
     suiteCommit: conformanceManifests.pins.officialConformanceSuite.commit,
+    taskNotificationSupplement: { passed: true, checks: [...taskNotificationSupplementChecks] },
   };
   writeFileSync(conformanceEvidencePath, `${JSON.stringify(conformanceEvidence, null, 2)}\n`);
   verifyReleaseConformanceEvidence(
@@ -2140,6 +2220,27 @@ try {
   assertRejectsConformanceMutation(
     (value) => { value.goldenMessagesValidated = 47; },
     /not a complete passing immutable release-candidate run/,
+  );
+  assertRejectsConformanceMutation(
+    (value) => { delete value.taskNotificationSupplement; },
+    /release conformance evidence keys must be exactly/,
+  );
+  assertRejectsConformanceMutation(
+    (value) => { value.taskNotificationSupplement = null; },
+    /release conformance task notification supplement/,
+  );
+  for (const mutate of [
+    (value) => { value.taskNotificationSupplement.passed = false; },
+    (value) => { value.taskNotificationSupplement.checks.pop(); },
+    (value) => { value.taskNotificationSupplement.checks.reverse(); },
+    (value) => { value.taskNotificationSupplement.checks[1] = value.taskNotificationSupplement.checks[0]; },
+    (value) => { value.taskNotificationSupplement.checks.push('unreviewedCheck'); },
+  ]) {
+    assertRejectsConformanceMutation(mutate, /must pass all eight exact reviewed checks/);
+  }
+  assertRejectsConformanceMutation(
+    (value) => { value.taskNotificationSupplement.unreviewed = true; },
+    /release conformance task notification supplement keys must be exactly/,
   );
   assertRejectsConformanceMutation(
     (value) => { value.scenarios[0].name = value.scenarios[1].name; },
@@ -2345,14 +2446,7 @@ try {
       sha: process.env.GITHUB_SHA,
     };
     const evidence = contract.roles.map((specification) => ({
-      artifact: specification.candidateArtifact === 'gateDefaultArtifact'
-        ? {
-          bytes: 1037363,
-          fileName: specification.fileName,
-          sha256: gate.defaultArtifactSha256,
-          type: 'FILE',
-        }
-        : syntheticEvidenceDescriptor(paths.get(specification.role), specification),
+      artifact: syntheticEvidenceDescriptor(paths.get(specification.role), specification),
       mediaType: specification.mediaType,
       role: specification.role,
     }));
@@ -2532,24 +2626,24 @@ try {
       continue;
     }
     if (gate.id === 'soklet-servlet-javax'
-        || gate.id === 'soklet-servlet-jakarta') {
+        || gate.id === 'soklet-servlet-jakarta' || gate.id === 'barebones-app') {
+      const jarRole = gate.id === 'barebones-app' ? 'vendored-jar' : 'default-jar';
+      const staleJar = fixturePath('stale-jars', gate.id, 'soklet-4.0.0.jar');
+      mkdirSync(dirname(staleJar), { recursive: true });
+      writeFileSync(staleJar, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x02]));
+      const staleRolePaths = rolePaths.map((rolePath) =>
+        rolePath.startsWith(`${jarRole}=`) ? `${jarRole}=${staleJar}` : rolePath);
       assert.throws(
         () => recordGateEvidence(
           fixtureManifestPath,
           candidateCommit,
           artifactDescriptorPath,
           gate.id,
-          fixturePath(`evidence/${gate.id}-wrong-default-jar.json`),
-          rolePaths,
+          fixturePath(`evidence/${gate.id}-wrong-${jarRole}.json`),
+          staleRolePaths,
         ),
-        /does not match the gate's exact default artifact identity and SHA-256/,
+        /bytes do not match the candidate artifact descriptor/,
       );
-      writeSyntheticGateEvidence(
-        gate,
-        resolve(gateDirectory, `${gate.id}.json`),
-        rolePaths,
-      );
-      continue;
     }
     recordGateEvidence(
       fixtureManifestPath,
@@ -2812,7 +2906,22 @@ try {
       value.evidence.find(({ role }) => role === 'default-jar').artifact.sha256 =
         '0'.repeat(64);
     },
-    /does not match the gate's exact default artifact identity and SHA-256/,
+    /bytes do not match the candidate artifact descriptor/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'barebones-app',
+    'wrong-vendored-jar-bytes',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'vendored-jar').artifact.sha256 =
+        '0'.repeat(64);
+    },
+    /bytes do not match the candidate artifact descriptor/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'barebones-app',
+    'missing-vendored-jar',
+    (value) => { value.evidence.shift(); },
+    /evidence roles and order must be exactly/,
   );
   assertRejectsGateEvidenceMutation(
     'candidate-localization',

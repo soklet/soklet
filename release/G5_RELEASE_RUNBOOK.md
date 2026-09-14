@@ -22,16 +22,17 @@ downstream commits. G5 does not change them.
 | Repository/output | Exact release identity | Semantic-version decision |
 | --- | --- | --- |
 | `soklet` | Maven `com.soklet:soklet:4.0.0`; Git tag `v4.0.0` | Major version: aggregate lifecycle, transport, simulator, MCP wire, and MCP Java API are intentionally incompatible with 3.5.1. |
-| `soklet-servlet-javax` | Maven `com.soklet:soklet-servlet-javax:1.3.0`; Git tag `v1.3.0` | Minor version: the public adapter API is retained, while this release adds the reviewed Soklet 4.0.0 compatibility claim. The already-published 1.2.0 coordinate must not be reused. |
-| `soklet-servlet-jakarta` | Maven `com.soklet:soklet-servlet-jakarta:1.3.0`; Git tag `v1.3.0` | Same compatibility-only minor decision as the `javax` adapter; do not reuse 1.2.0. |
+| `soklet-servlet-javax` | Maven `com.soklet:soklet-servlet-javax:2.0.0`; Git tag `v2.0.0` | Major version: the 2026-09-13 owner decision raises the required core baseline to Soklet 4.0.0 and drops 3.x compatibility, even though the Servlet adapter API is retained. Do not reuse 1.2.0 or publish the breaking baseline as a minor release. |
+| `soklet-servlet-jakarta` | Maven `com.soklet:soklet-servlet-jakarta:2.0.0`; Git tag `v2.0.0` | Same breaking core-baseline decision as the `javax` adapter. |
 | `soklet-otel` | Maven `com.soklet:soklet-otel:2.0.0`; Git tag `v2.0.0` | Major version: public removals and the six-value shutdown-outcome vocabulary are breaking changes; publishing them as 1.4.0 would violate the project policy. |
 | `barebones-app` | Git tag `soklet-4.0.0`; vendored `soklet-4.0.0.jar` | Example application, not a Central artifact. The tag names the exact core compatibility release without inventing an application package version. |
 | `toystore-app` | Git tag `soklet-4.0.0`; existing application version remains 1.0.0 | Example application/deployment, not a Central library. The compatibility tag binds its exact Soklet migration. |
 | `soklet.com` | Deployment label and Git tag `soklet-4.0.0`; private package version remains 0.1.0 | Website deployment identity follows the core release; it is not an npm package publication. |
 
-The adapter and OpenTelemetry coordinates above were selected after confirming
-on 2026-09-01 that Central already contained adapter 1.2.0 releases and
-`soklet-otel` 1.3.1. If an approved U8 downstream pin does not contain the
+Central was confirmed on 2026-09-01 to contain adapter 1.2.0 releases and
+`soklet-otel` 1.3.1. The adapter 2.0.0 decision above supersedes the earlier
+compatibility-only 1.3.0 plan because the required core baseline is now breaking.
+If an approved U8 downstream pin does not contain the
 corresponding next version, **stop**. Do not edit it in G5 and do not select a
 different version at the console.
 
@@ -48,6 +49,10 @@ containing:
 - main, sources, Javadoc, and POM filenames, sizes, and SHA-256 values;
 - the literal build-output timestamp and pinned build recipe/toolchain identity;
 - all six downstream repository commit/tree IDs and receipt SHA-256 values;
+- the SHA-256 and durable reference of the owner's
+  [historical-source disposition record](PLANNING_AUTHORITY_DRIFT_2026-09-13.md#required-owner-disposition-record),
+  separately resolving the V10 and matrix archive-or-retention-gap decisions
+  and acknowledging the sealed D1p scope and existing contract discrepancy;
 - the version/tag table above;
 - the full signing-key fingerprint approved for Maven artifacts and Git tags;
 - GitHub organization/repositories, Central namespace, deployment accounts,
@@ -70,6 +75,8 @@ Stop immediately if any of these is true:
 - a signature, checksum, source/Javadoc inventory, license, NOTICE, or SBOM-like
   inventory differs from its reviewed value;
 - any required U9 receipt is not PASS for the exact candidate;
+- the required historical-source disposition record is missing, ambiguous,
+  or does not match the recorded frozen/observed hashes and candidate identity;
 - a credential appears in a command line, log, receipt, or terminal capture;
 - Central returns an unexpected state, redirect, deployment ID, or checksum;
 - a public resolver returns bytes different from the approved artifact;
@@ -233,8 +240,8 @@ version, tag, and effective core dependency must match the frozen table.
 
 | Order | Artifact | Required public-input proof |
 | ---: | --- | --- |
-| 1 | `com.soklet:soklet-servlet-javax:1.3.0` | Clean default test plus the recorded exact Soklet 4.0.0 compatibility leg; no local replacement repository during the public smoke. |
-| 2 | `com.soklet:soklet-servlet-jakarta:1.3.0` | Same released-default/exact-core split and public core hash proof. |
+| 1 | `com.soklet:soklet-servlet-javax:2.0.0` | Clean default and explicit-override tests both resolve the exact public Soklet 4.0.0 JAR; no local replacement repository during the public smoke. |
+| 2 | `com.soklet:soklet-servlet-jakarta:2.0.0` | Same default/override configurations and identical public core hash proof. |
 | 3 | `com.soklet:soklet-otel:2.0.0` | Exact core 4.0.0, full tests, six literal shutdown outcomes, API/release notes, and public core hash proof. |
 
 For each library, in order:
@@ -292,8 +299,8 @@ never from an arbitrary working directory:
 | Site | Source/tag | Published API identity |
 | --- | --- | --- |
 | `https://javadoc.soklet.com/` | `soklet` `v4.0.0` | `com.soklet:soklet:4.0.0` |
-| `https://javax.javadoc.soklet.com/` | `soklet-servlet-javax` `v1.3.0` | `com.soklet:soklet-servlet-javax:1.3.0` |
-| `https://jakarta.javadoc.soklet.com/` | `soklet-servlet-jakarta` `v1.3.0` | `com.soklet:soklet-servlet-jakarta:1.3.0` |
+| `https://javax.javadoc.soklet.com/` | `soklet-servlet-javax` `v2.0.0` | `com.soklet:soklet-servlet-javax:2.0.0` |
+| `https://jakarta.javadoc.soklet.com/` | `soklet-servlet-jakarta` `v2.0.0` | `com.soklet:soklet-servlet-jakarta:2.0.0` |
 | `https://otel.javadoc.soklet.com/` | `soklet-otel` `v2.0.0` | `com.soklet:soklet-otel:2.0.0` |
 
 For each site, compare generated top-level inventories and representative
@@ -309,13 +316,20 @@ and rollback target for each site.
 
 ## 10. Deploy soklet.com
 
-The website is last so it never advertises unavailable coordinates or docs.
+Website deployment is last so it never advertises unavailable coordinates or
+docs. Its reviewed commit must already exist before downstream pinning and
+candidate acceptance; "last" does not mean the last preparation commit.
+Before any push, confirm the branch's actual hosting/deployment triggers as
+described in the [owner checklist](OWNER_COMMIT_CHECKLIST.md). Do not infer that
+a local commit deploys the site, or push a deployment-triggering branch early.
 At its exact G4-pinned commit:
 
 ```sh
 npm ci --ignore-scripts
 npm run lint
+npm run test:core-links
 npm run ssg-build
+npm run check:core-links -- --core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist
 git diff --exit-code
 ```
 
@@ -323,6 +337,29 @@ Require a clean generated tree under the repository's documented generated-
 artifact policy. Check that installation, direct-download, quickstart,
 migration, MCP, support/EOL, servlet, OTel, Javadocs, release notes, sitemap,
 and `llms.txt`/`llms-full.txt` references all name the exact public versions.
+Use the exact intended core candidate commit for `--core-ref`, not a moving
+branch name. The offline checker discovers core blob links from all sources,
+including navigation, and requires generated prose/HTML link-set parity. It
+checks regular targets in that committed tree without fetching or changing refs.
+
+Before promotion, check every exact GitHub source link used by the site,
+including its branch/tag/commit and target path. A local file or feature-branch
+commit does not establish that a `/blob/master/` URL resolves publicly. Under
+this separate G5 authorization, run the bounded public check from the website:
+
+```sh
+npm run check:core-links -- --core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist --live
+```
+
+Retain stdout JSON with the G5 evidence. Every dynamically discovered core
+blob URL must return HTTP 200 HTML without redirects, and its public raw master
+file must match the intended commit's SHA-256. No fixed list of five documents
+or fixed link count substitutes for discovery. Requests send no credentials;
+timeouts, rate limits, redirects, missing files and content mismatches fail
+closed. This is a point-in-time link/content check, not publication authority.
+Also check other exact source URLs, public artifacts and Javadoc links under
+the existing broader public-link review. A failed link check stops deployment; any
+tracked link correction requires renewed candidate preparation and acceptance.
 
 Deploy to the approved preview target, run its link/download/metadata smoke,
 then atomically promote it to `https://www.soklet.com`. Create and verify signed
@@ -335,7 +372,7 @@ tag object, and rollback target.
 Run all checks from a clean consumer environment with no Soklet artifacts in
 its local dependency cache:
 
-- resolve and hash core 4.0.0, both servlet 1.3.0 artifacts, and OTel 2.0.0;
+- resolve and hash core 4.0.0, both servlet 2.0.0 artifacts, and OTel 2.0.0;
 - download core main/sources/Javadoc/POM/signatures/checksums through the public
   Central path and GitHub release, comparing exact bytes;
 - copy the [MCP quickstart](../MCP_QUICKSTART.md) into a new minimal Maven

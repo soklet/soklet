@@ -4,6 +4,19 @@
 
 ### Breaking Changes
 
+- **HTTP server type:** `ServerType.STANDARD_HTTP` is now `ServerType.HTTP`,
+  with no deprecated alias. Update source references, switch cases, and stored
+  enum names, then recompile integrations. The built-in Prometheus/OpenMetrics
+  `soklet_transport_failures_total` label changes from
+  `server_type="STANDARD_HTTP"` to `server_type="HTTP"`; update metric queries,
+  dashboards, and alerts. The explicit OpenTelemetry `soklet.server.type`
+  vocabulary remains `http`, `sse`, and `mcp`. See
+  [HTTP server type](MIGRATING_TO_4_0.md#http-server-type).
+- **Servlet integrations:** both javax and Jakarta adapters move to 2.0.0
+  and require Soklet 4.0.0. The former 3.x compatibility baseline is removed;
+  applications must declare their core dependency explicitly because the
+  adapters retain provided scope. See
+  [Servlet adapters](MIGRATING_TO_4_0.md#servlet-adapters).
 - **Aggregate lifecycle:** `Soklet` is now a one-shot owner of every configured
   transport. `HttpServer`, `SseServer`, and `McpServer` no longer expose direct
   start/stop/status/close ownership. `Soklet.shutdown()` returns the one cached
@@ -109,8 +122,10 @@ maintenance or security fixes afterward. See the explicit
   explicit in-memory manager is bounded and process-local; it is intended for
   development, tests, and deliberately ephemeral single-process use, not as a
   production durability or worker system. The pinned official conformance gate
-  remains on the pre-Tasks `0.2.0-alpha.10` suite; the separately recorded
-  alpha.11 Tasks run is useful local evidence but is not a release-gate result.
+  now uses exact `0.2.0-alpha.11` source/build hashes and 49 reviewed profiles,
+  including ten Tasks rows. Its notification scenario remains an explicit
+  upstream harness skip with independent socket-test supplements; development
+  verification is not release-candidate or client-host compatibility evidence.
   The 14 public Tasks types retain a provisional maturity label, while their
   exact 4.0.0 signatures are covered by a mandatory reviewed snapshot.
 - Added one lifecycle coordinator and immutable result model across HTTP, SSE,
@@ -126,6 +141,31 @@ maintenance or security fixes afterward. See the explicit
 - Added explicit license/NOTICE packaging and a tracked
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
+### Correctness Fixes
+
+- Protocol numbers no longer depend on the JVM's default formatting locale:
+  file Content-Range values, default weak ETags, cookie Max-Age, SSE error
+  status/length fields, and servlet request/redirect ports use ASCII decimal
+  digits. Arabic/Persian formatting locales previously caused response
+  validation failures or malformed wire output. Application-selected display
+  formatting is unchanged.
+- EntityTag factories now reject characters above `0xFF`, including surrogate
+  code units, and parsing returns empty for those invalid values. Legal
+  `0x80–0xFF` obs-text remains accepted; ETags are not restricted to ASCII.
+
+### Security Hardening
+
+- Fixed a configured request-header and trailer size-limit bypass when a
+  pipelined input buffer was compacted after a section began. Section sizes
+  could be undercounted by the discarded buffer prefix, allowing requests to
+  exceed their configured limits and weakening resource-exhaustion defenses.
+  Accounting now stays request-relative across compaction, and rejected-input
+  capture remains confined to the offending request.
+- Content-Length now requires ASCII digits before numeric conversion, rejecting
+  signed forms such as `+5` and `-0` as malformed requests. Numeric overflow
+  continues to follow the malformed-request response path. These changes
+  harden HTTP framing; no request-smuggling exploit chain is claimed.
+
 ### Reviewed Non-Blocking Deferrals
 
 The 4.0 release review also recorded the following deliberate post-release
@@ -137,6 +177,20 @@ work; it is not claimed as fixed by 4.0.0:
 
 ### Detailed Implementation Record
 
+- Task subscription deduplication retains only notification comparison fields,
+  not private task origins or completed results. Terminal delivery and owner
+  cleanup discard comparison state, and late workers cannot restore it.
+- Lifecycle observer fan-out continues when multiple observers throw the same
+  exception instance. Default case-insensitive header normalization uses the
+  locale-neutral root locale, including Turkish and Azeri JVMs.
+- Both servlet adapters preserve empty bodyless 204/304 responses without
+  changing ordinary empty-200 content type or hiding illegal nonempty bodies.
+  ToyStore's Docker MCP listener now uses an explicit reachable bind and
+  allowed-host policy; native execution retains its loopback default.
+- StaticFiles extra-header validation identifies the resolver/factory context
+  and documents all managed headers. Maven, Gradle, and direct-javac consumer
+  fixtures exercise generated route/MCP metadata and packaged-only runtime
+  requests on Java 17, 21, and 25.
 - Owner-level lifecycle coverage now drives a real built-in HTTP delegate
   through the coordinator's attach-before-start shutdown path and proves
   graceful `NOT_STARTED` termination without a built-in generation, force, or

@@ -78,14 +78,14 @@ public class MetricsCollectorTests {
 		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
 				.body(new byte[]{9, 8})
 				.build();
-		collector.willAcceptConnection(ServerType.STANDARD_HTTP, null);
-		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
-		collector.didFailToAcceptConnection(ServerType.STANDARD_HTTP, null, ConnectionRejectionReason.MAX_CONNECTIONS, null);
-		collector.didRecordTransportFailure(ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
+		collector.willAcceptConnection(ServerType.HTTP, null);
+		collector.didAcceptConnection(ServerType.HTTP, null);
+		collector.didFailToAcceptConnection(ServerType.HTTP, null, ConnectionRejectionReason.MAX_CONNECTIONS, null);
+		collector.didRecordTransportFailure(ServerType.HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
 		collector.didRecordTransportFailure(ServerType.SSE, MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, null);
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
-		collector.willWriteResponse(ServerType.STANDARD_HTTP, request, resourceMethod, response);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod, response, Duration.ofMillis(5), List.of());
+		collector.didStartRequestHandling(ServerType.HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.HTTP, request, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.HTTP, request, resourceMethod, response, Duration.ofMillis(5), List.of());
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
@@ -124,7 +124,7 @@ public class MetricsCollectorTests {
 		assertEquals(1L, snapshot.getHttpConnectionsAccepted());
 		assertEquals(1L, snapshot.getHttpConnectionsRejected());
 		assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
-				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR)));
+				ServerType.HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR)));
 		assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
 				ServerType.SSE, MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
 		assertEquals(0L, snapshot.getActiveRequests());
@@ -133,7 +133,7 @@ public class MetricsCollectorTests {
 				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
 				.build()).orElseThrow();
 		assertTrue(snapshotText.contains(
-				"soklet_transport_failures_total{server_type=\"STANDARD_HTTP\",reason=\"WRITE_ERROR\"} 1"));
+				"soklet_transport_failures_total{server_type=\"HTTP\",reason=\"WRITE_ERROR\"} 1"));
 		assertTrue(snapshotText.contains(
 				"soklet_transport_failures_total{server_type=\"SSE\",reason=\"CONNECTION_SETUP_ERROR\"} 1"));
 
@@ -161,9 +161,9 @@ public class MetricsCollectorTests {
 				.body(new byte[]{9, 8})
 				.build();
 
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
-		collector.willWriteResponse(ServerType.STANDARD_HTTP, substitutedRequest, resourceMethod, response);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, substitutedRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
+		collector.didStartRequestHandling(ServerType.HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.HTTP, substitutedRequest, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.HTTP, substitutedRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
 
 		assertEquals(0L, collector.getActiveRequests());
 		assertEquals(0L, collector.getRequestsInFlightByIdentityCount());
@@ -184,9 +184,9 @@ public class MetricsCollectorTests {
 				.body(new byte[]{9, 8})
 				.build();
 
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
-		collector.willWriteResponse(ServerType.STANDARD_HTTP, replacementRequest, resourceMethod, response);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, replacementRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
+		collector.didStartRequestHandling(ServerType.HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.HTTP, replacementRequest, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.HTTP, replacementRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
 
 		assertEquals(0L, collector.getActiveRequests());
 		assertEquals(0L, collector.getRequestsInFlightByIdentityCount());
@@ -226,9 +226,9 @@ public class MetricsCollectorTests {
 		Request request = Request.withPath(HttpMethod.GET, "/widgets/123").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200).build();
 
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
-		collector.willWriteResponse(ServerType.STANDARD_HTTP, request, resourceMethod, response);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod, response, Duration.ofSeconds(2), List.of());
+		collector.didStartRequestHandling(ServerType.HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.HTTP, request, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.HTTP, request, resourceMethod, response, Duration.ofSeconds(2), List.of());
 
 		MetricsCollector.SnapshotTextOptions includeZeroBuckets = MetricsCollector.SnapshotTextOptions
 				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)

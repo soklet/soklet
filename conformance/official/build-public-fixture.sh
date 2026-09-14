@@ -50,6 +50,8 @@ javac --release 17 -proc:none -Xlint:all -Werror \
   -d "$TEST_CLASSES_DIR" \
   "$TEST_SOURCE_ROOT/com/soklet/conformance/McpConformanceFixtureContractTest.java" \
   "$TEST_SOURCE_ROOT/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java" \
+  "$TEST_SOURCE_ROOT/com/soklet/conformance/McpTaskNotificationSocketDriver.java" \
+  "$TEST_SOURCE_ROOT/com/soklet/conformance/McpChunkedHttpClient.java" \
   "$TEST_SOURCE_ROOT/com/soklet/conformance/transport/TransportCompositionFixtureContractTest.java"
 
 java -ea -classpath "$TEST_CLASSES_DIR:$CLASSES_DIR:$CANDIDATE_JAR" \

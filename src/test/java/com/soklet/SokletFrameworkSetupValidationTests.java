@@ -44,7 +44,7 @@ import static java.lang.String.format;
 final class SokletFrameworkSetupValidationTests {
 	@NonNull
 	private static final String NO_RESOURCE_METHODS = format(
-			"No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.",
+			"No Soklet Resource Methods were found. For default classpath discovery, configure com.soklet.SokletProcessor using Gradle annotationProcessor or Maven annotationProcessorPaths/annotationProcessors, compile with -parameters, and preserve META-INF/soklet/resource-method-lookup-table when packaging your application. If you supplied a custom %s, ensure its getResourceMethods() returns the configured HTTP/SSE Resource Methods. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.",
 			ResourceMethodResolver.class.getSimpleName());
 	@NonNull
 	private static final String MISSING_HTTP = format(
@@ -96,6 +96,24 @@ final class SokletFrameworkSetupValidationTests {
 		Assertions.assertEquals(0, http.initializeCalls());
 		Assertions.assertEquals(0, http.startCalls());
 		Assertions.assertEquals(0, instanceProvider.provisionCalls());
+	}
+
+	@Test
+	void noSseResourceMethodsExplainsDiscoveryBeforeServerInitialization() {
+		CountingSseServer sse = new CountingSseServer();
+		SokletConfig config = SokletConfig.withSseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build();
+
+		SokletStartupException startup = assertCompleteSetupFailure(config,
+				Set.of(InternalLifecycleComponentType.SSE));
+
+		Assertions.assertInstanceOf(IllegalStateException.class,
+				startup.getCause());
+		Assertions.assertEquals(NO_RESOURCE_METHODS,
+				startup.getCause().getMessage());
+		Assertions.assertEquals(0, sse.initializeCalls());
+		Assertions.assertEquals(0, sse.startCalls());
 	}
 
 	@Test

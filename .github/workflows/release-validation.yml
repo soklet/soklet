@@ -77,7 +77,7 @@ jobs:
       security-events: write
 
   release-scans:
-    name: Aggregate Release Scans (JDK 21)
+    name: Aggregate Release Scans (JDK 17 artifact, JDK 21 analysis)
     if: inputs.phase == 'produce'
     needs: release-scans-codeql
     runs-on: ubuntu-24.04
@@ -127,6 +127,13 @@ jobs:
           coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
           "${RUNNER_TEMP}/release-scans-java-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 17 for canonical packaging
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-scans-build-java-distribution.txt"
+
       - name: Install checksum-pinned Maven
         shell: bash
         run: >-
@@ -135,7 +142,7 @@ jobs:
           "${RUNNER_TEMP}/release-scans-maven-distribution.txt"
 
       - name: Build exact candidate artifact
-        run: mvn -B -ntp -DskipTests package
+        run: mvn -B -ntp -Dgpg.skip=true -DskipTests clean package
 
       - name: Self-test release-scan producer
         run: |
@@ -180,6 +187,7 @@ jobs:
             ${{ runner.temp }}/release-scans-evidence
             ${{ runner.temp }}/release-scans-node-distribution.txt
             ${{ runner.temp }}/release-scans-java-distribution.txt
+            ${{ runner.temp }}/release-scans-build-java-distribution.txt
             ${{ runner.temp }}/release-scans-maven-distribution.txt
 
   mcp-benchmarks:

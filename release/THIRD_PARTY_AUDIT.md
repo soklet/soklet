@@ -18,7 +18,7 @@ unreviewed material.
 | Material | Tracked location | Origin/license record | Distribution decision |
 | --- | --- | --- | --- |
 | Soklet | `src/main/java/com/soklet` outside the rows below | Revetware LLC / Transmogrify LLC, Apache-2.0 headers and root `LICENSE` | Retain. Root Apache-2.0 license is copied into the binary JAR as `META-INF/LICENSE`. |
-| Microhttp | 32 Java files under `src/main/java/com/soklet/internal/microhttp`, including `package-info.java` | Elliot Barlas, MIT; complete notice in `package-info.java` and root/JAR `NOTICE` | Retain repackaged/modified sources and MIT notice. |
+| Microhttp and Soklet extensions | 33 Java files under `src/main/java/com/soklet/internal/microhttp`, including `package-info.java` (inventory reconciled 2026-09-13) | Repackaged/modified Microhttp: Elliot Barlas, MIT; complete notice in `package-info.java` and root/JAR `NOTICE`. `UnparsedRequestRejection.java` is a first-party Soklet extension with its own Apache-2.0 header. | Retain upstream notices and first-party attribution without assigning upstream authorship to the extension. |
 | Spring Framework utilities | `internal/spring/CollectionUtils.java`, `LinkedCaseInsensitiveMap.java`, `ObjectUtils.java`, and `package-info.java`; the credited cookie-validation portion of `ResponseCookie.java` | Copyright 2002-2023 original authors, Apache-2.0; headers remain in every copied file or adjacent credited section | Retain with attribution in root/JAR `NOTICE`. |
 | Selenium header parsing | Credited section in `DefaultMultipartParser.java` | Selenium committers and Software Freedom Conservancy, Apache-2.0; complete notice remains adjacent to the code | Retain with attribution in root/JAR `NOTICE`. |
 | Apache Tomcat / Commons FileUpload multipart code | Credited section in `DefaultMultipartParser.java` | Apache Tomcat fork of Apache Commons FileUpload, Apache-2.0; source attribution remains adjacent | Retain; applicable Apache Software Foundation attribution added to root/JAR `NOTICE`. |
@@ -28,6 +28,16 @@ The production JAR contains no third-party dependency JAR or native binary.
 “Zero runtime dependencies” describes dependency resolution; it does not mean
 that every compiled class was authored solely by the current Soklet copyright
 holder. The notices above remain required for the repackaged source.
+
+The bytecode also retains compile-time JSpecify, concurrency, and Error Prone
+annotation descriptors even though their Maven dependencies are `provided`.
+Ordinary Soklet execution does not require those libraries; annotation-analysis
+or introspection tooling may require them. For `jdeps`, provide the annotation
+JARs on its analysis classpath or first inspect `--missing-deps` and use
+`--ignore-missing-deps` only for the reviewed annotation-only references. Do not
+use that option to hide a new runtime dependency. It is a `jdeps` flag, not a
+`jlink` flag, and `Automatic-Module-Name` does not itself make Soklet directly
+linkable into an image.
 
 Remediation added by this audit:
 
@@ -45,7 +55,7 @@ Do not replace these with a URL-only license reference.
 | Material | Provenance | License handling | Packaging |
 | --- | --- | --- | --- |
 | Final MCP protocol schema | `modelcontextprotocol/modelcontextprotocol` tag `2026-07-28`, commit `5f5440bb26a62e2cf3440b92da5a667efa03b267`; source `schema/2026-07-28/schema.json`; 181,474 bytes; SHA-256 `ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203` | Exact upstream licensing-transition notice and Apache text retained at `conformance/official/final-schema/LICENSE.upstream`, SHA-256 `0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a` | Tracked conformance/source material; not packaged in the runtime JAR. |
-| Official MCP conformance suite | `modelcontextprotocol/conformance` commit `49103de6ed70804e940637bf3e9e29e4a3f54e64`; exact tree/package/build hashes in `conformance/official/upstream-pins.json` | Not copied into this repository. The release workflow obtains the exact pinned checkout and builds it with scripts disabled before execution. | External candidate-time tool; no suite source or built CLI in Soklet artifacts. |
+| Official MCP conformance suite | `modelcontextprotocol/conformance` alpha.11 commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`; exact tree/package/build hashes in `conformance/official/upstream-pins.json` | Not copied into this repository. The release workflow obtains the exact pinned checkout and builds it with scripts disabled before execution. | External candidate-time tool; no suite source or built CLI in Soklet artifacts. [Dependency risk review](../conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md) remains open; this provenance row is not a security waiver. |
 | Soklet conformance fixture and scenario manifest | `conformance/official/public-fixture-src`, `scenarios.json`, and Soklet scripts | Soklet-authored Apache-2.0 source; scenario names and protocol interactions describe the upstream contract but do not copy the suite implementation | Source/release evidence only; no runtime-JAR inclusion. |
 
 The final schema importer refuses overwrite and accepts only the currently

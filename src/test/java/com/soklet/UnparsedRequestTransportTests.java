@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -64,6 +65,127 @@ class UnparsedRequestTransportTests {
 					.gracefulShutdownTimeout(Duration.ofSeconds(2))
 					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
+
+	@Test
+	void pipelinedFragmentedHeaderLimitRejectsOnlyTheOffendingRequest()
+			throws Exception {
+		assertPipelinedSectionRejected("GET /bad-request HTTP/1.1\r\nHost: a\r\nX: ",
+				"a".repeat(25) + "\r\n", 32);
+	}
+
+	@Test
+	void pipelinedFragmentedTrailerLimitRejectsOnlyTheOffendingRequest()
+			throws Exception {
+		assertPipelinedSectionRejected("POST /bad-request HTTP/1.1\r\nHost: a\r\n"
+				+ "Transfer-Encoding: chunked\r\n\r\n0\r\nX: ",
+				"a".repeat(60) + "\r\n", 64);
+	}
+
+	@Test
+	void invalidContentLengthsUseTheMalformedRequestObserverAndResponsePath()
+			throws Exception {
+		int port = findFreePort();
+		List<UnparsedRequest> rejectedRequests = new CopyOnWriteArrayList<>();
+		LifecycleObserver observer = new LifecycleObserver() {
+			@Override
+			public void didRejectUnparsedRequest(@NonNull UnparsedRequest request) {
+				rejectedRequests.add(request);
+			}
+		};
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(IntegrationTests.EchoResource.class)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.lifecycleObserver(observer)
+				.build();
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			for (String value : List.of("+1", "-0", "9223372036854775808")) {
+				String safePrefix = "POST /bad-request HTTP/1.1\r\nHost: a\r\nContent-Length: "
+						+ value + "\r\n";
+				RawResponse response = exchange(port, safePrefix + "\r\nx"
+						+ "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n");
+				Assertions.assertEquals("HTTP/1.1 400 Bad Request", response.statusLine());
+				Assertions.assertEquals("close", response.headers().get("connection"));
+				UnparsedRequest rejected = rejectedRequests.get(rejectedRequests.size() - 1);
+				Assertions.assertEquals(UnparsedRequestReason.MALFORMED_REQUEST, rejected.getReason());
+				Assertions.assertArrayEquals(safePrefix.getBytes(StandardCharsets.US_ASCII),
+						remainingBytes(rejected.getCapturedBytes()));
+				Assertions.assertEquals(safePrefix.length(), rejected.getObservedByteCount());
+			}
+		}
+		Assertions.assertEquals(3, rejectedRequests.size());
+	}
+
+	private static void assertPipelinedSectionRejected(@NonNull String prefix,
+			@NonNull String offendingLineSuffix, int maximumHeadersSize) throws Exception {
+		int port = findFreePort();
+		List<UnparsedRequest> rejectedRequests = new CopyOnWriteArrayList<>();
+		AtomicInteger marshaledRejections = new AtomicInteger();
+		LifecycleObserver observer = new LifecycleObserver() {
+			@Override
+			public void didRejectUnparsedRequest(@NonNull UnparsedRequest request) {
+				rejectedRequests.add(request);
+			}
+		};
+		String firstRequest = "GET /hello HTTP/1.1\r\nHost: a\r\n\r\n";
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.maximumHeadersSizeInBytes(maximumHeadersSize)
+						.requestReadBufferSizeInBytes(firstRequest.length() + prefix.length())
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(IntegrationTests.EchoResource.class)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.lifecycleObserver(observer)
+				.responseMarshaler(ResponseMarshaler.builder()
+						.unparsedRequestHandler(request -> {
+							marshaledRejections.incrementAndGet();
+							return MarshaledResponse.withStatusCode(431)
+									.headers(Map.of("X-Unparsed-Reason", Set.of(request.getReason().name())))
+									.build();
+						})
+						.build())
+				.build();
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+				socket.setSoTimeout(4_000);
+				OutputStream output = socket.getOutputStream();
+				InputStream input = socket.getInputStream();
+				output.write((firstRequest + prefix).getBytes(StandardCharsets.US_ASCII));
+				output.flush();
+				Assertions.assertEquals("HTTP/1.1 200 OK", readResponse(input).statusLine());
+				output.write((offendingLineSuffix + "\r\n"
+						+ "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n")
+						.getBytes(StandardCharsets.US_ASCII));
+				output.flush();
+				RawResponse rejection = readResponse(input);
+				Assertions.assertEquals("HTTP/1.1 431 Request Header Fields Too Large", rejection.statusLine());
+				Assertions.assertEquals("REQUEST_HEADERS_TOO_LARGE",
+						rejection.headers().get("x-unparsed-reason"));
+				Assertions.assertEquals("close", rejection.headers().get("connection"));
+				try {
+					Assertions.assertEquals(-1, input.read());
+				} catch (SocketException expected) {
+					// Closing with unread pipelined bytes may reset the socket
+					// after the complete rejection response has been delivered.
+				}
+			}
+		}
+		Assertions.assertEquals(1, rejectedRequests.size());
+		Assertions.assertEquals(1, marshaledRejections.get());
+		UnparsedRequest rejected = rejectedRequests.get(0);
+		Assertions.assertEquals(UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE, rejected.getReason());
+		String captured = new String(remainingBytes(rejected.getCapturedBytes()), StandardCharsets.US_ASCII);
+		// An over-limit incomplete line may be rejected before its CRLF arrives;
+		// either way neither adjacent request belongs to this safe capture.
+		Assertions.assertTrue(captured.startsWith(prefix), captured);
+		Assertions.assertTrue((prefix + offendingLineSuffix).startsWith(captured), captured);
+		Assertions.assertFalse(captured.contains("/hello"));
+		Assertions.assertFalse(captured.contains("secret"));
+		Assertions.assertEquals(captured.length(), rejected.getObservedByteCount());
+		Assertions.assertFalse(rejected.isCaptureTruncated());
+	}
 
 	@Test
 	void allParserRejectionsAreObservedAndMarshaledOffTheEventLoop()
@@ -188,7 +310,7 @@ class UnparsedRequestTransportTests {
 			UnparsedRequest request = requests.get(index);
 			byte[] expectedCapture = scenario.expectedCapture()
 					.getBytes(StandardCharsets.US_ASCII);
-			Assertions.assertEquals(ServerType.STANDARD_HTTP,
+			Assertions.assertEquals(ServerType.HTTP,
 					request.getServerType());
 			Assertions.assertEquals(scenario.reason(), request.getReason());
 			Assertions.assertTrue(request.getRemoteAddress().isPresent());

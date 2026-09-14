@@ -190,6 +190,7 @@ public final class StaticFiles {
 		Instant lastModified = requireNonNull(getLastModifiedResolver().lastModifiedFor(file, attributes), "lastModifiedResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		String cacheControl = requireNonNull(getCacheControlResolver().cacheControlFor(file, attributes), "cacheControlResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		Map<String, Set<String>> headers = requireNonNull(getHeadersResolver().headersFor(file, attributes), "headersResolver returned null; return an empty map to omit extra headers.");
+		FileResponse.rejectControlledHeaderConflicts(headers, "StaticFiles.HeadersResolver");
 		Boolean rangeRequests = requireNonNull(getRangeRequestsResolver().rangeRequestsFor(file, attributes), "rangeRequestsResolver returned null; return false to disable range requests.");
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
 
@@ -615,6 +616,8 @@ public final class StaticFiles {
 		 * Sets the resolver used to produce extra response headers.
 		 * <p>
 		 * Passing {@code null} restores the disabled resolver, which emits no extra headers.
+		 * Managed file headers cannot be supplied here; see {@link HeadersResolver} for the
+		 * controlled names and dedicated resolver alternatives.
 		 *
 		 * @param headersResolver the resolver to use, or {@code null} to omit extra headers
 		 * @return this builder
@@ -885,6 +888,14 @@ public final class StaticFiles {
 
 	/**
 	 * Resolves extra response headers for static-file responses.
+	 * <p>
+	 * Header names are checked case-insensitively. {@code Content-Length}, {@code Content-Range},
+	 * {@code Accept-Ranges}, {@code Content-Type}, {@code Content-Encoding}, {@code Cache-Control},
+	 * {@code ETag}, {@code Last-Modified}, and {@code Transfer-Encoding} are managed by file responses
+	 * and must not be returned here. Use the builder's {@link Builder#mimeTypeResolver(MimeTypeResolver)},
+	 * {@link Builder#cacheControlResolver(CacheControlResolver)}, {@link Builder#entityTagResolver(EntityTagResolver)},
+	 * {@link Builder#lastModifiedResolver(LastModifiedResolver)}, or
+	 * {@link Builder#rangeRequestsResolver(RangeRequestsResolver)} where applicable; framing is computed by the transport.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -895,14 +906,17 @@ public final class StaticFiles {
 		 * Returns a resolver that always emits the supplied headers.
 		 * <p>
 		 * The header map and nested value sets are defensively copied.
+		 * Managed headers listed on {@link HeadersResolver} are rejected immediately.
 		 *
 		 * @param headers the headers to emit
 		 * @return the constant headers resolver
+		 * @throws IllegalArgumentException if a header is controlled by file responses
 		 */
 		@NonNull
 		static HeadersResolver fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			requireNonNull(headers);
 			Map<String, Set<String>> copiedHeaders = copyHeaders(headers);
+			FileResponse.rejectControlledHeaderConflicts(copiedHeaders, "StaticFiles.HeadersResolver");
 			return (path, attributes) -> copiedHeaders;
 		}
 
@@ -918,6 +932,7 @@ public final class StaticFiles {
 
 		/**
 		 * Resolves extra response headers for the file being served.
+		 * Managed headers listed on {@link HeadersResolver} are rejected when the response is produced.
 		 * <p>
 		 * Implementations must be thread-safe; {@link StaticFiles} invokes resolvers concurrently from
 		 * request-handling threads.
@@ -1135,7 +1150,7 @@ public final class StaticFiles {
 			requireNonNull(attributes);
 			Long epochSecond = attributes.lastModifiedTime().toInstant().getEpochSecond();
 			Long size = attributes.size();
-			return Optional.of(EntityTag.fromWeakValue(format("mtime-%d-size-%d", epochSecond, size)));
+			return Optional.of(EntityTag.fromWeakValue("mtime-" + epochSecond + "-size-" + size));
 		}
 	}
 

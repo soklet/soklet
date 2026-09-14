@@ -30,6 +30,7 @@ import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpInputRequest;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpStreamTerminationReason;
@@ -64,6 +65,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -7923,6 +7925,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						finishTaskNotificationProjection(projection);
 						return;
 					}
+					boolean terminalSnapshot = terminalTaskStatus(
+							snapshot.task().getTaskStatus());
+					TaskNotificationDeliveryState deliveryState = terminalSnapshot
+							? null : TaskNotificationDeliveryState.from(snapshot);
 					boolean deliver;
 					synchronized (lock) {
 						deliver = taskNotificationProjectionActiveWhileLocked(
@@ -7930,7 +7936,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								&& projection.state().requestedGeneration
 								== projection.generation()
 								&& shouldDeliverTaskSnapshot(
-										projection.state(), snapshot);
+										projection.state(), snapshot, deliveryState);
 					}
 					if (deliver) {
 						McpOutboundChannel.OfferResult result;
@@ -7947,8 +7953,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
 							synchronized (lock) {
 								if (taskNotificationProjectionActiveWhileLocked(
-										projection))
-									projection.state().lastDeliveredSnapshot = snapshot;
+										projection)) {
+									projection.state().terminalDelivered = terminalSnapshot;
+									projection.state().lastDelivery = deliveryState;
+								}
 							}
 						} else if (result == McpOutboundChannel.OfferResult.FULL
 								|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
@@ -7987,16 +7995,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private boolean shouldDeliverTaskSnapshot(
 				@NonNull TaskNotificationProjectionState state,
-				@NonNull TaskSnapshot snapshot) {
-			TaskSnapshot lastSnapshot = state.lastDeliveredSnapshot;
-			if (lastSnapshot == null)
-				return true;
-			if (terminalTaskStatus(lastSnapshot.task().getTaskStatus()))
+				@NonNull TaskSnapshot snapshot,
+				@Nullable TaskNotificationDeliveryState deliveryState) {
+			if (state.terminalDelivered)
 				return false;
-			if (lastSnapshot.equals(snapshot))
+			TaskNotificationDeliveryState lastDelivery = state.lastDelivery;
+			if (lastDelivery == null)
+				return true;
+			if (lastDelivery.equals(deliveryState))
 				return false;
 			if (snapshot.task().getLastUpdatedAt().isBefore(
-					lastSnapshot.task().getLastUpdatedAt()))
+					lastDelivery.lastUpdatedAt()))
 				return false;
 			return true;
 		}
@@ -8140,6 +8149,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return;
 				streamAbortOwned = true;
 				subscriptionOwned = false;
+				taskNotificationProjectionQueue.reset();
 				pendingSubscriptionStreamFailure = new SubscriptionStreamFailure(
 						stream, reason, cause);
 				scheduled = true;
@@ -8174,6 +8184,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								|| responseStream == null)
 							return;
 						subscriptionOwned = false;
+						taskNotificationProjectionQueue.reset();
 						plannedSubscriptionCloseReason = closeReason;
 						streamTerminalResponseOwned = true;
 						stream = responseStream;
@@ -8279,6 +8290,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				throw new IllegalStateException(
 						"The request-control lock is required to mark a terminal request.");
 			terminal = true;
+			taskNotificationProjectionQueue.reset();
 			if (!requestObservationReserved && !requestRejectionRecorded) {
 				requestRejectionRecorded = true;
 				McpHttpServerRuntime.this.applicationExecutionObserver
@@ -9862,7 +9874,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				boolean ownerActive) {
 			TaskNotificationProjection requiredProjection =
 					requireNonNull(projection);
-			if (!ownerActive || !owns(requiredProjection)) {
+			// An old worker can finish after reset. It must not clear newer state.
+			if (!owns(requiredProjection))
+				return false;
+			if (!ownerActive) {
 				reset();
 				return false;
 			}
@@ -9881,8 +9896,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		void reset() {
-			for (TaskNotificationProjectionState state : this.states.values())
+			for (TaskNotificationProjectionState state : this.states.values()) {
 				state.pending = false;
+				state.lastDelivery = null;
+				state.terminalDelivered = false;
+			}
+			this.states.clear();
 			this.pendingTaskIds.clear();
 			this.active = null;
 			this.jobOutstanding = false;
@@ -9933,7 +9952,39 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final class TaskNotificationProjectionState {
 		private long requestedGeneration;
 		private boolean pending;
-		private @Nullable TaskSnapshot lastDeliveredSnapshot;
+		private boolean terminalDelivered;
+		private @Nullable TaskNotificationDeliveryState lastDelivery;
+	}
+
+	/**
+	 * Structural comparison of a delivered nonterminal status notification. The
+	 * task ID is already the queue key; its persisted, non-wire origin is not a
+	 * status update and must never be retained here. Completed/failed/canceled
+	 * tasks instead keep only the absorbing terminal marker, not their output.
+	 *
+	 * <p>This is deliberately not a timestamp or hash comparison: same-timestamp
+	 * changes and structurally equal maps must keep their delivery semantics.
+	 * Input requests, metadata, and status messages remain variable-size. State
+	 * is installed only after the stream accepts its output-bounded notification,
+	 * with at most one such value per accepted task ID (at most 256); it does not
+	 * keep the private origin or another copy of the encoded notification.
+	 */
+	private record TaskNotificationDeliveryState(@NonNull McpTaskStatus status,
+			@NonNull Optional<@NonNull String> statusMessage,
+			@NonNull Instant createdAt, @NonNull Instant lastUpdatedAt,
+			@NonNull Optional<@NonNull Duration> timeToLive,
+			@NonNull Optional<@NonNull Duration> pollInterval,
+			@NonNull Map<@NonNull String, @NonNull McpInputRequest> inputRequests,
+			com.soklet.@NonNull McpJsonObject metadata) {
+		@NonNull
+		private static TaskNotificationDeliveryState from(
+				@NonNull TaskSnapshot snapshot) {
+			com.soklet.McpTask task = requireNonNull(snapshot).task();
+			return new TaskNotificationDeliveryState(task.getTaskStatus(),
+					task.getTaskStatusMessage(), task.getCreatedAt(),
+					task.getLastUpdatedAt(), task.getTimeToLive(),
+					task.getPollInterval(), task.getInputRequests(), task.getMetadata());
+		}
 	}
 
 	private record SubscriptionSourceGroup(

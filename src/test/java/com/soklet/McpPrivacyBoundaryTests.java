@@ -385,7 +385,7 @@ class McpPrivacyBoundaryTests {
 
 	private static void bind(SokletConfig config, Request request) {
 		ResourceMethod resourceMethod = config.getResourceMethodResolver()
-				.resourceMethodForRequest(request, ServerType.STANDARD_HTTP)
+				.resourceMethodForRequest(request, ServerType.HTTP)
 				.orElseThrow();
 		config.getResourceMethodParameterProvider()
 				.parameterValuesForResourceMethod(request, resourceMethod);

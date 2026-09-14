@@ -118,7 +118,8 @@ final class LifecycleObservers {
 		if (firstThrowable == null)
 			return throwable;
 
-		firstThrowable.addSuppressed(throwable);
+		if (firstThrowable != throwable)
+			firstThrowable.addSuppressed(throwable);
 		return firstThrowable;
 	}
 }

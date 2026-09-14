@@ -86,21 +86,74 @@ Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTAR
 </dependency>
 ```
 
+Also configure annotation processing in your POM's `build/plugins` section.
+This generates HTTP/SSE routes and MCP endpoint descriptors; declaring only
+the dependency is not sufficient on JDK 23 and later:
+
+```xml
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-compiler-plugin</artifactId>
+  <version>3.14.0</version>
+  <configuration>
+    <parameters>true</parameters>
+    <annotationProcessorPaths>
+      <path>
+        <groupId>com.soklet</groupId>
+        <artifactId>soklet</artifactId>
+        <version>4.0.0</version>
+      </path>
+    </annotationProcessorPaths>
+    <annotationProcessors>
+      <annotationProcessor>com.soklet.SokletProcessor</annotationProcessor>
+    </annotationProcessors>
+  </configuration>
+</plugin>
+```
+
+Merge this configuration with your existing compiler-plugin configuration.
+The explicit processor path replaces compile-classpath discovery, and the named
+processor list selects which processors run. Preserve every other processor
+your build needs (such as Lombok or MapStruct) by keeping its artifact in
+`annotationProcessorPaths` and its processor class name in `annotationProcessors`
+alongside Soklet.
+
 #### Gradle
 
 ```groovy
+plugins {
+  id 'java'
+}
+
 repositories {
   mavenCentral()
 }
 
 dependencies {
   implementation 'com.soklet:soklet:4.0.0'
+  annotationProcessor 'com.soklet:soklet:4.0.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.compilerArgs += ['-parameters']
 }
 ```
+
+Gradle discovers processors through `annotationProcessor`, not `implementation`.
+If test sources declare annotated routes or endpoints, also configure
+`testAnnotationProcessor 'com.soklet:soklet:4.0.0'`. Preserve generated classes
+and `META-INF/soklet` indexes when shading or repackaging either build.
 
 #### Direct Download
 
 If you don't use Maven or Gradle, you can drop [soklet-4.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/4.0.0/soklet-4.0.0.jar) directly into your project. No other dependencies are required.
+
+The class files retain compile-time annotation references. Static tools such as
+`jdeps` may need those annotation JARs on their analysis classpath, or
+`jdeps --ignore-missing-deps` after verifying that only those annotation types
+are missing. That option is not a `jlink` option; the automatic module name
+does not make the Soklet JAR directly linkable. See the
+[dependency audit](release/THIRD_PARTY_AUDIT.md) for the scope of this distinction.
 
 ### Code Sample
 
@@ -595,9 +648,13 @@ Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com
 [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html). Each server owns
 its listener and port; MCP is never mounted inside the standard HTTP or SSE
 server.
-These builders let you configure host, read/write/handler timeouts, handler concurrency/queueing, request size limits, request decompression, and connection caps; you
-can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html) and
-[`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
+These builders expose transport-specific host, timeout, concurrency, request-size,
+and connection controls. The HTTP and SSE builders also accept custom
+[`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html) and
+[`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances;
+the MCP builder does not. MCP uses the default generator for its underlying HTTP
+`Request` ID. Its JSON-RPC request ID and privacy-preserving trace-correlation
+tokens are separate concepts, not overrides of that HTTP identity.
 Standard HTTP request-body decompression is disabled by default; enable [`HttpServer.Builder::requestDecompressionPolicy`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#requestDecompressionPolicy(com.soklet.RequestDecompressionPolicy)>) with [`RequestDecompressionPolicy::fromDefaults`](<https://javadoc.soklet.com/com/soklet/RequestDecompressionPolicy.html#fromDefaults()>) or a custom policy to accept single-coding `Content-Encoding: gzip`/`x-gzip` request bodies with decompression-bomb limits. Handlers receive the decompressed bytes through [`Request::getBody`](<https://javadoc.soklet.com/com/soklet/Request.html#getBody()>), while [`Request::getEncodedBodySizeInBytes`](<https://javadoc.soklet.com/com/soklet/Request.html#getEncodedBodySizeInBytes()>) retains the pre-decompression payload size for telemetry.
 Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the
 [Server Configuration](https://www.soklet.com/docs/server-configuration) docs for the full option matrix.
@@ -2834,9 +2891,40 @@ leaving the metric/snapshot/canary inventories unchanged.
 Those Vxx counts remain historical. The current MCP API inventory is 134/36/64
 frozen Phase 4/5/6 owners plus 14 provisional Tasks owners (248 MCP total); the
 51 reviewed non-MCP owners bring the current-side inventory to 299. The three
-numbered phases remain frozen, while the Tasks surface is not yet frozen. The
-release-validation workflow and fail-closed evidence assembler are implemented,
-but no immutable candidate run is claimed. The last full pre-typed-state local
+numbered phases remain frozen. The Tasks owners retain provisional maturity,
+but their 4.0.0 signatures are also frozen through the dedicated
+`provisional.signatures.jsonl` gate.
+
+##### Current release status — September 13, 2026
+
+The format-v2 manifest has 26 ordered gates: nineteen are `READY`, six remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and `candidate-conformance` is
+`BLOCKED_TOOLCHAIN_SECURITY_REVIEW`. No gate remains `BLOCKED_HARNESS_MISSING`.
+`READY` means an executable validation path is configured, not that the gate
+has passed for an immutable candidate. The external conformance toolchain's
+[security-risk disposition](conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md)
+remains open; local conformance success does not waive that blocker.
+
+The current pinned `0.2.0-alpha.11-descriptive` official suite covers 49 reviewed
+profiles (39 existing plus ten Tasks profiles). Its September 13 local
+development run produced 192 `SUCCESS`, three `SKIPPED`, and one `INFO`
+outcome. Only one of those three skips is Tasks-specific. Eight independent
+Soklet candidate-JAR socket notification checks also passed; these supplement
+the upstream Tasks notification skip and are not counted as upstream passes.
+Both servlet adapters are on the 2.0.0 line requiring Soklet 4.0.0. Their
+default-property and explicit-override validation legs both resolve the same
+exact 4.0.0 candidate, not a separate 3.x compatibility artifact.
+
+These are local development results and configured release requirements, not
+immutable-candidate acceptance or permission to publish. All required gates
+must produce candidate-bound PASS receipts before release. See
+[release/README.md](release/README.md) for the current fail-closed contract.
+
+##### Historical development checkpoints
+
+The following results describe earlier source trees and harness configurations;
+their counts and then-current statuses are preserved, not claims about today's
+candidate or supported adapter versions. The last full pre-typed-state local
 evidence was green at core
 clean verify 1,671/0/0/4 over 464 main and 193 test sources, JDK 21 static-
 analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, fuzz replay 139/139, and smoke
@@ -2858,16 +2946,17 @@ passes 3/3 and its related
 localization regression set passes 24/24. The preceding Corretto 17 clean-test
 run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
 and localization-fleet runtime test sources were added, so it remains prior
-supported-JDK evidence rather than a current 196-source result. Other carried-
-forward local evidence remains green for
+supported-JDK evidence rather than a current 196-source result. Other local
+evidence carried forward at that checkpoint was green for
 candidate localization, artifact-backed simulator 39/39, pinned live official
 CLI 39/39, the website's offline clean-install, lint, and 33-route SSG build,
-and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and
-green against the local snapshot. The six reviewed downstream change sets
-remain uncommitted local work. They are therefore unpublished and unpinned, so
-the manifest continues to carry its old public commits. All four servlet legs
-pass 158/158 locally: the default 3.1.1 and 4.0.0 legs for both javax
-and Jakarta. ToyStore's local 4.0 MCP migration passes 14/14, including six MCP
+and OpenTelemetry 36/36. TypeScript and Go were checksum-pinned, `READY`, and
+green against that local snapshot. The six reviewed downstream change sets
+were uncommitted local work and therefore unpublished and unpinned, so
+the manifest carried its old public commits. All four then-configured servlet
+legs passed 158/158 locally: the default 3.1.1 and 4.0.0 legs for both javax
+and Jakarta. This is historical 3.x evidence, not the current adapter contract.
+ToyStore's local 4.0 MCP migration passed 14/14, including six MCP
 tests. Its per-request credential proof accepts a valid request, then returns 401 for malformed,
 missing, expired, and wrong-audience credentials and 403 for an
 insufficient-scope credential; no prior request identity or authorization is
@@ -2885,10 +2974,11 @@ analysis reports `BUILD SUCCESS` with
 the existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The checksum-pinned Corretto 21.0.12.9.1
 toolchain now drives the `core-jdk-21`, `static-analysis`, and `spotbugs`
-release gates. The format-v2 release contract now enumerates exactly 26
-ordered gates. Twenty are dispatch-configured with executable `READY`
-paths, and none remain `BLOCKED_HARNESS_MISSING`; the six downstreams remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers.
+release gates. At that earlier release-harness checkpoint, the format-v2
+contract enumerated exactly 26 ordered gates. Twenty had executable `READY`
+paths, none remained `BLOCKED_HARNESS_MISSING`, and the six downstreams were
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. That historical configuration predates
+the additional toolchain-security blocker recorded in the current status above.
 `READY` means configured, never passed. The matrix-closure hook is `READY`, and
 the candidate-contained registry and residual evidence produce a canonical
 `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12

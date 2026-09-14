@@ -15,6 +15,7 @@ import {
   LifecycleBoundHarnessInventoryError,
   soakProfiles,
   standardJunitGuard,
+  taskNotificationSupplementGuard,
   verifyLifecycleBoundHarnessInventory,
   verifyLifecycleHostWiring,
   verifyNoSurvivingLegacySites,
@@ -94,6 +95,38 @@ run('positive production closure', () => {
   const result = verifyLifecycleBoundHarnessInventory({ root: ROOT });
   assert.equal(result.lifecycleScopes, INVENTORY.lifecycleScopes.length);
   assert.ok(result.discoveryCandidates > 4_000);
+});
+
+run('Tasks notification supplement has an invoked process-tree guard', () => {
+  const guard = taskNotificationSupplementGuard(sourceTexts('conformance/official/run.mjs'));
+  assert.equal(guard.millis, 120_000);
+  assert.equal(guard.cleanupFallbackMillis, 13_000);
+  assert.equal(guard.consumerCount, 1);
+});
+
+run('Tasks notification process guard cannot be missing, weakened, unused, or unsupervised', () => {
+  const path = 'conformance/official/run.mjs';
+  const source = readFileSync(join(ROOT, path), 'utf8');
+  for (const [before, after] of [
+    ['timeoutMilliseconds: 120_000, workingDirectory: options.projectRoot, supervisor',
+      'workingDirectory: options.projectRoot, supervisor'],
+    ['timeoutMilliseconds: 120_000, workingDirectory: options.projectRoot, supervisor',
+      'timeoutMilliseconds: 119_999, workingDirectory: options.projectRoot, supervisor'],
+    ['timeoutMilliseconds: 120_000, workingDirectory: options.projectRoot, supervisor',
+      'timeoutMilliseconds: 120_000, workingDirectory: options.projectRoot'],
+    ['await runTaskNotificationSupplement(', 'await skippedTaskNotificationSupplement('],
+    ['const result = await runBoundedCommand(options.javaExecutable, [',
+      'const result = await unboundedCommand(options.javaExecutable, ['],
+    ['supervisor.waitForClose(child, timeoutMilliseconds + 5_000)',
+      'supervisor.waitForClose(child, timeoutMilliseconds + 6_000)'],
+    ['constructor({ terminationGraceMilliseconds = 2_000 } = {})',
+      'constructor({ terminationGraceMilliseconds = 3_000 } = {})'],
+  ]) {
+    assert.ok(source.includes(before));
+    expectFailure(() => taskNotificationSupplementGuard(new Map([
+      [path, source.replace(before, after)],
+    ])), /Tasks notification/u);
+  }
 });
 
 run('unresolved lifecycle row rejected', () => {

@@ -29,6 +29,8 @@ import {
   verifyExplicitReleaseCandidate,
   verifyPublicFixtureClasspath,
   verifyReleaseCandidateManifest,
+  taskNotificationSupplementChecks,
+  verifyTaskNotificationSupplementResult,
 } from './run.mjs';
 import { sha256 } from './verify.mjs';
 
@@ -62,6 +64,7 @@ publicFixtureClasspathRequiresExactCandidateBoundary();
 releaseCandidateProvenanceIsFailClosed();
 resultTreeTraversalIsBounded();
 observationDraftPreservesCompleteMultisetsAndSkipReasons();
+taskNotificationSupplementIsFailClosed();
 await supervisorCancelsEveryChildAndRejectsLaterSpawns();
 if (process.platform !== 'win32') await supervisorCancelsOrdinaryDescendants();
 await failedSpawnDoesNotWaitForTerminationTimeouts();
@@ -70,6 +73,22 @@ await earlyFailureWritesDurableEvidence();
 await incompleteReleaseEvidenceStaysFalse();
 
 console.log('Official MCP conformance runner self-test passed.');
+
+function taskNotificationSupplementIsFailClosed() {
+  const valid = { status: 0, signal: null, timedOut: false, outputFailure: null,
+    stderr: '', stdout: taskNotificationSupplementChecks.map((name) => `PASS\t${name}\n`).join('') };
+  assert.deepEqual(verifyTaskNotificationSupplementResult(valid), {
+    passed: true, checks: [...taskNotificationSupplementChecks],
+  });
+  for (const mutation of [
+    { status: 1 }, { signal: 'SIGTERM' }, { timedOut: true },
+    { outputFailure: 'too much output' }, { stderr: 'warning' },
+    { stdout: valid.stdout.replace(/^.*\n/, '') },
+    { stdout: `${valid.stdout}PASS\textra\n` },
+    { stdout: valid.stdout.replace('PASS', 'SKIPPED') },
+  ]) assert.throws(() => verifyTaskNotificationSupplementResult({ ...valid, ...mutation }),
+    /exact bounded-output contract/);
+}
 
 async function boundedLineReaderStopsRetainingAfterOverflow() {
   const stream = new PassThrough();

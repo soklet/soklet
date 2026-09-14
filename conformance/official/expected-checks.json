@@ -1,18 +1,23 @@
 {
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
-  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
-  "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication.",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+  "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication. The 2026-09-13 alpha.11 repin re-observed all 49 selected profiles; an accepted SKIPPED profile is not exercised coverage.",
   "deferredProfilePolicy": "No Soklet 4.0.0 RUN row remains deferred after atomic Phase 5 activation. Null is retained only for the NOT_APPLICABLE completion-complete row and never means accept anything.",
   "profiles": [
     {
-      "id": "tools-list.phase4.v1",
+      "id": "tools-list.phase4.v2",
       "scenario": "tools-list",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-list",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tools-list-deterministic-order",
           "status": "SUCCESS",
           "count": 1
         },
@@ -32,7 +37,7 @@
       "id": "tools-call-simple-text.phase4.v1",
       "scenario": "tools-call-simple-text",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-simple-text",
@@ -50,7 +55,7 @@
       "id": "tools-call-image.phase4.v1",
       "scenario": "tools-call-image",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-image",
@@ -68,7 +73,7 @@
       "id": "tools-call-audio.phase4.v1",
       "scenario": "tools-call-audio",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-audio",
@@ -86,7 +91,7 @@
       "id": "tools-call-embedded-resource.phase4.v1",
       "scenario": "tools-call-embedded-resource",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-embedded-resource",
@@ -104,7 +109,7 @@
       "id": "tools-call-mixed-content.phase4.v1",
       "scenario": "tools-call-mixed-content",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-mixed-content",
@@ -122,7 +127,7 @@
       "id": "tools-call-error.phase4.v1",
       "scenario": "tools-call-error",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-error",
@@ -140,7 +145,7 @@
       "id": "json-schema-2020-12.phase4.v1",
       "scenario": "json-schema-2020-12",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "json-schema-2020-12-$defs",
@@ -188,7 +193,7 @@
       "id": "server-sse-multiple-streams.phase4.v1",
       "scenario": "server-sse-multiple-streams",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "server-accepts-multiple-post-streams",
@@ -211,7 +216,7 @@
       "id": "resources-list.phase4.v1",
       "scenario": "resources-list",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "resources-list",
@@ -229,7 +234,7 @@
       "id": "resources-read-text.phase4.v1",
       "scenario": "resources-read-text",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "resources-read-text",
@@ -247,7 +252,7 @@
       "id": "resources-read-binary.phase4.v1",
       "scenario": "resources-read-binary",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "resources-read-binary",
@@ -265,7 +270,7 @@
       "id": "resources-templates-read.phase4.v1",
       "scenario": "resources-templates-read",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "resources-templates-read",
@@ -283,7 +288,7 @@
       "id": "sep-2164-resource-not-found.phase4.v1",
       "scenario": "sep-2164-resource-not-found",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2164-data-uri",
@@ -311,7 +316,7 @@
       "id": "prompts-list.phase4.v1",
       "scenario": "prompts-list",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "prompts-list",
@@ -329,7 +334,7 @@
       "id": "prompts-get-simple.phase4.v1",
       "scenario": "prompts-get-simple",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "prompts-get-simple",
@@ -347,7 +352,7 @@
       "id": "prompts-get-with-args.phase4.v1",
       "scenario": "prompts-get-with-args",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "prompts-get-with-args",
@@ -365,7 +370,7 @@
       "id": "prompts-get-embedded-resource.phase4.v1",
       "scenario": "prompts-get-embedded-resource",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "prompts-get-embedded-resource",
@@ -383,7 +388,7 @@
       "id": "prompts-get-with-image.phase4.v1",
       "scenario": "prompts-get-with-image",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "prompts-get-with-image",
@@ -401,7 +406,7 @@
       "id": "dns-rebinding-protection.phase3.v1",
       "scenario": "dns-rebinding-protection",
       "frozenInPhase": 3,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "localhost-host-rebinding-rejected",
@@ -424,7 +429,7 @@
       "id": "caching.phase4.v1",
       "scenario": "caching",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2549-cache-scope-valid",
@@ -472,7 +477,7 @@
       "id": "http-header-validation.phase4.v1",
       "scenario": "http-header-validation",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2243-header-name-case-insensitive",
@@ -505,7 +510,7 @@
       "id": "http-custom-header-server-validation.phase4.v1",
       "scenario": "http-custom-header-server-validation",
       "frozenInPhase": 4,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2243-server-decode-base64",
@@ -538,7 +543,7 @@
       "id": "server-stateless.phase5.v1",
       "scenario": "server-stateless",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2575-discover-capabilities-match-handlers",
@@ -693,7 +698,7 @@
       "id": "tools-call-with-progress.phase5.v1",
       "scenario": "tools-call-with-progress",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "tools-call-with-progress",
@@ -711,7 +716,7 @@
       "id": "input-required-result-basic-elicitation.phase5.v1",
       "scenario": "input-required-result-basic-elicitation",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-elicitation-complete",
@@ -734,7 +739,7 @@
       "id": "input-required-result-basic-sampling.phase5.v1",
       "scenario": "input-required-result-basic-sampling",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-sampling-complete",
@@ -757,7 +762,7 @@
       "id": "input-required-result-basic-list-roots.phase5.v1",
       "scenario": "input-required-result-basic-list-roots",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-list-roots-complete",
@@ -780,7 +785,7 @@
       "id": "input-required-result-request-state.phase5.v1",
       "scenario": "input-required-result-request-state",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-request-state-complete",
@@ -803,7 +808,7 @@
       "id": "input-required-result-multiple-input-requests.phase5.v1",
       "scenario": "input-required-result-multiple-input-requests",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-multiple-inputs-complete",
@@ -826,7 +831,7 @@
       "id": "input-required-result-multi-round.phase5.v1",
       "scenario": "input-required-result-multi-round",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-multi-round-r1",
@@ -854,7 +859,7 @@
       "id": "input-required-result-missing-input-response.phase5.v1",
       "scenario": "input-required-result-missing-input-response",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-missing-response-rerequests",
@@ -872,7 +877,7 @@
       "id": "input-required-result-non-tool-request.phase5.v1",
       "scenario": "input-required-result-non-tool-request",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-non-tool-complete",
@@ -895,7 +900,7 @@
       "id": "input-required-result-result-type.phase5.v1",
       "scenario": "input-required-result-result-type",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-result-type-included",
@@ -913,7 +918,7 @@
       "id": "input-required-result-unsupported-methods.phase5.v1",
       "scenario": "input-required-result-unsupported-methods",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-not-on-unsupported-requests",
@@ -931,7 +936,7 @@
       "id": "input-required-result-tampered-state.phase5.v1",
       "scenario": "input-required-result-tampered-state",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-reject-tampered-state",
@@ -949,7 +954,7 @@
       "id": "input-required-result-capability-check.phase5.v1",
       "scenario": "input-required-result-capability-check",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-respect-client-capabilities",
@@ -967,7 +972,7 @@
       "id": "input-required-result-ignore-extra-params.phase5.v1",
       "scenario": "input-required-result-ignore-extra-params",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-ignore-unexpected-params",
@@ -985,7 +990,7 @@
       "id": "input-required-result-validate-input.phase5.v1",
       "scenario": "input-required-result-validate-input",
       "frozenInPhase": 5,
-      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "checks": [
         {
           "id": "sep-2322-error-on-protocol-error",
@@ -1002,6 +1007,317 @@
         "wire-schema-valid": 1,
         "wire-schema-harness-error": 0,
         "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tasks-lifecycle.phase5.v1",
+      "scenario": "tasks-lifecycle",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-cancel-ack-empty-result",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-result-type-task-on-create",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-get-status-completed",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-get-status-failed",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-get-status-working",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tool-error-uses-completed-status",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-cancel-terminal-idempotent-ack",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-sync-tool-call",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-capability-negotiation.phase5.v1",
+      "scenario": "tasks-capability-negotiation",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-server-rejects-undeclared-client",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-methods-non-declaring",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-extension-advertised",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-per-request-meta-opt-in",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-wire-fields.phase5.v1",
+      "scenario": "tasks-wire-fields",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "tasks-no-early-ttl-expiry",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-no-related-task-meta-on-inlined-result",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-wire-field-renames",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-request-state-removal.phase5.v1",
+      "scenario": "tasks-request-state-removal",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "tasks-create-result-no-request-state",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-get-detailed-no-request-state",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-mrtr-input.phase5.v1",
+      "scenario": "tasks-mrtr-input",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-tasks-get-status-input-required",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-mrtr-partial-fulfillment",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-mrtr-tasks-update-resumes",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-request-headers.phase5.v1",
+      "scenario": "tasks-request-headers",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-routing-headers-accepted-on-tasks-get",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-server-rejects-mismatched-mcp-name-on-tasks-get",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-headers-reject-mismatched-method",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-headers-tolerate-mcp-method-on-tools-call",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-dispatch-and-envelope.phase5.v1",
+      "scenario": "tasks-dispatch-and-envelope",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-durable-create-strong-consistency",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-legacy-task-param-ignored",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-get-invalid-task-id-32602",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-tasks-result-removed-method-not-found",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-immediate-result-shortcut",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-removed-tasks-list",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-result-type-complete-on-non-task-responses",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tasks-server-directed-creation-no-hint",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-status-notifications.phase5.v1",
+      "scenario": "tasks-status-notifications",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "tasks-status-notifications",
+          "status": "SKIPPED",
+          "count": 1,
+          "reason": "Skipped: SEP-2663 delivers notifications/tasks via the SEP-2575 subscriptions/listen stream, not via the tools/call POST SSE response that the prior harness observed. The harness needs a rewrite against the new channel; tracked as a follow-up."
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 0,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13: upstream explicitly skips this scenario pending a subscriptions/listen harness rewrite, so zero wire checks are expected; independent Tasks notification socket tests are required supplements."
+      }
+    },
+    {
+      "id": "tasks-required-task-error.phase5.v1",
+      "scenario": "tasks-required-task-error",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-server-returns-missing-capability-data-shape",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2663-server-returns-missing-capability-when-required",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
+      }
+    },
+    {
+      "id": "tasks-mrtr-composition.phase5.v1",
+      "scenario": "tasks-mrtr-composition",
+      "frozenInPhase": 5,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "sep-2663-mrtr-synchronous-before-task-creation",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "Reviewed 2026-09-13 against the exact alpha.11 CLI: one automatic wire-schema success and zero harness errors, alongside the exact successful ordinary check multiset."
       }
     }
   ]

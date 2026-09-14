@@ -37,6 +37,15 @@ public class MetricsCollectorReleaseRegressionTests {
 	private static final String JSON_RPC_METHOD = "tools/call";
 
 	@Test
+	public void serverTypesUseHttpAndSseNames() {
+		Assertions.assertArrayEquals(new ServerType[]{ServerType.HTTP, ServerType.SSE},
+				ServerType.values());
+		Assertions.assertSame(ServerType.HTTP, ServerType.valueOf("HTTP"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> ServerType.valueOf("STANDARD_HTTP"));
+	}
+
+	@Test
 	public void overlappingRequestsWithSameIdRemainIndependent() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		Object sharedId = "non-unique-request-id";
@@ -57,29 +66,29 @@ public class MetricsCollectorReleaseRegressionTests {
 				.body(new byte[]{2, 3})
 				.build();
 
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didStartRequestHandling(ServerType.HTTP,
 				widgetsRequest, widgetsResource);
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didStartRequestHandling(ServerType.HTTP,
 				reportsRequest, reportsResource);
 		Assertions.assertEquals(2L, collector.getActiveRequests());
 		Assertions.assertEquals(2L, collector.getRequestsInFlightByIdentityCount());
 		Assertions.assertEquals(2L, collector.getRequestsInFlightByIdCount());
 
-		collector.willWriteResponse(ServerType.STANDARD_HTTP,
+		collector.willWriteResponse(ServerType.HTTP,
 				reportsRequest, reportsResource, reportsResponse);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				reportsRequest, reportsResource, reportsResponse,
 				Duration.ofMillis(7), List.of());
 		// Once a collision has occurred, an ID-only fallback remains ambiguous
 		// until every overlapping request is gone. A duplicate terminal callback
 		// for one request must not finish the remaining request.
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				reportsRequest, reportsResource, reportsResponse,
 				Duration.ofMillis(11), List.of());
 		Assertions.assertEquals(1L, collector.getActiveRequests());
-		collector.willWriteResponse(ServerType.STANDARD_HTTP,
+		collector.willWriteResponse(ServerType.HTTP,
 				widgetsRequest, widgetsResource, widgetsResponse);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				widgetsRequest, widgetsResource, widgetsResponse,
 				Duration.ofMillis(3), List.of());
 
@@ -112,7 +121,7 @@ public class MetricsCollectorReleaseRegressionTests {
 				"/widgets/{id}", HttpMethod.GET, "widget", false);
 		Request httpRequest = Request.withPath(HttpMethod.GET, "/widgets/1").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200).build();
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didStartRequestHandling(ServerType.HTTP,
 				httpRequest, httpResource);
 
 		ResourceMethod sseResource = resourceMethodFor(
@@ -130,12 +139,12 @@ public class MetricsCollectorReleaseRegressionTests {
 		Assertions.assertEquals(1L, collector.getRequestsInFlightByIdCount());
 
 		// Both calls require the identity state that reset previously discarded.
-		collector.willWriteResponse(ServerType.STANDARD_HTTP,
+		collector.willWriteResponse(ServerType.HTTP,
 				httpRequest, httpResource, response);
 		collector.willWriteSseEvent(connection,
 				SseEvent.withData("first").build());
 
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				httpRequest, httpResource, response, Duration.ofNanos(-1L), List.of());
 		StreamTermination termination = StreamTermination.with(
 				StreamTerminationReason.CLIENT_DISCONNECTED, Duration.ofSeconds(1L))
@@ -168,7 +177,7 @@ public class MetricsCollectorReleaseRegressionTests {
 				.values().iterator().next().getCount());
 
 		// Duplicate terminal callbacks neither underflow gauges nor duplicate samples.
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				httpRequest, httpResource, response, Duration.ZERO, List.of());
 		collector.didTerminateSseConnection(connection, termination);
 		MetricsCollector.Snapshot duplicate = collector.snapshot().orElseThrow();
@@ -186,7 +195,7 @@ public class MetricsCollectorReleaseRegressionTests {
 		Request request = Request.withPath(HttpMethod.GET, "/widgets/1").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(500).build();
 
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				request, resourceMethod, response, Duration.ofSeconds(1L), List.of());
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
@@ -259,12 +268,12 @@ public class MetricsCollectorReleaseRegressionTests {
 				"/widgets/{id}", HttpMethod.GET, "widget", false);
 		Request request = Request.withPath(HttpMethod.GET, "/widgets/1").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200).build();
-		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
-		collector.didRecordTransportFailure(ServerType.STANDARD_HTTP,
+		collector.didAcceptConnection(ServerType.HTTP, null);
+		collector.didRecordTransportFailure(ServerType.HTTP,
 				MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
-		collector.didStartRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didStartRequestHandling(ServerType.HTTP,
 				request, resourceMethod);
-		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP,
+		collector.didFinishRequestHandling(ServerType.HTTP,
 				request, resourceMethod, response, Duration.ZERO, List.of());
 		collector.reset();
 
@@ -277,8 +286,8 @@ public class MetricsCollectorReleaseRegressionTests {
 				"soklet_http_request_duration_nanos_bucket{method=\"GET\",route=\"/widgets/{id}\",status_class=\"2xx\",le=\"+Inf\"} 0"),
 				prometheus);
 
-		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
-		collector.didRecordTransportFailure(ServerType.STANDARD_HTTP,
+		collector.didAcceptConnection(ServerType.HTTP, null);
+		collector.didRecordTransportFailure(ServerType.HTTP,
 				MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
 		String openMetrics = collector.snapshotText(
 				MetricsCollector.SnapshotTextOptions

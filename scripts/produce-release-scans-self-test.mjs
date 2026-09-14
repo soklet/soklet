@@ -403,6 +403,14 @@ try {
   assert.match(runner, new RegExp(approved.policy.spotbugs.exclusionFileSha256, 'u'));
   const spotbugsExecutionIndex = runner.indexOf('-Pspotbugs compile spotbugs:check');
   assert.notEqual(spotbugsExecutionIndex, -1);
+  assert.match(runner, /\[\[ "\$build_jdk" == 17 \]\]/u);
+  const artifactCaptureIndex = runner.indexOf('candidate_jar_sha256=$(sha256sum');
+  const artifactRecheckIndex = runner.indexOf('"$candidate_jar_sha256" "$candidate_jar"');
+  assert.ok(artifactCaptureIndex > 0 && artifactCaptureIndex < spotbugsExecutionIndex);
+  assert.ok(artifactRecheckIndex > spotbugsExecutionIndex
+    && artifactRecheckIndex < runner.indexOf('node "$candidate_root/scripts/produce-release-scans.mjs"'));
+  assert.match(runner, /env JAVA_HOME="\$SOKLET_RELEASE_CORE_JDK_21_HOME"/u);
+  assertions += 4;
   for (const [label, digest] of [
     ['SpotBugs Maven plugin', approved.policy.spotbugs.mavenPluginJarSha256],
     ['SpotBugs engine', approved.policy.spotbugs.engineJarSha256],
@@ -447,6 +455,12 @@ try {
     'release-scans',
   );
   const releaseScanJob = workflowJob(releaseWorkflow, 'release-scans', 'mcp-benchmarks');
+  const canonicalPackagingIndex = releaseScanJob.indexOf('java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"');
+  const candidateBuildIndex = releaseScanJob.indexOf('mvn -B -ntp -Dgpg.skip=true -DskipTests clean package');
+  assert.ok(canonicalPackagingIndex > 0 && candidateBuildIndex > canonicalPackagingIndex,
+    'release scans must install canonical JDK 17 before packaging the candidate');
+  assert.match(releaseScanJob, /release-scans-build-java-distribution\.txt/u);
+  assertions += 2;
   assert.match(
     codeqlCallerJob,
     /release-scans-codeql:[\s\S]*?uses: \.\/\.github\/workflows\/codeql\.yml[\s\S]*?candidate_commit: \$\{\{ inputs\.candidate_commit \}\}/u,

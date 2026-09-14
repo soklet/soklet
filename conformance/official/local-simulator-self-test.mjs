@@ -16,7 +16,7 @@ assert.equal(rows[0].ordinal, 1);
 assert.equal(rows[0].name, 'server-stateless');
 assert.equal(rows[1].ordinal, 3);
 assert.equal(rows[1].name, 'tools-list');
-assert.equal(rows[38].ordinal, 40);
+assert.equal(rows[38].ordinal, 50);
 assert.equal(rows[38].name, 'input-required-result-validate-input');
 assert.deepEqual(localSimulatorDriverArguments(rows).slice(0, 3), [
   '1:server-stateless',
@@ -29,7 +29,7 @@ assert.equal(expected.toString('utf8').split('\n').length, 40);
 assert.equal(expected.toString('utf8').split('\n')[0],
   'PASS\t1\tserver-stateless');
 assert.equal(expected.toString('utf8').split('\n')[38],
-  'PASS\t40\tinput-required-result-validate-input');
+  'PASS\t50\tinput-required-result-validate-input');
 assert.deepEqual(verifyLocalSimulatorDriverResult({
   error: undefined,
   signal: null,

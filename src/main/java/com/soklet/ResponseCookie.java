@@ -364,7 +364,7 @@ public final class ResponseCookie {
 		long maxAge = getMaxAge().isPresent() ? getMaxAge().get().toSeconds() : -1;
 
 		if (maxAge >= 0)
-			components.add(format("Max-Age=%d", maxAge));
+			components.add("Max-Age=" + maxAge);
 
 		if (getExpires().isPresent())
 			components.add(format("Expires=%s", HttpDate.toHeaderValue(getExpires().get())));

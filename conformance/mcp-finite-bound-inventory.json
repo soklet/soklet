@@ -4,7 +4,8 @@
       "boundaryTests": [
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#directTransportDefaultsAndAggregateAccountingAreFrozen",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#request_body_limit_has_an_exact_body_only_boundary"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#request_body_limit_has_an_exact_body_only_boundary",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#contentLengthPreservesOverflowAndConfiguredLimitClassification"
       ],
       "category": "BODY",
       "deterministicFailure": {
@@ -23,7 +24,8 @@
       "positiveTests": [
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/McpServerPublicRuntimeTests.java#configuredRequestLimitReachesHttpAndJsonParsingLayers",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#discovery_works_as_the_first_request_and_preserves_id_types"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#discovery_works_as_the_first_request_and_preserves_id_types",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#contentLengthAcceptsDigitsLeadingZerosAndSurroundingOws"
       ],
       "sourceOwners": [
         {
@@ -261,15 +263,21 @@
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#parsedRangeCountAtThirtyTwoParsesAndThirtyThreeIsNotTruncated",
         "src/test/java/com/soklet/McpRequestPropagationTests.java#baggageParsingIsBoundedDecodedAndImmutable",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
+        "src/test/java/com/soklet/UnparsedRequestTransportTests.java#pipelinedFragmentedHeaderLimitRejectsOnlyTheOffendingRequest",
+        "src/test/java/com/soklet/UnparsedRequestTransportTests.java#pipelinedFragmentedTrailerLimitRejectsOnlyTheOffendingRequest",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java#custom_integer_accepts_the_safe_range_boundaries",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#headerCountAndEncodedByteLimitsHaveExactListenerBoundaries",
         "src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecTests.java#plain_values_enforce_ascii_whitespace_and_decoded_size_rules",
         "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateSelectedLocaleCodecTests.java#nonCanonicalRootOversizedAndNonAsciiTagsAreRejected",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateSelectedLocaleCodecTests.java#theMaximumTagIsExactlyTwoHundredFiftyFiveCanonicalBytes"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateSelectedLocaleCodecTests.java#theMaximumTagIsExactlyTwoHundredFiftyFiveCanonicalBytes",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#headerLimitIsIndependentOfEveryPipelinedReadSplit",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#headerLimitSurvivesRepeatedPipelinedCompactions",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#incompleteSectionsStayBoundedAfterCompaction",
+        "src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java#trailerLimitIsIndependentOfEveryPipelinedReadSplit"
       ],
       "category": "HEADER",
       "deterministicFailure": {
-        "contract": "HTTP request-header overflow fails with 431 before dispatch; admission-rejection response headers are independently capped at 100 fields and 65,536 encoded bytes by validatedPolicyHeaders and fail closed as an internal policy error before response construction; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention.",
+        "contract": "HTTP request-header overflow fails with 431 before dispatch; admission-rejection response headers are independently capped at 100 fields and 65,536 encoded bytes by validatedPolicyHeaders and fail closed as an internal policy error before response construction; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention. Request-header and chunk-trailer section accounting is request-relative across tokenizer compaction, including section terminators, and cannot be bypassed by pipelined read fragmentation.",
         "stage": "TRANSPORT_OR_HEADER_INPUT_VALIDATION"
       },
       "enforcementOwners": [
@@ -1495,13 +1503,15 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#oneOwnerJobCoalescesQueuedAndRunningTaskGenerations",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#oneSubscriberOverflowCannotRejectAnUnrelatedSubscriber",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#rejectionAndInactiveCompletionDrainOwnerState",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#resetReleasesTaskIdentitiesAndFencesOutstandingWorkers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#uniqueTaskIdsRetainFirstEventOrderInOneOwnerSlot",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#disconnectDuringActiveProjectionReleasesSubscriptionAndRecovers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#maximumTaskIdStormCoalescesWithoutClosingItsSubscription",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#moreThanMaximumUniqueTaskIdsFailsBeforeAdmissionOrLookup"
       ],
       "category": "QUEUE_STREAM",
       "deterministicFailure": {
-        "contract": "Full request queues return their fixed capacity outcome; each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome.",
+        "contract": "Full request queues return their fixed capacity outcome; each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all task state, and late workers cannot restore it or clear a replacement generation.",
         "stage": "APPLICATION_OR_STREAM_ADMISSION"
       },
       "enforcementOwners": [
@@ -1542,7 +1552,8 @@
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#slow_reader_applies_bounded_backpressure_without_blocking_other_requests",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#ownerContinuationReturnsToTailBehindAWaitingPeer",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#transientExecutorRejectionRetainsBoundedProjectionWorkForRetry"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#transientExecutorRejectionRetainsBoundedProjectionWorkForRetry",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#deliveryComparisonPreservesSameTimestampChangesAndStaleSuppression"
       ],
       "sourceOwners": [
         {
@@ -1730,7 +1741,7 @@
           "value": "256"
         },
         {
-          "accounting": "distinct task IDs in one subscription filter",
+          "accounting": "distinct task IDs in one subscription filter, each retaining at most one accepted-output-bounded nonterminal delivery comparison or terminal marker; private origins and completed results are excluded, and all comparison state is released on owner cleanup",
           "key": "queue.subscription-task-ids",
           "unit": "TASK_IDS",
           "value": "256"

@@ -266,7 +266,7 @@ public class McpTransportMetricsAggregationTests {
 	@Test
 	public void sharedTransportFamilyCombinesServerTypesWithSingleMetadataBlock() {
 		DefaultMetricsCollector collector = configuredCollector();
-		collector.didRecordTransportFailure(ServerType.STANDARD_HTTP,
+		collector.didRecordTransportFailure(ServerType.HTTP,
 				MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
 		collector.didRecordTransportFailure(ServerType.SSE,
 				MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, null);
@@ -290,13 +290,13 @@ public class McpTransportMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(text,
 				"# TYPE " + TRANSPORT_FAILURE_METRIC_NAME + " counter\n"));
 		Assertions.assertEquals(Set.of(
-				Map.of("server_type", "STANDARD_HTTP", "reason", "WRITE_ERROR"),
+				Map.of("server_type", "HTTP", "reason", "WRITE_ERROR"),
 				Map.of("server_type", "SSE", "reason",
 						"CONNECTION_SETUP_ERROR"),
 				Map.of("server_type", "MCP", "reason", "WRITE_TIMEOUT")),
 				labels);
 		Assertions.assertTrue(text.contains(TRANSPORT_FAILURE_METRIC_NAME
-				+ "{server_type=\"STANDARD_HTTP\",reason=\"WRITE_ERROR\"} 1\n"),
+				+ "{server_type=\"HTTP\",reason=\"WRITE_ERROR\"} 1\n"),
 				text);
 		Assertions.assertTrue(text.contains(TRANSPORT_FAILURE_METRIC_NAME
 				+ "{server_type=\"SSE\",reason=\"CONNECTION_SETUP_ERROR\"} 1\n"),
@@ -316,7 +316,7 @@ public class McpTransportMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(mcpOnly,
 				TRANSPORT_FAILURE_METRIC_NAME + "{"));
 		Assertions.assertTrue(mcpOnly.contains("server_type=\"MCP\""), mcpOnly);
-		Assertions.assertFalse(mcpOnly.contains("STANDARD_HTTP"), mcpOnly);
+		Assertions.assertFalse(mcpOnly.contains("HTTP"), mcpOnly);
 		Assertions.assertFalse(mcpOnly.contains("server_type=\"SSE\""), mcpOnly);
 
 		String withoutTransportFailures = collector.snapshotText(

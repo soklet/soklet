@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Candidate-artifact, public-API-only replay of the pinned 39 RUN scenarios
+ * Candidate-artifact, public-API-only replay of the pinned 39 core RUN scenarios
  * through Soklet's off-network MCP simulator.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -110,20 +110,20 @@ public final class McpLocalSimulatorScenarioDriver {
 			new ScenarioRow(24, "caching"),
 			new ScenarioRow(25, "http-header-validation"),
 			new ScenarioRow(26, "http-custom-header-server-validation"),
-			new ScenarioRow(27, "input-required-result-basic-elicitation"),
-			new ScenarioRow(28, "input-required-result-basic-sampling"),
-			new ScenarioRow(29, "input-required-result-basic-list-roots"),
-			new ScenarioRow(30, "input-required-result-request-state"),
-			new ScenarioRow(31, "input-required-result-multiple-input-requests"),
-			new ScenarioRow(32, "input-required-result-multi-round"),
-			new ScenarioRow(33, "input-required-result-missing-input-response"),
-			new ScenarioRow(34, "input-required-result-non-tool-request"),
-			new ScenarioRow(35, "input-required-result-result-type"),
-			new ScenarioRow(36, "input-required-result-unsupported-methods"),
-			new ScenarioRow(37, "input-required-result-tampered-state"),
-			new ScenarioRow(38, "input-required-result-capability-check"),
-			new ScenarioRow(39, "input-required-result-ignore-extra-params"),
-			new ScenarioRow(40, "input-required-result-validate-input"));
+			new ScenarioRow(37, "input-required-result-basic-elicitation"),
+			new ScenarioRow(38, "input-required-result-basic-sampling"),
+			new ScenarioRow(39, "input-required-result-basic-list-roots"),
+			new ScenarioRow(40, "input-required-result-request-state"),
+			new ScenarioRow(41, "input-required-result-multiple-input-requests"),
+			new ScenarioRow(42, "input-required-result-multi-round"),
+			new ScenarioRow(43, "input-required-result-missing-input-response"),
+			new ScenarioRow(44, "input-required-result-non-tool-request"),
+			new ScenarioRow(45, "input-required-result-result-type"),
+			new ScenarioRow(46, "input-required-result-unsupported-methods"),
+			new ScenarioRow(47, "input-required-result-tampered-state"),
+			new ScenarioRow(48, "input-required-result-capability-check"),
+			new ScenarioRow(49, "input-required-result-ignore-extra-params"),
+			new ScenarioRow(50, "input-required-result-validate-input"));
 
 	private McpLocalSimulatorScenarioDriver() {
 	}

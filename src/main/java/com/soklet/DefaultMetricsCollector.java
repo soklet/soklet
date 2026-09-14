@@ -274,7 +274,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																	@Nullable InetSocketAddress remoteAddress) {
 		requireNonNull(serverType);
 
-		if (serverType == ServerType.STANDARD_HTTP)
+		if (serverType == ServerType.HTTP)
 			this.httpConnectionsAccepted.increment();
 		else if (serverType == ServerType.SSE)
 			this.sseConnectionsAccepted.increment();
@@ -288,7 +288,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(serverType);
 		requireNonNull(reason);
 
-		if (serverType == ServerType.STANDARD_HTTP)
+		if (serverType == ServerType.HTTP)
 			this.httpConnectionsRejected.increment();
 		else if (serverType == ServerType.SSE)
 			this.sseConnectionsRejected.increment();
@@ -333,7 +333,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		RequestReadFailureKey key = new RequestReadFailureKey(reason);
 
-		if (serverType == ServerType.STANDARD_HTTP)
+		if (serverType == ServerType.HTTP)
 			counterFor(this.httpRequestReadFailuresByReason, key).increment();
 		else if (serverType == ServerType.SSE)
 			counterFor(this.sseRequestReadFailuresByReason, key).increment();
@@ -350,7 +350,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		RequestRejectionKey key = new RequestRejectionKey(reason);
 
-		if (serverType == ServerType.STANDARD_HTTP)
+		if (serverType == ServerType.HTTP)
 			counterFor(this.httpRequestRejectionsByReason, key).increment();
 		else if (serverType == ServerType.SSE)
 			counterFor(this.sseRequestRejectionsByReason, key).increment();
@@ -373,7 +373,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(serverType);
 		requireNonNull(request);
 
-		if (serverType != ServerType.STANDARD_HTTP)
+		if (serverType != ServerType.HTTP)
 			return;
 
 		RouteContext routeContext = routeFor(resourceMethod);
@@ -411,7 +411,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 
-		if (serverType != ServerType.STANDARD_HTTP)
+		if (serverType != ServerType.HTTP)
 			return;
 
 		RequestState state = requestStateFor(request);
@@ -448,7 +448,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(duration);
 		requireNonNull(throwables);
 
-		if (serverType != ServerType.STANDARD_HTTP)
+		if (serverType != ServerType.HTTP)
 			return;
 
 		RequestState state = removeRequestState(request);

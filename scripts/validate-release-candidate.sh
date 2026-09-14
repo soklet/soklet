@@ -479,8 +479,7 @@ node "$evidence_helper" record-gate \
 	"java-distribution=$java_distribution_evidence"
 
 declare -A gate_repository gate_commit gate_version_property \
-	gate_artifact_identity gate_default_artifact_identity \
-	gate_default_artifact_sha256
+	gate_artifact_identity gate_default_artifact_identity
 while IFS=$'\t' read -r gate_id _gate_status; do
 	gate_repository["$gate_id"]=$(node "$evidence_helper" gate-value \
 		"$manifest_path" "$gate_id" repository)
@@ -492,8 +491,6 @@ while IFS=$'\t' read -r gate_id _gate_status; do
 		"$manifest_path" "$gate_id" artifactIdentity)
 	gate_default_artifact_identity["$gate_id"]=$(node "$evidence_helper" gate-value \
 		"$manifest_path" "$gate_id" defaultArtifactIdentity)
-	gate_default_artifact_sha256["$gate_id"]=$(node "$evidence_helper" gate-value \
-		"$manifest_path" "$gate_id" defaultArtifactSha256)
 done < <(node "$evidence_helper" list-gate-ids "$manifest_path")
 
 clone_pinned_gate() {
@@ -948,34 +945,6 @@ run_candidate_localization() {
 	record_gate candidate-localization "localization-log=$log"
 }
 
-prepare_servlet_default_jar() {
-	local default_version=$1
-	local expected_identity=$2
-	local expected_sha256=$3
-	[[ "$expected_identity" == "com.soklet:soklet:$default_version" ]] \
-		|| fail "servlet default Soklet identity does not match its POM version."
-	local default_root="$isolated_maven_repository/com/soklet/soklet/$default_version"
-	local default_jar="$default_root/soklet-$default_version.jar"
-	if [[ ! -e "$default_jar" ]]; then
-		local download="$work_root/reviewed-soklet-$default_version.jar"
-		[[ ! -e "$download" ]] \
-			|| fail "reviewed servlet default download path already exists."
-		curl --fail --silent --show-error --location \
-			--proto '=https' --proto-redir '=https' --tlsv1.2 \
-			"https://repo1.maven.org/maven2/com/soklet/soklet/$default_version/soklet-$default_version.jar" \
-			--output "$download"
-		verify_reviewed_soklet_jar "$download" "$expected_sha256" \
-			|| fail "downloaded servlet default Soklet JAR failed its reviewed pin."
-		mkdir -p "$default_root"
-		[[ ! -e "$default_jar" ]] \
-			|| fail "servlet default Soklet JAR appeared during staging."
-		cp "$download" "$default_jar"
-	fi
-	verify_reviewed_soklet_jar "$default_jar" "$expected_sha256" \
-		|| fail "servlet default Soklet JAR differs from its reviewed pin."
-	printf '%s\n' "$default_jar"
-}
-
 run_maven_downstream() {
 	local gate_id=$1
 	local checkout
@@ -985,7 +954,6 @@ run_maven_downstream() {
 		|| fail "$gate_id does not declare the required soklet.version override."
 	local artifact_identity=${gate_artifact_identity[$gate_id]:-}
 	local default_artifact_identity=${gate_default_artifact_identity[$gate_id]:-}
-	local default_artifact_sha256=${gate_default_artifact_sha256[$gate_id]:-}
 	local downstream_pom="$checkout/pom.xml"
 	[[ -f "$downstream_pom" && ! -L "$downstream_pom" ]] \
 		|| fail "$gate_id POM is missing or is a symlink."
@@ -1039,11 +1007,10 @@ run_maven_downstream() {
 	local default_log="$evidence_root/$gate_id-default.log"
 	local candidate_log="$evidence_root/$gate_id-candidate.log"
 	local default_surefire_reports="$evidence_root/$gate_id-default-surefire-reports"
-	local default_jar
-	default_jar=$(prepare_servlet_default_jar "$default_soklet_version" \
-		"$default_artifact_identity" "$default_artifact_sha256")
-	verify_reviewed_soklet_jar "$default_jar" "$default_artifact_sha256" \
-		|| fail "$gate_id default Soklet JAR changed before its default leg."
+	[[ "$default_soklet_version" == "$candidate_version" \
+			&& "$default_artifact_identity" == "com.soklet:soklet:$candidate_version" ]] \
+		|| fail "$gate_id default leg must resolve the exact Soklet 4.0.0 candidate."
+	local default_jar="$installed_jar"
 	assert_installed_candidate_unchanged
 	(
 		cd "$checkout"
@@ -1052,15 +1019,11 @@ run_maven_downstream() {
 			-DfailIfNoTests=true clean verify
 	) 2>&1 | tee "$default_log"
 	assert_installed_candidate_unchanged
-	verify_reviewed_soklet_jar "$default_jar" "$default_artifact_sha256" \
-		|| fail "$gate_id default Soklet JAR changed during its default leg."
 	node "$surefire_verifier" "$checkout/target/surefire-reports" \
-		"$gate_id" default "$default_jar" "$default_artifact_sha256"
+		"$gate_id" default "$default_jar" "$candidate_jar_sha256"
 	[[ ! -e "$default_surefire_reports" ]] \
 		|| fail "$gate_id default Surefire evidence path already exists."
 	cp -R "$checkout/target/surefire-reports" "$default_surefire_reports"
-	verify_reviewed_soklet_jar "$default_jar" "$default_artifact_sha256" \
-		|| fail "$gate_id default Soklet JAR changed before its candidate leg."
 	assert_installed_candidate_unchanged
 	(
 		cd "$checkout"
@@ -1070,8 +1033,6 @@ run_maven_downstream() {
 			-D"$version_property"="$candidate_version" clean verify
 	) 2>&1 | tee "$candidate_log"
 	assert_installed_candidate_unchanged
-	verify_reviewed_soklet_jar "$default_jar" "$default_artifact_sha256" \
-		|| fail "$gate_id default Soklet JAR changed during its candidate leg."
 	node "$surefire_verifier" "$checkout/target/surefire-reports" \
 		"$gate_id" candidate "$installed_jar" "$candidate_jar_sha256"
 	local raw_root="$evidence_root/raw/$gate_id"
@@ -1096,18 +1057,18 @@ run_maven_downstream() {
 run_barebones() {
 	local checkout
 	checkout=$(clone_pinned_gate barebones-app)
-	local candidate_copy="$checkout/soklet-release-candidate.jar"
-	while IFS= read -r tracked_jar; do
-		[[ -n "$tracked_jar" ]] && rm -f -- "$checkout/$tracked_jar"
-	done < <(git -C "$checkout" ls-files '*soklet*.jar')
-	cp "$candidate_jar" "$candidate_copy"
+	local vendored_jar="$checkout/soklet-$candidate_version.jar"
+	git -C "$checkout" ls-files --error-unmatch "soklet-$candidate_version.jar" >/dev/null \
+		|| fail "barebones-app must track its exact versioned Soklet JAR."
+	verify_reviewed_soklet_jar "$vendored_jar" "$candidate_jar_sha256" \
+		|| fail "barebones-app vendored Soklet JAR differs from the exact candidate."
 	local classes="$checkout/release-validation-classes"
 	local sources="$work_root/barebones-sources.txt"
 	mkdir -p "$classes"
 	find "$checkout/src" -type f -name '*.java' -print | LC_ALL=C sort > "$sources"
 	[[ -s "$sources" ]] || fail "barebones-app has no Java sources."
 	javac --release 17 -parameters -processor com.soklet.SokletProcessor \
-		-classpath "$candidate_copy" -d "$classes" @"$sources"
+		-classpath "$vendored_jar" -d "$classes" @"$sources"
 	local log="$evidence_root/barebones-app.log"
 	local port_file="$work_root/barebones-loopback-port.txt"
 	local reservation_log="$evidence_root/barebones-port-reservation.log"
@@ -1119,7 +1080,7 @@ run_barebones() {
 	! kill -0 "$reservation_pid" 2>/dev/null \
 		|| fail "barebones-app loopback port reservation remains alive after handoff."
 	env RUNNING_IN_DOCKER=true SOKLET_BAREBONES_LOOPBACK_PORT="$barebones_port" \
-		java -classpath "$candidate_copy:$classes" com.soklet.barebones.App \
+		java -classpath "$vendored_jar:$classes" com.soklet.barebones.App \
 		>"$log" 2>&1 &
 	active_pid=$!
 	local app_pid=$active_pid
@@ -1157,18 +1118,17 @@ run_barebones() {
 		|| fail "barebones-app process remains alive after its candidate probes."
 	assert_loopback_port_available "$barebones_port" \
 		|| fail "barebones-app did not release loopback port $barebones_port."
-	[[ $(git -C "$checkout" rev-parse HEAD) == "${gate_commit[barebones-app]}" ]] \
-		|| fail "barebones-app HEAD changed during validation."
-	local unexpected_barebones_changes
-	unexpected_barebones_changes=$(git -C "$checkout" diff --name-only \
-		| grep -v -E '(^|/)soklet[^/]*\.jar$' || true)
-	[[ -z "$unexpected_barebones_changes" ]] \
-		|| fail "barebones-app changed tracked files other than its replaced Soklet JAR."
+	assert_pinned_checkout_unchanged barebones-app "$checkout"
+	verify_reviewed_soklet_jar "$vendored_jar" "$candidate_jar_sha256" \
+		|| fail "barebones-app vendored Soklet JAR changed during validation."
 	local raw_root="$evidence_root/raw/barebones-app"
+	local retained_vendored_jar="$raw_root/soklet-$candidate_version.jar"
 	local retained_port_file="$raw_root/barebones-loopback-port.txt"
 	mkdir -p "$raw_root"
+	cp "$vendored_jar" "$retained_vendored_jar"
 	cp "$port_file" "$retained_port_file"
 	record_gate barebones-app \
+		"vendored-jar=$retained_vendored_jar" \
 		"port-file=$retained_port_file" \
 		"reservation-log=$reservation_log" \
 		"runtime-log=$log"
@@ -1249,12 +1209,6 @@ run_interoperability typescript-interop
 run_interoperability go-interop
 
 assert_installed_candidate_unchanged
-final_default_identity=${gate_default_artifact_identity[soklet-servlet-javax]:-}
-final_default_sha256=${gate_default_artifact_sha256[soklet-servlet-javax]:-}
-final_default_version=${final_default_identity##*:}
-final_default_jar="$isolated_maven_repository/com/soklet/soklet/$final_default_version/soklet-$final_default_version.jar"
-verify_reviewed_soklet_jar "$final_default_jar" "$final_default_sha256" \
-	|| fail "servlet default Soklet JAR changed before finalization."
 
 git_status_after=$(git status --porcelain --untracked-files=all)
 [[ -z "$git_status_after" ]] \
@@ -1270,8 +1224,6 @@ node "$evidence_helper" record-artifacts \
 cmp -s "$artifact_descriptor" "$final_artifact_descriptor" \
 	|| fail "candidate artifact bytes changed during validation."
 assert_installed_candidate_unchanged
-verify_reviewed_soklet_jar "$final_default_jar" "$final_default_sha256" \
-	|| fail "servlet default Soklet JAR changed during finalization."
 
 export SOKLET_EVIDENCE_GIT_VERSION
 SOKLET_EVIDENCE_GIT_VERSION=$(git --version)
@@ -1287,8 +1239,6 @@ node "$evidence_helper" assemble \
 	"$manifest_path" "$candidate_commit" "$artifact_descriptor" \
 	"$gate_evidence_root" "$final_evidence"
 assert_installed_candidate_unchanged
-verify_reviewed_soklet_jar "$final_default_jar" "$final_default_sha256" \
-	|| fail "servlet default Soklet JAR changed while assembling final evidence."
 final_evidence_sha=$(node "$evidence_helper" sha256 "$final_evidence")
 printf '%s  %s\n' "$final_evidence_sha" "$(basename "$final_evidence")" \
 	> "$evidence_root/release-validation-evidence.sha256"

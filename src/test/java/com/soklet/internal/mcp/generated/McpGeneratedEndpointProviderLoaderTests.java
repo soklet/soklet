@@ -179,6 +179,24 @@ public class McpGeneratedEndpointProviderLoaderTests {
 	}
 
 	@Test
+	void emptyClasspathDiscoveryExplainsProcessorAndPackagingRequirements()
+			throws Exception {
+		try (IndexedClassLoader classLoader = newClassLoader()) {
+			ClassLoader previous = Thread.currentThread().getContextClassLoader();
+			try {
+				Thread.currentThread().setContextClassLoader(classLoader);
+				IllegalStateException missing = assertThrows(IllegalStateException.class,
+						McpEndpointRegistry::fromClasspathIntrospection);
+				assertTrue(missing.getMessage().startsWith(
+						"No generated MCP endpoint descriptors were found."));
+				assertProcessorAndPackagingGuidance(missing.getMessage());
+			} finally {
+				Thread.currentThread().setContextClassLoader(previous);
+			}
+		}
+	}
+
+	@Test
 	void oneArgumentServerFactoryDefersDiscoveryUntilBuildAndDefaultsToAnonymousAdmission()
 			throws Exception {
 		try (IndexedClassLoader emptyClassLoader = newClassLoader();
@@ -301,9 +319,21 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			IllegalArgumentException missing = assertThrows(
 					IllegalArgumentException.class,
 					() -> McpEndpointRegistry.fromClasses(unindexed));
+			assertTrue(missing.getMessage().startsWith(
+					"No generated MCP endpoint descriptor exists for '"
+							+ UNINDEXED_ENDPOINT + "'."));
 			assertTrue(missing.getMessage().contains(
-					"No generated MCP endpoint descriptor exists"));
+					"Verify the selected annotated endpoint class"));
+			assertProcessorAndPackagingGuidance(missing.getMessage());
 		}
+	}
+
+	private static void assertProcessorAndPackagingGuidance(@NonNull String message) {
+		for (String fragment : List.of("com.soklet.SokletProcessor",
+				"Gradle annotationProcessor", "Maven annotationProcessorPaths/annotationProcessors",
+				"-parameters", "META-INF/soklet/mcp-endpoint-descriptor-providers",
+				"generated provider classes", "packaging"))
+			assertTrue(message.contains(fragment), message);
 	}
 
 	@Test

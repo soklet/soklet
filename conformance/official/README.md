@@ -38,25 +38,44 @@ evidence, and nondeterministic output; its self-test covers those fail-closed
 paths. The candidate-conformance runner verifies this index before consuming
 its profile evidence.
 
-`scenarios.json` preserves all 40 names in the pinned CLI's exact order. Its 39
-`RUN` rows are the active Soklet 4.0.0 run set; `completion-complete` is the
-only `NOT_APPLICABLE` row because Soklet does not advertise Completion.
+The current gate is pinned to `@modelcontextprotocol/conformance`
+`0.2.0-alpha.11`, commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`.
+`scenarios.json` preserves the 50 relevant names in exact CLI order: 40
+`2026-07-28` core rows and ten Tasks extension rows. Its 49 `RUN` rows for Soklet 4.0.0 exclude
+only unsupported `completion-complete`. The unfiltered `list --server` output
+also includes 12 legacy-only rows; strict parsing validates those rows but
+excludes them from this modern-profile inventory. Unknown extensions, missing
+Tasks names, duplicate names, or reordered selected rows fail verification.
 
-That release gate is pinned to `@modelcontextprotocol/conformance`
-`0.2.0-alpha.10` at commit
-`49103de6ed70804e940637bf3e9e29e4a3f54e64`, whose inventory predates the
-official Tasks scenarios. It therefore supplies no gated conformance coverage
-for `io.modelcontextprotocol/tasks`. A separate local alpha.11 run of the nine
-runnable Tasks scenarios is recorded in
-[`release/MCP_CLIENT_COMPATIBILITY.md`](../../release/MCP_CLIENT_COMPATIBILITY.md),
-but it is neither replayed by candidate conformance nor a release PASS receipt.
-Repinning and reviewing those scenario profiles is tracked explicitly under
-DF-01 in `roadmap-readiness-deferred-features.json`.
+Core scenarios retain the explicit `--spec-version 2026-07-28` selector. In
+alpha.11 that selector excludes extension scenarios, so the ten exact pinned
+Tasks names use the reviewed extension command template without a version
+selector; the audited CLI default is `2026-07-28`. Neither path uses
+`--force`, `--suite`, or expected-failure suppression.
+
+The 2026-09-13 repin re-observed all 49 selected profiles against the exact built
+CLI and the packaged working-tree JAR. The nine runnable Tasks scenarios
+produced 44 successful checks. `tasks-status-notifications` still emits one
+explicit upstream `SKIPPED` because its harness does not observe
+`subscriptions/listen`; matching that profile is not a passing notification
+delivery test. The same conformance runner also requires eight independent
+candidate-JAR-only socket checks from `McpTaskNotificationSocketDriver`: exact
+acknowledgment/filtering, authorization revocation, input-capability filtering,
+duplicate-event terminal suppression, 256-ID coalescing, disconnect recovery,
+reconnect/no replay, and real `tasks/cancel` acknowledgment plus terminal event.
+Its 120-second command timeout has bounded supervised process-tree cleanup;
+any missing/extra/reordered PASS record, stderr, timeout or nonzero exit fails.
+Private retained-object proofs remain source-suite tests, not black-box claims.
+This development evidence is not a release PASS receipt or a client-host smoke.
+The [upstream dependency review](UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md)
+records an unresolved external-toolchain risk disposition; publication is not
+approved by this repin. DF-01 retains future same-revision growth obligations.
 
 `earliestPhase` means the first phase in which a scenario is mandatory as part
 of that phase's full gate. The 23 applicable non-MRTR scenarios other than
 `server-stateless` and `tools-call-with-progress` are mandatory in Phase 4.
-Those two scenarios and all 14 MRTR scenarios are mandatory in Phase 5.
+Those two scenarios, all 14 MRTR scenarios, and the ten Tasks extension rows
+are mandatory in Phase 5.
 `dns-rebinding-protection` was additionally active as an early Phase 3 smoke
 test because its production Host/Origin path already existed. Phase 4 now runs
 all 23 owned scenarios through one common fullest-truthful Phase 4 fixture.
@@ -80,7 +99,7 @@ stable graph identity, wrapped request dispatch, SSE broadcaster forwarding,
 delegate-subtree proof, decorator-owned cleanup, and complete graceful results.
 This is packaged development evidence, not release-candidate evidence; the
 later release gate separately requires checksum-matched JAR/POM provenance and
-the full 39-scenario run.
+the full 49-profile run (including the explicitly declared upstream skip).
 
 Every scenario row names the truthful fixture registrations or features it
 needs and the local tests that supplement official-suite coverage. Existing
@@ -89,13 +108,13 @@ future phase are checked-in evidence obligations: they must be implemented and
 green before that row can acquire an expected profile. Empty arrays are valid
 only for the intentionally unsupported Completion row.
 
-Expected profiles are evidence, not guesses. `expected-checks.json` retains the
-23 historical Phase 3/4 profile IDs and freezes the 16 exact reviewed Phase 5
-profiles. All 39 `RUN` rows now have one non-null profile, the manifest records
-`currentImplementationPhase: 5`, and the complete profile file has SHA-256
-`7852c6bfc8c686f1d9b8b6e2ac27ebe1b69e5b5ee62cc1c09fd874f427d1bc09`.
-The activated scenario manifest has SHA-256
-`e8f0d1a8c9ac673c80e3a6434f5763bb608f49d1fad62e48c179d26b6bee18e3`.
+Expected profiles are evidence, not guesses. `expected-checks.json` binds all
+49 selected rows to the exact alpha.11 commit. The prior 39 core profiles were
+re-observed; `tools-list.phase4.v2` adds the upstream deterministic-order check.
+Ten reviewed Tasks profiles were then frozen, with the notification skip reason
+matched exactly. Every other new Tasks check succeeded. The manifest remains
+`currentImplementationPhase: 5`. Current hashes live in the machine-verified
+pin/profile evidence files; historical checkpoint hashes below remain historical.
 Null never means “accept anything”; for a future phase it means “not executable
 in this phase.”
 
@@ -460,7 +479,7 @@ Every artifact path is absolute and every hash is lowercase SHA-256:
   "formatVersion": 1,
   "candidateCommit": "0123456789abcdef0123456789abcdef01234567",
   "protocolVersion": "2026-07-28",
-  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
   "coordinates": {
     "groupId": "com.soklet",
     "artifactId": "soklet",
@@ -538,8 +557,9 @@ registration, and uses `jdeps` to reject any compiled dependency on
 `com.soklet.internal`. It also compiles and runs standalone public-API contract
 tests for both the exact Phase 5 registrations and the external transport graph
 shapes. The test output also contains a public-API-only local simulator driver.
-`run-local-simulator.mjs` derives the 39 RUN rows from the pinned
-`scenarios.json` manifest in exact CLI ordinal order, executes every row
+`run-local-simulator.mjs` derives the 39 core RUN rows from the pinned
+`scenarios.json` manifest in exact CLI ordinal order, omitting the ten Tasks
+extension rows (which have separate live and simulator coverage), executes every row
 off-network against the packaged candidate, and byte-compares the driver's 39
 PASS records. The driver covers real fixture handlers, response and SSE shapes,
 Host/Origin/header policy, progress isolation, protected multi-round state, and
@@ -562,8 +582,9 @@ in that order: the fixed snapshot path in development mode or the validated
 main-JAR path in release mode. It refuses missing, substituted, symlinked, or
 exploded main/test class paths. The work directory must be empty.
 
-The runner verifies the live 40-name CLI inventory and both reviewed digests
-before starting a server. It invokes each active row by exact name and version,
+The runner verifies the live 50-name modern-plus-Tasks inventory and both
+reviewed digests before starting a server. It invokes each active row by exact
+name and its reviewed core or extension command template,
 then compares the complete
 `(check ID, status, count)` multiset. Missing/extra outcomes, every
 `FAILURE`/`WARNING`, unreviewed `INFO`/`SKIPPED`, a wire-schema harness error,
@@ -686,3 +707,10 @@ node conformance/official/scripts/import-final-tag-schema.mjs \
 
 The importer accepts only the currently reviewed bytes and refuses overwrite;
 change its constants only as part of that dedicated repin.
+
+If the repin changes `conformance/roadmap-readiness-deferred-features.json`,
+regenerate `conformance/MCP_ROADMAP_READINESS_POLICY.md` with the exported
+`renderRoadmapPolicy` function in `scripts/verify-mcp-roadmap-readiness.mjs`.
+Review the generated diff, run the roadmap verifier and its self-test, then
+run `scripts/verify-mcp-api-freezes.sh`; the generated policy is part of that
+gate, not an independent historical document. Do not edit it by hand.

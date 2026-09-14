@@ -1278,7 +1278,7 @@ final class SokletDirectLifecycle {
 		this.config.getHttpServer().ifPresent(server ->
 				((Soklet.MockHttpServer) server).initialize(this.config,
 						(request, consumer) -> this.soklet.handleRequest(request,
-								ServerType.STANDARD_HTTP, consumer)));
+								ServerType.HTTP, consumer)));
 		this.config.getSseServer().ifPresent(server ->
 				((Soklet.MockSseServer) server).initialize(this.config,
 						(request, consumer) -> this.soklet.handleRequest(request,
@@ -2555,7 +2555,7 @@ final class SokletDirectLifecycle {
 			}
 			try (AdmissionFence.Admission ignoredAdmission = admission;
 				 LifecycleExecutionContext.Scope ignoredExecution = enterExecution()) {
-				this.soklet.handleRequest(request, ServerType.STANDARD_HTTP, consumer);
+				this.soklet.handleRequest(request, ServerType.HTTP, consumer);
 			}
 		};
 	}

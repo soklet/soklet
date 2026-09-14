@@ -17,15 +17,17 @@
 package com.soklet;
 
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP} and {@link #SSE}.
+ * Identifies the HTTP resource-method transport or the dedicated Server-Sent Event transport.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum ServerType {
 	/**
-	 * A server which speaks HTTP over TCP (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.)
+	 * An HTTP server which services <em>Resource Methods</em> annotated with
+	 * {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.,
+	 * including buffered and streaming responses.
 	 */
-	STANDARD_HTTP,
+	HTTP,
 	/**
 	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.SseEventSource}).
 	 */

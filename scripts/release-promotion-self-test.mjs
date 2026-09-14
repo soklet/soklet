@@ -154,8 +154,7 @@ function syntheticEvidenceItem(specification, artifacts, gate, toolchains) {
       sha256: digest(bytes),
       type: 'FILE',
     };
-  } else if (specification.binding !== null
-      && specification.binding !== 'gateDefaultArtifact') {
+  } else if (specification.binding !== null) {
     artifact = {
       ...artifacts[specification.binding],
       fileName: specification.fileName,
@@ -172,9 +171,7 @@ function syntheticEvidenceItem(specification, artifacts, gate, toolchains) {
     artifact = {
       bytes: 1,
       fileName: specification.fileName,
-      sha256: specification.binding === 'gateDefaultArtifact'
-        ? gate.defaultArtifactSha256
-        : digest(Buffer.from(specification.role, 'utf8')),
+      sha256: digest(Buffer.from(specification.role, 'utf8')),
       type: 'FILE',
     };
   }
@@ -196,8 +193,8 @@ function syntheticGate(id, artifacts, workflow, toolchains) {
     artifactChecksum,
     artifactIdentity,
     commit,
-    defaultArtifactIdentity: isServlet ? 'com.soklet:soklet:3.1.1' : null,
-    defaultArtifactSha256: isServlet ? '4'.repeat(64) : null,
+    defaultArtifactIdentity: isServlet ? 'com.soklet:soklet:4.0.0' : null,
+    defaultArtifactSha256: null,
     evidenceContract: contract.contractId,
     id,
     repository: null,
@@ -873,6 +870,20 @@ async function run() {
       /gates must be exactly/,
     );
 
+    const securityBlockedManifest = structuredClone(inputs.releaseManifest);
+    const securityBlockedGate = securityBlockedManifest.gates.find(({ id }) =>
+      id === 'candidate-conformance');
+    securityBlockedGate.status = 'BLOCKED_TOOLCHAIN_SECURITY_REVIEW';
+    securityBlockedGate.reason = 'Fixture external toolchain security disposition remains open.';
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'security-blocked-conformance-manifest',
+      securityBlockedManifest,
+      /candidate-conformance is not READY/,
+    );
+
     const missingGateManifest = structuredClone(inputs.releaseManifest);
     missingGateManifest.gates.splice(5, 1);
     expectManifestFailure(
@@ -1114,7 +1125,7 @@ async function run() {
       fakeGpg,
       'wrong-default-artifact-sha',
       wrongDefaultShaEvidence,
-      /default JAR evidence does not match its exact identity and SHA-256/,
+      /evidence role default-jar does not match candidate mainJar/,
     );
 
     const wrongDefaultIdentityEvidence = structuredClone(inputs.evidence);
@@ -1126,7 +1137,23 @@ async function run() {
       fakeGpg,
       'wrong-default-artifact-identity',
       wrongDefaultIdentityEvidence,
-      /default JAR evidence does not match its exact identity and SHA-256/,
+      /default must use the descriptor-bound Soklet 4.0.0 candidate/,
+    );
+
+    const barebonesGateIndex = GATE_IDS.indexOf('barebones-app');
+    const wrongVendoredEvidence = structuredClone(inputs.evidence);
+    wrongVendoredEvidence.gates[barebonesGateIndex].evidence
+      .find(({ role }) => role === 'vendored-jar').artifact.sha256 = '8'.repeat(64);
+    expectEvidenceFailure(
+      temporary, inputs, fakeGpg, 'wrong-vendored-artifact-sha', wrongVendoredEvidence,
+      /evidence role vendored-jar does not match candidate mainJar/,
+    );
+
+    const missingVendoredEvidence = structuredClone(inputs.evidence);
+    missingVendoredEvidence.gates[barebonesGateIndex].evidence.shift();
+    expectEvidenceFailure(
+      temporary, inputs, fakeGpg, 'missing-vendored-artifact', missingVendoredEvidence,
+      /does not contain its exact ordered evidence roles/,
     );
 
     const incompleteEvidence = structuredClone(inputs.evidence);

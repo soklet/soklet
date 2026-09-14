@@ -28,6 +28,11 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable representation of one HTTP entity tag.
+ * <p>
+ * Values use the HTTP opaque-tag byte grammar: {@code 0x21}, {@code 0x23-0x7E},
+ * and {@code 0x80-0xFF} (obs-text). Characters above {@code 0xFF}, including
+ * surrogate code units, are not valid field octets. Factories reject invalid
+ * values; {@link #fromHeaderValue(String)} returns {@link Optional#empty()}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -144,7 +149,7 @@ public final class EntityTag {
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
 
-			if (c == '"' || c < 0x21 || c == 0x7F)
+			if (c == '"' || c < 0x21 || c == 0x7F || c > 0xFF)
 				return false;
 		}
 

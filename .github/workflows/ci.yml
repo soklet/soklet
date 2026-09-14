@@ -57,6 +57,121 @@ jobs:
       - name: Compile benchmarks
         run: mvn -B -ntp -f benchmarks/pom.xml -DskipTests clean compile
 
+  packaged-consumer:
+    name: Packaged consumer (${{ matrix.mode }}, JDK ${{ matrix.runtime.jdk }})
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [maven, gradle, javac]
+        runtime:
+          - { jdk: '17', pin: java, environment: JAVA_HOME }
+          - { jdk: '21', pin: coreJdk21, environment: SOKLET_RELEASE_CORE_JDK_21_HOME }
+          - { jdk: '25', pin: toystoreJava, environment: SOKLET_RELEASE_TOYSTORE_JAVA_HOME }
+    steps:
+      - name: Check out
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install checksum-pinned Node and npm
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/consumer-node-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 17 for packaging
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/consumer-build-java-distribution.txt"
+
+      - name: Install checksum-pinned consumer runtime
+        if: matrix.runtime.pin != 'java'
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          ${{ matrix.runtime.pin }} "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/consumer-runtime-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/consumer-maven-distribution.txt"
+
+      - name: Self-test pinned Gradle installer and consumer CI contract
+        run: node scripts/verify-consumer-ci-self-test.mjs
+
+      - name: Install checksum-pinned Gradle
+        if: matrix.mode == 'gradle'
+        run: >-
+          bash release/scripts/install-pinned-gradle-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/consumer-gradle-distribution.txt"
+
+      - name: Package and install exact core JAR and POM
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="${RUNNER_TEMP}/consumer-repository"
+          mvn -B -ntp -Dmaven.repo.local="$repository" -Dgpg.skip=true -DskipTests clean package
+          sha256sum target/soklet-4.0.0.jar pom.xml > "${RUNNER_TEMP}/consumer-inputs.sha256"
+          mvn -B -ntp -Dmaven.repo.local="$repository" \
+            org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file \
+            -Dfile=target/soklet-4.0.0.jar -DpomFile=pom.xml
+          cmp target/soklet-4.0.0.jar "$repository/com/soklet/soklet/4.0.0/soklet-4.0.0.jar"
+          cmp pom.xml "$repository/com/soklet/soklet/4.0.0/soklet-4.0.0.pom"
+
+      - name: Provision Maven fixture build dependencies
+        if: matrix.mode == 'maven'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Resolve the fixture's ordinary lifecycle plugins in a separate copy.
+          # This online preparation is not consumer evidence. The real verifier
+          # uses a fresh copy and must complete its own offline build and controls.
+          cp -R verification/consumer-build "${RUNNER_TEMP}/consumer-prewarm"
+          mvn -B -ntp -Dmaven.repo.local="${RUNNER_TEMP}/consumer-repository" \
+            -f "${RUNNER_TEMP}/consumer-prewarm/pom.xml" -DskipTests package
+
+      - name: Verify packaged consumer and generated-index negative controls
+        shell: bash
+        env:
+          SOKLET_CONSUMER_MODE: ${{ matrix.mode }}
+          SOKLET_CONSUMER_JAVA_ENVIRONMENT: ${{ matrix.runtime.environment }}
+        run: |
+          set -euo pipefail
+          node verification/consumer-build/self-test.mjs
+          candidate_sha256=$(sha256sum target/soklet-4.0.0.jar | cut -d ' ' -f 1)
+          consumer_java_home=${!SOKLET_CONSUMER_JAVA_ENVIRONMENT}
+          arguments=(--mode "$SOKLET_CONSUMER_MODE" --java-home "$consumer_java_home"
+            --jar "${GITHUB_WORKSPACE}/target/soklet-4.0.0.jar" --sha256 "$candidate_sha256"
+            --repository "${RUNNER_TEMP}/consumer-repository" --output "${RUNNER_TEMP}/consumer-result")
+          case "$SOKLET_CONSUMER_MODE" in
+            maven) arguments+=(--maven "$(command -v mvn)");;
+            gradle) arguments+=(--gradle "$(command -v gradle)");;
+            javac) ;;
+            *) exit 64;;
+          esac
+          node verification/consumer-build/verify.mjs "${arguments[@]}"
+          sha256sum --check --strict "${RUNNER_TEMP}/consumer-inputs.sha256"
+          cmp pom.xml "${RUNNER_TEMP}/consumer-repository/com/soklet/soklet/4.0.0/soklet-4.0.0.pom"
+
+      - name: Upload development-only consumer evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: packaged-consumer-${{ matrix.mode }}-jdk-${{ matrix.runtime.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/consumer-result
+            ${{ runner.temp }}/consumer-*-distribution.txt
+            ${{ runner.temp }}/consumer-inputs.sha256
+          # These PR/push results are not immutable-candidate release receipts.
+          retention-days: 30
+
   api-diff:
     name: API Compatibility and MCP Freezes (JDK 17)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
@@ -262,7 +377,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: modelcontextprotocol/conformance
-          ref: 49103de6ed70804e940637bf3e9e29e4a3f54e64
+          ref: a983ba93c91e0bb31d0b6849eeb52f0ad1083107
           path: .mcp-conformance-source
           persist-credentials: false
 

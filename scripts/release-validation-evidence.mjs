@@ -16,6 +16,7 @@ import {
   activeScenarios,
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
+import { taskNotificationSupplementChecks } from '../conformance/official/run.mjs';
 import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -29,9 +30,7 @@ const IMPORTED_RELEASE_HARNESS_GATE_IDS = new Set([
   'mcp-benchmarks',
   'release-scans',
 ]);
-const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:3.1.1';
-const SERVLET_DEFAULT_ARTIFACT_SHA256 =
-  'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4';
+const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:4.0.0';
 const EXPECTED_GATE_IDS = [
   'candidate-build',
   'core-jdk-21',
@@ -72,6 +71,7 @@ const ALLOWED_GATE_STATUSES = new Set([
   'BLOCKED_REQUIRES_MIGRATION',
   'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION',
   'BLOCKED_HARNESS_MISSING',
+  'BLOCKED_TOOLCHAIN_SECURITY_REVIEW',
 ]);
 const EXPECTED_GATE_CONTRACTS = Object.freeze({
   'candidate-build': Object.freeze({
@@ -204,7 +204,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'candidate-conformance': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
-    artifactIdentity: '@modelcontextprotocol/conformance:0.2.0-alpha.10-descriptive',
+    artifactIdentity: '@modelcontextprotocol/conformance:0.2.0-alpha.11-descriptive',
     kind: 'CANDIDATE_ARTIFACT',
     repository: 'https://github.com/modelcontextprotocol/conformance.git',
     toolchain: 'nodePin',
@@ -228,7 +228,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'soklet-servlet-javax': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
-    artifactIdentity: 'com.soklet:soklet-servlet-javax:1.2.0',
+    artifactIdentity: 'com.soklet:soklet-servlet-javax:2.0.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-servlet-javax.git',
     toolchain: 'java',
@@ -236,7 +236,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'soklet-servlet-jakarta': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
-    artifactIdentity: 'com.soklet:soklet-servlet-jakarta:1.2.0',
+    artifactIdentity: 'com.soklet:soklet-servlet-jakarta:2.0.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-servlet-jakarta.git',
     toolchain: 'java',
@@ -252,7 +252,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'soklet-otel': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
-    artifactIdentity: 'com.soklet:soklet-otel:1.4.0-SNAPSHOT',
+    artifactIdentity: 'com.soklet:soklet-otel:2.0.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-otel.git',
     toolchain: 'java',
@@ -557,12 +557,13 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'nodePin',
     'node conformance/official/run.mjs --phase 5 --mode release',
     'release',
-    'ALL_39_CAPABILITY_SELECTED_SCENARIOS_PASS',
+    'ALL_49_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
     [directoryRole(
       'conformance-evidence',
       'application/vnd.soklet.conformance-evidence',
       'release',
     )],
+    2,
   ),
   'candidate-localization': gateEvidenceContract(
     'candidate-localization',
@@ -579,10 +580,12 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'candidate',
     'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
     [
+      fileRole('vendored-jar', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       fileRole('port-file', 'text/plain', 'barebones-loopback-port.txt'),
       logRole('reservation-log', 'barebones-port-reservation.log'),
       logRole('runtime-log', 'barebones-app.log'),
     ],
+    2,
   ),
   'soklet-servlet-javax': gateEvidenceContract(
     'soklet-servlet-javax',
@@ -595,14 +598,15 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole(
         'default-jar',
         'application/java-archive',
-        'soklet-3.1.1.jar',
-        'gateDefaultArtifact',
+        'soklet-4.0.0.jar',
+        'mainJar',
       ),
       logRole('default-log', 'soklet-servlet-javax-default.log'),
       surefireRole('default-surefire-reports', 'soklet-servlet-javax-default-surefire-reports'),
       logRole('candidate-log', 'soklet-servlet-javax-candidate.log'),
       surefireRole('candidate-surefire-reports'),
     ],
+    2,
   ),
   'soklet-servlet-jakarta': gateEvidenceContract(
     'soklet-servlet-jakarta',
@@ -615,8 +619,8 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole(
         'default-jar',
         'application/java-archive',
-        'soklet-3.1.1.jar',
-        'gateDefaultArtifact',
+        'soklet-4.0.0.jar',
+        'mainJar',
       ),
       logRole('default-log', 'soklet-servlet-jakarta-default.log'),
       surefireRole(
@@ -626,6 +630,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       logRole('candidate-log', 'soklet-servlet-jakarta-candidate.log'),
       surefireRole('candidate-surefire-reports'),
     ],
+    2,
   ),
   'toystore-app': gateEvidenceContract(
     'toystore-app',
@@ -996,9 +1001,9 @@ function validateGate(gate, index, toolchains) {
   const expectedDefaultArtifactIdentity = isServletGate
     ? SERVLET_DEFAULT_ARTIFACT_IDENTITY
     : null;
-  const expectedDefaultArtifactSha256 = isServletGate
-    ? SERVLET_DEFAULT_ARTIFACT_SHA256
-    : null;
+  // Both servlet legs consume the descriptor-bound candidate main JAR.
+  // No independent checksum may silently introduce a second core artifact.
+  const expectedDefaultArtifactSha256 = null;
   if (gate.defaultArtifactIdentity !== expectedDefaultArtifactIdentity
       || gate.defaultArtifactSha256 !== expectedDefaultArtifactSha256) {
     fail(
@@ -1556,20 +1561,6 @@ function evidenceMatchesCandidateArtifact(evidence, candidateArtifact, descripti
   }
 }
 
-function validateGateDefaultArtifact(evidence, gate, specification, description) {
-  const identity = /^com\.soklet:soklet:([0-9]+\.[0-9]+\.[0-9]+)$/.exec(
-    gate.defaultArtifactIdentity ?? '',
-  );
-  if (identity === null
-      || !SHA256_PATTERN.test(gate.defaultArtifactSha256 ?? '')
-      || specification.fileName !== `soklet-${identity[1]}.jar`
-      || evidence.type !== 'FILE'
-      || evidence.fileName !== specification.fileName
-      || evidence.sha256 !== gate.defaultArtifactSha256) {
-    fail(`${description} does not match the gate's exact default artifact identity and SHA-256`);
-  }
-}
-
 function canonicalToolchainDistributionBytes(toolchain, description) {
   if (toolchain === null || typeof toolchain !== 'object' || Array.isArray(toolchain))
     fail(`${description} requires an available manifest toolchain pin`);
@@ -1797,13 +1788,6 @@ export function recordGateEvidence(
           || artifact.sha256 !== expectedDescriptor.sha256) {
         fail(`${gateId} artifact descriptor role does not match the validated descriptor`);
       }
-    } else if (specification.candidateArtifact === 'gateDefaultArtifact') {
-      validateGateDefaultArtifact(
-        artifact,
-        gate,
-        specification,
-        `${gateId} ${specification.role}`,
-      );
     } else if (specification.candidateArtifact === 'gateToolchainDistribution') {
       validateGateToolchainDistribution(
         artifact,
@@ -2061,6 +2045,7 @@ export function verifyReleaseConformanceEvidence(
       'scenarios',
       'status',
       'suiteCommit',
+      'taskNotificationSupplement',
     ],
     'release conformance evidence',
   );
@@ -2072,8 +2057,8 @@ export function verifyReleaseConformanceEvidence(
     fail('Release manifest conformance commit does not match the reviewed suite pin');
   }
   const selectedScenarios = activeScenarios(selection, 5);
-  if (selectedScenarios.length !== 39)
-    fail('Reviewed Phase 5 conformance selection must contain exactly 39 scenarios');
+  if (selectedScenarios.length !== 49)
+    fail('Reviewed Phase 5 conformance selection must contain exactly 49 scenarios');
 
   if (evidence.formatVersion !== 1
       || evidence.evidenceClass !== 'IMMUTABLE_RELEASE_CANDIDATE'
@@ -2091,6 +2076,16 @@ export function verifyReleaseConformanceEvidence(
   }
 
   const profilesById = new Map(expectedChecks.profiles.map((profile) => [profile.id, profile]));
+  requireExactKeys(
+    evidence.taskNotificationSupplement,
+    ['checks', 'passed'],
+    'release conformance task notification supplement',
+  );
+  if (evidence.taskNotificationSupplement.passed !== true
+      || JSON.stringify(evidence.taskNotificationSupplement.checks)
+        !== JSON.stringify(taskNotificationSupplementChecks)) {
+    fail('Release conformance task notification supplement must pass all eight exact reviewed checks');
+  }
   for (const [index, expectedScenario] of selectedScenarios.entries()) {
     const actual = evidence.scenarios[index];
     requireExactKeys(
@@ -2331,13 +2326,6 @@ export function assembleReleaseEvidence(
             || item.artifact.sha256 !== expectedDescriptor.sha256) {
           fail(`${id} artifact descriptor role does not match the validated descriptor`);
         }
-      } else if (specification.candidateArtifact === 'gateDefaultArtifact') {
-        validateGateDefaultArtifact(
-          item.artifact,
-          expectedGate,
-          specification,
-          `${id} ${item.role}`,
-        );
       } else if (specification.candidateArtifact === 'gateToolchainDistribution') {
         validateGateToolchainDistribution(
           item.artifact,

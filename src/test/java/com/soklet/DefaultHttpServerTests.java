@@ -277,7 +277,7 @@ public class DefaultHttpServerTests {
 																								InetSocketAddress remoteAddress,
 																								ConnectionRejectionReason reason,
 																								Throwable throwable) {
-						if (serverType == ServerType.STANDARD_HTTP && reason == ConnectionRejectionReason.INTERNAL_ERROR)
+						if (serverType == ServerType.HTTP && reason == ConnectionRejectionReason.INTERNAL_ERROR)
 							acceptFailureLatch.countDown();
 					}
 				})
@@ -303,7 +303,7 @@ public class DefaultHttpServerTests {
 			Assertions.assertTrue(acceptFailureLatch.await(2, TimeUnit.SECONDS));
 			Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getTransportFailures()
 					.get(new MetricsCollector.TransportFailureKey(
-							ServerType.STANDARD_HTTP,
+							ServerType.HTTP,
 							MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED)));
 			Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
 					logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());

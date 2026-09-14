@@ -24,15 +24,16 @@ Tasks implementation checkpoint, followed by the 2026-09-10 release-review
 API amendment and provisional Tasks signature freeze, and the
 lifecycle-observer and public-value amendment, followed by the authored
 input-schema remediation and 2026-09-11 pre-release naming and unparsed-request
-observation/response amendments. The
+observation/response amendments. The 2026-09-14 HTTP server-type naming amendment
+below records the subsequent non-MCP enum correction. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 648 records and has SHA-256
-`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+4.0.0 source tree. It currently contains 649 records and has SHA-256
+`981f1c85c1e81ca6f1cf75cab1cc333c08421e40c4e785a20d9fd46d1f26738a`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -77,9 +78,9 @@ scope has exactly one owner:
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
-| `non-mcp-public-api.allowlist` | 59 | reviewed lifecycle, runner, transport-SPI, CORS, and metrics owners |
+| `non-mcp-public-api.allowlist` | 60 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, and server-type owners |
 
-The 248-entry MCP union plus the 59-entry non-MCP allowlist owns exactly 307 current types.
+The 248-entry MCP union plus the 60-entry non-MCP allowlist owns exactly 308 current types.
 Ownership alone does not freeze a type. The three phase snapshots freeze their
 phase inventories, and the separate `provisional.signatures.jsonl` snapshot
 now freezes the 14 Tasks owners while retaining their explicit provisional
@@ -99,7 +100,7 @@ compatibility inventory.
 
 ## Current local evidence
 
-The 2026-09-11 unparsed-request API reconciliation is green at 648
+The 2026-09-11 unparsed-request API reconciliation was green at 648
 incompatibilities, 307 exact owners, 1,135/200/425 Phase 4/5/6 signature
 records, and 98 provisional
 Tasks signature records. The aggregate API-freeze verifier passes against the
@@ -2614,3 +2615,26 @@ compatibility ledger or its SHA-256
 `d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
 The historical D1p preview seal remains immutable; a release candidate must
 capture these active snapshots as fresh API-freeze evidence.
+
+### 2026-09-14 HTTP server-type naming amendment
+
+The owner-approved naming correction replaces `ServerType.STANDARD_HTTP` with
+`ServerType.HTTP` without retaining an alias. The shorter constant matches
+`HttpServer` and `ShutdownComponentType.HTTP`. Applications must update Java
+references and switches, migrate persisted enum names, and recompile against
+4.0.0. The built-in Prometheus transport-failure metric derives its
+`server_type` label from `Enum.name()`, so its HTTP value changes from
+`STANDARD_HTTP` to `HTTP`. The explicit OpenTelemetry mapping continues to
+emit `http`.
+
+Removing the released constant adds exactly one reviewed `FIELD_REMOVED`
+record to the 3.5.1 comparison. The compatibility ledger now contains 649
+records with SHA-256
+`981f1c85c1e81ca6f1cf75cab1cc333c08421e40c4e785a20d9fd46d1f26738a`.
+Adding the replacement constant introduces a current-side public API delta
+on `ServerType`, which therefore joins the non-MCP allowlist. That inventory
+now contains 60 owners with SHA-256
+`5898e5ab29ee1b65bf69683de12a4ed05c7b0382792224d42c1c55750d70b0be`;
+the exact current-side union contains 308 owners. The Phase 4/5/6 and provisional
+Tasks signature snapshots are unchanged. The immutable Phase 0 ledger and
+historical D1p evidence retain their original symbols and seals.

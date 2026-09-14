@@ -292,6 +292,15 @@ consumes the exact documented source identity rather than a Maven coordinate.
 Step 6 consumes both three-hash tuples as its required equality target. G4
 consumes both build receipts and the install rehearsal receipt.
 
+Before the downstream owner-commit/pin step, rerun the
+[packaged consumer fixture](../verification/consumer-build/README.md) against
+that same canonical Java-17-built main JAR in all nine combinations of consumer
+Java 17/21/25 and Maven/Gradle/direct javac. Use fresh consumer output directories,
+verify the candidate hash before and after each run, and retain generated-index
+and live-request evidence. These consumer runtimes must not rebuild or replace
+the core JAR. Preparation results do not substitute for immutable-candidate
+acceptance receipts or add a new release gate.
+
 **Invalidation edge.** A different commit/tree, dirty checkout, recipe or
 toolchain difference, nonliteral timestamp, missing artifact, any pairwise
 hash mismatch, failed byte comparison after install, or a later artifact-
@@ -321,9 +330,9 @@ checked-in release-validator command family:
 
 | Gate | Required rehearsal command family and binding |
 |---|---|
-| `barebones-app` | Compile with `javac --release 17 -parameters -processor com.soklet.SokletProcessor -classpath soklet-4.0.0.jar`, then perform the noninteractive loopback start/probe/graceful-stop/port-release checks. Record the exact vendored main-JAR SHA-256. |
-| `soklet-servlet-javax` | `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, with the candidate leg forced to the isolated repository. Prove default `com.soklet:soklet:3.1.1` and candidate `com.soklet:soklet:4.0.0` plus both resolved JAR hashes. |
-| `soklet-servlet-jakarta` | The same released-default and exact-candidate command family and effective-coordinate/hash proof as the `javax` repository. |
+| `barebones-app` | First verify that tracked `soklet-4.0.0.jar` equals step 3's candidate main JAR. Compile and run against that unchanged vendored file with `javac --release 17 -parameters -processor com.soklet.SokletProcessor -classpath soklet-4.0.0.jar`, then perform the noninteractive loopback start/probe/graceful-stop/port-release checks. Retain the file under the version-2 `vendored-jar` evidence role and recheck its hash. |
+| `soklet-servlet-javax` | For adapter 2.0.0, run `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, both forced to the isolated repository. Prove the default property is exact `4.0.0` and both configurations resolve the identical `com.soklet:soklet:4.0.0` candidate JAR. No 3.x compatibility leg remains. |
+| `soklet-servlet-jakarta` | The same default-property/explicit-override command family and identical-candidate coordinate/hash proof as the `javax` repository, for adapter 2.0.0. |
 | `toystore-app` | Run `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, both against the isolated repository. On the final F2 tree, prove both legs resolve the exact candidate coordinate/hash because the tracked property default is exact `4.0.0`. Retain the separate Milestone-R pinned-base receipt that proved the former default `3.5.1` and candidate override; do not misstate that historical default as the final F2 default. |
 | `soklet-otel` | `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify` against the isolated repository, including the exact six-value shutdown-outcome vocabulary and effective coordinate/hash proof. |
 | `soklet-website` | `npm ci --ignore-scripts`, `npm run lint`, `npm run ssg-build`, and `git diff --exit-code`; record the exact documented core identity plus source, generated-distribution, lockfile/workflow, and generator hashes. No Maven coordinate is fabricated. |
@@ -337,7 +346,7 @@ clean at the new commit.
 
 **Tracked inputs.** The six recorded bases and repositories; owner-approved
 migration specification; each downstream's tracked source, POM or lockfile,
-validator hook, generated-content rules, and preserved released-default
+validator hook, generated-content rules, and exact core 4.0.0 default
 dependency where required; step 3's exact POM/main-JAR or documented-source
 identity; and the candidate-tracked downstream evidence contract in
 `scripts/release-validation-evidence.mjs`.

@@ -1031,7 +1031,7 @@ final class DefaultHttpServer implements HttpServer {
 						return;
 
 					UnparsedRequest request = UnparsedRequest
-							.withServerTypeAndReason(ServerType.STANDARD_HTTP,
+							.withServerTypeAndReason(ServerType.HTTP,
 									unparsedRequestReason(rejection.reason()))
 							.remoteAddress(rejection.remoteAddress())
 							.capturedBytes(rejection.capturedBytesForTransfer())
@@ -1349,7 +1349,7 @@ final class DefaultHttpServer implements HttpServer {
 				.build());
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didRecordTransportFailure", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.STANDARD_HTTP, reason, throwable));
+				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.HTTP, reason, throwable));
 	}
 
 	@NonNull
@@ -2023,7 +2023,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (request == null)
 			return;
 
-		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.STANDARD_HTTP,
+		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.HTTP,
 				request, resourceMethod, marshaledResponse, establishedAt);
 		StreamTermination termination = StreamTermination
 				.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
@@ -2057,7 +2057,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
-			getLifecycleObserver().willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress);
+			getLifecycleObserver().willAcceptConnection(ServerType.HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -2069,12 +2069,12 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::willAcceptConnection", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddressSnapshot));
+				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.HTTP, remoteAddressSnapshot));
 	}
 
 	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
-			getLifecycleObserver().didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress);
+			getLifecycleObserver().didAcceptConnection(ServerType.HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -2086,7 +2086,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didAcceptConnection", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddressSnapshot));
+				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.HTTP, remoteAddressSnapshot));
 	}
 
 	private void notifyDidFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
@@ -2095,7 +2095,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().didFailToAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress, reason, throwable);
+			getLifecycleObserver().didFailToAcceptConnection(ServerType.HTTP, remoteAddress, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -2109,7 +2109,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didFailToAcceptConnection", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.HTTP,
 						remoteAddressSnapshot,
 						reasonSnapshot,
 						throwableSnapshot));
@@ -2118,7 +2118,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			 @Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().willAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
+			getLifecycleObserver().willAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -2131,7 +2131,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::willAcceptRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -2139,7 +2139,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			@Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().didAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
+			getLifecycleObserver().didAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -2152,7 +2152,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didAcceptRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -2164,7 +2164,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().didFailToAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable);
+			getLifecycleObserver().didFailToAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -2179,7 +2179,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didFailToAcceptRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot,
 						reasonSnapshot,
@@ -2189,7 +2189,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		 @Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().willReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
+			getLifecycleObserver().willReadRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -2202,7 +2202,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::willReadRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -2210,7 +2210,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		@Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().didReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
+			getLifecycleObserver().didReadRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -2223,7 +2223,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didReadRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -2235,7 +2235,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().didFailToReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable);
+			getLifecycleObserver().didFailToReadRequest(ServerType.HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -2250,7 +2250,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didFailToReadRequest", MetricsCollector.class.getSimpleName()),
-				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.STANDARD_HTTP,
+				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.HTTP,
 						remoteAddressSnapshot,
 						requestTargetSnapshot,
 						reasonSnapshot,

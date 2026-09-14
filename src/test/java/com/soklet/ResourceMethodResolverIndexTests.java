@@ -32,13 +32,13 @@ public class ResourceMethodResolverIndexTests {
 		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(IndexedRouteResource.class));
 
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/indexed/literal").build(),
-				ServerType.STANDARD_HTTP, "literal");
+				ServerType.HTTP, "literal");
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/indexed/123").build(),
-				ServerType.STANDARD_HTTP, "placeholder");
+				ServerType.HTTP, "placeholder");
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/indexed/files/js/app.js").build(),
-				ServerType.STANDARD_HTTP, "varargs");
+				ServerType.HTTP, "varargs");
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/assets").build(),
-				ServerType.STANDARD_HTTP, "assetsVarargs");
+				ServerType.HTTP, "assetsVarargs");
 	}
 
 	@Test
@@ -46,7 +46,7 @@ public class ResourceMethodResolverIndexTests {
 		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(IndexedRouteResource.class));
 
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/events/123").build(),
-				ServerType.STANDARD_HTTP, "httpEvent");
+				ServerType.HTTP, "httpEvent");
 		assertRoute(resolver, Request.withPath(HttpMethod.GET, "/events/123").build(),
 				ServerType.SSE, "sseEvent");
 	}

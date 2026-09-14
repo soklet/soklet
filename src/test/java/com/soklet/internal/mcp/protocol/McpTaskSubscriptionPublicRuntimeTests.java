@@ -62,6 +62,7 @@ import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -70,7 +71,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -819,6 +823,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(90)
 	public void maximumTaskIdStormCoalescesWithoutClosingItsSubscription()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
@@ -839,7 +844,14 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			for (int index = 0; index < 256; index++) {
 				String taskId = "task-storm-" + index;
 				taskIds.add(taskId);
-				taskManager.putTask(workingTask(taskId, origin),
+				Map<String, McpJsonValue> persisted = new LinkedHashMap<>(
+						origin.getPersistedState().getMembers());
+				persisted.put("rawArguments", McpJsonObject.builder()
+						.put("private", "PRIVATE-ORIGIN-" + index
+								+ "x".repeat(128 * 1024)).build());
+				taskManager.putTask(workingTask(taskId,
+						McpTaskOrigin.fromPersistedState(
+								McpJsonObject.fromMembers(persisted))),
 						"authorization-" + ALPHA);
 			}
 
@@ -848,6 +860,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"bounded-storm\"", taskIds),
 					client.readChunkText());
+			Object control = subscriptionControl(server);
 			taskManager.resetFindInvocations();
 
 			taskManager.blockTaskFindsAfterSnapshot(Set.of(taskIds.get(0)));
@@ -873,6 +886,24 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(1,
 					server.getDiagnostics().getActiveSubscriptions());
 			metrics.assertOpen();
+			awaitProjectionDrained(control);
+			assertNoPrivateProjectionRetention(control, taskIds.size());
+
+			for (String taskId : taskIds) {
+				String output = "PRIVATE-RESULT-" + taskId + "y".repeat(64 * 1024);
+				taskManager.replaceTask(completedTask(
+						taskManager.requireTask(taskId), output));
+				taskManager.publishTaskChanged(taskId);
+				Assertions.assertTrue(client.readChunkText().contains(output),
+						"The completed output must be delivered before it is released.");
+			}
+			awaitProjectionDrained(control);
+			assertNoPrivateProjectionRetention(control, taskIds.size());
+
+			client.closeWithReset();
+			client = null;
+			awaitActiveSubscriptions(server, 0);
+			assertNoPrivateProjectionRetention(control, 0);
 		} finally {
 			taskManager.releaseBlockedTaskFinds();
 			if (client != null)
@@ -882,6 +913,86 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(90)
+	public void deliveryComparisonPreservesSameTimestampChangesAndStaleSuppression()
+			throws Exception {
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpServer server = serverBuilder(taskManager, new AtomicInteger()).build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			String taskId = "task-comparison";
+			String controlTaskId = "task-comparison-control";
+			seedTask(port, taskId, ALPHA);
+			seedTask(port, controlTaskId, ALPHA);
+			client = listen(port, "\"comparison\"", ALPHA, true,
+					taskIdsFilter(List.of(taskId, controlTaskId)));
+			assertSseHead(client.readHead());
+			client.readChunkText();
+			Object control = subscriptionControl(server);
+
+			taskManager.publishTaskChanged(taskId);
+			Assertions.assertEquals(workingNotification("\"comparison\"", taskId),
+					client.readChunkText());
+			awaitProjectionDrained(control);
+
+			McpTask original = taskManager.requireTask(taskId);
+			// A separately constructed equal value must not cause another delivery.
+			taskManager.replaceTask(workingTask(taskId, original.getTaskOrigin()));
+			taskManager.publishTaskChanged(taskId);
+			taskManager.publishTaskChanged(controlTaskId);
+			Assertions.assertEquals(workingNotification("\"comparison\"",
+					controlTaskId), client.readChunkText());
+			awaitProjectionDrained(control);
+
+			taskManager.replaceTask(workingTaskWithMessage(original,
+					"same-time-message"));
+			taskManager.publishTaskChanged(taskId);
+			Assertions.assertTrue(client.readChunkText().contains(
+					"\"statusMessage\":\"same-time-message\""),
+					"A timestamp alone is not a delivery-comparison key.");
+			awaitProjectionDrained(control);
+
+			McpTask metadataChange = McpTask.withTaskId(taskId,
+					original.getTaskOrigin(), McpTaskStatus.WORKING,
+					CREATED_AT, WORKING_UPDATED_AT)
+					.taskStatusMessage("same-time-message")
+					.timeToLive(TASK_TIME_TO_LIVE).pollInterval(POLL_INTERVAL)
+					.metadata(McpJsonObject.builder()
+							.put("com.example/change", "same-time-metadata").build())
+					.build();
+			taskManager.replaceTask(metadataChange);
+			taskManager.publishTaskChanged(taskId);
+			Assertions.assertTrue(client.readChunkText().contains(
+					"\"com.example/change\":\"same-time-metadata\""));
+			awaitProjectionDrained(control);
+
+			taskManager.replaceTask(McpTask.withTaskId(taskId,
+					original.getTaskOrigin(), McpTaskStatus.WORKING,
+					CREATED_AT, WORKING_UPDATED_AT.minusMillis(1))
+					.taskStatusMessage("stale-message").build());
+			taskManager.publishTaskChanged(taskId);
+			taskManager.replaceTask(workingTaskWithMessage(
+					taskManager.requireTask(controlTaskId), "control-after-stale"));
+			taskManager.publishTaskChanged(controlTaskId);
+			Assertions.assertTrue(client.readChunkText().contains(
+					"\"statusMessage\":\"control-after-stale\""),
+					"Changed content must not override the stale-timestamp fence.");
+			awaitProjectionDrained(control);
+			assertNoPrivateProjectionRetention(control, 2);
+			soklet.close();
+			assertNoPrivateProjectionRetention(control, 0);
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	@Timeout(90)
 	public void disconnectDuringActiveProjectionReleasesSubscriptionAndRecovers()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
@@ -901,6 +1012,11 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"disconnect-active\"",
 					List.of("task-disconnect-active")), client.readChunkText());
+			Object control = subscriptionControl(server);
+			taskManager.publishTaskChanged("task-disconnect-active");
+			Assertions.assertEquals(workingNotification("\"disconnect-active\"",
+					"task-disconnect-active"), client.readChunkText());
+			awaitProjectionDrained(control);
 			taskManager.resetFindInvocations();
 
 			taskManager.blockTaskFindsAfterSnapshot(
@@ -910,10 +1026,12 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			client.closeWithReset();
 			client = null;
 			awaitActiveSubscriptions(server, 0);
+			assertNoPrivateProjectionRetention(control, 0);
 
 			taskManager.releaseBlockedTaskFinds();
 			taskManager.awaitFindCompletions("task-disconnect-active", 1);
 			assertDiscoverCompletes(port);
+			assertNoPrivateProjectionRetention(control, 0);
 			awaitRecoveredTaskSubscription(port, "task-disconnect-recovered");
 		} finally {
 			taskManager.releaseBlockedTaskFinds();
@@ -1350,13 +1468,18 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	private static McpTask completedTask(@NonNull McpTask previous) {
+		return completedTask(previous, "completed-output");
+	}
+
+	private static McpTask completedTask(@NonNull McpTask previous,
+			@NonNull String output) {
 		return McpTask.withTaskId(previous.getTaskId(), previous.getTaskOrigin(),
 					McpTaskStatus.COMPLETED, CREATED_AT, COMPLETED_UPDATED_AT)
 				.taskStatusMessage("completed-message")
 				.timeToLive(TASK_TIME_TO_LIVE)
 				.pollInterval(POLL_INTERVAL)
 				.completedResult(McpCompleteResult
-						.fromToolText("completed-output")
+						.fromToolText(output)
 						.withMetadata(McpJsonObject.builder()
 								.put("com.example/completed", "nested")
 								.build()))
@@ -1477,6 +1600,90 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				reserved = Math.addExact(reserved, (Integer) count);
 			}
 			return reserved;
+		}
+	}
+
+	private static Object subscriptionControl(@NonNull McpServer server)
+			throws Exception {
+		Object runtime = field(field(server, "runtimeBridge"), "runtime");
+		Map<?, ?> controls = (Map<?, ?>) field(runtime, "requestControls");
+		List<?> snapshot;
+		synchronized (controls) {
+			snapshot = List.copyOf(controls.values());
+		}
+		for (Object control : snapshot) {
+			synchronized (field(control, "lock")) {
+				if (field(control, "subscriptionRegistration") != null)
+					return control;
+			}
+		}
+		throw new AssertionError("No active subscription control exists.");
+	}
+
+	private static void awaitProjectionDrained(@NonNull Object control)
+			throws Exception {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (true) {
+			synchronized (field(control, "lock")) {
+				McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
+						(McpHttpServerRuntime.TaskNotificationProjectionQueue)
+								field(control, "taskNotificationProjectionQueue");
+				McpRequestSseStream stream = (McpRequestSseStream)
+						field(control, "responseStream");
+				if (!queue.jobOutstanding()
+						&& stream.snapshot().orElseThrow().bufferedFrames() == 0)
+					return;
+			}
+			if (System.nanoTime() - deadline >= 0L)
+				throw new AssertionError("Task projection or outbound frames did not drain.");
+			Thread.sleep(10L);
+		}
+	}
+
+	private static void assertNoPrivateProjectionRetention(
+			@NonNull Object control, int expectedTaskIds) throws Exception {
+		synchronized (field(control, "lock")) {
+			Object queue = field(control, "taskNotificationProjectionQueue");
+			Assertions.assertEquals(expectedTaskIds,
+					((Map<?, ?>) field(queue, "states")).size(),
+					"Terminal subscription cleanup must release all delivery state.");
+			assertNoPrivateTaskObjects(queue,
+					Collections.newSetFromMap(new IdentityHashMap<>()));
+		}
+	}
+
+	private static void assertNoPrivateTaskObjects(@Nullable Object value,
+			Set<Object> visited) throws Exception {
+		if (value == null || !visited.add(value))
+			return;
+		Assertions.assertFalse(value instanceof McpTaskOrigin
+				|| value instanceof McpTask
+				|| value instanceof McpCompleteResult
+				|| value instanceof McpServerRuntimeBridge.TaskSnapshot,
+				"Delivery comparison retained a private origin/full task/result: "
+						+ value.getClass().getName());
+		if (value instanceof String string) {
+			Assertions.assertFalse(string.contains("PRIVATE-ORIGIN-")
+					|| string.contains("PRIVATE-RESULT-"),
+					"Delivery comparison must not retain serialized private payloads.");
+		} else if (value instanceof Map<?, ?> map) {
+			for (Map.Entry<?, ?> entry : map.entrySet()) {
+				assertNoPrivateTaskObjects(entry.getKey(), visited);
+				assertNoPrivateTaskObjects(entry.getValue(), visited);
+			}
+		} else if (value instanceof Iterable<?> iterable) {
+			for (Object element : iterable)
+				assertNoPrivateTaskObjects(element, visited);
+		} else if (value instanceof Optional<?> optional) {
+			assertNoPrivateTaskObjects(optional.orElse(null), visited);
+		} else if (!value.getClass().isEnum()
+				&& value.getClass().getName().startsWith("com.soklet.")) {
+			for (Field field : value.getClass().getDeclaredFields()) {
+				if (Modifier.isStatic(field.getModifiers()))
+					continue;
+				field.setAccessible(true);
+				assertNoPrivateTaskObjects(field.get(value), visited);
+			}
 		}
 	}
 

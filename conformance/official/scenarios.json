@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
-  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
   "currentImplementationPhase": 5,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phaseExecutionPolicy": "Phase 5 activates all 39 RUN rows, retaining the 23 historical Phase 3/4 profile IDs and requiring the 16 reviewed Phase 5 profiles acquired in one complete controlled observation. completion-complete remains the sole NOT_APPLICABLE row and its profile remains null.",
+  "phaseExecutionPolicy": "Phase 5 activates all 49 RUN rows after the 2026-09-13 alpha.11 repin: the prior 39 core scenarios plus ten Tasks extension scenarios. All profiles were re-observed against the exact built CLI; tools-list.phase4.v2 records the new deterministic-order check. Tasks notification delivery remains an explicit upstream harness SKIPPED profile with independent socket-level supplements. completion-complete remains the sole NOT_APPLICABLE row.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -48,7 +48,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": "tools-list.phase4.v1",
+      "expectedCheckProfile": "tools-list.phase4.v2",
       "requiredFixtureRegistrations": [
         "immutable tools/list catalog containing every official fixture tool"
       ],
@@ -56,7 +56,7 @@
         "McpServerCapabilityRegistryTests#tool_and_prompt_catalogs_are_truthful_immutable_and_never_mutable",
         "McpServerCapabilityRegistryTests#duplicate_catalog_names_fail_during_normalization"
       ],
-      "rationale": "Owned by the Phase 4 tools gate."
+      "rationale": "Owned by the Phase 4 tools gate. The 2026-09-13 alpha.11 observation additionally verifies deterministic catalog ordering."
     },
     {
       "ordinal": 4,
@@ -441,6 +441,167 @@
     },
     {
       "ordinal": 27,
+      "name": "tasks-lifecycle",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-lifecycle.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 28,
+      "name": "tasks-capability-negotiation",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-capability-negotiation.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 29,
+      "name": "tasks-wire-fields",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-wire-fields.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 30,
+      "name": "tasks-request-state-removal",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-request-state-removal.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 31,
+      "name": "tasks-mrtr-input",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-mrtr-input.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 32,
+      "name": "tasks-request-headers",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-request-headers.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 33,
+      "name": "tasks-dispatch-and-envelope",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-dispatch-and-envelope.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 34,
+      "name": "tasks-status-notifications",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-status-notifications.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTaskSubscriptionPublicRuntimeTests#acknowledgmentFiltersTaskIdsAndEventCarriesExactCurrentSnapshot",
+        "McpTaskSubscriptionPublicRuntimeTests#maximumTaskIdStormCoalescesWithoutClosingItsSubscription",
+        "McpTaskSubscriptionPublicRuntimeTests#duplicateEventsReadCurrentTerminalAndSuppressLaterStates"
+      ],
+      "rationale": "The exact alpha.11 scenario reports one SKIPPED check because upstream has not rewritten its notification harness for subscriptions/listen. This is an explicitly reviewed harness gap, not a passing delivery test; independent production-listener Tasks notification tests cover acknowledgment, current snapshots, authorization, filtering, coalescing, disconnect and terminal suppression."
+    },
+    {
+      "ordinal": 35,
+      "name": "tasks-required-task-error",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-required-task-error.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 36,
+      "name": "tasks-mrtr-composition",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "tasks-mrtr-composition.phase5.v1",
+      "requiredFixtureRegistrations": [
+        "public durable Tasks fixture tools and framework-owned task methods"
+      ],
+      "localSupplements": [
+        "McpTasksPublicRuntimeTests#creationAndEveryDetailedTaskStateHaveExactWireShapes",
+        "McpTasksPublicRuntimeTests#capabilityAndTaskNamespacePreflightRemainFailClosed"
+      ],
+      "rationale": "The exact alpha.11 scenario was observed on 2026-09-13 against a fresh public fixture backed by the packaged working-tree JAR. Every ordinary check and its automatic wire-schema check succeeded without warnings, harness errors or forced cleanup; the reviewed exact multiset is frozen here, not claimed as immutable candidate evidence."
+    },
+    {
+      "ordinal": 37,
       "name": "input-required-result-basic-elicitation",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -457,7 +618,7 @@
       "rationale": "Local production-listener evidence covers elicitation emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 28,
+      "ordinal": 38,
       "name": "input-required-result-basic-sampling",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -475,7 +636,7 @@
       "rationale": "Local production-listener and input-union evidence covers sampling emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 29,
+      "ordinal": 39,
       "name": "input-required-result-basic-list-roots",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -493,7 +654,7 @@
       "rationale": "Local production-listener and input-union evidence covers roots emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 30,
+      "ordinal": 40,
       "name": "input-required-result-request-state",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -511,7 +672,7 @@
       "rationale": "Local production-listener, coordinator, and protection-vector evidence covers protected request-state continuation. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 31,
+      "ordinal": 41,
       "name": "input-required-result-multiple-input-requests",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -529,7 +690,7 @@
       "rationale": "Local descriptor and production-listener evidence covers combined state, ordered multi-input emission, and multi-type responses. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 32,
+      "ordinal": 42,
       "name": "input-required-result-multi-round",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -545,7 +706,7 @@
       "rationale": "Local coordinator evidence covers protected-state re-emission and a public fresh-ID retry. The exact three-round official listener scenario cleanly produced three ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 33,
+      "ordinal": 43,
       "name": "input-required-result-missing-input-response",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -560,7 +721,7 @@
       "rationale": "A local production-listener test covers re-requesting a missing key while preserving unexpected valid responses. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 34,
+      "ordinal": 44,
       "name": "input-required-result-non-tool-request",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -577,7 +738,7 @@
       "rationale": "Local production-listener evidence confirms prompts/get may return input_required and later a complete prompt result. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 35,
+      "ordinal": 45,
       "name": "input-required-result-result-type",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -593,7 +754,7 @@
       "rationale": "Local wire-model and production golden evidence confirms explicit input_required and complete resultType values. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 36,
+      "ordinal": 46,
       "name": "input-required-result-unsupported-methods",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -610,7 +771,7 @@
       "rationale": "Local result-factory and production-listener evidence covers the supported-method boundary and complete list results. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 37,
+      "ordinal": 47,
       "name": "input-required-result-tampered-state",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -626,7 +787,7 @@
       "rationale": "Local production-listener and built-in-envelope evidence covers tamper rejection and its precedence. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 38,
+      "ordinal": 48,
       "name": "input-required-result-capability-check",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -644,7 +805,7 @@
       "rationale": "Local production-listener evidence covers current-request capability scoping and conditional emission. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 39,
+      "ordinal": 49,
       "name": "input-required-result-ignore-extra-params",
       "selection": "RUN",
       "earliestPhase": 5,
@@ -660,7 +821,7 @@
       "rationale": "Local production-listener evidence preserves unexpected valid responses for application handling and permits normal completion. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
-      "ordinal": 40,
+      "ordinal": 50,
       "name": "input-required-result-validate-input",
       "selection": "RUN",
       "earliestPhase": 5,

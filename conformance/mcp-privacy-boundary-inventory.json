@@ -34143,9 +34143,9 @@
         },
         {
           "file": "src/main/java/com/soklet/FileResponse.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/FileResponse.java#com.soklet.FileResponse#rejectControlledHeaderConflicts(Map<String, Set<String>>)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/FileResponse.java#com.soklet.FileResponse#rejectControlledHeaderConflicts(Map<String, Set<String>>,String)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "rejectControlledHeaderConflicts(Map<String, Set<String>>)",
+          "member": "rejectControlledHeaderConflicts(Map<String, Set<String>>,String)",
           "occurrence": 1,
           "owner": "com.soklet.FileResponse",
           "sink": "Throwable.IllegalArgumentException"
@@ -42801,6 +42801,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HttpTransportPlan#HttpTransportPlan()->Throwable.IllegalArgumentException@5",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "HttpTransportPlan()",
+          "occurrence": 5,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HttpTransportPlan",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HttpTransportPlan#maximumAggregateRequestBytes(int,int,int)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "maximumAggregateRequestBytes(int,int,int)",
@@ -44569,6 +44578,15 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "observeContentLengthHeader(Header)",
           "occurrence": 3,
+          "owner": "com.soklet.internal.microhttp.RequestParser",
+          "sink": "Throwable.MalformedRequestException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/RequestParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/RequestParser.java#com.soklet.internal.microhttp.RequestParser#observeContentLengthHeader(Header)->Throwable.MalformedRequestException@4",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "observeContentLengthHeader(Header)",
+          "occurrence": 4,
           "owner": "com.soklet.internal.microhttp.RequestParser",
           "sink": "Throwable.MalformedRequestException"
         },
@@ -54546,33 +54564,6 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#failTaskNotificationProjection(StreamTerminationReason,Throwable)->MetricsCollector.invocation.reset@1",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "failTaskNotificationProjection(StreamTerminationReason,Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
-          "sink": "MetricsCollector.invocation.reset"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#failTaskNotificationProjection(StreamTerminationReason,Throwable)->MetricsCollector.invocation.reset@2",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "failTaskNotificationProjection(StreamTerminationReason,Throwable)",
-          "occurrence": 2,
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
-          "sink": "MetricsCollector.invocation.reset"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectTaskNotification()->MetricsCollector.invocation.reset@1",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "projectTaskNotification()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
-          "sink": "MetricsCollector.invocation.reset"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#startObservation(McpRuntimeObservationSink,McpRuntimeRequestInput)->MetricsCollector.invocation.disabledInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
           "member": "startObservation(McpRuntimeObservationSink,McpRuntimeRequestInput)",
@@ -59334,6 +59325,110 @@
           "sink": "Diagnostic.toString"
         }
       ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#deliveryComparisonPreservesSameTimestampChangesAndStaleSuppression",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#disconnectDuringActiveProjectionReleasesSubscriptionAndRecovers",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#maximumTaskIdStormCoalescesWithoutClosingItsSubscription"
+      ],
+      "category": "DIAGNOSTIC",
+      "classification": "EXACT_APPLICATION_BOUNDARY",
+      "contract": "Private task-notification delivery comparison preserves previously delivered nonterminal status, message, timestamps, TTL, poll interval, input requests, and metadata structurally. Its constructor, accessors, and implicit record rendering therefore contain exact client-visible application values; the value is not a public API and is not emitted by built-in logs or metrics. It never retains a task origin, persisted arguments, full task, or completed result; terminal delivery retains only a marker, and owner cleanup releases comparison state even while an old worker remains referenced. Variable-size visible fields are retained only after bounded notification encoding, for at most 256 task IDs, not as a constant-size memory claim.",
+      "id": "PRIV-BOUND-042",
+      "name": "Internal task-notification comparison values and retention",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#TaskNotificationDeliveryState(McpTaskStatus,Optional<String>,Instant,Instant,Optional<Duration>,Optional<Duration>,Map<String, McpInputRequest>,com.soklet.McpJsonObject)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "TaskNotificationDeliveryState(McpTaskStatus,Optional<String>,Instant,Instant,Optional<Duration>,Optional<Duration>,Map<String, McpInputRequest>,com.soklet.McpJsonObject)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#createdAt()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "createdAt()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#inputRequests()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "inputRequests()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#lastUpdatedAt()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "lastUpdatedAt()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#metadata()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "metadata()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#pollInterval()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "pollInterval()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#status()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "status()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#statusMessage()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "statusMessage()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#timeToLive()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "timeToLive()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.TaskNotificationDeliveryState",
+          "sink": "Diagnostic.recordRenderer"
+        }
+      ]
     }
   ],
   "delegations": [
@@ -59447,7 +59542,74 @@
   ],
   "productionProfile": "2026-07-28",
   "releaseTarget": "4.0.0",
-  "reviewedExclusions": [],
+  "reviewedExclusions": [
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-001",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#completeSubscription(StreamTerminationReason)->MetricsCollector.invocation.reset@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "completeSubscription(StreamTerminationReason)",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-002",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#failTaskNotificationProjection(StreamTerminationReason,Throwable)->MetricsCollector.invocation.reset@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "failTaskNotificationProjection(StreamTerminationReason,Throwable)",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-003",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#failTaskNotificationProjection(StreamTerminationReason,Throwable)->MetricsCollector.invocation.reset@2",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "failTaskNotificationProjection(StreamTerminationReason,Throwable)",
+      "occurrence": 2,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-004",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#markTerminalWhileLocked()->MetricsCollector.invocation.reset@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "markTerminalWhileLocked()",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-005",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectTaskNotification()->MetricsCollector.invocation.reset@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "projectTaskNotification()",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "PRIV-EX-006",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#scheduleSubscriptionStreamFailure(McpRequestSseStream,StreamTerminationReason,Throwable)->MetricsCollector.invocation.reset@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "scheduleSubscriptionStreamFailure(McpRequestSseStream,StreamTerminationReason,Throwable)",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+      "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
+      "sink": "MetricsCollector.invocation.reset"
+    }
+  ],
   "scanRoots": [
     "src/main/java/com/soklet/**/*.java"
   ]

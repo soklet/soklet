@@ -117,7 +117,7 @@ final class SokletFrameworkSetup {
 		if (resourceMethods.isEmpty()
 				&& (this.config.getHttpServer().isPresent()
 				|| this.config.getSseServer().isPresent()))
-			throw new IllegalStateException(format("No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.",
+			throw new IllegalStateException(format("No Soklet Resource Methods were found. For default classpath discovery, configure com.soklet.SokletProcessor using Gradle annotationProcessor or Maven annotationProcessorPaths/annotationProcessors, compile with -parameters, and preserve META-INF/soklet/resource-method-lookup-table when packaging your application. If you supplied a custom %s, ensure its getResourceMethods() returns the configured HTTP/SSE Resource Methods. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.",
 					ResourceMethodResolver.class.getSimpleName()));
 
 		boolean hasStandardHttpResourceMethods = resourceMethods.stream()
