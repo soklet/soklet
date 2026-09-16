@@ -73,7 +73,7 @@ public final class Request {
 	@NonNull
 	private static final Charset DEFAULT_CHARSET;
 	@NonNull
-	private static final IdGenerator DEFAULT_ID_GENERATOR;
+	private static final IdGenerator<?> DEFAULT_ID_GENERATOR;
 
 	static {
 		DEFAULT_CHARSET = StandardCharsets.UTF_8;
@@ -233,7 +233,7 @@ public final class Request {
 		if (rawBuilder == null && pathBuilder == null)
 			throw new IllegalStateException(format("Neither %s nor %s were specified", RawBuilder.class.getSimpleName(), PathBuilder.class.getSimpleName()));
 
-		IdGenerator builderIdGenerator;
+		IdGenerator<?> builderIdGenerator;
 		Object builderId;
 		HttpMethod builderHttpMethod;
 		byte[] builderBody;
@@ -1461,7 +1461,7 @@ public final class Request {
 		@Nullable
 		private Object id;
 		@Nullable
-		private IdGenerator idGenerator;
+		private IdGenerator<?> idGenerator;
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
@@ -1522,7 +1522,7 @@ public final class Request {
 		 * @return this builder
 		 */
 		@NonNull
-		public RawBuilder idGenerator(@Nullable IdGenerator idGenerator) {
+		public RawBuilder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
@@ -1652,7 +1652,7 @@ public final class Request {
 		@Nullable
 		private Object id;
 		@Nullable
-		private IdGenerator idGenerator;
+		private IdGenerator<?> idGenerator;
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
@@ -1727,7 +1727,7 @@ public final class Request {
 		 * @return this builder
 		 */
 		@NonNull
-		public PathBuilder idGenerator(@Nullable IdGenerator idGenerator) {
+		public PathBuilder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}

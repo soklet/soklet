@@ -167,6 +167,10 @@ public interface Simulator {
 	 * Given a request that would normally be handled by your standard {@link HttpServer}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 * <p>
 	 * To make requests that would normally be handled by your {@link SseServer}, use {@link #performSseRequest(Request)}.
+	 * <p>
+	 * Each invocation processes a fresh copy of {@code request}, preserving its ID and other values.
+	 * Paired lifecycle and metrics callbacks, including HTTP stream handles, share that dispatch copy,
+	 * so the same caller-supplied request may be reused concurrently without sharing observation identity.
 	 *
 	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
@@ -178,6 +182,10 @@ public interface Simulator {
 	 * Given a request that would normally be handled by your {@link SseServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.SseEventSource} annotation), process it and return response data ({@link com.soklet.SseRequestResult.HandshakeAccepted}, {@link com.soklet.SseRequestResult.HandshakeRejected}, or {@link com.soklet.SseRequestResult.RequestFailed});
 	 * <p>
 	 * To make requests that would normally be handled by your {@link HttpServer}, use {@link #performHttpRequest(Request)}.
+	 * <p>
+	 * Each invocation processes a fresh copy of {@code request}, preserving its ID and other values.
+	 * Paired lifecycle and metrics callbacks share that dispatch copy, even when the caller reuses the
+	 * same request concurrently.
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request

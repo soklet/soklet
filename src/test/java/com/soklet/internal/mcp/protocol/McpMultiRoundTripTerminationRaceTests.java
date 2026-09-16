@@ -476,7 +476,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 
 	private void conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult(
 			HoldTermination termination) throws Exception {
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration.roots(
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration.elicitationUrl(
 				McpInputRequirement.CONDITIONAL);
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(roots));
 		BlockingProtector protector = new BlockingProtector();

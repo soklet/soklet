@@ -102,6 +102,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Soklet's standard annotation processor. It generates lookup tables for
  * <em>Resource Method</em> definitions, generated public-API-only MCP endpoint
@@ -2729,8 +2731,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(index).append(".build());\n");
 		}
 
-		if (endpoint.resourceList() != null) {
-			McpResourceListModel resourceList = endpoint.resourceList();
+		McpResourceListModel resourceList = endpoint.resourceList();
+		if (resourceList != null) {
 			source.append("\t\tendpointBuilder.resourceListHandler(")
 					.append("(request, list, features) -> instanceResolver.apply(request).")
 					.append(resourceList.method().getSimpleName()).append('(')
@@ -2758,9 +2760,10 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(", description = ")
 						.append(javaStringLiteral(binding.description()))
 						.append(") ");
-				if (binding.headerName() != null)
+				String headerName = binding.headerName();
+				if (headerName != null)
 					source.append("@com.soklet.annotation.McpHeader(name = ")
-							.append(javaStringLiteral(binding.headerName()))
+							.append(javaStringLiteral(headerName))
 							.append(") ");
 				source
 						.append(mcpSourceType(binding.type())).append(' ')
@@ -2824,17 +2827,6 @@ public final class SokletProcessor extends AbstractProcessor {
 							+ requirement + ")";
 			case "ELICITATION_URL" ->
 					"com.soklet.McpInputRequestDeclaration.fromElicitationUrl("
-							+ requirement + ")";
-			case "SAMPLING" -> {
-				String capabilities = declaration.samplingCapabilities().stream()
-						.map(capability -> "com.soklet.McpClientCapability."
-								+ capability)
-						.collect(Collectors.joining(", "));
-				yield "com.soklet.McpInputRequestDeclaration.fromSampling(java.util.Set.of("
-						+ capabilities + "), " + requirement + ")";
-			}
-			case "ROOTS" ->
-					"com.soklet.McpInputRequestDeclaration.fromRoots("
 							+ requirement + ")";
 			default -> throw new IllegalStateException(
 					"Unsupported generated MCP input-request type.");
@@ -2900,7 +2892,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				case RESOURCE_READ_CONTEXT -> "resource";
 				case URI_PARAMETER -> "java.util.Objects.requireNonNull("
 						+ "resource.getUriTemplateVariables().get("
-						+ javaStringLiteral(binding.variableName()) + "))";
+						+ javaStringLiteral(requireNonNull(binding.variableName())) + "))";
 			});
 		}
 		return String.join(", ", arguments);
@@ -3034,30 +3026,11 @@ public final class SokletProcessor extends AbstractProcessor {
 			String type = annotationEnumConstantName(declaration, "type");
 			String requirement = annotationEnumConstantName(declaration,
 					"requirement");
-			List<String> declaredSamplingCapabilities =
-					annotationEnumConstantNames(declaration,
-							"samplingCapabilities");
-			LinkedHashSet<String> samplingCapabilities = new LinkedHashSet<>(
-					declaredSamplingCapabilities);
-			if (samplingCapabilities.size()
-					!= declaredSamplingCapabilities.size())
-				mcpError(operation,
-						"Soklet: @McpMayRequestInput samplingCapabilities must not contain duplicates.");
-			boolean knownType = Set.of("ELICITATION_FORM", "ELICITATION_URL",
-					"SAMPLING", "ROOTS").contains(type);
+			boolean knownType = Set.of("ELICITATION_FORM", "ELICITATION_URL").contains(type);
 			if (!knownType)
 				mcpError(operation,
 						"Soklet: @McpMayRequestInput must select a supported input-request type.");
-			if (!"SAMPLING".equals(type) && !samplingCapabilities.isEmpty())
-				mcpError(operation,
-						"Soklet: @McpMayRequestInput samplingCapabilities may be declared only for SAMPLING.");
-			for (String capability : samplingCapabilities)
-				if (!Set.of("SAMPLING_CONTEXT", "SAMPLING_TOOLS")
-						.contains(capability))
-					mcpError(operation,
-							"Soklet: @McpMayRequestInput samplingCapabilities accepts only SAMPLING_CONTEXT and SAMPLING_TOOLS.");
-			declarations.add(new McpInputRequestModel(type,
-					List.copyOf(samplingCapabilities), requirement));
+			declarations.add(new McpInputRequestModel(type, requirement));
 		}
 		return List.copyOf(declarations);
 	}
@@ -4444,7 +4417,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			List<McpPromptParameterBinding> bindings) {}
 
 	private record McpInputRequestModel(String type,
-			List<String> samplingCapabilities, String requirement) {}
+			String requirement) {}
 
 	private record McpParameterBinding(McpParameterBindingKind kind,
 			String publishedName, String carrierName, TypeMirror type, String title,

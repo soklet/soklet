@@ -30,6 +30,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Presence-aware provisional representation of the open client-capability object.
  *
+ * <p>Deprecated Roots and Sampling settings are retained only as validated
+ * peer metadata. Soklet neither negotiates their use nor permits corresponding
+ * input-request declarations.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -108,14 +112,6 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 			case ELICITATION_URL -> elicitation
 					.map(value -> value.members().containsKey("url"))
 					.orElse(false);
-			case ROOTS -> roots.isPresent();
-			case SAMPLING -> sampling.isPresent();
-			case SAMPLING_CONTEXT -> sampling
-					.map(value -> value.members().containsKey("context"))
-					.orElse(false);
-			case SAMPLING_TOOLS -> sampling
-					.map(value -> value.members().containsKey("tools"))
-					.orElse(false);
 		};
 	}
 
@@ -193,12 +189,6 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 						withObjectMember(elicitation.orElseGet(McpJsonObject::empty), "form"));
 				case ELICITATION_URL -> elicitation = Optional.of(
 						withObjectMember(elicitation.orElseGet(McpJsonObject::empty), "url"));
-				case ROOTS -> roots = Optional.of(roots.orElseGet(McpJsonObject::empty));
-				case SAMPLING -> sampling = Optional.of(sampling.orElseGet(McpJsonObject::empty));
-				case SAMPLING_CONTEXT -> sampling = Optional.of(
-						withObjectMember(sampling.orElseGet(McpJsonObject::empty), "context"));
-				case SAMPLING_TOOLS -> sampling = Optional.of(
-						withObjectMember(sampling.orElseGet(McpJsonObject::empty), "tools"));
 			}
 
 			return this;

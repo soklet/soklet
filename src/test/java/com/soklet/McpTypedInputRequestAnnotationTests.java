@@ -82,10 +82,7 @@ public class McpTypedInputRequestAnnotationTests {
 				@McpServerEndpoint(path = "/mcp", name = "typed-input", version = "1")
 				public final class TypedInputEndpoint {
 				  @McpTool(name = "sample", mayRequestInput = @McpMayRequestInput(
-				      type = McpInputRequestType.SAMPLING,
-				      samplingCapabilities = {
-				          McpClientCapability.SAMPLING_CONTEXT,
-				          McpClientCapability.SAMPLING_TOOLS},
+				      type = McpInputRequestType.ELICITATION_FORM,
 				      requirement = McpInputRequirement.CONDITIONAL),
 				      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
 				  public McpOperationResult sample() {
@@ -114,7 +111,7 @@ public class McpTypedInputRequestAnnotationTests {
 
 				  @McpResource(uri = "test://roots", name = "roots",
 				      mayRequestInput = @McpMayRequestInput(
-				          type = McpInputRequestType.ROOTS,
+				          type = McpInputRequestType.ELICITATION_URL,
 				          requirement = McpInputRequirement.CONDITIONAL),
 				      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
 				  public McpOperationResult roots() { return null; }
@@ -146,8 +143,7 @@ public class McpTypedInputRequestAnnotationTests {
 		Assertions.assertTrue(generatedSource.contains(
 				"resourceBuilder0.requestStateMode(com.soklet.McpRequestStateMode.FRAMEWORK_PROTECTED)"),
 				generatedSource);
-		for (String factory : List.of("fromSampling", "fromElicitationForm",
-				"fromElicitationUrl", "fromRoots"))
+		for (String factory : List.of("fromElicitationForm", "fromElicitationUrl"))
 			Assertions.assertTrue(generatedSource.contains(
 					"McpInputRequestDeclaration." + factory + "("),
 					generatedSource);
@@ -167,10 +163,8 @@ public class McpTypedInputRequestAnnotationTests {
 			Assertions.assertEquals(McpRequestStateMode.FRAMEWORK_PROTECTED,
 					tool.getRequestStateMode());
 			assertDeclaration(tool.getInputRequestDeclarations().get(0),
-					McpInputRequestType.SAMPLING, "sampling/createMessage",
-					Set.of(McpClientCapability.SAMPLING,
-							McpClientCapability.SAMPLING_CONTEXT,
-							McpClientCapability.SAMPLING_TOOLS),
+					McpInputRequestType.ELICITATION_FORM, "elicitation/create",
+					Set.of(McpClientCapability.ELICITATION_FORM),
 					McpInputRequirement.CONDITIONAL);
 			McpToolRegistration<?> stateOnlyTool = tools.get("state-only-tool");
 			Assertions.assertEquals(McpRequestStateMode.APPLICATION_PROTECTED,
@@ -233,8 +227,8 @@ public class McpTypedInputRequestAnnotationTests {
 							Function.identity()));
 			assertDeclaration(resources.get("roots")
 					.getInputRequestDeclarations().get(0),
-					McpInputRequestType.ROOTS, "roots/list",
-					Set.of(McpClientCapability.ROOTS),
+					McpInputRequestType.ELICITATION_URL, "elicitation/create",
+					Set.of(McpClientCapability.ELICITATION_URL),
 					McpInputRequirement.CONDITIONAL);
 			Assertions.assertEquals(McpRequestStateMode.FRAMEWORK_PROTECTED,
 					resources.get("roots").getRequestStateMode());
@@ -245,8 +239,9 @@ public class McpTypedInputRequestAnnotationTests {
 		}
 	}
 
+
 	@Test
-	void rejectsSamplingCapabilitiesForNonSamplingTypesAndForeignCapabilities() {
+	void removedRootsSamplingAndSamplingAnnotationMemberDoNotCompile() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.InvalidTypedInputEndpoint", """
 						package example;
@@ -288,15 +283,7 @@ public class McpTypedInputRequestAnnotationTests {
 				.compile(source);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining(
-				"samplingCapabilities may be declared only for SAMPLING")
-				.inFile(source);
-		assertThat(compilation).hadErrorContaining(
-				"samplingCapabilities accepts only SAMPLING_CONTEXT and SAMPLING_TOOLS")
-				.inFile(source);
-		assertThat(compilation).hadErrorContaining(
-				"samplingCapabilities must not contain duplicates")
-				.inFile(source);
+		assertThat(compilation).hadErrorContaining("cannot find symbol");
 	}
 
 	@Test

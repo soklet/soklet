@@ -415,10 +415,6 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			@Override public Optional<String> getApplicationRequestState() {
 				return Optional.empty();
 			}
-			@Override
-			public Optional<McpLogLevel> getLogLevel() {
-				return Optional.empty();
-			}
 			@Override public Optional<TraceContext> getTraceContext() {
 				return Optional.empty();
 			}

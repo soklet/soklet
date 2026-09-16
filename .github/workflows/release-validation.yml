@@ -141,6 +141,13 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/release-scans-maven-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-scans-javadoc-java-distribution.txt"
+
       - name: Build exact candidate artifact
         run: mvn -B -ntp -Dgpg.skip=true -DskipTests clean package
 
@@ -188,6 +195,7 @@ jobs:
             ${{ runner.temp }}/release-scans-node-distribution.txt
             ${{ runner.temp }}/release-scans-java-distribution.txt
             ${{ runner.temp }}/release-scans-build-java-distribution.txt
+            ${{ runner.temp }}/release-scans-javadoc-java-distribution.txt
             ${{ runner.temp }}/release-scans-maven-distribution.txt
 
   mcp-benchmarks:
@@ -244,6 +252,13 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/mcp-benchmark-maven-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/mcp-benchmarks-javadoc-java-distribution.txt"
+
       - name: Build exact candidate artifact
         run: mvn -B -ntp -DskipTests package
 
@@ -282,6 +297,7 @@ jobs:
             ${{ runner.temp }}/mcp-benchmark-work
             ${{ runner.temp }}/mcp-benchmark-node-distribution.txt
             ${{ runner.temp }}/mcp-benchmark-java-distribution.txt
+            ${{ runner.temp }}/mcp-benchmarks-javadoc-java-distribution.txt
             ${{ runner.temp }}/mcp-benchmark-maven-distribution.txt
 
   mcp-benchmarks-finalize:
@@ -355,6 +371,13 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/mcp-benchmark-finalize-maven-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/mcp-benchmarks-finalize-javadoc-java-distribution.txt"
+
       - name: Build exact candidate artifact
         run: mvn -B -ntp -DskipTests package
 
@@ -410,6 +433,7 @@ jobs:
             ${{ runner.temp }}/mcp-benchmark-final-evidence
             ${{ runner.temp }}/mcp-benchmark-finalize-node-distribution.txt
             ${{ runner.temp }}/mcp-benchmark-finalize-java-distribution.txt
+            ${{ runner.temp }}/mcp-benchmarks-finalize-javadoc-java-distribution.txt
             ${{ runner.temp }}/mcp-benchmark-finalize-maven-distribution.txt
 
   validate:
@@ -515,6 +539,13 @@ jobs:
           java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
           "${RUNNER_TEMP}/release-validation-java-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-validation-javadoc-java-distribution.txt"
+
       - name: Install checksum-pinned Maven
         shell: bash
         run: >-
@@ -541,6 +572,7 @@ jobs:
           SOKLET_RELEASE_CORE_JDK_21_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-core-jdk-21-distribution.txt
           SOKLET_RELEASE_GO_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-go-distribution.txt
           SOKLET_RELEASE_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-java-distribution.txt
+          SOKLET_RELEASE_JAVADOC_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-javadoc-java-distribution.txt
           SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-maven-distribution.txt
           SOKLET_RELEASE_NODE_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-node-distribution.txt
           SOKLET_RELEASE_TOYSTORE_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
@@ -560,6 +592,7 @@ jobs:
             ${{ runner.temp }}/release-validation-maven-distribution.txt
             ${{ runner.temp }}/release-validation-go-distribution.txt
             ${{ runner.temp }}/release-validation-java-distribution.txt
+            ${{ runner.temp }}/release-validation-javadoc-java-distribution.txt
             ${{ runner.temp }}/release-validation-core-jdk-21-distribution.txt
             ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
             target/soklet-4.0.0.jar

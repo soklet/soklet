@@ -309,7 +309,7 @@ public class McpServerCapabilityRegistryTests {
 	@Test
 	public void operation_capability_plans_include_tools_prompts_and_resource_reads() {
 		McpInputRequestDeclaration declaration =
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL);
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(declaration));
 		McpServerCapabilityRegistry registry =
 				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()

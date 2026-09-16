@@ -47,51 +47,34 @@ import java.util.Set;
 public final class McpConformanceFixtureContractTest {
 	private static final String ELICITATION =
 			"test_input_required_result_elicitation";
-	private static final String SAMPLING =
-			"test_input_required_result_sampling";
-	private static final String ROOTS =
-			"test_input_required_result_list_roots";
 	private static final String REQUEST_STATE =
 			"test_input_required_result_request_state";
-	private static final String MULTIPLE =
-			"test_input_required_result_multiple_inputs";
 	private static final String MULTI_ROUND =
 			"test_input_required_result_multi_round";
 	private static final String TAMPERED =
 			"test_input_required_result_tampered_state";
-	private static final String CAPABILITIES =
-			"test_input_required_result_capabilities";
 	private static final String PROMPT =
 			"test_input_required_result_prompt";
 	private static final Set<String> PHASE_5_TOOL_NAMES = Set.of(
-			ELICITATION, SAMPLING, ROOTS, REQUEST_STATE, MULTIPLE,
-			MULTI_ROUND, TAMPERED, CAPABILITIES);
+			ELICITATION, REQUEST_STATE, MULTI_ROUND, TAMPERED);
 	private static final Map<String, String> SCENARIO_TO_TOOL = Map.ofEntries(
 			Map.entry("input-required-result-basic-elicitation", ELICITATION),
-			Map.entry("input-required-result-basic-sampling", SAMPLING),
-			Map.entry("input-required-result-basic-list-roots", ROOTS),
 			Map.entry("input-required-result-request-state", REQUEST_STATE),
-			Map.entry("input-required-result-multiple-input-requests", MULTIPLE),
 			Map.entry("input-required-result-multi-round", MULTI_ROUND),
 			Map.entry("input-required-result-missing-input-response", ELICITATION),
 			Map.entry("input-required-result-result-type", ELICITATION),
 			Map.entry("input-required-result-tampered-state", TAMPERED),
-			Map.entry("input-required-result-capability-check", CAPABILITIES),
 			Map.entry("input-required-result-ignore-extra-params", ELICITATION),
 			Map.entry("input-required-result-validate-input", ELICITATION));
 	private static final Set<String> PHASE_5_SCENARIOS = Set.of(
 			"input-required-result-basic-elicitation",
-			"input-required-result-basic-sampling",
-			"input-required-result-basic-list-roots",
 			"input-required-result-request-state",
-			"input-required-result-multiple-input-requests",
 			"input-required-result-multi-round",
 			"input-required-result-missing-input-response",
 			"input-required-result-non-tool-request",
 			"input-required-result-result-type",
 			"input-required-result-unsupported-methods",
 			"input-required-result-tampered-state",
-			"input-required-result-capability-check",
 			"input-required-result-ignore-extra-params",
 			"input-required-result-validate-input");
 	private static final Set<String> TASK_TOOL_NAMES = Set.of(
@@ -193,24 +176,15 @@ public final class McpConformanceFixtureContractTest {
 
 		assertRegistration("input-required-result-basic-elicitation", ELICITATION,
 				McpRequestStateMode.NONE, List.of("elicitation/create"));
-		assertRegistration("input-required-result-basic-sampling", SAMPLING,
-				McpRequestStateMode.NONE, List.of("sampling/createMessage"));
-		assertRegistration("input-required-result-basic-list-roots", ROOTS,
-				McpRequestStateMode.NONE, List.of("roots/list"));
 		assertRegistration("input-required-result-request-state", REQUEST_STATE,
 				McpRequestStateMode.FRAMEWORK_PROTECTED,
 				List.of("elicitation/create"));
-		assertRegistration("input-required-result-multiple-input-requests", MULTIPLE,
-				McpRequestStateMode.FRAMEWORK_PROTECTED,
-				List.of("elicitation/create", "sampling/createMessage", "roots/list"));
 		assertRegistration("input-required-result-multi-round", MULTI_ROUND,
 				McpRequestStateMode.FRAMEWORK_PROTECTED,
 				List.of("elicitation/create"));
 		assertRegistration("input-required-result-tampered-state", TAMPERED,
 				McpRequestStateMode.FRAMEWORK_PROTECTED,
 				List.of("elicitation/create"));
-		assertRegistration("input-required-result-capability-check", CAPABILITIES,
-				McpRequestStateMode.NONE, List.of("sampling/createMessage"));
 	}
 
 	private static void basicHandlersCompleteOnlyAfterTheirExpectedResponses()
@@ -232,26 +206,6 @@ public final class McpConformanceFixtureContractTest {
 				ELICITATION,
 				context(responses("user_name", "unknown_extra_key"), null)));
 
-		McpInputRequiredResult sampling = assertInputRequired(invokeTool(
-				"input-required-result-basic-sampling", SAMPLING,
-				context(responses(), null)));
-		assertRequests(sampling, List.of("capital_question"),
-				List.of("sampling/createMessage"), null);
-		assertComplete(invokeTool("input-required-result-basic-sampling", SAMPLING,
-				context(responses("capital_question"), null)));
-
-		McpInputRequiredResult roots = assertInputRequired(invokeTool(
-				"input-required-result-basic-list-roots", ROOTS,
-				context(responses(), null)));
-		assertRequests(roots, List.of("client_roots"), List.of("roots/list"), null);
-		assertComplete(invokeTool("input-required-result-basic-list-roots", ROOTS,
-				context(responses("client_roots"), null)));
-
-		McpInputRequiredResult capability = assertInputRequired(invokeTool(
-				"input-required-result-capability-check", CAPABILITIES,
-				context(responses(), null)));
-		assertRequests(capability, List.of("sampling"),
-				List.of("sampling/createMessage"), null);
 	}
 
 	private static void frameworkStateHandlersAdvanceAndCompleteDeterministically()
@@ -263,16 +217,6 @@ public final class McpConformanceFixtureContractTest {
 				"request-state");
 		assertComplete(invokeTool("input-required-result-request-state",
 				REQUEST_STATE, context(responses("confirm"), state("request-state"))));
-
-		McpInputRequiredResult multiple = assertInputRequired(invokeTool(
-				"input-required-result-multiple-input-requests", MULTIPLE,
-				context(responses(), null)));
-		assertRequests(multiple, List.of("user_name", "greeting", "client_roots"),
-				List.of("elicitation/create", "sampling/createMessage", "roots/list"),
-				"multiple-inputs");
-		assertComplete(invokeTool("input-required-result-multiple-input-requests",
-				MULTIPLE, context(responses("user_name", "greeting", "client_roots"),
-						state("multiple-inputs"))));
 
 		McpInputRequiredResult round1 = assertInputRequired(invokeTool(
 				"input-required-result-multi-round", MULTI_ROUND,

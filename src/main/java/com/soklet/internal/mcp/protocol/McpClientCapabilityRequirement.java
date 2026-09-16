@@ -54,11 +54,7 @@ record McpExtensionClientCapability(@NonNull String identifier)
 @ThreadSafe
 enum McpCoreClientCapability implements McpClientCapabilityRequirement {
 	ELICITATION_FORM,
-	ELICITATION_URL,
-	SAMPLING,
-	SAMPLING_CONTEXT,
-	SAMPLING_TOOLS,
-	ROOTS
+	ELICITATION_URL
 }
 
 /**
@@ -79,7 +75,7 @@ record McpInputRequestDeclaration(@NonNull String method,
 		@NonNull McpInputRequirement requirement) {
 	@NonNull
 	private static final Set<@NonNull String> CORE_METHODS =
-			Set.of("elicitation/create", "sampling/createMessage", "roots/list");
+			Set.of("elicitation/create");
 
 	McpInputRequestDeclaration {
 		method = McpProtocolSupport.requireNonBlank(method, "Input-request method");
@@ -99,30 +95,13 @@ record McpInputRequestDeclaration(@NonNull String method,
 
 		if (!CORE_METHODS.contains(method))
 			throw new IllegalArgumentException(
-					"Soklet 4.0 supports only the three core input-request methods.");
+					"Soklet supports only elicitation input requests.");
 
 		if ("elicitation/create".equals(method)
 				&& !(capabilities.equals(Set.of(McpCoreClientCapability.ELICITATION_FORM))
 				|| capabilities.equals(Set.of(McpCoreClientCapability.ELICITATION_URL))))
 			throw new IllegalArgumentException(
 					"Elicitation declarations must select exactly form or URL capability.");
-
-		if ("sampling/createMessage".equals(method)) {
-			Set<McpClientCapabilityRequirement> allowed = Set.of(
-					McpCoreClientCapability.SAMPLING,
-					McpCoreClientCapability.SAMPLING_CONTEXT,
-					McpCoreClientCapability.SAMPLING_TOOLS);
-
-			if (!capabilities.contains(McpCoreClientCapability.SAMPLING)
-					|| !allowed.containsAll(capabilities))
-				throw new IllegalArgumentException(
-						"Sampling declarations require SAMPLING and only sampling capabilities.");
-		}
-
-		if ("roots/list".equals(method)
-				&& !capabilities.equals(Set.of(McpCoreClientCapability.ROOTS)))
-			throw new IllegalArgumentException(
-					"Roots declarations require exactly the ROOTS capability.");
 	}
 
 	@NonNull
@@ -138,25 +117,6 @@ record McpInputRequestDeclaration(@NonNull String method,
 		return new McpInputRequestDeclaration("elicitation/create",
 				Set.of(McpCoreClientCapability.ELICITATION_URL), requirement);
 	}
-
-	@NonNull
-	static McpInputRequestDeclaration sampling(
-			@NonNull Set<@NonNull McpCoreClientCapability> optionalCapabilities,
-			@NonNull McpInputRequirement requirement) {
-		requireNonNull(optionalCapabilities);
-		Set<McpClientCapabilityRequirement> capabilities = new LinkedHashSet<>();
-		capabilities.add(McpCoreClientCapability.SAMPLING);
-		capabilities.addAll(optionalCapabilities);
-		return new McpInputRequestDeclaration(
-				"sampling/createMessage", capabilities, requirement);
-	}
-
-	@NonNull
-	static McpInputRequestDeclaration roots(@NonNull McpInputRequirement requirement) {
-		return new McpInputRequestDeclaration("roots/list",
-				Set.of(McpCoreClientCapability.ROOTS), requirement);
-	}
-
 }
 
 /**

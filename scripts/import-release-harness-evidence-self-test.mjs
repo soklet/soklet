@@ -879,13 +879,25 @@ function run() {
       ['registry-toolchain-drift', (registry) => {
         registry.contracts[0].toolchains[0].digest = `sha256:${'0'.repeat(64)}`;
       }],
+      ['registry-stale-scanner-pin', (registry) => {
+        registry.contracts.find(({ id }) => id === 'release-scans')
+          .policy.spotbugs.mavenPluginVersion = '4.9.8.3';
+      }],
+      ['registry-scanner-threshold-weakened', (registry) => {
+        registry.contracts.find(({ id }) => id === 'release-scans')
+          .policy.spotbugs.threshold = 'High';
+      }],
+      ['registry-scanner-exclusion-drift', (registry) => {
+        registry.contracts.find(({ id }) => id === 'release-scans')
+          .policy.spotbugs.exclusionFileSha256 = '0'.repeat(64);
+      }],
     ]) {
       const registry = clone(configuration.registry);
       mutateRegistry(registry);
       const path = writeFixture(root, label, registry);
       assert.throws(
         () => verifyReleaseHarnessConfiguration(path),
-        /reviewed U7 approval/,
+        /pinned current registry/,
         label,
       );
       assertionCount++;

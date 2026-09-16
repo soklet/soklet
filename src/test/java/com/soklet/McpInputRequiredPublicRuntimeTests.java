@@ -45,15 +45,12 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
-	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
+	private static final String URL_INPUT_CAPABILITY = "{\"elicitation\":{\"url\":{}}}";
 	private static final String FORM_CAPABILITY =
 			"{\"elicitation\":{\"form\":{}}}";
-	private static final String FORM_AND_ROOTS_CAPABILITIES =
-			"{\"elicitation\":{\"form\":{}},\"roots\":{}}";
-	private static final String ALL_INPUT_CAPABILITIES =
-			"{\"elicitation\":{\"form\":{},\"url\":{}},"
-					+ "\"sampling\":{\"context\":{},\"tools\":{}},"
-					+ "\"roots\":{}}";
+	private static final String FORM_AND_URL_INPUT_CAPABILITIES =
+			"{\"elicitation\":{\"form\":{},\"url\":{}}}";
+	private static final String ALL_INPUT_CAPABILITIES = "{\"elicitation\":{\"form\":{},\"url\":{}}}";
 
 	@Test
 	public void declaredInputRequestsEmitExactWireForToolsPromptsAndResources()
@@ -61,8 +58,8 @@ public class McpInputRequiredPublicRuntimeTests {
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration urlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpJsonObject requestedSchema = McpJsonObject.builder()
 				.put("type", "object")
 				.put("properties", McpJsonObject.emptyInstance())
@@ -83,26 +80,26 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, arguments, features) ->
 						McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
 										form, toolFormParams))
-								.addInputRequest("roots", McpInputRequest.fromDeclaration(
-										roots,
-												McpJsonObject.emptyInstance()))
+								.addInputRequest("urlInput", McpInputRequest.fromDeclaration(
+										urlInput,
+												McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "tool")
 										.build())
 								.build())
-				.addInputRequestDeclarations(form, roots)
+				.addInputRequestDeclarations(form, urlInput)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("input-prompt")
 				.handler((request, promptGet, features) ->
-						McpInputRequiredResult.withInputRequest("promptRoots", McpInputRequest.fromDeclaration(
-										roots,
-												McpJsonObject.emptyInstance()))
+						McpInputRequiredResult.withInputRequest("promptUrlInput", McpInputRequest.fromDeclaration(
+										urlInput,
+												McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "prompt")
 										.build())
 								.build())
-				.addInputRequestDeclarations(roots)
+				.addInputRequestDeclarations(urlInput)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriTemplateAndName("test://items/{id}", "input-resource")
@@ -140,7 +137,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> toolResponse = send(port, "tool-input",
 					"tools/call", "input-tool",
 					",\"name\":\"input-tool\",\"arguments\":{}",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInputRequired(toolResponse, "tool-input");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"tool-input\",\"result\":{"
@@ -149,7 +146,7 @@ public class McpInputRequiredPublicRuntimeTests {
 							+ "\"params\":{\"message\":\"Approve tool?\","
 							+ "\"mode\":\"form\",\"requestedSchema\":{"
 							+ "\"type\":\"object\",\"properties\":{}}}},"
-							+ "\"roots\":{\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"urlInput\":{\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}},"
 							+ "\"resultType\":\"input_required\","
 							+ "\"_meta\":{\"testResult\":\"tool\"}}}",
 					toolResponse.body());
@@ -157,12 +154,12 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> promptResponse = send(port, "prompt-input",
 					"prompts/get", "input-prompt",
 					",\"name\":\"input-prompt\",\"arguments\":{}",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInputRequired(promptResponse, "prompt-input");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"prompt-input\",\"result\":{"
-							+ "\"inputRequests\":{\"promptRoots\":{"
-							+ "\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"inputRequests\":{\"promptUrlInput\":{"
+							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}},"
 							+ "\"resultType\":\"input_required\","
 							+ "\"_meta\":{\"testResult\":\"prompt\"}}}",
 					promptResponse.body());
@@ -170,7 +167,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> resourceResponse = send(port, "resource-input",
 					"resources/read", "test://items/42",
 					",\"uri\":\"test://items/42\"",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInputRequired(resourceResponse, "resource-input");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"resource-input\",\"result\":{"
@@ -200,10 +197,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration url = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
-				.fromSampling(Set.of(McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration additionalForm = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpJsonObject formParams = McpJsonObject.builder()
 				.put("message", "Approve without a mode?")
 				.put("requestedSchema", McpJsonObject.builder()
@@ -223,42 +218,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("url", "https://example.com/authorize?state=abc")
 				.put("x-url-extension", 42)
 				.build();
-		McpJsonObject samplingParams = McpJsonObject.builder()
-				.put("messages", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("role", "user")
-								.put("content", McpJsonObject.builder()
-										.put("type", "text")
-										.put("text", "Use the lookup tool")
-										.build())
-								.build())
-						.build())
-				.put("maxTokens", 64)
-				.put("includeContext", "allServers")
-				.put("modelPreferences", McpJsonObject.builder()
-						.put("costPriority", 0.25)
-						.put("speedPriority", 1)
-						.put("hints", McpJsonArray.builder()
-								.add(McpJsonObject.builder()
-										.put("name", "small")
-										.put("x-hint-extension", true)
-										.build())
-								.build())
-						.build())
-				.put("tools", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("name", "lookup")
-								.put("inputSchema", McpJsonObject.builder()
-										.put("type", "object")
-										.put("properties", McpJsonObject.emptyInstance())
-										.build())
-								.build())
-						.build())
-				.put("toolChoice", McpJsonObject.builder()
-						.put("mode", "required")
-						.build())
-				.put("x-sampling-extension", "preserved")
-				.build();
+		McpJsonObject additionalFormParams = formParams;
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("valid-form-input")
 				.jsonObjectArguments()
@@ -273,11 +233,11 @@ public class McpInputRequiredPublicRuntimeTests {
 				.addInputRequestDeclarations(url)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(URI.create("test://valid-sampling"),
-						"valid-sampling-input")
+				.withUriAndName(URI.create("test://valid-additionalForm"),
+						"valid-additionalForm-input")
 				.handler((request, read, features) -> inputRequired(
-						"sampling", sampling, samplingParams))
-				.addInputRequestDeclarations(sampling)
+						"additionalForm", additionalForm, additionalFormParams))
+				.addInputRequestDeclarations(additionalForm)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
@@ -331,31 +291,20 @@ public class McpInputRequiredPublicRuntimeTests {
 							+ "\"resultType\":\"input_required\"}}",
 					urlResponse.body());
 
-			HttpResponse<String> samplingResponse = send(port, "valid-sampling",
-					"resources/read", "test://valid-sampling",
-					",\"uri\":\"test://valid-sampling\"",
+			HttpResponse<String> additionalFormResponse = send(port, "valid-additionalForm",
+					"resources/read", "test://valid-additionalForm",
+					",\"uri\":\"test://valid-additionalForm\"",
 					ALL_INPUT_CAPABILITIES);
-			assertInputRequired(samplingResponse, "valid-sampling");
-			Assertions.assertEquals(
-					"{\"jsonrpc\":\"2.0\",\"id\":\"valid-sampling\",\"result\":{"
-							+ "\"inputRequests\":{\"sampling\":{"
-							+ "\"method\":\"sampling/createMessage\",\"params\":{"
-							+ "\"messages\":[{\"role\":\"user\",\"content\":{"
-							+ "\"type\":\"text\",\"text\":\"Use the lookup tool\"}}],"
-							+ "\"maxTokens\":64,\"includeContext\":\"allServers\","
-							+ "\"modelPreferences\":{\"costPriority\":0.25,"
-							+ "\"speedPriority\":1,\"hints\":[{\"name\":\"small\","
-							+ "\"x-hint-extension\":true}]},\"tools\":[{"
-							+ "\"name\":\"lookup\",\"inputSchema\":{\"type\":\"object\","
-							+ "\"properties\":{}}}],\"toolChoice\":{\"mode\":\"required\"},"
-							+ "\"x-sampling-extension\":\"preserved\"}}},"
-							+ "\"resultType\":\"input_required\"}}",
-					samplingResponse.body());
-			Assertions.assertFalse(samplingResponse.body().contains("\"ttlMs\""),
-					samplingResponse.body());
+			assertInputRequired(additionalFormResponse, "valid-additionalForm");
+			Assertions.assertEquals(formResponse.body()
+					.replace("\"id\":\"valid-form\"", "\"id\":\"valid-additionalForm\"")
+					.replace("\"inputRequests\":{\"form\":", "\"inputRequests\":{\"additionalForm\":"),
+					additionalFormResponse.body());
+			Assertions.assertFalse(additionalFormResponse.body().contains("\"ttlMs\""),
+					additionalFormResponse.body());
 			Assertions.assertFalse(
-					samplingResponse.body().contains("\"cacheScope\""),
-					samplingResponse.body());
+					additionalFormResponse.body().contains("\"cacheScope\""),
+					additionalFormResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
 			soklet.close();
@@ -366,17 +315,17 @@ public class McpInputRequiredPublicRuntimeTests {
 	public void invalidMethodSpecificParametersFailClosedAcrossOperationKinds()
 			throws Exception {
 		String formSecret = "INVALID-FORM-PARAMETER-SECRET";
-		String samplingSecret = "INVALID-SAMPLING-PARAMETER-SECRET";
-		String rootsSecret = "INVALID-ROOTS-PARAMETER-SECRET";
+		String additionalFormSecret = "INVALID-ADDITIONAL-FORM-PARAMETER-SECRET";
+		String urlInputSecret = "INVALID-URL_INPUT-PARAMETER-SECRET";
 		String metadataSecret = "INVALID-METADATA-SECRET";
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
-				.fromSampling(Set.of(), McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration additionalForm = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration urlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpJsonObject requestedSchema = McpJsonObject.builder()
 				.put("type", "object")
 				.put("properties", McpJsonObject.emptyInstance())
@@ -390,20 +339,15 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("mode", "url")
 				.put("requestedSchema", requestedSchema)
 				.build();
-		McpJsonObject invalidSamplingParams = McpJsonObject.builder()
-				.put("messages", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("role", "user")
-								.put("content", McpJsonObject.builder()
-										.put("type", "text")
-										.put("text", "Invalid maxTokens")
-										.build())
-								.build())
+		McpJsonObject invalidAdditionalFormParams = McpJsonObject.builder()
+				.put("message", additionalFormSecret)
+				.put("requestedSchema", McpJsonObject.builder()
+						.put("type", "array")
+						.put("properties", McpJsonObject.emptyInstance())
 						.build())
-				.put("maxTokens", samplingSecret)
 				.build();
-		McpJsonObject invalidRootsParams = McpJsonObject.builder()
-				.put("_meta", rootsSecret)
+		McpJsonObject invalidUrlInputParams = McpJsonObject.builder()
+				.put("_meta", urlInputSecret)
 				.build();
 		McpJsonObject secretMetadata = McpJsonObject.builder()
 				.put("secret", metadataSecret)
@@ -414,42 +358,42 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
-									roots,
-											McpJsonObject.emptyInstance()))
+									urlInput,
+											McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 							.addInputRequest("invalid-form", McpInputRequest.fromDeclaration(
 									form, invalidFormParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(roots, form)
+				.addInputRequestDeclarations(urlInput, form)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("invalid-sampling-input")
+				.withName("invalid-additionalForm-input")
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
 									form, validFormParams))
-							.addInputRequest("invalid-sampling", McpInputRequest.fromDeclaration(
-									sampling,
-											invalidSamplingParams))
+							.addInputRequest("invalid-additionalForm", McpInputRequest.fromDeclaration(
+									additionalForm,
+											invalidAdditionalFormParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(form, sampling)
+				.addInputRequestDeclarations(form, additionalForm)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(URI.create("test://invalid-roots"),
-						"invalid-roots-input")
+				.withUriAndName(URI.create("test://invalid-urlInput"),
+						"invalid-urlInput-input")
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
 									form, validFormParams))
-							.addInputRequest("invalid-roots", McpInputRequest.fromDeclaration(
-									roots, invalidRootsParams))
+							.addInputRequest("invalid-urlInput", McpInputRequest.fromDeclaration(
+									urlInput, invalidUrlInputParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(form, roots)
+				.addInputRequestDeclarations(form, urlInput)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
@@ -477,19 +421,19 @@ public class McpInputRequiredPublicRuntimeTests {
 			assertInternalErrorWithoutOutput(toolResponse, "invalid-form",
 					formSecret, metadataSecret);
 
-			HttpResponse<String> promptResponse = send(port, "invalid-sampling",
-					"prompts/get", "invalid-sampling-input",
-					",\"name\":\"invalid-sampling-input\",\"arguments\":{}",
+			HttpResponse<String> promptResponse = send(port, "invalid-additionalForm",
+					"prompts/get", "invalid-additionalForm-input",
+					",\"name\":\"invalid-additionalForm-input\",\"arguments\":{}",
 					ALL_INPUT_CAPABILITIES);
-			assertInternalErrorWithoutOutput(promptResponse, "invalid-sampling",
-					samplingSecret, metadataSecret);
+			assertInternalErrorWithoutOutput(promptResponse, "invalid-additionalForm",
+					additionalFormSecret, metadataSecret);
 
-			HttpResponse<String> resourceResponse = send(port, "invalid-roots",
-					"resources/read", "test://invalid-roots",
-					",\"uri\":\"test://invalid-roots\"",
+			HttpResponse<String> resourceResponse = send(port, "invalid-urlInput",
+					"resources/read", "test://invalid-urlInput",
+					",\"uri\":\"test://invalid-urlInput\"",
 					ALL_INPUT_CAPABILITIES);
-			assertInternalErrorWithoutOutput(resourceResponse, "invalid-roots",
-					rootsSecret, metadataSecret);
+			assertInternalErrorWithoutOutput(resourceResponse, "invalid-urlInput",
+					urlInputSecret, metadataSecret);
 			Assertions.assertFalse(resourceResponse.body().contains("\"ttlMs\""),
 					resourceResponse.body());
 			Assertions.assertFalse(
@@ -512,19 +456,19 @@ public class McpInputRequiredPublicRuntimeTests {
 		AtomicInteger conditionalCompleteHandlerInvocations = new AtomicInteger();
 		AtomicInteger conditionalInputHandlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
-		McpInputRequestDeclaration requiredRoots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
-		McpInputRequestDeclaration conditionalRoots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration requiredUrlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
+		McpInputRequestDeclaration conditionalUrlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
-				.withName("required-roots")
+				.withName("required-urlInput")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					requiredHandlerInvocations.incrementAndGet();
-					return inputRequired("roots", requiredRoots,
-							McpJsonObject.emptyInstance());
+					return inputRequired("urlInput", requiredUrlInput,
+							McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 				})
-				.addInputRequestDeclarations(requiredRoots)
+				.addInputRequestDeclarations(requiredUrlInput)
 				.build();
 		McpToolRegistration<McpJsonObject> conditionalComplete =
 				McpToolRegistration.withName("conditional-complete")
@@ -533,17 +477,17 @@ public class McpInputRequiredPublicRuntimeTests {
 							conditionalCompleteHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("complete");
 						})
-						.addInputRequestDeclarations(conditionalRoots)
+						.addInputRequestDeclarations(conditionalUrlInput)
 						.build();
 		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
 				.withName("conditional-input")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					conditionalInputHandlerInvocations.incrementAndGet();
-					return inputRequired("roots", conditionalRoots,
-							McpJsonObject.emptyInstance());
+					return inputRequired("urlInput", conditionalUrlInput,
+							McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 				})
-				.addInputRequestDeclarations(conditionalRoots)
+				.addInputRequestDeclarations(conditionalUrlInput)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
 				.addTools(List.of(required, conditionalComplete, conditionalInput))
@@ -569,16 +513,16 @@ public class McpInputRequiredPublicRuntimeTests {
 			int port = boundPort(server);
 
 			HttpResponse<String> missingRequired = callTool(port,
-					"missing-required", "required-roots", "{}");
+					"missing-required", "required-urlInput", "{}");
 			assertMissingCapability(missingRequired, "missing-required",
-					ROOTS_CAPABILITY);
+					URL_INPUT_CAPABILITY);
 			assertCounts(0, admissionInvocations, requestLimiterInvocations,
 					toolLimiterInvocations, requiredHandlerInvocations,
 					conditionalCompleteHandlerInvocations,
 					conditionalInputHandlerInvocations, sanitizerInvocations);
 
 			HttpResponse<String> supportedRequired = callTool(port,
-					"supported-required", "required-roots", ROOTS_CAPABILITY);
+					"supported-required", "required-urlInput", URL_INPUT_CAPABILITY);
 			assertInputRequired(supportedRequired, "supported-required");
 			Assertions.assertEquals(1, admissionInvocations.get());
 			Assertions.assertEquals(1, requestLimiterInvocations.get());
@@ -596,13 +540,13 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> emittedWithoutCapability = callTool(port,
 					"conditional-missing", "conditional-input", "{}");
 			assertMissingCapability(emittedWithoutCapability,
-					"conditional-missing", ROOTS_CAPABILITY);
+					"conditional-missing", URL_INPUT_CAPABILITY);
 			Assertions.assertEquals(1, conditionalInputHandlerInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
 
 			HttpResponse<String> emittedWithCapability = callTool(port,
 					"conditional-supported", "conditional-input",
-					ROOTS_CAPABILITY);
+					URL_INPUT_CAPABILITY);
 			assertInputRequired(emittedWithCapability, "conditional-supported");
 			Assertions.assertEquals(4, admissionInvocations.get());
 			Assertions.assertEquals(4, requestLimiterInvocations.get());
@@ -800,11 +744,11 @@ public class McpInputRequiredPublicRuntimeTests {
 		String inputKeySecret = "MISSING-CAPABILITY-INPUT-KEY-SECRET";
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-					.fromRoots(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration undeclaredRoots = McpInputRequestDeclaration
-					.fromRoots(McpInputRequirement.REQUIRED);
-		McpJsonObject invalidRootsParams = McpJsonObject.builder()
+		McpInputRequestDeclaration urlInput = McpInputRequestDeclaration
+					.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration undeclaredUrlInput = McpInputRequestDeclaration
+					.fromElicitationUrl(McpInputRequirement.REQUIRED);
+		McpJsonObject invalidUrlInputParams = McpJsonObject.builder()
 				.put("_meta", parameterSecret)
 				.put("secret", parameterSecret)
 				.build();
@@ -817,14 +761,14 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("undeclared-" + inputKeySecret,
-									McpInputRequest.fromDeclaration(undeclaredRoots,
-											McpJsonObject.emptyInstance()))
+									McpInputRequest.fromDeclaration(undeclaredUrlInput,
+											McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 							.addInputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
-									roots, invalidRootsParams))
+									urlInput, invalidUrlInputParams))
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(roots)
+				.addInputRequestDeclarations(urlInput)
 				.build();
 		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
 		McpServer server = server(endpoint,
@@ -845,7 +789,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"missing-before-malformed", "conditional-malformed-input", "{}");
 
 			assertMissingCapability(missingCapability,
-					"missing-before-malformed", ROOTS_CAPABILITY);
+					"missing-before-malformed", URL_INPUT_CAPABILITY);
 			Assertions.assertFalse(missingCapability.body().contains(parameterSecret),
 					missingCapability.body());
 			Assertions.assertFalse(missingCapability.body().contains(metadataSecret),
@@ -861,7 +805,7 @@ public class McpInputRequiredPublicRuntimeTests {
 
 			HttpResponse<String> supportedButMalformed = callTool(port,
 					"supported-malformed", "conditional-malformed-input",
-					ROOTS_CAPABILITY);
+					URL_INPUT_CAPABILITY);
 			assertInternalErrorWithoutOutput(supportedButMalformed,
 					"supported-malformed", parameterSecret, metadataSecret);
 			Assertions.assertFalse(supportedButMalformed.body().contains(inputKeySecret),
@@ -883,7 +827,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpInputRequestDeclaration declared = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("undeclared-input")
 				.jsonObjectArguments()
@@ -917,7 +861,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			soklet.start();
 			HttpResponse<String> response = callTool(boundPort(server),
 					"undeclared", "undeclared-input",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 
 			Assertions.assertEquals(500, response.statusCode(), response.body());
 			Assertions.assertEquals(
@@ -949,7 +893,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpInputRequestDeclaration declared = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpInputRequiredResult undeclaredResult = McpInputRequiredResult.withInputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
 						emitted, McpJsonObject.builder()
 								.put("x-secret", parameterSecret)
@@ -1019,7 +963,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> toolResponse = callTool(port,
 					"interceptor-undeclared-tool-response",
 					"interceptor-undeclared-tool",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInternalErrorWithoutOutput(toolResponse,
 					"interceptor-undeclared-tool-response",
 					parameterSecret, metadataSecret);
@@ -1030,7 +974,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"interceptor-undeclared-prompt-response", "prompts/get",
 					"interceptor-undeclared-prompt",
 					",\"name\":\"interceptor-undeclared-prompt\",\"arguments\":{}",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInternalErrorWithoutOutput(promptResponse,
 					"interceptor-undeclared-prompt-response",
 					parameterSecret, metadataSecret);
@@ -1040,7 +984,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> resourceResponse = send(port,
 					"interceptor-undeclared-resource-response", "resources/read",
 					resourceUri.toString(), ",\"uri\":\"" + resourceUri + "\"",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInternalErrorWithoutOutput(resourceResponse,
 					"interceptor-undeclared-resource-response",
 					parameterSecret, metadataSecret);
@@ -1070,9 +1014,9 @@ public class McpInputRequiredPublicRuntimeTests {
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
-		McpJsonObject invalidRootsParams = McpJsonObject.builder()
+		McpInputRequestDeclaration urlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
+		McpJsonObject invalidUrlInputParams = McpJsonObject.builder()
 				.put("_meta", parameterSecret)
 				.put("secret", parameterSecret)
 				.build();
@@ -1094,7 +1038,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					|| toolName.equals("interceptor-missing-capability"))
 				toolBuilder.addInputRequestDeclarations(form);
 			else
-				toolBuilder.addInputRequestDeclarations(roots);
+				toolBuilder.addInputRequestDeclarations(urlInput);
 			endpointBuilder.addTool(toolBuilder.build());
 		}
 		McpServer server = server(endpointBuilder.build(),
@@ -1105,18 +1049,18 @@ public class McpInputRequiredPublicRuntimeTests {
 					interceptorInvocations.incrementAndGet();
 					return switch (context.getOperationName().orElseThrow()) {
 						case "interceptor-valid-input" -> inputRequired(
-								"valid", roots, McpJsonObject.emptyInstance());
+								"valid", urlInput, McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 						case "interceptor-undeclared-input" ->
 								McpInputRequiredResult.withInputRequest(inputKeySecret,
-												McpInputRequest.fromDeclaration(roots,
-														McpJsonObject.emptyInstance()))
+												McpInputRequest.fromDeclaration(urlInput,
+														McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 										.metadata(secretMetadata)
 										.build();
 						case "interceptor-invalid-input",
 								"interceptor-missing-capability" ->
 								McpInputRequiredResult.withInputRequest(inputKeySecret,
-												McpInputRequest.fromDeclaration(roots,
-														invalidRootsParams))
+												McpInputRequest.fromDeclaration(urlInput,
+														invalidUrlInputParams))
 										.metadata(secretMetadata)
 										.build();
 						default -> continuation.proceed();
@@ -1133,24 +1077,24 @@ public class McpInputRequiredPublicRuntimeTests {
 			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> valid = callTool(port, "interceptor-valid",
-					"interceptor-valid-input", ROOTS_CAPABILITY);
+					"interceptor-valid-input", URL_INPUT_CAPABILITY);
 			assertInputRequired(valid, "interceptor-valid");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"interceptor-valid\",\"result\":{"
 							+ "\"inputRequests\":{\"valid\":{"
-							+ "\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}},"
 							+ "\"resultType\":\"input_required\"}}",
 					valid.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 
 			HttpResponse<String> undeclared = callTool(port,
 					"interceptor-undeclared", "interceptor-undeclared-input",
-					FORM_AND_ROOTS_CAPABILITIES);
+					FORM_AND_URL_INPUT_CAPABILITIES);
 			assertInternalErrorWithoutOutput(undeclared,
 					"interceptor-undeclared", inputKeySecret, metadataSecret);
 
 			HttpResponse<String> invalid = callTool(port, "interceptor-invalid",
-					"interceptor-invalid-input", ROOTS_CAPABILITY);
+					"interceptor-invalid-input", URL_INPUT_CAPABILITY);
 			assertInternalErrorWithoutOutput(invalid, "interceptor-invalid",
 					parameterSecret, metadataSecret);
 			Assertions.assertFalse(invalid.body().contains(inputKeySecret),
@@ -1159,7 +1103,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> missingCapability = callTool(port,
 					"interceptor-missing", "interceptor-missing-capability", "{}");
 			assertMissingCapability(missingCapability, "interceptor-missing",
-					ROOTS_CAPABILITY);
+					URL_INPUT_CAPABILITY);
 			Assertions.assertFalse(
 					missingCapability.body().contains(inputKeySecret),
 					missingCapability.body());
@@ -1189,11 +1133,12 @@ public class McpInputRequiredPublicRuntimeTests {
 		AtomicInteger aggregateInvocations = new AtomicInteger();
 		AtomicInteger legalInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration urlInput = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpJsonArray padding = McpJsonArray.fromElements(
 				Collections.nCopies(1_000, McpJsonNull.INSTANCE));
 		McpJsonObject params = McpJsonObject.builder()
+				.put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize")
 				.put("_meta", McpJsonObject.builder()
 						.put("aggregateCanary", canary)
 						.put("padding", padding)
@@ -1201,14 +1146,14 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpInputRequiredResult.Builder aggregateResult =
 				McpInputRequiredResult.withInputRequest("request-0",
-						McpInputRequest.fromDeclaration(roots, params));
+						McpInputRequest.fromDeclaration(urlInput, params));
 		for (int index = 1; index < 100; ++index)
 			aggregateResult.addInputRequest("request-" + index,
-					McpInputRequest.fromDeclaration(roots, params));
+					McpInputRequest.fromDeclaration(urlInput, params));
 		McpInputRequiredResult oversizedResult = aggregateResult.build();
 		McpInputRequiredResult individuallyLegalResult =
 				McpInputRequiredResult.withInputRequest("request", McpInputRequest.fromDeclaration(
-								roots, params))
+								urlInput, params))
 						.build();
 		McpToolRegistration<McpJsonObject> aggregateTool = McpToolRegistration
 				.withName("aggregate-input-requests")
@@ -1217,7 +1162,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					aggregateInvocations.incrementAndGet();
 					return oversizedResult;
 				})
-				.addInputRequestDeclarations(roots)
+				.addInputRequestDeclarations(urlInput)
 				.build();
 		McpToolRegistration<McpJsonObject> legalTool = McpToolRegistration
 				.withName("legal-input-request")
@@ -1226,7 +1171,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					legalInvocations.incrementAndGet();
 					return individuallyLegalResult;
 				})
-				.addInputRequestDeclarations(roots)
+				.addInputRequestDeclarations(urlInput)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
 				.addTool(aggregateTool)
@@ -1249,7 +1194,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"aggregate-input-missing-capability",
 					"aggregate-input-requests", "{}");
 			assertMissingCapability(missingCapability,
-					"aggregate-input-missing-capability", ROOTS_CAPABILITY);
+					"aggregate-input-missing-capability", URL_INPUT_CAPABILITY);
 			Assertions.assertFalse(missingCapability.body().contains(canary),
 					missingCapability.body());
 			Assertions.assertFalse(
@@ -1257,7 +1202,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					missingCapability.body());
 
 			HttpResponse<String> oversized = callTool(port, "aggregate-input",
-					"aggregate-input-requests", ROOTS_CAPABILITY);
+					"aggregate-input-requests", URL_INPUT_CAPABILITY);
 			Assertions.assertEquals(500, oversized.statusCode(), oversized.body());
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"aggregate-input\","
@@ -1270,7 +1215,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					oversized.body());
 
 			HttpResponse<String> recovered = callTool(port, "legal-input",
-					"legal-input-request", ROOTS_CAPABILITY);
+					"legal-input-request", URL_INPUT_CAPABILITY);
 			assertInputRequired(recovered, "legal-input");
 			assertContains(recovered.body(), canary);
 			Assertions.assertEquals(2, aggregateInvocations.get());

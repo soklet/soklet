@@ -83,15 +83,15 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 134;
+	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 64;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 248;
+	private static final int CURRENT_MCP_TYPE_COUNT = 247;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88";
+			"b7c2c5340cb8b1105c1fdbe8f6d43306572df0717086b9c4d238f8ba5017a0de";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d";
+			"5313e39d3809ae81b4d664838bb6690a5d677d1e388547422b2d52ec88f2230c";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -140,14 +140,10 @@ public class McpPublicApiReflectionContractTests {
 					Map.entry("com.soklet.McpCacheScope",
 							List.of("PUBLIC", "PRIVATE")),
 					Map.entry("com.soklet.McpClientCapability", List.of(
-							"ELICITATION_FORM", "ELICITATION_URL", "SAMPLING",
-							"SAMPLING_CONTEXT", "SAMPLING_TOOLS", "ROOTS")),
+							"ELICITATION_FORM", "ELICITATION_URL")),
 					Map.entry("com.soklet.McpIconTheme",
 							List.of("LIGHT", "DARK")),
 					Map.entry("com.soklet.McpJsonNull", List.of("INSTANCE")),
-					Map.entry("com.soklet.McpLogLevel", List.of(
-							"DEBUG", "INFO", "NOTICE", "WARNING", "ERROR",
-							"CRITICAL", "ALERT", "EMERGENCY")),
 					Map.entry("com.soklet.McpOperationType", List.of(
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
@@ -171,8 +167,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final Map<String, List<String>> PHASE_FIVE_MCP_ENUM_VALUES =
 			Map.ofEntries(
 					Map.entry("com.soklet.McpInputRequestType", List.of(
-							"ELICITATION_FORM", "ELICITATION_URL", "SAMPLING",
-							"ROOTS")),
+							"ELICITATION_FORM", "ELICITATION_URL")),
 					Map.entry("com.soklet.McpInputRequirement",
 							List.of("REQUIRED", "CONDITIONAL")),
 					Map.entry("com.soklet.McpProtectionMode", List.of(
@@ -550,6 +545,20 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertThrows(NoSuchMethodException.class,
 				() -> McpEndpointRegistry.class.getMethod("fromClasses",
 						InstanceProvider.class, Class[].class));
+	}
+
+	@Test
+	public void unsupportedMcpLoggingDoesNotExposeAPublicJavaApi()
+			throws Exception {
+		Assertions.assertThrows(ClassNotFoundException.class,
+				() -> Class.forName("com.soklet.McpLogLevel"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpRequestContext.class.getMethod("getLogLevel"));
+		Assertions.assertFalse(Modifier.isPublic(
+				Class.forName("com.soklet.internal.mcp.protocol.McpRequestLogLevel")
+						.getModifiers()));
+		assertInstanceMethod(McpRequestContext.class, "getRequestMetadata",
+				McpJsonObject.class, MethodShape.ABSTRACT, false);
 	}
 
 	@Test
@@ -1020,13 +1029,6 @@ public class McpPublicApiReflectionContractTests {
 		assertFactory(McpInputRequestDeclaration.class, "fromElicitationUrl",
 				McpInputRequestDeclaration.class, List.of("requirement"),
 				McpInputRequirement.class);
-		assertFactory(McpInputRequestDeclaration.class, "fromSampling",
-				McpInputRequestDeclaration.class,
-				List.of("optionalCapabilities", "requirement"), Set.class,
-				McpInputRequirement.class);
-		assertFactory(McpInputRequestDeclaration.class, "fromRoots",
-				McpInputRequestDeclaration.class, List.of("requirement"),
-				McpInputRequirement.class);
 		assertGetter(McpInputRequestDeclaration.class, "getInputRequestType",
 				McpInputRequestType.class);
 		assertGetter(McpInputRequestDeclaration.class, "getJsonRpcMethod",
@@ -1124,10 +1126,6 @@ public class McpPublicApiReflectionContractTests {
 		Map<String, Class<?>> actualElements = new TreeMap<>();
 		for (Method element : McpMayRequestInput.class.getDeclaredMethods()) {
 			actualElements.put(element.getName(), element.getReturnType());
-			if (element.getName().equals("samplingCapabilities"))
-				Assertions.assertArrayEquals(new McpClientCapability[0],
-						(McpClientCapability[]) element.getDefaultValue());
-			else
 				Assertions.assertNull(element.getDefaultValue(),
 						() -> McpMayRequestInput.class.getName() + "#"
 								+ element.getName()
@@ -1135,7 +1133,6 @@ public class McpPublicApiReflectionContractTests {
 		}
 
 		Assertions.assertEquals(Map.of(
-				"samplingCapabilities", McpClientCapability[].class,
 				"type", McpInputRequestType.class,
 				"requirement", McpInputRequirement.class), actualElements,
 				"McpMayRequestInput elements or return types changed");

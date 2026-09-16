@@ -161,16 +161,19 @@ export function stageCodeqlReleaseProvenance({
       for (const [name, wanted] of expected) {
         if (digest !== wanted)
           continue;
-        if (matches.has(name))
-          fail(`CodeQL installation contains duplicate approved ${name} bytes.`);
-        matches.set(name, path);
+        // Bundles vendor identical suite-helper descriptors in multiple query
+        // packs. The whole archive and descriptor bytes are checksum-pinned;
+        // select the first deterministic match rather than rejecting those
+        // byte-identical copies as ambiguous provenance.
+        if (!matches.has(name))
+          matches.set(name, path);
       }
     }
   }
   visit(absoluteCodeqlRoot);
   for (const name of expected.keys()) {
     if (!matches.has(name))
-      fail(`CodeQL installation is missing approved ${name} bytes.`);
+      fail(`CodeQL installation is missing registered ${name} bytes.`);
   }
 
   mkdirSync(absoluteOutputRoot);

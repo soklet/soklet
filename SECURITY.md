@@ -116,11 +116,14 @@ Rejected header/metadata values or secret canaries are not reflected beyond the 
 Every MCP HTTP response family—including early parser errors, fixed empty/JSON/preflight responses, and SSE—carries exactly one `Cache-Control: no-store`.
 An application-authored attempt to replace that header fails closed.
 
-Every MCP server requires an explicit `McpAdmissionController`. Production
-applications should authenticate and authorize there and return stable,
+An MCP server without an explicitly configured `McpAdmissionController`
+accepts requests and notifications anonymously and emits a startup diagnostic.
+It does not fail closed merely because admission configuration was omitted.
+Production applications that require authentication or authorization must
+configure a controller, enforce those policies there, and return stable,
 bounded rate-limit and authorization partition keys in the accepted
-`McpAdmissionIdentity`. `McpAdmissionController.acceptAllInstance()` is an
-explicit anonymous policy, not a production authentication mechanism.
+`McpAdmissionIdentity`. `McpAdmissionController.acceptAllInstance()` is the
+default anonymous policy, not a production authentication mechanism.
 Admission and rate-limit decisions are created only through the named sealed-
 root factories (`accepted(...)`, `rejected(...)`, `allowed()`, and
 `denied(...)`). Their nested final variants have private constructors and
@@ -236,9 +239,9 @@ than assuming structural schema validation can classify them. URL-mode flows
 should use a server-owned HTTPS destination with an opaque state handle bound
 to the verified initiating user; do not put identity, credentials, userinfo, a
 pre-authenticated bearer capability, query data, or fragments in the emitted
-URL. Applications also own sensitive-data classification and finite iteration
-limits for sampling, plus `toRealPath()`-based containment, symlink policy, and
-authorization for returned roots. The public-API-only
+URL. Applications also own `toRealPath()`-based containment, symlink policy,
+and authorization when handling filesystem paths supplied through ordinary
+tool arguments or resource URIs. The public-API-only
 [MCP input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
 exercise each of these fail-closed boundaries without claiming a universal
 semantic classifier or a real downstream authorization deployment. The
@@ -782,7 +785,7 @@ Exact tests are
 `#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 Live-path evidence is
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-`#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+`#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
 `#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
 `#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
 `McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
@@ -903,7 +906,7 @@ Core authority is
 `#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
 `#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
 `#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-`#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+`#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
 `McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
 `#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
 `#baggageParsingIsBoundedDecodedAndImmutable`,
@@ -960,7 +963,7 @@ privacy boundary.
 
 Representative exact citations from the full 46-test simulator/API gate are
 `McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-`McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+`McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
 `McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
 `#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
 `#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
@@ -968,7 +971,7 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#mcpSimulationCompletionRetainsStreamCaptureFailures`,
 `#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-`McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+`McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
 
 At the V21 boundary, Phase 6 had 15 owners, the provisional inventory had 32,
 and the reviewed union had 219. The canonical comparison had 558 records and SHA-256
@@ -1428,17 +1431,24 @@ on both JDKs; neither was rerun. These are bounded development results, not
 every-operation simulator, sustained fuzz/soak, privacy, security, live-network
 fidelity, release-candidate, or Phase 6 freeze evidence.
 
-### Deprecated compatibility surfaces
+### Protocol scope and unsupported features
 
-SEP-2577 deprecates Roots and Sampling at the MCP layer in `2026-07-28`; it
-does not deprecate Soklet's retained Java API. New designs should pass files or
-directories through explicit tool parameters, resource URIs, or server
-configuration and integrate directly with a model provider. Soklet also does
-not advertise or implement MCP Logging: retained log-level metadata is parsed
-for compatibility, while applications use the existing observability path.
-No negotiation-triggered warning is emitted. Adding one requires a separately
-reviewed, default-off, bounded and redacted diagnostic rather than Java
-`@Deprecated`, which describes a different lifecycle and trigger.
+The current development fixtures use elicitation requests. Production tests
+verify the error-mapping manifest SHA-256
+`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+and result-envelope manifest SHA-256
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`.
+The dated evidence sections below retain their original historical hashes.
+
+SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`.
+Soklet does not implement these features or expose Java APIs for requesting
+them. Applications should pass files or directories through explicit tool
+parameters, resource URIs, or server configuration, integrate directly with a
+model provider, and use application logging and Soklet's observability APIs.
+Deprecated peer capability and log-level metadata may still be structurally
+validated without enabling corresponding server behavior. Elicitation and
+the shared multi-round-trip request machinery remain supported. No
+negotiation-triggered warning is emitted.
 
 ## Current API and release-security state
 
@@ -1686,7 +1696,7 @@ precedence, diagnostic-boundary, unsupported-notification, and universal
 `no-store` security contracts. The separate
 `conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 canonical complete responses at SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests comprise three real-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
 four initialize-diagnostic tests include 23 readable-`initialize` rejection
 cases and the negative boundary. Those two classes pass 9/9 in the current
@@ -1710,12 +1720,12 @@ from the release-pinned Corretto 21.0.12.9.1 toolchain.
 The subsequent 2026-08-21 core-result/error closure adds two independent,
 checksum-bound production corpora. The 25-fixture result-envelope manifest is
 SHA-256
-`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`;
+`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`;
 its four live tests and source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` envelope authorities without claiming
 extension result types. The twelve-fixture canonical complete-HTTP error
 manifest is SHA-256
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`;
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`;
 it covers the eight frozen ordinary mapping families, including separate
 required-preflight and conditional-result `-32021` paths, exact `no-store`,
 Retry-After exclusivity, original string/integer IDs across the corpus, and

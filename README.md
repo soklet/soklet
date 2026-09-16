@@ -76,6 +76,8 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 Upgrading from 3.5.1? Read the [4.0.0 migration guide](MIGRATING_TO_4_0.md).
 Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md).
 
+For the required annotation processor configuration, see [Building and Running](#building-and-running).
+
 #### Maven
 
 ```xml
@@ -93,8 +95,6 @@ dependencies {
   implementation 'com.soklet:soklet:4.0.0'
 }
 ```
-
-For the required annotation processor configuration, see [Building and Running](#building-and-running).
 
 #### Direct Download
 
@@ -261,7 +261,7 @@ the dependency is not sufficient on JDK 23 and later:
 <plugin>
   <groupId>org.apache.maven.plugins</groupId>
   <artifactId>maven-compiler-plugin</artifactId>
-  <version>3.14.0</version>
+  <version>3.16.0</version>
   <configuration>
     <parameters>true</parameters>
     <annotationProcessorPaths>
@@ -311,6 +311,11 @@ If test sources declare annotated routes or endpoints, also configure
 `testAnnotationProcessor 'com.soklet:soklet:4.0.0'`.
 
 ##### Packaging and static analysis
+
+The optional `@NonNull` and `@Nullable` annotations used in advanced examples
+come from `org.jspecify.annotations`. If you use them in application source,
+declare `org.jspecify:jspecify:1.0.1` as a compile-time dependency; Soklet's
+provided annotation dependency is not inherited by consumers.
 
 Preserve generated classes and `META-INF/soklet` indexes when shading or
 repackaging either build.
@@ -773,12 +778,8 @@ public void sseTest() {
 
 #### Model Context Protocol (MCP)
 
-Soklet 4.0.0's MCP API is intentionally incompatible with the older 3.5.1
-implementation. For a complete buildable endpoint, compiler configuration,
-application start, and localhost/Inspector recipe, use the
-[MCP quickstart](MCP_QUICKSTART.md). See the
-[migration guide](MIGRATING_TO_4_0.md#mcp-wire-migration) before upgrading an
-existing MCP server.
+For a complete buildable endpoint, compiler configuration, application start,
+and localhost/Inspector recipe, use the [MCP quickstart](MCP_QUICKSTART.md).
 
 The development coordinate for this section is `4.0.0`.
 
@@ -923,7 +924,7 @@ fences new MCP work while preserving already-admitted finite unary and
 request-scoped progress responses; indefinite subscriptions complete promptly.
 Soklet validates the open `inputResponses` wire union, but
 applications still own response-key correlation, action handling, accepted
-content policy, user binding, sampling limits, and filesystem containment. See
+content policy, user binding, and side-effect authorization. See
 the compile-checked
 [application input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java),
 [durable-handle and prompt-security patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java),
@@ -1002,22 +1003,26 @@ eligible node and should assume at-least-once execution. See
 manager, authorization, wire-routing, notification, reconnect, simulator, and
 distributed-operation contract.
 
-##### Deprecated compatibility surfaces
+##### Protocol scope and unsupported features
 
 The selected MCP profile is fixed; Soklet neither selects an automatic
-"latest" profile nor falls back to another revision. SEP-2577 marks Roots,
-Sampling, and Logging deprecated in that profile, with specification removal
-eligible no earlier than 2027-07-28. Their MCP
-lifecycle is independent from Soklet's Java API lifecycle: retained Java surfaces remain supported, have no
-Java deprecation marker, and have no Soklet API-removal decision. Prefer
-explicit tool parameters, resource URIs, or server configuration over Roots
-and direct model-provider integration over Sampling. Soklet parses retained
-Logging metadata but neither advertises nor implements MCP Logging; use the
-existing observability path. Dynamic Client Registration and
+"latest" profile nor falls back to another revision. Soklet does not implement
+MCP Roots, Sampling, or Logging. Pass file or directory information through
+explicit tool parameters, resource URIs, or server configuration, and integrate
+directly with a model provider when needed. Use application logging and
+Soklet's existing observability and OpenTelemetry integrations.
+Dynamic Client Registration and
 deprecated standalone legacy HTTP+SSE transport are reviewed N/A; current SSE response
 streaming is not that legacy transport.
 
 ##### Current implementation evidence
+
+The current result-envelope and error-mapping fixture manifests retain 25 and
+twelve fixtures, respectively, using elicitation for client-input examples.
+Their SHA-256 values are
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`
+and `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`.
+The dated development checkpoints below retain their original hashes.
 
 Trace correlation remains default-off. Configuring a trace-correlation key
 enables an exactly-once finish-time
@@ -2369,7 +2374,7 @@ Exact tests are
 `#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 Live authority is covered by
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-`#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+`#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
 `#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
 `#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
 `McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
@@ -2499,7 +2504,7 @@ Core authority is
 `#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
 `#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
 `#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-`#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+`#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
 `McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
 `#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
 `#baggageParsingIsBoundedDecodedAndImmutable`,
@@ -2571,7 +2576,7 @@ Collections and byte arrays are immutable/defensively copied and carrier
 rendering is redacted, but accessors do not establish confidentiality.
 Representative exact citations from the full 46-test simulator/API gate are
 `McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-`McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+`McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
 `McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
 `#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
 `#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
@@ -2906,9 +2911,9 @@ The twenty-first adds seven top-level public simulation types,
 and two abstract methods to
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html), while
 leaving the metric/snapshot/canary inventories unchanged.
-Those Vxx counts remain historical. The current MCP API inventory is 134/36/64
-frozen Phase 4/5/6 owners plus 14 provisional Tasks owners (248 MCP total); the
-51 reviewed non-MCP owners bring the current-side inventory to 299. The three
+Those Vxx counts remain historical. The current MCP API inventory is 133/36/64
+frozen Phase 4/5/6 owners plus 14 provisional Tasks owners (247 MCP total); the
+61 reviewed non-MCP owners bring the current-side inventory to 308. The three
 numbered phases remain frozen. The Tasks owners retain provisional maturity,
 but their 4.0.0 signatures are also frozen through the dedicated
 `provisional.signatures.jsonl` gate.
@@ -3136,7 +3141,7 @@ unsupported classified-notification handling, universal MCP HTTP `no-store`,
 and exact request/notification validation precedence. The separate
 `conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 path-sorted canonical complete-response hex fixtures and has SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests—three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest parity
 gate—cover compound request first-failure winners,
 the separate notification/preflight order, overload/SSE, and every production
@@ -3171,14 +3176,14 @@ corpora without changing the official 48-message/11-test or authorization/
 CORS three-head/two-test corpora. The checksum-bound
 `conformance/golden-result-envelope/live/manifest.sha256` binds 25 production
 JSON/SSE fixtures at SHA-256
-`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` result-envelope authorities; extension result
 types remain separately bounded by `MCP-BASE-006`. The separate
 `conformance/golden-error-mapping/live/manifest.sha256` binds twelve canonical
 complete HTTP responses across the eight frozen ordinary error families at
 SHA-256
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
 Two live-listener tests cover every fixture, while existing readable-
 `initialize` and path-specific error evidence remain explicit supplements.
 Five deterministic tests freeze both progress/error enqueue orders and the

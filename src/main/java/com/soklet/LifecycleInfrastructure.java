@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /** Lazy, daemon, role-bounded lifecycle worker topology. */
@@ -128,7 +129,7 @@ final class LifecycleWorkers {
 				} catch (Throwable throwable) {
 					if (taskFailure == null)
 						taskFailure = throwable;
-					else if (throwable != taskFailure)
+					else if (!sameInstance(throwable, taskFailure))
 						taskFailure.addSuppressed(throwable);
 				}
 				if (taskFailure instanceof RuntimeException runtimeException)
@@ -290,7 +291,7 @@ final class InternalLifecycleCompletion {
 				fallback.setDaemon(true);
 				fallback.start();
 			} catch (RuntimeException | Error fallbackFailure) {
-				if (fallbackFailure != launchFailure)
+				if (!sameInstance(fallbackFailure, launchFailure))
 					launchFailure.addSuppressed(fallbackFailure);
 			}
 		}
@@ -582,7 +583,7 @@ final class LifecycleRetentionAnchor {
 	}
 
 	boolean retains(@NonNull Object candidate) {
-		return this.retainedGraph == requireNonNull(candidate);
+		return sameInstance(this.retainedGraph, requireNonNull(candidate));
 	}
 }
 
@@ -882,19 +883,19 @@ final class TrackedLifecycleCallRunner {
 					try {
 						this.group.signalFailure(this.group.root(), throwable);
 					} catch (Throwable signalFailure) {
-						if (signalFailure != throwable)
+						if (!sameInstance(signalFailure, throwable))
 							throwable.addSuppressed(signalFailure);
 					}
 				}
 			} catch (Throwable contextFailure) {
 				if (failure == null)
 					failure = contextFailure;
-				else if (failure != contextFailure)
+				else if (!sameInstance(failure, contextFailure))
 					failure.addSuppressed(contextFailure);
 				try {
 					this.group.signalFailure(this.group.root(), failure);
 				} catch (Throwable signalFailure) {
-					if (signalFailure != failure)
+					if (!sameInstance(signalFailure, failure))
 						failure.addSuppressed(signalFailure);
 				}
 			} finally {
@@ -904,7 +905,7 @@ final class TrackedLifecycleCallRunner {
 				} catch (Throwable closeFailure) {
 					if (failure == null)
 						failure = closeFailure;
-					else if (failure != closeFailure)
+					else if (!sameInstance(failure, closeFailure))
 						failure.addSuppressed(closeFailure);
 				}
 			}

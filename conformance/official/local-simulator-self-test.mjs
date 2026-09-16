@@ -11,13 +11,13 @@ import { verifyManifestSet } from './verify.mjs';
 
 const { selection } = verifyManifestSet();
 const rows = localSimulatorRows(selection);
-assert.equal(rows.length, 39);
+assert.equal(rows.length, 35);
 assert.equal(rows[0].ordinal, 1);
 assert.equal(rows[0].name, 'server-stateless');
 assert.equal(rows[1].ordinal, 3);
 assert.equal(rows[1].name, 'tools-list');
-assert.equal(rows[38].ordinal, 50);
-assert.equal(rows[38].name, 'input-required-result-validate-input');
+assert.equal(rows[34].ordinal, 50);
+assert.equal(rows[34].name, 'input-required-result-validate-input');
 assert.deepEqual(localSimulatorDriverArguments(rows).slice(0, 3), [
   '1:server-stateless',
   '3:tools-list',
@@ -25,10 +25,10 @@ assert.deepEqual(localSimulatorDriverArguments(rows).slice(0, 3), [
 ]);
 
 const expected = expectedLocalSimulatorOutput(rows);
-assert.equal(expected.toString('utf8').split('\n').length, 40);
+assert.equal(expected.toString('utf8').split('\n').length, 36);
 assert.equal(expected.toString('utf8').split('\n')[0],
   'PASS\t1\tserver-stateless');
-assert.equal(expected.toString('utf8').split('\n')[38],
+assert.equal(expected.toString('utf8').split('\n')[34],
   'PASS\t50\tinput-required-result-validate-input');
 assert.deepEqual(verifyLocalSimulatorDriverResult({
   error: undefined,
@@ -74,7 +74,7 @@ duplicate.scenarios[3].name = duplicate.scenarios[2].name;
 assert.throws(() => localSimulatorRows(duplicate), /invalid or duplicate name/);
 const missing = structuredClone(selection);
 missing.scenarios[3].selection = 'NOT_APPLICABLE';
-assert.throws(() => localSimulatorRows(missing), /exactly 39 RUN rows/);
+assert.throws(() => localSimulatorRows(missing), /exactly 35 RUN rows/);
 
 for (const result of [
   { error: new Error('spawn failed'), signal: null, status: null,

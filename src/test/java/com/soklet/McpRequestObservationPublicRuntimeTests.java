@@ -787,7 +787,7 @@ public class McpRequestObservationPublicRuntimeTests {
 	}
 
 	@Test
-	public void deprecatedWireLogLevelProjectsToTheRealRequestContext()
+	public void deprecatedWireLogLevelRemainsInRawRequestMetadata()
 			throws Exception {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
@@ -821,8 +821,9 @@ public class McpRequestObservationPublicRuntimeTests {
 			McpRequestContext context = observer.startedContext.get();
 			Assertions.assertNotNull(context);
 			Assertions.assertSame(context, handlerContext.get());
-			Assertions.assertEquals(Optional.of(McpLogLevel.WARNING),
-					context.getLogLevel());
+			Assertions.assertEquals(McpJsonString.fromValue("warning"),
+					context.getRequestMetadata()
+							.find("io.modelcontextprotocol/logLevel").orElseThrow());
 		} finally {
 			soklet.close();
 		}

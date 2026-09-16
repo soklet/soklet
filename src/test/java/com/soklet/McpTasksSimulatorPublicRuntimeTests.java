@@ -50,11 +50,11 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			"io.modelcontextprotocol/subscriptionId";
 	private static final String TOOL_NAME = "tasks.simulator";
 	private static final Duration WAIT = Duration.ofSeconds(5);
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL);
-	private static final McpJsonObject EMPTY_ROOTS_RESPONSE =
+	private static final McpInputRequestDeclaration ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
+	private static final McpJsonObject EMPTY_ELICITATION_URL_RESPONSE =
 			McpJsonObject.builder()
-					.put("roots", McpJsonArray.emptyInstance())
+					.put("action", "accept")
 					.build();
 
 	@Test
@@ -93,15 +93,15 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					"\"status\":\"input_required\""), inputRequired);
 			Assertions.assertTrue(inputRequired.contains("\"first\":{")
 					&& inputRequired.contains("\"second\":{"), inputRequired);
-			Assertions.assertTrue(inputRequired.contains("\"method\":\"roots/list\""),
+			Assertions.assertTrue(inputRequired.contains("\"method\":\"elicitation/create\""),
 					inputRequired);
 
 			assertEmptyAcknowledgement(performJson(simulator,
 					request("tasks/update", taskId, "update-first",
 							"\"taskId\":\"" + taskId + "\","
 									+ "\"inputResponses\":{"
-									+ "\"first\":{\"roots\":[]},"
-									+ "\"unknown\":{\"roots\":[]}}", true)));
+									+ "\"first\":{\"action\":\"accept\"},"
+									+ "\"unknown\":{\"action\":\"accept\"}}", true)));
 			McpTask partial = fixture.taskManager().findTask(taskId).orElseThrow();
 			Assertions.assertEquals(McpTaskStatus.INPUT_REQUIRED,
 					partial.getTaskStatus());
@@ -109,7 +109,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					List.copyOf(partial.getInputRequests().keySet()));
 			McpInputResponses firstResponses = fixture.taskManager()
 					.takeTaskInputResponses(taskId);
-			Assertions.assertEquals(EMPTY_ROOTS_RESPONSE,
+			Assertions.assertEquals(EMPTY_ELICITATION_URL_RESPONSE,
 					firstResponses.find("first").orElseThrow());
 			Assertions.assertTrue(firstResponses.find("unknown").isEmpty());
 
@@ -123,11 +123,11 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					request("tasks/update", taskId, "update-second",
 							"\"taskId\":\"" + taskId + "\","
 									+ "\"inputResponses\":{"
-									+ "\"second\":{\"roots\":[]}}", true)));
+									+ "\"second\":{\"action\":\"accept\"}}", true)));
 			Assertions.assertEquals(McpTaskStatus.WORKING,
 					fixture.taskManager().findTask(taskId).orElseThrow()
 							.getTaskStatus());
-			Assertions.assertEquals(EMPTY_ROOTS_RESPONSE,
+			Assertions.assertEquals(EMPTY_ELICITATION_URL_RESPONSE,
 					fixture.taskManager().takeTaskInputResponses(taskId)
 							.find("second").orElseThrow());
 
@@ -280,8 +280,8 @@ public class McpTasksSimulatorPublicRuntimeTests {
 
 	@NonNull
 	private static McpInputRequest rootsRequest() {
-		return McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
-				McpJsonObject.emptyInstance());
+		return McpInputRequest.fromDeclaration(ELICITATION_URL_DECLARATION,
+				McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 	}
 
 	@NonNull
@@ -451,7 +451,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			@Nullable String operationName, @NonNull String requestId,
 			@NonNull String fields, boolean rootsCapable) {
 		String capabilities = "{\"extensions\":{\"" + TASKS_EXTENSION_ID
-				+ "\":{}}" + (rootsCapable ? ",\"roots\":{}" : "") + "}";
+				+ "\":{}}" + (rootsCapable ? ",\"elicitation\":{\"url\":{}}" : "") + "}";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + method + "\",\"params\":{" + fields
 				+ ",\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
@@ -498,7 +498,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 						return McpTaskCreatedResult
 								.<McpJsonObject>fromTaskId(task.getTaskId());
 					})
-					.addInputRequestDeclaration(ROOTS_DECLARATION)
+					.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
 					.structuredContentMirroredAsText(false)
 					.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,

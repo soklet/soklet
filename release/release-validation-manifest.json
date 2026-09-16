@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "310d7a567a3b6989bf1ebbecc36afa7a51e69fcfb9291ed725ff7953395b25a2"
+      "sha256": "c269ded8a3f57cf5aa4bd4690199fa374eceb634b7d5213c02b835f745f20712"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -40,6 +40,15 @@
       "runtimeVersion": "17.0.20+8-LTS",
       "vendorVersion": "Corretto-17.0.20.8.1",
       "version": "17.0.20"
+    },
+    "javadocJava": {
+      "archive": "amazon-corretto-26.0.2.11.1-linux-x64.tar.gz",
+      "archiveSha256": "f61206891b8e1009b117eefe38784cf31b0a5cdb02fd2e023556f436b85dedaa",
+      "distribution": "corretto",
+      "distributionUrl": "https://corretto.aws/downloads/resources/26.0.2.11.1/amazon-corretto-26.0.2.11.1-linux-x64.tar.gz",
+      "runtimeVersion": "26.0.2.1+11-FR",
+      "vendorVersion": "Corretto-26.0.2.11.1",
+      "version": "26.0.2.1"
     },
     "maven": {
       "archive": "apache-maven-3.9.16-bin.tar.gz",
@@ -378,7 +387,7 @@
       "evidenceContract": "soklet.release.soklet-servlet-javax.v2",
       "id": "soklet-servlet-javax",
       "kind": "DOWNSTREAM",
-      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The uncommitted local POM and bodyless-response migration must be owner-committed and re-pinned; the old pin does not implement this contract.",
+      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The final reviewed runtime, dependency, packaging, and CI changes require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
       "repository": "https://github.com/soklet/soklet-servlet-javax.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -394,7 +403,7 @@
       "evidenceContract": "soklet.release.soklet-servlet-jakarta.v2",
       "id": "soklet-servlet-jakarta",
       "kind": "DOWNSTREAM",
-      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The uncommitted local POM and bodyless-response migration must be owner-committed and re-pinned; the old pin does not implement this contract.",
+      "reason": "Adapter 2.0.0 requires Soklet 4.0.0. The final reviewed runtime, dependency, packaging, and CI changes require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
       "repository": "https://github.com/soklet/soklet-servlet-jakarta.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -410,7 +419,7 @@
       "evidenceContract": "soklet.release.toystore-app.v1",
       "id": "toystore-app",
       "kind": "DOWNSTREAM",
-      "reason": "The completed local 4.0 MCP migration is uncommitted and is intentionally not represented by this pre-migration pin.",
+      "reason": "The earlier MCP migration is committed, but final dependency changes and candidate-artifact validation require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
       "repository": "https://github.com/soklet/toystore-app.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "toystoreJava",
@@ -426,7 +435,7 @@
       "evidenceContract": "soklet.release.soklet-otel.v1",
       "id": "soklet-otel",
       "kind": "DOWNSTREAM",
-      "reason": "The current MCP migration is uncommitted locally and is intentionally not represented by this pin.",
+      "reason": "The earlier MCP migration is committed, but final telemetry, dependency, packaging, and CI changes require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
       "repository": "https://github.com/soklet/soklet-otel.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
@@ -442,7 +451,7 @@
       "evidenceContract": "soklet.release.soklet-website.v1",
       "id": "soklet-website",
       "kind": "DOWNSTREAM",
-      "reason": "The current MCP documentation migration is uncommitted locally and is intentionally not represented by this pin.",
+      "reason": "The earlier MCP documentation migration is committed, but final documentation, dependency, and generated-artifact changes require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
       "repository": "https://github.com/revetware/soklet.com.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "nodePin",

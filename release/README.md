@@ -13,6 +13,8 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [application-owned OAuth resource-server pattern](MCP_OAUTH_RESOURCE_SERVER.md)
 - [third-party attribution and redistribution audit](THIRD_PARTY_AUDIT.md)
 - [security-claims audit](SECURITY_CLAIMS_AUDIT.md)
+- [current Gitleaks history-scan triage (not an approval)](GITLEAKS_TRIAGE_2026-09-16.md)
+- [owner-approved scanner false-positive dispositions](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md)
 - [G5 promotion runbook](G5_RELEASE_RUNBOOK.md)—checked in but never executed
   without explicit G5 approval
 - [no-rebuild Central promotion mechanics](PROMOTION.md)
@@ -30,6 +32,14 @@ pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish
 that.
 
+After the owner-approved Roots/Sampling removal, current development fixtures
+use elicitation. Production tests verify error-mapping manifest SHA-256
+`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+and result-envelope manifest SHA-256
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`.
+These local results are not release receipts; dated historical evidence below
+retains its original hashes.
+
 Before the publication decision, the owner must resolve the separate V10 and
 matrix historical-source retention gaps and acknowledge the recorded D1p
 contract discrepancy. The [provenance disposition record](PLANNING_AUTHORITY_DRIFT_2026-09-13.md#required-owner-disposition-record)
@@ -44,9 +54,10 @@ are blocking imported release gates:
 - `release-scans` combines candidate-bound CodeQL, SpotBugs, Gitleaks, and
   runtime-dependency reports. CodeQL and Gitleaks findings require exact,
   candidate-tracked, project-owner exceptions lasting no more than 30 days;
-  HIGH and CRITICAL findings cannot be excepted. The checked-in exception
-  registry is empty, so real findings still fail until fixed or individually
-  reviewed and approved; and
+  HIGH and CRITICAL findings cannot be excepted. The current exception registry
+  records 39 specifically approved historical Gitleaks false positives, expiring
+  `2026-10-16T14:26:19Z`; new, changed or otherwise unapproved findings still fail.
+  See the [scoped owner decision](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md); and
 - `mcp-benchmarks` executes the registered 3.5.1-versus-4.0.0 JMH comparison,
   retains the raw draft for review, and finalizes only the exact reviewed
   bytes. A score ratio below 0.90 additionally requires a hashed 4.0.0
@@ -61,6 +72,26 @@ during candidate packaging: controlled local 17/21 builds produced different
 JAR bytes, including their `Build-Jdk-Spec` metadata. Local tests of this change
 do not establish that the Linux producer ran or that any immutable candidate
 passed its scan gate.
+
+The active scanner pins were refreshed from primary upstream releases on
+2026-09-16: CodeQL CLI/bundle 2.27.0, CodeQL Action 4.38.0 (immutable commit),
+Java queries 1.11.10, and SpotBugs Maven plugin 4.10.4.1 / engine 4.10.4.
+Gitleaks 8.30.1 and Jazzer 0.30.0 were already current. The fuzz module now
+aligns all JUnit modules with the 6.1.3 BOM; it does not replace Jazzer or use a
+compatibility shim. These are current build/provenance pins, not a new security
+approval or candidate PASS. Historical approved registry hashes, scan reports,
+receipts, exclusion bytes, severity thresholds, and exception policy remain
+unchanged. New candidate scans must use the refreshed pins; prior scanner
+results do not establish that the updated candidate passes.
+
+The current candidate filter also contains four exact class/method/parameter/
+bug-pattern exclusions for the reproduced SpotBugs 4.10.4 synthetic-constructor
+annotation-indexing false positives. Their [bytecode proof and review boundary](../docs/spotbugs-jspecify-constructor-analysis.md)
+remain separate from historical approval. The producer extracts this filter
+from the exact candidate commit and checks its current registry digest; it no
+longer substitutes a historical filter. The owner has now approved those four
+exact exclusions in the [scoped decision](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md).
+That does not establish a candidate PASS or satisfy unrelated policy reviews.
 
 Three longer-running producers remain available as advisory post-release
 monitoring and are deliberately outside the manifest, candidate validator,
@@ -341,7 +372,7 @@ unsupported classified-notification handling, universal MCP HTTP `no-store`,
 and exact validation precedence. The
 separate `conformance/golden-http-contract/precedence-no-store/manifest.sha256`
 binds 22 canonical complete responses at SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests comprise three real-listener goldens, one exhaustive
 response-authority inventory, and one six-document manifest-digest parity gate;
 four diagnostic tests cover the positive post-JSON and negative pre-JSON/
@@ -369,7 +400,7 @@ exhaust Soklet 4.0's core `complete` and `input_required` envelope authorities;
 extension result types remain separately bounded by `MCP-BASE-006`. The twelve-
 fixture canonical complete-HTTP error manifest at
 `conformance/golden-error-mapping/live/manifest.sha256` has SHA-256
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
 Two production-listener tests cover all eight frozen ordinary mapping families
 and both `-32021` paths; readable-`initialize` and path-specific error evidence
 remain explicit supplements. Five deterministic tests freeze the two progress/
@@ -614,7 +645,9 @@ Once every gate is ready, the validator:
    Go toolchains, rejecting any `READY` gate whose named toolchain is absent or
    unpinned;
 3. performs one unsigned JDK 17 `clean verify` build and hashes the POM plus the
-   main, sources, and Javadocs JARs, then runs the separately configured
+   main, sources, and Javadocs JARs; Javadoc alone uses the independently pinned
+   Corretto 26 executable via `SOKLET_JAVADOC_HOME`, while compilation and
+   Maven remain on JDK 17. It then runs the separately configured
    supported-JDK gates against the same candidate tree;
 4. installs the already-built POM and main JAR with the pinned `install-file`
    goal into a fresh isolated Maven repository and byte-compares the result;
@@ -681,13 +714,16 @@ The soak module compiles source at the candidate commit, as documented in
 `soak/README.md`; it does not claim to consume the candidate JAR. Artifact-based
 gates use the checksum-matched JAR or the isolated Maven repository.
 
-The candidate build uses the exact Corretto 17 toolchain. The workflow installs
-the exact Corretto 25 archive first, Corretto 21.0.12.9.1 second, and Corretto
-17 last; the validator verifies each full vendor build, runtime version, and
-compiler version plus the default Maven runtime before any build. Corretto 21
+The candidate build uses the exact Corretto 17 compiler and Maven runtime.
+The workflow independently installs the pinned Corretto 26 Javadoc generator,
+exports only `SOKLET_JAVADOC_HOME` for it, and retains its checksum-bound
+distribution receipt alongside the compiler receipt. The validator verifies
+every full vendor build, runtime version, and compiler or Javadoc executable
+version plus the default Maven runtime before any build. Corretto 21
 is selected only for `core-jdk-21`, `static-analysis`, and `spotbugs`.
 Corretto 25 is selected only for `core-jdk-25`, `fuzz-replay`, `soak-smoke`,
-and ToyStore; the other currently configured Java gates use Corretto 17.
+and ToyStore; the other Java gates use Corretto 17 for execution, with
+documentation generation consistently delegated to Corretto 26.
 ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 4.0
 API. The servlet integrations require core 4.0.0 and retain default-property
@@ -745,6 +781,7 @@ node scripts/release-validation-evidence.mjs \
 node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs
 node scripts/verify-lifecycle-bound-harness-inventory.mjs
 node scripts/release-validation-self-test.mjs
+node scripts/verify-javadoc-toolchain-self-test.mjs
 bash -n scripts/validate-release-candidate.sh
 bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 ```

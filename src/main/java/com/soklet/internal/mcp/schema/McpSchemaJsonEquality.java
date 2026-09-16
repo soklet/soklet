@@ -27,6 +27,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -58,7 +59,7 @@ final class McpSchemaJsonEquality {
 			ValuePair pair = pairs.pop();
 			McpJsonValue leftValue = pair.left();
 			McpJsonValue rightValue = pair.right();
-			if (leftValue == rightValue
+			if (sameInstance(leftValue, rightValue)
 					&& !(leftValue instanceof McpJsonArray)
 					&& !(leftValue instanceof McpJsonObject))
 				continue;

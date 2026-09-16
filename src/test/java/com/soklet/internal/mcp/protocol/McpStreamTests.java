@@ -88,7 +88,7 @@ public class McpStreamTests {
 	public void neverWritesIndependentRequest() throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<com.soklet.McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonObjectArguments()
@@ -96,7 +96,7 @@ public class McpStreamTests {
 					features.find(McpProgressReporter.class).ifPresent(reporter ->
 							reporter.report(McpProgressUpdate.withProgress(1.0).build()));
 					return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
-									roots, com.soklet.McpJsonObject.emptyInstance()))
+									roots, com.soklet.McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 							.build();
 				})
 				.addInputRequestDeclarations(roots)
@@ -203,7 +203,7 @@ public class McpStreamTests {
 	public void outboundBoundariesRejectIndependentRequestsBeforeEncodingOrChannelMutation()
 			throws Exception {
 		McpJsonRpcMessage.Request request = new McpJsonRpcMessage.Request(
-				new McpJsonRpcId.StringId("server-request"), "roots/list",
+				new McpJsonRpcId.StringId("server-request"), "elicitation/create",
 				new McpRequestParameters(McpRequestMetadata.fromClientCapabilities(
 						Mcp20260728ProtocolProfile.INSTANCE,
 						McpClientCapabilities.empty()), McpJsonObject.empty()),
@@ -310,7 +310,7 @@ public class McpStreamTests {
 				+ ",\"method\":\"tools/call\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{\"roots\":{}}"
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{\"elicitation\":{\"url\":{}}}"
 				+ progressToken + "},\"name\":\"" + TOOL_NAME
 				+ "\",\"arguments\":{}}}";
 		return McpChunkedHttpClient.postMcpMessage(port, body, List.of(
@@ -403,7 +403,7 @@ public class McpStreamTests {
 				McpJsonObject.class, result.members().get("inputRequests"));
 		McpJsonObject roots = Assertions.assertInstanceOf(
 				McpJsonObject.class, inputRequests.members().get("roots"));
-		Assertions.assertEquals(new McpJsonString("roots/list"),
+		Assertions.assertEquals(new McpJsonString("elicitation/create"),
 				roots.members().get("method"));
 		Assertions.assertInstanceOf(McpJsonObject.class,
 				roots.members().get("params"));

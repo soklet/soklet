@@ -878,11 +878,23 @@ public class McpHttpContractGoldenProductionTests {
 		}
 
 		private byte[] canonicalWire() {
+			Assertions.assertEquals(1, headerValues("Date").size(), "Expected exactly one Date header");
+			java.time.Instant date = HttpDate.fromHeaderValue(headerValues("Date").get(0)).orElseThrow();
+			Assertions.assertTrue(Math.abs(Duration.between(date, java.time.Instant.now()).toSeconds()) <= 10,
+					"Date must reflect response generation, not listener startup");
+			// Keep the required Date field in the complete-response golden while
+			// normalizing only its independently validated wall-clock value.
+			byte[] head = this.rawHead.replaceFirst("(?im)^Date: [^\\r\\n]*",
+					"Date: Thu, 01 Jan 1970 00:00:00 GMT").getBytes(StandardCharsets.ISO_8859_1);
+			ByteArrayOutputStream normalized = new ByteArrayOutputStream();
+			normalized.writeBytes(head);
+			normalized.write(this.raw, this.rawHead.length(), this.raw.length - this.rawHead.length());
+			byte[] responseBytes = normalized.toByteArray();
 			ByteArrayOutputStream canonical = new ByteArrayOutputStream(this.raw.length);
-			for (int index = 0; index < this.raw.length; index++) {
-				byte value = this.raw[index];
+			for (int index = 0; index < responseBytes.length; index++) {
+				byte value = responseBytes[index];
 				if (value == '\r') {
-					if (index + 1 >= this.raw.length || this.raw[index + 1] != '\n')
+					if (index + 1 >= responseBytes.length || responseBytes[index + 1] != '\n')
 						throw new AssertionError("Response contains a bare CR byte.");
 					canonical.write('\n');
 					index++;

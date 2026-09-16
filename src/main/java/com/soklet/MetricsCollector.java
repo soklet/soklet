@@ -478,6 +478,7 @@ public interface MetricsCollector {
 
 	/**
 	 * Called after a broadcast attempt for a Server-Sent Event payload.
+	 * All counts are non-null, including zero when no connections were targeted.
 	 *
 	 * @param route     the route declaration that was broadcast to
 	 * @param attempted number of connections targeted
@@ -485,14 +486,15 @@ public interface MetricsCollector {
 	 * @param dropped   number of connections for which enqueue failed
 	 */
 	default void didBroadcastSseEvent(@NonNull ResourcePathDeclaration route,
-																					 int attempted,
-																					 int enqueued,
-																					 int dropped) {
+																					 @NonNull Integer attempted,
+																					 @NonNull Integer enqueued,
+																					 @NonNull Integer dropped) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a broadcast attempt for a Server-Sent Event comment payload.
+	 * All counts are non-null, including zero when no connections were targeted.
 	 *
 	 * @param route       the route declaration that was broadcast to
 	 * @param commentType the comment type
@@ -502,9 +504,9 @@ public interface MetricsCollector {
 	 */
 	default void didBroadcastSseComment(@NonNull ResourcePathDeclaration route,
 																									SseComment.@NonNull CommentType commentType,
-																									int attempted,
-																									int enqueued,
-																									int dropped) {
+																									@NonNull Integer attempted,
+																									@NonNull Integer enqueued,
+																									@NonNull Integer dropped) {
 		// No-op by default
 	}
 

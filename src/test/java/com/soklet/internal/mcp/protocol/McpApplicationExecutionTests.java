@@ -49,7 +49,7 @@ public class McpApplicationExecutionTests {
 	public void framework_protocol_errors_remain_protocol_observation_outcomes() {
 		McpJsonRpcId id = new McpJsonRpcId.StringId("conditional-capability");
 		McpJsonRpcError error = McpJsonRpcError.missingRequiredClientCapabilities(
-				Set.of(McpCoreClientCapability.ROOTS));
+				Set.of(McpCoreClientCapability.ELICITATION_URL));
 
 		McpApplicationResponse response =
 				McpApplicationResponse.protocolJsonRpcError(id, error);

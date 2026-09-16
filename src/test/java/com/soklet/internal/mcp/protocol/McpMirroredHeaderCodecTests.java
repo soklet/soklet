@@ -54,6 +54,7 @@ public class McpMirroredHeaderCodecTests {
 	public void malformed_base64_and_utf8_fail_without_reflecting_the_value() {
 		McpMirroredHeaderCodec codec = new McpMirroredHeaderCodec(1_024);
 		for (String value : List.of(
+				"=?base64?=",
 				"=?base64?***secret***?=",
 				"=?base64?_w==?=",
 				"=?base64?SGVsbG8?=",
@@ -62,6 +63,7 @@ public class McpMirroredHeaderCodecTests {
 			IllegalArgumentException exception = Assertions.assertThrows(
 					IllegalArgumentException.class, () -> codec.decodeString(value));
 			Assertions.assertEquals("Invalid mirrored header value.", exception.getMessage());
+			Assertions.assertNull(exception.getCause());
 			Assertions.assertFalse(exception.getMessage().contains("secret"));
 		}
 	}

@@ -47,6 +47,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -1949,7 +1950,7 @@ final class McpApplicationExecution {
 						if (!interceptorActive.get())
 							throw new IllegalStateException(
 									"An MCP interceptor continuation cannot be invoked after interception returns.");
-						if (Thread.currentThread() != interceptorThread)
+						if (!sameInstance(Thread.currentThread(), interceptorThread))
 							throw new IllegalStateException(
 									"An MCP interceptor continuation must be invoked on the interceptor thread.");
 						if (!handlerInvoked.compareAndSet(false, true))

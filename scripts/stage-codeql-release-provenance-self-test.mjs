@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -91,7 +92,37 @@ try {
   missingDescriptor.expectedDescriptors.securityExtendedSuiteSha256 = '1'.repeat(64);
   assert.throws(
     () => stageCodeqlReleaseProvenance(missingDescriptor),
-    /missing approved securityExtendedSuiteSha256 bytes/,
+    /missing registered securityExtendedSuiteSha256 bytes/,
+  );
+  assertions++;
+
+  const repeatedDescriptor = fixture('repeated-descriptor');
+  const vendorRoot = join(repeatedDescriptor.codeqlPath, '..', 'qlpacks', 'java', '.codeql', 'libraries');
+  mkdirSync(vendorRoot, { recursive: true });
+  writeFileSync(join(vendorRoot, 'security-extended-selectors.yml'), 'selector');
+  // A same-named descriptor with different bytes must never be selected.
+  writeFileSync(join(vendorRoot, 'other-security-extended-selectors.yml'), 'unregistered selector');
+  const repeatedResult = stageCodeqlReleaseProvenance(repeatedDescriptor);
+  assert.equal(
+    readFileSync(join(repeatedDescriptor.outputRoot, 'codeql-java-security-extended-selectors.yml'), 'utf8'),
+    'selector',
+  );
+  assert.equal(
+    repeatedResult.descriptorPaths.securityExtendedSuiteSelectorSha256,
+    join(vendorRoot, 'security-extended-selectors.yml'),
+  );
+  assertions += 2;
+
+  const symlinkDescriptor = fixture('symlink-descriptor');
+  const selectorPath = join(symlinkDescriptor.codeqlPath, '..', 'qlpacks', 'java',
+    'security-extended-selectors.yml');
+  const outsideSelectorPath = join(root, 'outside-selector.yml');
+  writeFileSync(outsideSelectorPath, 'selector');
+  rmSync(selectorPath);
+  symlinkSync(outsideSelectorPath, selectorPath);
+  assert.throws(
+    () => stageCodeqlReleaseProvenance(symlinkDescriptor),
+    /missing registered securityExtendedSuiteSelectorSha256 bytes/,
   );
   assertions++;
 

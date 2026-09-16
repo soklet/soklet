@@ -22,10 +22,10 @@ Contract format: 2.
 | DPOP-002 | dpop-implementation-boundary | <code>literal (case-sensitive) "DPoP"</code> | nonzero-with-notice | <code>literal (case-sensitive) "core Soklet does not implement DPoP-bound access tokens"</code> | 1 | 1 | The retained DPoP reference states that core does not implement DPoP-bound tokens. | PASS |
 | EXTENSION-001 | server-extension-overclaim-prohibition | <code>regex (case-insensitive) /(?:advertis(?:e&#124;es&#124;ed&#124;ing)&#124;support(?:s&#124;ed&#124;ing)?)[\s\S]{0,140}server\s+extensions?&#124;server\s+extensions?\s+(?:(?:is&#124;are)\s+)?support(?:s&#124;ed&#124;ing)?&#124;arbitrary\s+extension\s+methods?&#124;extension\s+methods?[\s\S]{0,120}(?:enabled&#124;support(?:s&#124;ed&#124;ing)?)/giu</code> | zero | — | 6 | 0 | Public guidance must not claim supported server-extension advertisement or arbitrary extension-method registration. | PASS |
 | EXTENSION-002 | client-extension-isolation | <code>literal (case-sensitive) "Client extension settings are open but do not implicitly enable server\nbehavior."</code> | nonzero-with-notice | <code>literal (case-sensitive) "without inventing a core capability, advertising matching server support"</code> | 1 | 1 | Open client settings remain inspectable without enabling or advertising server behavior. | PASS |
-| LIFECYCLE-001 | mcp-deprecated-whole-file-census | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | nonzero-with-notice | <code>literal (case-sensitive) "SEP-2577"</code> | 3 | 20 | The whole-file census fails closed on every added, removed, or duplicated Roots, Sampling, and Logging token in the three target documents. | PASS |
+| LIFECYCLE-001 | mcp-deprecated-whole-file-census | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | nonzero-with-notice | <code>literal (case-sensitive) "Soklet does not implement"</code> | 3 | 10 | The whole-file census fails closed on every added, removed, or duplicated Roots, Sampling, and Logging token in the three target documents. | PASS |
 | LIFECYCLE-002 | mcp-deprecated-default-mrtr | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | zero | — | 2 | 0 | The default MRTR introduction and flagship Java example contain no deprecated MCP capability name. | PASS |
 | LIFECYCLE-003 | mcp-deprecated-readme-default | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | zero | — | 2 | 0 | The README recommended MCP setup and its Java quick-start contain no deprecated MCP capability name. | PASS |
-| LIFECYCLE-004 | mcp-deprecated-reviewed-regions | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | nonzero-with-notice | <code>regex (case-sensitive) /SEP-2577 (?:marks Roots,\s+Sampling, and Logging deprecated&#124;deprecates Roots and Sampling at the MCP layer)/gu</code> | 3 | 19 | Deprecated MCP capability references are allowed only in clearly labeled compatibility/security regions carrying the lifecycle notice. | PASS |
+| LIFECYCLE-004 | mcp-deprecated-reviewed-regions | <code>regex (case-sensitive) /\b(?:Roots&#124;Sampling&#124;Logging)\b/gu</code> | nonzero-with-notice | <code>literal (case-sensitive) "Soklet does not implement"</code> | 3 | 9 | Unsupported MCP capability references are allowed only in clearly labeled scope/security regions carrying the explicit non-support notice. | PASS |
 | LIFECYCLE-005 | reviewed-non-mcp-logging-reference | <code>literal (case-sensitive) "Logging"</code> | nonzero-with-notice | <code>literal (case-sensitive) "Logging via"</code> | 1 | 1 | The README's SLF4J/Logback bullet is an explicit non-MCP Logging false positive. | PASS |
 | DCR-001 | dynamic-client-registration | <code>literal (case-sensitive) "Dynamic Client Registration is reviewed and not applicable because Soklet has"</code> | nonzero-with-notice | <code>literal (case-sensitive) "no OAuth/DCR implementation"</code> | 1 | 1 | Dynamic Client Registration remains reviewed N/A because Soklet provides no OAuth/DCR implementation. | PASS |
 | EXAMPLE-001 | active-default-example | <code>literal (case-sensitive) "this raw-JSON tool requests active form Elicitation"</code> | nonzero-with-notice | <code>literal (case-sensitive) "this raw-JSON tool requests active form Elicitation"</code> | 1 | 1 | The flagship MRTR example explicitly teaches active form Elicitation. | PASS |
@@ -35,7 +35,7 @@ Contract format: 2.
 | Rule | Path | Complete scope identity |
 | --- | --- | --- |
 | PROFILE-001 | <code>MCP.md</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;role=defaultPath</code> |
-| PROFILE-001 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
+| PROFILE-001 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
 | PROFILE-002 | <code>MCP.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | PROFILE-002 | <code>README.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | PROFILE-002 | <code>SECURITY.md</code> | <code>wholeFile&#124;role=security</code> |
@@ -98,9 +98,9 @@ Contract format: 2.
 | LIFECYCLE-002 | <code>MCP.md</code> | <code>fencedBlock&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;fenceLanguage="java"&#124;role=defaultPath</code> |
 | LIFECYCLE-003 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"]&#124;role=defaultPath</code> |
 | LIFECYCLE-003 | <code>README.md</code> | <code>fencedBlock&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"]&#124;fenceLanguage="java"&#124;role=defaultPath</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"]&#124;role=security</code> |
+| LIFECYCLE-004 | <code>MCP.md</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"]&#124;role=security</code> |
 | LIFECYCLE-005 | <code>README.md</code> | <code>headingSubtree&#124;headingPath=["Building Real-World Apps"]&#124;role=factualSupport</code> |
 | DCR-001 | <code>MCP.md</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Current Phase 6 and release state"]&#124;role=factualSupport</code> |
 | EXAMPLE-001 | <code>MCP.md</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;role=defaultPath</code> |
@@ -110,7 +110,7 @@ Contract format: 2.
 | Rule | Path | Matched text | Complete scope identity |
 | --- | --- | --- | --- |
 | PROFILE-001 | <code>MCP.md</code> | <code>"automatic\n\"latest\" profile"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;role=defaultPath</code> |
-| PROFILE-001 | <code>README.md</code> | <code>"automatic\n\"latest\" profile"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
+| PROFILE-001 | <code>README.md</code> | <code>"automatic\n\"latest\" profile"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
 | PROFILE-002 | — | — | — |
 | PROFILE-003 | <code>MCP.md</code> | <code>"Soklet supports exactly the MCP `2026-07-28`"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;role=defaultPath</code> |
 | PROFILE-003 | <code>README.md</code> | <code>"Soklet supports exactly the MCP `2026-07-28`"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"]&#124;role=defaultPath</code> |
@@ -136,44 +136,24 @@ Contract format: 2.
 | LIFECYCLE-001 | <code>MCP.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>MCP.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>MCP.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>README.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>README.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>README.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>README.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>README.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>README.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=factualSupport</code> |
-| LIFECYCLE-001 | <code>README.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>README.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | LIFECYCLE-001 | <code>SECURITY.md</code> | <code>"Roots"</code> | <code>wholeFile&#124;role=security</code> |
 | LIFECYCLE-001 | <code>SECURITY.md</code> | <code>"Sampling"</code> | <code>wholeFile&#124;role=security</code> |
 | LIFECYCLE-001 | <code>SECURITY.md</code> | <code>"Logging"</code> | <code>wholeFile&#124;role=security</code> |
 | LIFECYCLE-002 | — | — | — |
 | LIFECYCLE-003 | — | — | — |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>README.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"]&#124;role=compatibility</code> |
-| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"]&#124;role=security</code> |
-| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"]&#124;role=security</code> |
-| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"]&#124;role=security</code> |
+| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>MCP.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>README.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>README.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>README.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"]&#124;role=compatibility</code> |
+| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Roots"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"]&#124;role=security</code> |
+| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Sampling"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"]&#124;role=security</code> |
+| LIFECYCLE-004 | <code>SECURITY.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"]&#124;role=security</code> |
 | LIFECYCLE-005 | <code>README.md</code> | <code>"Logging"</code> | <code>headingSubtree&#124;headingPath=["Building Real-World Apps"]&#124;role=factualSupport</code> |
 | DCR-001 | <code>MCP.md</code> | <code>"Dynamic Client Registration is reviewed and not applicable because Soklet has"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Current Phase 6 and release state"]&#124;role=factualSupport</code> |
 | EXAMPLE-001 | <code>MCP.md</code> | <code>"this raw-JSON tool requests active form Elicitation"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Multi-round-trip input and request state"]&#124;role=defaultPath</code> |

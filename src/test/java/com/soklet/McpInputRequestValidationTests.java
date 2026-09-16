@@ -20,10 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.NonNull;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Contract coverage for input-request parameter and response correlation.
@@ -39,15 +36,6 @@ public class McpInputRequestValidationTests {
 		McpInputRequest url = request(
 				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL), urlParams());
-		McpInputRequest sampling = request(
-				McpInputRequestDeclaration.fromSampling(Set.of(
-						McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.CONDITIONAL), samplingParams());
-		McpInputRequest roots = request(
-				McpInputRequestDeclaration.fromRoots(
-						McpInputRequirement.REQUIRED),
-				McpJsonObject.emptyInstance());
 
 		McpJsonObject elicitationResponse = McpJsonObject.builder()
 				.put("action", "accept")
@@ -77,15 +65,11 @@ public class McpInputRequestValidationTests {
 
 		Assertions.assertTrue(form.matchesInputResponse(elicitationResponse));
 		Assertions.assertTrue(url.matchesInputResponse(elicitationResponse));
-		Assertions.assertTrue(sampling.matchesInputResponse(samplingResponse));
-		Assertions.assertTrue(roots.matchesInputResponse(rootsResponse));
 		Assertions.assertFalse(form.matchesInputResponse(rootsResponse));
 		Assertions.assertFalse(url.matchesInputResponse(samplingResponse));
-		Assertions.assertFalse(sampling.matchesInputResponse(rootsResponse));
-		Assertions.assertFalse(roots.matchesInputResponse(elicitationResponse));
 
 		for (McpInputRequest inputRequest
-				: List.of(form, url, sampling, roots)) {
+				: List.of(form, url)) {
 			Assertions.assertFalse(inputRequest.matchesInputResponse(
 					McpJsonObject.emptyInstance()));
 			Assertions.assertFalse(inputRequest.matchesInputResponse(
@@ -101,14 +85,7 @@ public class McpInputRequestValidationTests {
 				request(McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.REQUIRED), formParams()),
 				request(McpInputRequestDeclaration.fromElicitationUrl(
-						McpInputRequirement.REQUIRED), urlParams()),
-				request(McpInputRequestDeclaration.fromSampling(Set.of(
-						McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.REQUIRED), samplingParams()),
-				request(McpInputRequestDeclaration.fromRoots(
-						McpInputRequirement.REQUIRED),
-						McpJsonObject.emptyInstance()));
+						McpInputRequirement.REQUIRED), urlParams()));
 		valid.forEach(inputRequest -> Assertions.assertDoesNotThrow(
 				inputRequest::requireValidParams));
 
@@ -123,13 +100,6 @@ public class McpInputRequestValidationTests {
 								.put("mode", "url")
 								.put("message", "Relative URL")
 								.put("url", "relative")
-								.build()),
-				request(McpInputRequestDeclaration.fromSampling(Set.of(),
-						McpInputRequirement.REQUIRED),
-						samplingParamsWithoutMaximumTokens()),
-				request(McpInputRequestDeclaration.fromRoots(
-						McpInputRequirement.REQUIRED),
-						McpJsonObject.builder().put("_meta", "not-an-object")
 								.build()));
 		for (McpInputRequest inputRequest : invalid) {
 			IllegalArgumentException exception = Assertions.assertThrows(
@@ -170,40 +140,6 @@ public class McpInputRequestValidationTests {
 				.put("mode", "url")
 				.put("message", "Authorize access")
 				.put("url", "https://example.com/authorize")
-				.build();
-	}
-
-	@NonNull
-	private static McpJsonObject samplingParams() {
-		return McpJsonObject.fromMembers(Map.of(
-				"messages", messages(),
-				"maxTokens", McpJsonNumber.fromValue(BigDecimal.valueOf(16)),
-				"includeContext", McpJsonString.fromValue("allServers"),
-				"tools", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("name", "lookup")
-								.put("inputSchema", McpJsonObject.builder()
-										.put("type", "object")
-										.build())
-								.build())
-						.build()));
-	}
-
-	@NonNull
-	private static McpJsonObject samplingParamsWithoutMaximumTokens() {
-		return McpJsonObject.builder().put("messages", messages()).build();
-	}
-
-	@NonNull
-	private static McpJsonArray messages() {
-		return McpJsonArray.builder()
-				.add(McpJsonObject.builder()
-						.put("role", "user")
-						.put("content", McpJsonObject.builder()
-								.put("type", "text")
-								.put("text", "Hello")
-								.build())
-						.build())
 				.build();
 	}
 }

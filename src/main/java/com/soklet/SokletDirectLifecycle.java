@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -272,7 +273,7 @@ final class SokletDirectLifecycle {
 		this.beforeStartupCallOutcomeSelection = requireNonNull(
 				beforeStartupCallOutcomeSelection);
 		this.transitionObservationEnabled = config.getLifecycleObservers().stream()
-				.anyMatch(observer -> observer != LifecycleObserver.defaultInstance());
+				.anyMatch(observer -> !sameInstance(observer, LifecycleObserver.defaultInstance()));
 
 		List<ParticipantControl> controls = createControls();
 		IDENTITY_CLAIMS.claimAllDescriptors(controls.stream()
@@ -596,11 +597,11 @@ final class SokletDirectLifecycle {
 	private static void addSuppressedIfDistinct(@NonNull Throwable primary,
 			@Nullable Throwable secondary) {
 		Throwable exactSecondary = secondary;
-		if (exactSecondary == null || primary == exactSecondary)
+		if (exactSecondary == null || sameInstance(primary, exactSecondary))
 			return;
 		synchronized (primary) {
 			if (java.util.Arrays.stream(primary.getSuppressed())
-					.noneMatch(candidate -> candidate == exactSecondary))
+					.noneMatch(candidate -> sameInstance(candidate, exactSecondary)))
 				primary.addSuppressed(exactSecondary);
 		}
 	}
@@ -957,12 +958,12 @@ final class SokletDirectLifecycle {
 					exactSchedule.forcedDeadlineNanos());
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
-			if (primaryFailure != null && primaryFailure != exception)
+			if (primaryFailure != null && !sameInstance(primaryFailure, exception))
 				primaryFailure.addSuppressed(exception);
 			coordinated = unknownResult(participants, disposition,
 					primaryFailure == null ? exception : primaryFailure);
 		} catch (RuntimeException | Error failure) {
-			if (primaryFailure != null && primaryFailure != failure)
+			if (primaryFailure != null && !sameInstance(primaryFailure, failure))
 				primaryFailure.addSuppressed(failure);
 			coordinated = unknownResult(participants, disposition,
 					primaryFailure == null ? failure : primaryFailure);
@@ -1091,7 +1092,7 @@ final class SokletDirectLifecycle {
 			@NonNull InternalLifecycleComponentShutdownResult attempt) {
 		List<Throwable> failures = new ArrayList<>(transport.failures());
 		for (Throwable failure : attempt.failures())
-			if (failures.stream().noneMatch(candidate -> candidate == failure))
+			if (failures.stream().noneMatch(candidate -> sameInstance(candidate, failure)))
 				failures.add(failure);
 		EnumSet<InternalResidualActivityType> residual = EnumSet.noneOf(
 				InternalResidualActivityType.class);
@@ -1115,7 +1116,7 @@ final class SokletDirectLifecycle {
 		List<Throwable> failures = new ArrayList<>(
 				requireNonNull(participant).failures());
 		Throwable exactFailure = requireNonNull(failure);
-		if (failures.stream().noneMatch(candidate -> candidate == exactFailure))
+		if (failures.stream().noneMatch(candidate -> sameInstance(candidate, exactFailure)))
 			failures.add(exactFailure);
 		return new InternalLifecycleComponentShutdownResult(participant.kind(),
 				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
@@ -1793,7 +1794,7 @@ final class SokletDirectLifecycle {
 				residual = requireNonNull(participant.residualActivity(),
 						"Participant residual activity returned null");
 			} catch (Throwable diagnosticFailure) {
-				if (diagnosticFailure != failure)
+				if (!sameInstance(diagnosticFailure, failure))
 					failures.add(diagnosticFailure);
 				addSuppressedIfDistinct(failure, diagnosticFailure);
 			}

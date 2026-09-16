@@ -36,6 +36,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -379,7 +380,7 @@ public final class SokletApplication {
 			} catch (Throwable failure) {
 				if (processReleaseFailure == null)
 					processReleaseFailure = failure;
-				else if (processReleaseFailure != failure)
+				else if (!sameInstance(processReleaseFailure, failure))
 					processReleaseFailure.addSuppressed(failure);
 			}
 		}
@@ -484,10 +485,10 @@ public final class SokletApplication {
 			@NonNull Throwable secondary) {
 		Throwable exactPrimary = requireNonNull(primary);
 		Throwable exactSecondary = requireNonNull(secondary);
-		if (exactPrimary == exactSecondary)
+		if (sameInstance(exactPrimary, exactSecondary))
 			return;
 		for (Throwable existing : exactPrimary.getSuppressed())
-			if (existing == exactSecondary)
+			if (sameInstance(existing, exactSecondary))
 				return;
 		exactPrimary.addSuppressed(exactSecondary);
 	}

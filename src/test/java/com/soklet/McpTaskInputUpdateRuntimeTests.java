@@ -47,15 +47,15 @@ public class McpTaskInputUpdateRuntimeTests {
 	private static final String TASKS_EXTENSION_ID =
 			"io.modelcontextprotocol/tasks";
 	private static final String TOOL_NAME = "tasks.input-update";
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(
+	private static final McpInputRequestDeclaration ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(
 					McpInputRequirement.CONDITIONAL);
 	private static final McpInputRequestDeclaration FORM_DECLARATION =
 			McpInputRequestDeclaration.fromElicitationForm(
 					McpInputRequirement.CONDITIONAL);
-	private static final McpJsonObject EMPTY_ROOTS_RESPONSE =
+	private static final McpJsonObject EMPTY_ELICITATION_URL_RESPONSE =
 			McpJsonObject.builder()
-					.put("roots", McpJsonArray.emptyInstance())
+					.put("action", "accept")
 					.build();
 
 	@Test
@@ -74,7 +74,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(task.getTaskId());
 				})
-				.addInputRequestDeclaration(ROOTS_DECLARATION)
+				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
@@ -122,7 +122,7 @@ public class McpTaskInputUpdateRuntimeTests {
 			McpJsonObject persistedDeclaration = Assertions.assertInstanceOf(
 					McpJsonObject.class,
 					persistedDeclarations.getElements().get(0));
-			Assertions.assertEquals(McpJsonString.fromValue("roots"),
+			Assertions.assertEquals(McpJsonString.fromValue("elicitation_url"),
 					persistedDeclaration.find("inputRequestType").orElseThrow());
 			Assertions.assertEquals(McpJsonString.fromValue("conditional"),
 					persistedDeclaration.find("requirement").orElseThrow());
@@ -150,7 +150,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					.asMap().isEmpty());
 
 			assertEmptyAcknowledgement(updateTask(port, "partial", taskId,
-					"\"first\":{\"roots\":[]},"
+					"\"first\":{\"action\":\"accept\"},"
 							+ "\"second\":{\"ignored\":true},"
 							+ "\"unknown\":{\"ignored\":true}"));
 			McpTask partial = taskManager.findTask(taskId).orElseThrow();
@@ -164,17 +164,17 @@ public class McpTaskInputUpdateRuntimeTests {
 							+ "\"file:///must-not-replace\"}]}"));
 			McpInputResponses firstResponses =
 					taskManager.takeTaskInputResponses(taskId);
-			Assertions.assertEquals(EMPTY_ROOTS_RESPONSE,
+			Assertions.assertEquals(EMPTY_ELICITATION_URL_RESPONSE,
 					firstResponses.find("first").orElseThrow());
 			Assertions.assertTrue(firstResponses.find("unknown").isEmpty());
 			Assertions.assertTrue(taskManager.takeTaskInputResponses(taskId)
 					.asMap().isEmpty());
 
 			assertEmptyAcknowledgement(updateTask(port, "complete-input", taskId,
-					"\"second\":{\"roots\":[]}"));
+					"\"second\":{\"action\":\"accept\"}"));
 			Assertions.assertEquals(McpTaskStatus.WORKING,
 					taskManager.findTask(taskId).orElseThrow().getTaskStatus());
-			Assertions.assertEquals(EMPTY_ROOTS_RESPONSE,
+			Assertions.assertEquals(EMPTY_ELICITATION_URL_RESPONSE,
 					taskManager.takeTaskInputResponses(taskId)
 							.find("second").orElseThrow());
 
@@ -182,7 +182,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					Map.of("superseded", rootsRequest()), null);
 			taskManager.markTaskWorking(taskId, "Worker resumed independently");
 			assertEmptyAcknowledgement(updateTask(port, "superseded", taskId,
-					"\"superseded\":{\"roots\":[]}"));
+					"\"superseded\":{\"action\":\"accept\"}"));
 			Assertions.assertTrue(taskManager.takeTaskInputResponses(taskId)
 					.asMap().isEmpty());
 
@@ -190,7 +190,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					Map.of("terminal", rootsRequest()), null);
 			taskManager.cancelTask(taskId, "Canceled by worker");
 			assertEmptyAcknowledgement(updateTask(port, "terminal", taskId,
-					"\"terminal\":{\"roots\":[]}"));
+					"\"terminal\":{\"action\":\"accept\"}"));
 			Assertions.assertEquals(McpTaskStatus.CANCELED,
 					taskManager.findTask(taskId).orElseThrow().getTaskStatus());
 			Assertions.assertTrue(taskManager.takeTaskInputResponses(taskId)
@@ -220,8 +220,8 @@ public class McpTaskInputUpdateRuntimeTests {
 
 	@NonNull
 	private static McpInputRequest rootsRequest() {
-		return McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
-				McpJsonObject.emptyInstance());
+		return McpInputRequest.fromDeclaration(ELICITATION_URL_DECLARATION,
+				McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 	}
 
 	@NonNull
@@ -258,7 +258,7 @@ public class McpTaskInputUpdateRuntimeTests {
 			@NonNull String operationName, @NonNull String requestId,
 			@NonNull String fields, boolean rootsCapable) throws Exception {
 		String capabilities = "{\"extensions\":{\"" + TASKS_EXTENSION_ID
-				+ "\":{}}" + (rootsCapable ? ",\"roots\":{}" : "") + "}";
+				+ "\":{}}" + (rootsCapable ? ",\"elicitation\":{\"url\":{}}" : "") + "}";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + method + "\",\"params\":{"
 				+ fields + ",\"_meta\":{"

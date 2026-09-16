@@ -219,7 +219,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
-					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
 
@@ -255,7 +255,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(headers)
-					.body(format("HTTP %d: %s. Requested: %s, Allowed: %s",
+					.body(format("HTTP %s: %s. Requested: %s, Allowed: %s",
 							statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase(), request.getHttpMethod().name(),
 							String.join(", ", allowedHttpMethodsAsStrings)).getBytes(getCharset()))
 					.build();
@@ -284,7 +284,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
-					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
 
@@ -314,7 +314,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 							"Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())),
 							"Connection", Set.of("close") // Important for load shedding
 					))
-					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
 
@@ -443,7 +443,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
-					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
 
@@ -542,7 +542,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
-					.body(format("HTTP %d: %s (CORS preflight rejected)", statusCode,
+					.body(format("HTTP %s: %s (CORS preflight rejected)", statusCode,
 							StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}

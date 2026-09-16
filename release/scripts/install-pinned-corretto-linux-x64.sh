@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [[ $# -ne 5 ]]; then
-	printf 'Usage: %s <java|coreJdk21|toystoreJava> <runner-temp> <github-path> <github-env> <evidence-file>\n' "$0" >&2
+	printf 'Usage: %s <java|coreJdk21|toystoreJava|javadocJava> <runner-temp> <github-path> <github-env> <evidence-file>\n' "$0" >&2
 	exit 64
 fi
 
@@ -28,6 +28,10 @@ case "$toolchain_name" in
 		expected_major=25
 		environment_name=SOKLET_RELEASE_TOYSTORE_JAVA_HOME
 		;;
+	javadocJava)
+		expected_major=26
+		environment_name=SOKLET_JAVADOC_HOME
+		;;
 	*)
 		printf 'Unsupported Corretto toolchain: %s\n' "$toolchain_name" >&2
 		exit 64
@@ -49,8 +53,8 @@ distribution_version=${vendor_version#Corretto-}
 
 [[ "$distribution" == "corretto" ]] \
 	|| { printf 'Pinned Java distribution must be Corretto.\n' >&2; exit 1; }
-if [[ "$expected_major" -eq 21 ]]; then
-	[[ "$java_version" =~ ^21\.0\.[0-9]+(\.[0-9]+)?$ ]] \
+if [[ "$expected_major" -eq 21 || "$expected_major" -eq 26 ]]; then
+	[[ "$java_version" =~ ^${expected_major}\.0\.[0-9]+(\.[0-9]+)?$ ]] \
 		|| { printf 'Invalid pinned Java version: %s\n' "$java_version" >&2; exit 1; }
 else
 	[[ "$java_version" =~ ^${expected_major}\.0\.[0-9]+$ ]] \
@@ -62,7 +66,7 @@ fi
 IFS=. read -r release_major release_minor release_security release_build release_package \
 	<<< "$distribution_version"
 release_version_prefix="$release_major.$release_minor.$release_security"
-if [[ "$expected_major" -eq 21 ]]; then
+if [[ "$expected_major" -eq 21 || "$expected_major" -eq 26 ]]; then
 	[[ "$java_version" == "$release_version_prefix" \
 			|| "$java_version" == "$release_version_prefix.$release_package" ]] \
 		|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
@@ -70,7 +74,11 @@ else
 	[[ "$java_version" == "$release_version_prefix" ]] \
 		|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
 fi
-[[ "$runtime_version" == "$java_version+$release_build-LTS" \
+release_kind=LTS
+if [[ "$expected_major" -eq 26 ]]; then
+	release_kind=FR
+fi
+[[ "$runtime_version" == "$java_version+$release_build-$release_kind" \
 		&& "$release_package" =~ ^[0-9]+$ ]] \
 	|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
 
@@ -96,7 +104,7 @@ printf '%s  %s\n' "$archive_sha256" "$archive_path" \
 	| sha256sum --check --strict
 tar -xzf "$archive_path" -C "$staging_root"
 
-[[ -x "$java_home/bin/java" && -x "$java_home/bin/javac" ]] \
+[[ -x "$java_home/bin/java" && -x "$java_home/bin/javac" && -x "$java_home/bin/javadoc" ]] \
 	|| { printf 'Extracted Corretto JDK executables are missing.\n' >&2; exit 1; }
 
 java_property() {
@@ -109,11 +117,13 @@ actual_runtime_version=$(java_property java.runtime.version)
 actual_vendor=$(java_property java.vendor)
 actual_vendor_version=$(java_property java.vendor.version)
 actual_javac_version=$("$java_home/bin/javac" -version 2>&1)
+actual_javadoc_version=$("$java_home/bin/javadoc" --version 2>&1)
 [[ "$actual_version" == "$java_version" \
 		&& "$actual_runtime_version" == "$runtime_version" \
 		&& "$actual_vendor" == "Amazon.com Inc." \
 		&& "$actual_vendor_version" == "$vendor_version" \
-		&& "$actual_javac_version" == "javac $java_version" ]] \
+		&& "$actual_javac_version" == "javac $java_version" \
+		&& "$actual_javadoc_version" == "javadoc $java_version" ]] \
 	|| { printf 'Extracted Corretto JDK identity does not match the reviewed pin.\n' >&2; exit 1; }
 
 if [[ "$toolchain_name" == "java" ]]; then

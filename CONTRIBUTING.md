@@ -6,7 +6,19 @@ Pull requests and bug reports are welcomed.  For enhancement pull requests, plea
 
 #### Local Installation
 
+Keep compilation and Maven on Java 17, and install the separately pinned
+Amazon Corretto 26.0.2.11.1 JDK for documentation generation. Set
+`SOKLET_JAVADOC_HOME` to that JDK's absolute home directory (the directory
+containing `bin/javadoc`; on macOS, use the bundle's `Contents/Home`). The
+tool must report `javadoc 26.0.2.1`. Do not replace `JAVA_HOME` or prepend this
+JDK to `PATH`: the library still targets Java 17. Exact distribution pins
+and checksums are in `release/release-validation-manifest.json` under
+`toolchains.javadocJava`.
+
 ```shell
+$ export JAVA_HOME=/absolute/path/to/corretto-17
+$ export PATH="$JAVA_HOME/bin:$PATH"
+$ export SOKLET_JAVADOC_HOME=/absolute/path/to/corretto-26
 $ mvn -Dgpg.skip=true install
 ```
 

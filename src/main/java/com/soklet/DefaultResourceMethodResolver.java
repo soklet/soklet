@@ -59,6 +59,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -95,7 +96,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	public static DefaultResourceMethodResolver fromClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
+	public static DefaultResourceMethodResolver fromClasses(@NonNull Set<@NonNull Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
@@ -416,7 +417,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		private void rejectRecursiveOwnerCall() {
-			if (this.ownerThread == Thread.currentThread())
+			if (sameInstance(this.ownerThread, Thread.currentThread()))
 				throw new IllegalStateException(
 						"Default Resource Method Resolver loading cannot recursively resolve itself");
 		}
@@ -542,9 +543,9 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		// Line format written by SokletProcessor:
-		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
-			@Nullable
-			private static ResourceMethodDeclaration parseLine(@NonNull String line) {
+		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|sseEventSource
+		@Nullable
+		private static ResourceMethodDeclaration parseLine(@NonNull String line) {
 			requireNonNull(line);
 
 			String[] parts = line.split("\\|", -1);

@@ -61,6 +61,12 @@ public class McpMirroredHeaderCodecFuzzTest {
 		Assertions.assertEquals("Invalid mirrored header value.",
 				invalidPadding.getMessage());
 		Assertions.assertNull(invalidPadding.getCause());
+		IllegalArgumentException overlappingSentinels = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> CODEC.decodeString(readTextSeed("overlapping-sentinels.header")));
+		Assertions.assertEquals("Invalid mirrored header value.",
+				overlappingSentinels.getMessage());
+		Assertions.assertNull(overlappingSentinels.getCause());
 	}
 
 	private static void decode(String value) {

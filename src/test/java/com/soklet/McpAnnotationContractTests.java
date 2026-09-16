@@ -102,7 +102,7 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals(Set.of("name"),
 				elementNames(McpResourceUriParameter.class));
 		Assertions.assertEquals(Set.of(), elementNames(McpResourceList.class));
-		Assertions.assertEquals(Set.of("type", "samplingCapabilities",
+		Assertions.assertEquals(Set.of("type",
 				"requirement"), elementNames(McpMayRequestInput.class));
 	}
 
@@ -208,8 +208,6 @@ public class McpAnnotationContractTests {
 				multiRoundTripTool.mayRequestInput()[0];
 		Assertions.assertEquals(McpInputRequestType.ELICITATION_FORM,
 				declaration.type());
-		Assertions.assertArrayEquals(new McpClientCapability[0],
-				declaration.samplingCapabilities());
 		Assertions.assertEquals(McpInputRequirement.REQUIRED,
 				declaration.requirement());
 	}
@@ -217,9 +215,6 @@ public class McpAnnotationContractTests {
 	@Test
 	public void multiRoundTripAnnotationArraysHaveExplicitJSpecifyNullness()
 			throws Exception {
-		assertNonNullArray(McpMayRequestInput.class
-				.getDeclaredMethod("samplingCapabilities")
-				.getAnnotatedReturnType());
 		assertNonNullArray(McpTool.class
 				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
 		assertNonNullArray(McpPrompt.class

@@ -29,25 +29,5 @@ public enum McpInputRequestType {
 	/** Form-based elicitation through {@code elicitation/create}. */
 	ELICITATION_FORM,
 	/** URL-based elicitation through {@code elicitation/create}. */
-	ELICITATION_URL,
-	/**
-	 * Model sampling through {@code sampling/createMessage}.
-	 *
-	 * <p>SEP-2577 marks Sampling deprecated in MCP 2026-07-28, with
-	 * specification removal eligible no earlier than 2027-07-28. Prefer direct
-	 * model-provider integration. Soklet keeps this constant functional for
-	 * every supported profile containing it and has made no Java API-removal
-	 * decision.
-	 */
-	SAMPLING,
-	/**
-	 * Client-root discovery through {@code roots/list}.
-	 *
-	 * <p>SEP-2577 marks Roots deprecated in MCP 2026-07-28, with specification
-	 * removal eligible no earlier than 2027-07-28. Prefer explicit tool
-	 * parameters, resource URIs, or server configuration. Soklet keeps this
-	 * constant functional for every supported profile containing it and has
-	 * made no Java API-removal decision.
-	 */
-	ROOTS
+	ELICITATION_URL
 }

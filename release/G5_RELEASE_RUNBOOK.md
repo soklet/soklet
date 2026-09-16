@@ -14,6 +14,12 @@ has happened. No signing, tag creation, GitHub release, Central upload,
 publication, downstream publication, or deployment was performed while this
 document was written.
 
+The accepted build recipe keeps Maven and compilation on the pinned Corretto
+17 toolchain, while Javadoc alone uses the separately pinned Corretto 26
+toolchain from `toolchains.javadocJava` through `SOKLET_JAVADOC_HOME`.
+Changing that generator changes candidate artifact provenance and requires
+fresh acceptance; it is not a publication-time regeneration step.
+
 ## Frozen release decisions
 
 These versions and labels must already be present in the G4-approved core and
@@ -22,7 +28,7 @@ downstream commits. G5 does not change them.
 | Repository/output | Exact release identity | Semantic-version decision |
 | --- | --- | --- |
 | `soklet` | Maven `com.soklet:soklet:4.0.0`; Git tag `v4.0.0` | Major version: aggregate lifecycle, transport, simulator, MCP wire, and MCP Java API are intentionally incompatible with 3.5.1. |
-| `soklet-servlet-javax` | Maven `com.soklet:soklet-servlet-javax:2.0.0`; Git tag `v2.0.0` | Major version: the 2026-09-13 owner decision raises the required core baseline to Soklet 4.0.0 and drops 3.x compatibility, even though the Servlet adapter API is retained. Do not reuse 1.2.0 or publish the breaking baseline as a minor release. |
+| `soklet-servlet-javax` | Maven `com.soklet:soklet-servlet-javax:2.0.0`; Git tag `v2.0.0` | Major version: the owner-approved migration raises the required core baseline to Soklet 4.0.0, drops 3.x compatibility, finalizes builders, and removes public internal-mutation hooks. Do not reuse 1.2.0 or publish this breaking migration as a minor release. |
 | `soklet-servlet-jakarta` | Maven `com.soklet:soklet-servlet-jakarta:2.0.0`; Git tag `v2.0.0` | Same breaking core-baseline decision as the `javax` adapter. |
 | `soklet-otel` | Maven `com.soklet:soklet-otel:2.0.0`; Git tag `v2.0.0` | Major version: public removals and the six-value shutdown-outcome vocabulary are breaking changes; publishing them as 1.4.0 would violate the project policy. |
 | `barebones-app` | Git tag `soklet-4.0.0`; vendored `soklet-4.0.0.jar` | Example application, not a Central artifact. The tag names the exact core compatibility release without inventing an application package version. |
@@ -360,7 +366,10 @@ At its exact G4-pinned commit:
 npm ci --ignore-scripts
 npm run lint
 npm run test:core-links
+npm run test:mcp-api-reference
+npm run check:mcp-api-reference -- --core /absolute/soklet
 npm run ssg-build
+node scripts/verify-site-presentation.mjs /absolute/soklet.com/dist
 npm run check:core-links -- --core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist
 git diff --exit-code
 ```
@@ -373,6 +382,8 @@ Use the exact intended core candidate commit for `--core-ref`, not a moving
 branch name. The offline checker discovers core blob links from all sources,
 including navigation, and requires generated prose/HTML link-set parity. It
 checks regular targets in that committed tree without fetching or changing refs.
+The presentation verifier checks all 32 internal pages for metadata, pager
+links, icons, and the dark 404 presentation; retain its successful output too.
 
 Before promotion, check every exact GitHub source link used by the site,
 including its branch/tag/commit and target path. A local file or feature-branch
@@ -446,7 +457,7 @@ G5 is complete only when one immutable index binds:
   libraries;
 - exact tag/smoke/deployment records for barebones and ToyStore;
 - website tag, build, preview, production, and link/download records;
-- all four Javadoc source/artifact/generation/deployment/link records;
+- all four Javadoc source/artifact/importer-receipt/payload-parity/deployment/link records;
 - every public URL/coordinate hash and observation time;
 - any stop, partial-publication, rollback, correction, or advisory decision;
   and

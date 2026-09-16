@@ -123,32 +123,32 @@ run_gitleaks_report sarif "$raw_reports_root/02-gitleaks.sarif"
 run_gitleaks_report json "$raw_reports_root/03-gitleaks.json"
 
 spotbugs_filter="$provenance_root/spotbugs-exclude.xml"
-git -C "$candidate_root" cat-file blob \
-	a66f83d1c401ca0c4829d2a75ce0b38ca2d7eb4f > "$spotbugs_filter"
+git -C "$candidate_root" show \
+	"$candidate_commit:config/spotbugs-exclude.xml" > "$spotbugs_filter"
 printf '%s  %s\n' \
-	2c7559cc6d288da637316de4957ffd8cc86aa22014dede34f3a581716f82f63c \
+	c1005b521f8a047fdedaf418661a6c54d92d59e6c3ea1c0ab6fb24c710628ed5 \
 	"$spotbugs_filter" | sha256sum --check --strict
 
-# Materialize and verify the two approved executable SpotBugs artifacts before
+# Materialize and verify the two registry-pinned executable SpotBugs artifacts before
 # Maven is allowed to load either one. Maven strict-checksum mode applies to
 # every remaining POM and transitive artifact resolved into this isolated
-# repository; the producer rechecks the approved executable JARs after the run.
-spotbugs_plugin="$maven_repository/com/github/spotbugs/spotbugs-maven-plugin/4.9.8.3/spotbugs-maven-plugin-4.9.8.3.jar"
-spotbugs_engine="$maven_repository/com/github/spotbugs/spotbugs/4.9.8/spotbugs-4.9.8.jar"
+# repository; the producer rechecks the pinned executable JARs after the run.
+spotbugs_plugin="$maven_repository/com/github/spotbugs/spotbugs-maven-plugin/4.10.4.1/spotbugs-maven-plugin-4.10.4.1.jar"
+spotbugs_engine="$maven_repository/com/github/spotbugs/spotbugs/4.10.4/spotbugs-4.10.4.jar"
 mkdir -p "$(dirname "$spotbugs_plugin")" "$(dirname "$spotbugs_engine")"
 curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
 	--retry 3 \
-	https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs-maven-plugin/4.9.8.3/spotbugs-maven-plugin-4.9.8.3.jar \
+	https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs-maven-plugin/4.10.4.1/spotbugs-maven-plugin-4.10.4.1.jar \
 	--output "$spotbugs_plugin"
 curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
 	--retry 3 \
-	https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs/4.9.8/spotbugs-4.9.8.jar \
+	https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs/4.10.4/spotbugs-4.10.4.jar \
 	--output "$spotbugs_engine"
 printf '%s  %s\n' \
-	bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757 \
+	405114389d4c93ab6ce0ddb09bad5b0f1da95ffac0bb36c04094066c5b01e338 \
 	"$spotbugs_plugin" | sha256sum --check --strict
 printf '%s  %s\n' \
-	4469bc080afe7cd2290a20bf63e28392b80abcc7c7ace33c8f55da52a17c7ca5 \
+	a88cad2e0ea9bb74b908ce82ae89416c61fa8f8ea5cfcc9368b1baac2da878d2 \
 	"$spotbugs_engine" | sha256sum --check --strict
 (
 	cd "$candidate_root"
@@ -168,10 +168,10 @@ cp "$spotbugs_report" "$raw_reports_root/01-spotbugs.xml"
 		&& -f "$spotbugs_engine" && ! -L "$spotbugs_engine" ]] \
 	|| { printf 'Pinned SpotBugs artifacts are missing from the isolated Maven repository.\n' >&2; exit 1; }
 printf '%s  %s\n' \
-	bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757 \
+	405114389d4c93ab6ce0ddb09bad5b0f1da95ffac0bb36c04094066c5b01e338 \
 	"$spotbugs_plugin" | sha256sum --check --strict
 printf '%s  %s\n' \
-	4469bc080afe7cd2290a20bf63e28392b80abcc7c7ace33c8f55da52a17c7ca5 \
+	a88cad2e0ea9bb74b908ce82ae89416c61fa8f8ea5cfcc9368b1baac2da878d2 \
 	"$spotbugs_engine" | sha256sum --check --strict
 cp "$spotbugs_plugin" "$provenance_root/spotbugs-maven-plugin.jar"
 cp "$spotbugs_engine" "$provenance_root/spotbugs.jar"

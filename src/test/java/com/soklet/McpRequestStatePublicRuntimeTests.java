@@ -58,7 +58,7 @@ public class McpRequestStatePublicRuntimeTests {
 			"deterministic-framework-state-v1";
 	private static final String UNAVAILABLE_STATE =
 			"deterministic-framework-state-unavailable";
-	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
+	private static final String ELICITATION_URL_CAPABILITY = "{\"elicitation\":{\"url\":{}}}";
 	private static final URI RESOURCE_URI =
 			URI.create("test://request-state/resource");
 
@@ -187,7 +187,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpJsonObject applicationState = McpJsonObject.builder()
 				.put("phase", "awaiting-roots")
 				.put("sequence", 1)
@@ -200,7 +200,7 @@ public class McpRequestStatePublicRuntimeTests {
 					if (request.getFrameworkRequestState().isEmpty())
 						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
-												McpJsonObject.emptyInstance()))
+												McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.frameworkRequestState(applicationState)
 								.build();
 
@@ -239,7 +239,7 @@ public class McpRequestStatePublicRuntimeTests {
 			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> initial = callTool(port, "framework-initial",
-					FRAMEWORK_TOOL, "", ROOTS_CAPABILITY);
+					FRAMEWORK_TOOL, "", ELICITATION_URL_CAPABILITY);
 			assertSuccess(initial, "framework-initial");
 			assertContains(initial.body(), "\"resultType\":\"input_required\"");
 			assertContains(initial.body(), "\"requestState\":\""
@@ -248,14 +248,14 @@ public class McpRequestStatePublicRuntimeTests {
 
 			HttpResponse<String> sameId = callTool(port, "framework-initial",
 					FRAMEWORK_TOOL, ",\"requestState\":\""
-							+ FRAMEWORK_STATE + "\"", ROOTS_CAPABILITY);
+							+ FRAMEWORK_STATE + "\"", ELICITATION_URL_CAPABILITY);
 			assertError(sameId, 400, -32602, "framework-initial");
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(1, interceptorInvocations.get());
 
 			HttpResponse<String> retry = callTool(port, "framework-retry",
 					FRAMEWORK_TOOL, ",\"requestState\":\""
-							+ FRAMEWORK_STATE + "\"", ROOTS_CAPABILITY);
+							+ FRAMEWORK_STATE + "\"", ELICITATION_URL_CAPABILITY);
 			assertSuccess(retry, "framework-retry");
 			assertContains(retry.body(), "\"resultType\":\"complete\"");
 			assertContains(retry.body(), "framework state accepted");
@@ -273,7 +273,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpJsonObject applicationState = McpJsonObject.builder()
 				.put("phase", "awaiting-roots")
 				.put("origin", "server-a")
@@ -286,7 +286,7 @@ public class McpRequestStatePublicRuntimeTests {
 					if (request.getFrameworkRequestState().isEmpty())
 						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
-												McpJsonObject.emptyInstance()))
+												McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.frameworkRequestState(applicationState)
 								.build();
 
@@ -327,7 +327,7 @@ public class McpRequestStatePublicRuntimeTests {
 		try {
 			emittingSoklet.start();
 			HttpResponse<String> initial = callTool(boundPort(emittingServer),
-					"fleet-initial", FRAMEWORK_TOOL, "", ROOTS_CAPABILITY);
+					"fleet-initial", FRAMEWORK_TOOL, "", ELICITATION_URL_CAPABILITY);
 			assertSuccess(initial, "fleet-initial");
 			assertContains(initial.body(), "\"resultType\":\"input_required\"");
 			protectedState = extractRequestState(initial.body());
@@ -347,7 +347,7 @@ public class McpRequestStatePublicRuntimeTests {
 			HttpResponse<String> retry = callTool(boundPort(acceptingServer),
 					"fleet-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertSuccess(retry, "fleet-retry");
 			assertContains(retry.body(), "\"resultType\":\"complete\"");
 			assertContains(retry.body(), "cross-instance state accepted");
@@ -365,7 +365,7 @@ public class McpRequestStatePublicRuntimeTests {
 			HttpResponse<String> retry = callTool(boundPort(wrongKeyServer),
 					"wrong-key-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-key-retry");
 		} finally {
 			wrongKeySoklet.close();
@@ -381,7 +381,7 @@ public class McpRequestStatePublicRuntimeTests {
 			HttpResponse<String> retry = callTool(boundPort(wrongPartitionServer),
 					"wrong-partition-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-partition-retry");
 		} finally {
 			wrongPartitionSoklet.close();
@@ -398,7 +398,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonObjectArguments()
@@ -445,14 +445,14 @@ public class McpRequestStatePublicRuntimeTests {
 
 			HttpResponse<String> tampered = callTool(port, "tampered",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(tampered, 400, -32602, "tampered");
 			assertStageCounts(1, 1, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 
 			HttpResponse<String> unavailable = callTool(port, "unavailable",
 					FRAMEWORK_TOOL, ",\"requestState\":\""
-							+ UNAVAILABLE_STATE + "\"", ROOTS_CAPABILITY);
+							+ UNAVAILABLE_STATE + "\"", ELICITATION_URL_CAPABILITY);
 			assertError(unavailable, 503, -32603, "unavailable");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"unavailable\","
@@ -476,7 +476,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger toolLimiterInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonObjectArguments()
@@ -512,7 +512,7 @@ public class McpRequestStatePublicRuntimeTests {
 			int port = boundPort(server);
 			HttpResponse<String> denied = callTool(port, "tampered-denied",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			Assertions.assertEquals(429, denied.statusCode(), denied.body());
 			Assertions.assertEquals("3", denied.headers()
 					.firstValue("Retry-After").orElseThrow());
@@ -524,7 +524,7 @@ public class McpRequestStatePublicRuntimeTests {
 
 			HttpResponse<String> allowed = callTool(port, "tampered-allowed",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(allowed, 400, -32602, "tampered-allowed");
 			Assertions.assertEquals(2, admissionInvocations.get());
 			Assertions.assertEquals(2, limiterInvocations.get());
@@ -544,7 +544,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger toolLimiterInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonObjectArguments()
@@ -578,7 +578,7 @@ public class McpRequestStatePublicRuntimeTests {
 			int port = boundPort(server);
 			HttpResponse<String> denied = callTool(port, "tool-tampered-denied",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			Assertions.assertEquals(429, denied.statusCode(), denied.body());
 			Assertions.assertEquals("5", denied.headers()
 					.firstValue("Retry-After").orElseThrow());
@@ -588,7 +588,7 @@ public class McpRequestStatePublicRuntimeTests {
 
 			HttpResponse<String> allowed = callTool(port, "tool-tampered-allowed",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(allowed, 400, -32602, "tool-tampered-allowed");
 			Assertions.assertEquals(2, admissionInvocations.get());
 			Assertions.assertEquals(2, toolLimiterInvocations.get());
@@ -619,7 +619,7 @@ public class McpRequestStatePublicRuntimeTests {
 		AtomicInteger limiterInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonObjectArguments()
@@ -652,7 +652,7 @@ public class McpRequestStatePublicRuntimeTests {
 			String requestId = caseName + "-tool-limiter";
 			HttpResponse<String> response = callTool(boundPort(server), requestId,
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
-					ROOTS_CAPABILITY);
+					ELICITATION_URL_CAPABILITY);
 			assertError(response, 500, -32603, requestId);
 			Assertions.assertFalse(response.body().contains(failureCanary));
 			Assertions.assertEquals(1, limiterInvocations.get());
@@ -918,7 +918,7 @@ public class McpRequestStatePublicRuntimeTests {
 						+ "\",\"error\":{\"code\":-32021,"
 						+ "\"message\":\"Missing required client capability\","
 						+ "\"data\":{\"requiredCapabilities\":"
-						+ ROOTS_CAPABILITY + "}}}", response.body());
+						+ ELICITATION_URL_CAPABILITY + "}}}", response.body());
 	}
 
 	private static void assertStageCounts(int admissions, int opens,

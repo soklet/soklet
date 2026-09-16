@@ -89,6 +89,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -840,7 +841,7 @@ final class DefaultMcpServer implements McpServer {
 		Object exactOwner = requireNonNull(ownerToken);
 		synchronized (this.lifecycleLock) {
 			Object existing = this.lifecycleExecutionOwner;
-			if (existing != null && existing != exactOwner)
+			if (existing != null && !sameInstance(existing, exactOwner))
 				throw new IllegalStateException(
 						"The MCP application-execution lifecycle owner was already installed");
 			this.lifecycleExecutionOwner = exactOwner;
@@ -955,7 +956,7 @@ final class DefaultMcpServer implements McpServer {
 				try {
 					this.mcpMetricEventDelivery.discard(provisionalServerStarted);
 				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != primary)
+					if (!sameInstance(cleanupFailure, primary))
 						primary.addSuppressed(cleanupFailure);
 				}
 			}
@@ -964,7 +965,7 @@ final class DefaultMcpServer implements McpServer {
 					this.lifecycleAdapter.failedStart(lifecycleGeneration, primary,
 							false);
 				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != primary)
+					if (!sameInstance(cleanupFailure, primary))
 						primary.addSuppressed(cleanupFailure);
 				}
 			}
@@ -1571,8 +1572,6 @@ final class DefaultMcpServer implements McpServer {
 				"inputRequestType")) {
 			case "elicitation_form" -> McpInputRequestType.ELICITATION_FORM;
 			case "elicitation_url" -> McpInputRequestType.ELICITATION_URL;
-			case "sampling" -> McpInputRequestType.SAMPLING;
-			case "roots" -> McpInputRequestType.ROOTS;
 			default -> throw invalidTaskOrigin();
 		};
 		McpInputRequirement requirement = switch (taskOriginString(fields,
@@ -1597,14 +1596,6 @@ final class DefaultMcpServer implements McpServer {
 					.fromElicitationForm(requirement);
 			case ELICITATION_URL -> McpInputRequestDeclaration
 					.fromElicitationUrl(requirement);
-			case SAMPLING -> {
-				Set<McpClientCapability> optionalCapabilities =
-						new java.util.LinkedHashSet<>(capabilities);
-				optionalCapabilities.remove(McpClientCapability.SAMPLING);
-				yield McpInputRequestDeclaration.fromSampling(
-						optionalCapabilities, requirement);
-			}
-			case ROOTS -> McpInputRequestDeclaration.fromRoots(requirement);
 		};
 		if (!declaration.getCapabilities().equals(capabilities))
 			throw invalidTaskOrigin();
@@ -1617,10 +1608,6 @@ final class DefaultMcpServer implements McpServer {
 		return switch (requireNonNull(persistedCapability)) {
 			case "elicitation_form" -> McpClientCapability.ELICITATION_FORM;
 			case "elicitation_url" -> McpClientCapability.ELICITATION_URL;
-			case "sampling" -> McpClientCapability.SAMPLING;
-			case "sampling_context" -> McpClientCapability.SAMPLING_CONTEXT;
-			case "sampling_tools" -> McpClientCapability.SAMPLING_TOOLS;
-			case "roots" -> McpClientCapability.ROOTS;
 			default -> throw invalidTaskOrigin();
 		};
 	}
@@ -1792,7 +1779,7 @@ final class DefaultMcpServer implements McpServer {
 							if (!active.get())
 								throw new IllegalStateException(
 										"An MCP interceptor continuation cannot be used after interception returns.");
-							if (Thread.currentThread() != interceptorThread)
+							if (!sameInstance(Thread.currentThread(), interceptorThread))
 								throw new IllegalStateException(
 										"An MCP interceptor continuation must be used on the interceptor thread.");
 						}
@@ -1985,8 +1972,6 @@ final class DefaultMcpServer implements McpServer {
 		return switch (requireNonNull(inputRequestType)) {
 			case ELICITATION_FORM -> "elicitation_form";
 			case ELICITATION_URL -> "elicitation_url";
-			case SAMPLING -> "sampling";
-			case ROOTS -> "roots";
 		};
 	}
 
@@ -1996,10 +1981,6 @@ final class DefaultMcpServer implements McpServer {
 		return switch (requireNonNull(capability)) {
 			case ELICITATION_FORM -> "elicitation_form";
 			case ELICITATION_URL -> "elicitation_url";
-			case SAMPLING -> "sampling";
-			case SAMPLING_CONTEXT -> "sampling_context";
-			case SAMPLING_TOOLS -> "sampling_tools";
-			case ROOTS -> "roots";
 		};
 	}
 
@@ -3258,7 +3239,7 @@ final class DefaultMcpServer implements McpServer {
 			Thread currentThread = Thread.currentThread();
 			synchronized (this.lock) {
 				this.deferralDepth++;
-				while (this.delivering && this.deliveryThread != currentThread) {
+				while (this.delivering && !sameInstance(this.deliveryThread, currentThread)) {
 					try {
 						this.lock.wait();
 					} catch (InterruptedException exception) {
@@ -3327,7 +3308,7 @@ final class DefaultMcpServer implements McpServer {
 				synchronized (this.lock) {
 					if (asynchronous) {
 						while ((this.deferralDepth != 0 || this.delivering)
-								&& this.deliveryThread != currentThread) {
+								&& !sameInstance(this.deliveryThread, currentThread)) {
 							try {
 								this.lock.wait();
 							} catch (InterruptedException exception) {
@@ -3367,7 +3348,7 @@ final class DefaultMcpServer implements McpServer {
 				if (deliveryClaimed) {
 					synchronized (this.lock) {
 						if (this.delivering
-								&& this.deliveryThread == currentThread)
+								&& sameInstance(this.deliveryThread, currentThread))
 							finishDeliveryLocked();
 					}
 				}
@@ -3665,9 +3646,6 @@ final class DefaultMcpRateLimitContext implements McpRateLimitContext {
 final class DefaultMcpRequestContext implements McpRequestContext,
 		GeneratedInvocationContext {
 	@NonNull
-	private static final String DEPRECATED_LOG_LEVEL_KEY =
-			"io.modelcontextprotocol/logLevel";
-	@NonNull
 	private final Request request;
 	@NonNull
 	private final McpEndpoint endpoint;
@@ -3695,8 +3673,6 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	private final McpAdmissionIdentity admissionIdentity;
 	@NonNull
 	private final McpClientCapabilities clientCapabilities;
-	@NonNull
-	private final Optional<@NonNull McpLogLevel> logLevel;
 	@NonNull
 	private final McpRequestPropagation requestPropagation;
 	@NonNull
@@ -3886,13 +3862,6 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				requireNonNull(acceptLanguageValues));
 		this.clientCapabilities = McpClientCapabilities.fromJson(
 				clientCapabilitiesJson);
-		this.logLevel = requestMetadata
-				.find(DEPRECATED_LOG_LEVEL_KEY)
-				.filter(McpJsonString.class::isInstance)
-				.map(McpJsonString.class::cast)
-				.map(McpJsonString::getValue)
-				.map(value -> McpLogLevel.valueOf(
-						value.toUpperCase(Locale.ROOT)));
 		this.requestPropagation = McpRequestPropagation.fromMetadata(
 				requestMetadata);
 		this.traceCorrelationToken = requireNonNull(securityControls)
@@ -3955,10 +3924,6 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	@Override public @NonNull Optional<@NonNull String>
 	getApplicationRequestState() {
 		return this.applicationRequestState;
-	}
-	@Override
-	public @NonNull Optional<@NonNull McpLogLevel> getLogLevel() {
-		return this.logLevel;
 	}
 	@Override public @NonNull Optional<@NonNull TraceContext> getTraceContext() {
 		return this.requestPropagation.traceContext();

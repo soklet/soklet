@@ -147,7 +147,8 @@ function syntheticToolchainDistributionBytes(toolchain) {
 function syntheticEvidenceItem(specification, artifacts, gate, toolchains) {
   let artifact;
   if (specification.binding === 'gateToolchainDistribution') {
-    const bytes = syntheticToolchainDistributionBytes(toolchains[gate.toolchain]);
+    const bytes = syntheticToolchainDistributionBytes(toolchains[
+      specification.role === 'javadoc-distribution' ? 'javadocJava' : gate.toolchain]);
     artifact = {
       bytes: bytes.length,
       fileName: specification.fileName,
@@ -316,6 +317,16 @@ function writeSyntheticInputs(root) {
       vendorVersion: 'Corretto-17.0.20.8.1',
       version: '17.0.20',
     },
+    javadocJava: {
+      archive: 'amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',
+      archiveSha256: 'f61206891b8e1009b117eefe38784cf31b0a5cdb02fd2e023556f436b85dedaa',
+      distribution: 'corretto',
+      distributionUrl:
+        'https://corretto.aws/downloads/resources/26.0.2.11.1/amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',
+      runtimeVersion: '26.0.2.1+11-FR',
+      vendorVersion: 'Corretto-26.0.2.11.1',
+      version: '26.0.2.1',
+    },
     toystoreJava: {
       archive: 'amazon-corretto-25.0.4.7.1-linux-x64.tar.gz',
       archiveSha256: '4'.repeat(64),
@@ -339,6 +350,7 @@ function writeSyntheticInputs(root) {
       git: 'git version synthetic',
       go: 'go version synthetic',
       java: 'java version synthetic',
+      javadocJava: 'javadoc java version synthetic',
       maven: 'maven version synthetic',
       node: 'node version synthetic',
       npm: 'npm version synthetic',
@@ -951,6 +963,26 @@ async function run() {
         pattern,
       );
     }
+
+    for (const [label, mutate, pattern] of [
+      ['sha', (toolchain) => { toolchain.archiveSha256 = '9'.repeat(64); },
+        /Java distribution evidence does not match its exact manifest toolchain/],
+      ['runtime', (toolchain) => { toolchain.runtimeVersion = '26.0.2.1+11-LTS'; },
+        /fields do not match its exact Corretto distribution/],
+      ['package', (toolchain) => { toolchain.version = '26.0.2.2'; },
+        /not an exact supported Corretto identity/],
+    ]) {
+      const manifest = structuredClone(inputs.releaseManifest);
+      mutate(manifest.toolchains.javadocJava);
+      expectManifestFailure(temporary, inputs, fakeGpg,
+        `wrong-javadoc-${label}-manifest`, manifest, pattern);
+    }
+
+    const missingJavadocEvidence = structuredClone(inputs.evidence);
+    missingJavadocEvidence.gates[0].evidence = missingJavadocEvidence.gates[0].evidence
+      .filter(({ role }) => role !== 'javadoc-distribution');
+    expectEvidenceFailure(temporary, inputs, fakeGpg, 'missing-javadoc-distribution',
+      missingJavadocEvidence, /does not contain its exact ordered evidence roles/);
 
     const legacyGateEnvelopeEvidence = structuredClone(inputs.evidence);
     legacyGateEnvelopeEvidence.gates[0].formatVersion = 1;

@@ -736,52 +736,6 @@
       }
     },
     {
-      "id": "input-required-result-basic-sampling.phase5.v1",
-      "scenario": "input-required-result-basic-sampling",
-      "frozenInPhase": 5,
-      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
-      "checks": [
-        {
-          "id": "sep-2322-sampling-complete",
-          "status": "SUCCESS",
-          "count": 1
-        },
-        {
-          "id": "sep-2322-sampling-incomplete",
-          "status": "SUCCESS",
-          "count": 1
-        }
-      ],
-      "automaticWireChecks": {
-        "wire-schema-valid": 1,
-        "wire-schema-harness-error": 0,
-        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
-      }
-    },
-    {
-      "id": "input-required-result-basic-list-roots.phase5.v1",
-      "scenario": "input-required-result-basic-list-roots",
-      "frozenInPhase": 5,
-      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
-      "checks": [
-        {
-          "id": "sep-2322-list-roots-complete",
-          "status": "SUCCESS",
-          "count": 1
-        },
-        {
-          "id": "sep-2322-list-roots-incomplete",
-          "status": "SUCCESS",
-          "count": 1
-        }
-      ],
-      "automaticWireChecks": {
-        "wire-schema-valid": 1,
-        "wire-schema-harness-error": 0,
-        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
-      }
-    },
-    {
       "id": "input-required-result-request-state.phase5.v1",
       "scenario": "input-required-result-request-state",
       "frozenInPhase": 5,
@@ -794,29 +748,6 @@
         },
         {
           "id": "sep-2322-request-state-incomplete",
-          "status": "SUCCESS",
-          "count": 1
-        }
-      ],
-      "automaticWireChecks": {
-        "wire-schema-valid": 1,
-        "wire-schema-harness-error": 0,
-        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
-      }
-    },
-    {
-      "id": "input-required-result-multiple-input-requests.phase5.v1",
-      "scenario": "input-required-result-multiple-input-requests",
-      "frozenInPhase": 5,
-      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
-      "checks": [
-        {
-          "id": "sep-2322-multiple-inputs-complete",
-          "status": "SUCCESS",
-          "count": 1
-        },
-        {
-          "id": "sep-2322-multiple-inputs-incomplete",
           "status": "SUCCESS",
           "count": 1
         }
@@ -940,24 +871,6 @@
       "checks": [
         {
           "id": "sep-2322-reject-tampered-state",
-          "status": "SUCCESS",
-          "count": 1
-        }
-      ],
-      "automaticWireChecks": {
-        "wire-schema-valid": 1,
-        "wire-schema-harness-error": 0,
-        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
-      }
-    },
-    {
-      "id": "input-required-result-capability-check.phase5.v1",
-      "scenario": "input-required-result-capability-check",
-      "frozenInPhase": 5,
-      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
-      "checks": [
-        {
-          "id": "sep-2322-respect-client-capabilities",
           "status": "SUCCESS",
           "count": 1
         }

@@ -95,6 +95,7 @@ public final class EffectiveClientIpResolver {
 	 * Resolves the effective client IP address.
 	 *
 	 * @return the effective client IP address, or {@link Optional#empty()} if no client IP could be determined
+	 * @throws IllegalStateException if {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} is selected without a trusted-proxy predicate or allowlist
 	 */
 	@NonNull
 	public Optional<@NonNull InetAddress> resolve() {

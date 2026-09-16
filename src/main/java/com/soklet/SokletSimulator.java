@@ -39,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /** Runs single-use, off-network simulation configurations. */
@@ -285,24 +286,25 @@ public final class SokletSimulator {
 
 			TeardownOutcome teardown = teardown(participants, setupAttempt,
 					policy, startupBudget, startupDisposition);
+			SokletShutdownIncompleteException teardownFailure = teardown.failure();
 
 			if (startupLifecycleFailure) {
 				SokletStartupException startupFailure = new SokletStartupException(
 						startupDisposition, teardown.result(),
 						requireNonNull(primaryFailure));
-				if (teardown.failure() != null)
-					startupFailure.addSuppressed(teardown.failure());
+				if (teardownFailure != null)
+					startupFailure.addSuppressed(teardownFailure);
 				if (restoreStartupInterrupt)
 					Thread.currentThread().interrupt();
 				throw startupFailure;
 			}
 			if (primaryFailure != null) {
-				if (teardown.failure() != null)
-					primaryFailure.addSuppressed(teardown.failure());
+				if (teardownFailure != null)
+					primaryFailure.addSuppressed(teardownFailure);
 				SokletSimulator.<E>throwBodyFailure(primaryFailure);
 			}
-			if (teardown.failure() != null)
-				throw teardown.failure();
+			if (teardownFailure != null)
+				throw teardownFailure;
 			return teardown.result();
 		}
 
@@ -315,12 +317,12 @@ public final class SokletSimulator {
 		@NonNull
 		private ResolvedScopeTransports validate(@NonNull SokletConfig config) {
 			HttpServer configuredHttp = config.getHttpServer().orElse(null);
-			if (configuredHttp != null && configuredHttp != this.httpServer)
+			if (configuredHttp != null && !sameInstance(configuredHttp, this.httpServer))
 				throw new IllegalStateException(
 						"The simulator config contains a foreign HTTP transport");
 
 			SseServer configuredSse = config.getSseServer().orElse(null);
-			if (configuredSse != null && configuredSse != this.sseServer)
+			if (configuredSse != null && !sameInstance(configuredSse, this.sseServer))
 				throw new IllegalStateException(
 						"The simulator config contains a foreign SSE transport");
 
@@ -624,7 +626,7 @@ public final class SokletSimulator {
 					try {
 						participant.publishResultAfterFailure(result);
 					} catch (Throwable publicationFailure) {
-						if (publicationFailure != failure)
+						if (!sameInstance(publicationFailure, failure))
 							failure.addSuppressed(publicationFailure);
 					}
 				}
@@ -635,7 +637,7 @@ public final class SokletSimulator {
 			Throwable cause = failures.isEmpty() ? null : failures.get(0);
 			for (int index = 1; index < failures.size(); index++) {
 				Throwable additional = failures.get(index);
-				if (additional != cause)
+				if (!sameInstance(additional, cause))
 					requireNonNull(cause).addSuppressed(additional);
 			}
 			SokletShutdownIncompleteException failure = result.isComplete() ? null
@@ -771,7 +773,7 @@ public final class SokletSimulator {
 								existing.failures());
 						for (Throwable failure : failures)
 							if (attributedFailures.stream().noneMatch(
-									candidate -> candidate == failure))
+									candidate -> sameInstance(candidate, failure)))
 								attributedFailures.add(failure);
 						InternalLifecycleComponentShutdownDisposition disposition =
 								existing.disposition()
@@ -800,7 +802,7 @@ public final class SokletSimulator {
 					: requireNonNull(evidence).primaryEvents())
 				event.cause().ifPresent(merged::add);
 			for (Throwable failure : requireNonNull(infrastructureFailures))
-				if (merged.stream().noneMatch(candidate -> candidate == failure))
+				if (merged.stream().noneMatch(candidate -> sameInstance(candidate, failure)))
 					merged.add(failure);
 			return List.copyOf(merged);
 		}

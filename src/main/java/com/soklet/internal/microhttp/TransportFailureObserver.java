@@ -21,6 +21,8 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Typed observation boundary for one low-level transport failure and all of
  * its synchronous terminal consequences.
@@ -88,9 +90,7 @@ final class TransportFailureObservations {
 			MetricsCollector.@NonNull TransportFailureReason reason) {
 		try {
 			TransportFailureObserver.Observation observation =
-					observer.beginFailure(reason);
-			if (observation == null)
-				return DisabledTransportFailureObserver.INSTANCE;
+					requireNonNull(observer.beginFailure(reason));
 			return new SafeObservation(observation);
 		} catch (Throwable ignored) {
 			return DisabledTransportFailureObserver.INSTANCE;

@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /** Indicates that shutdown ended without complete termination proof. */
@@ -58,7 +59,7 @@ public final class SokletShutdownIncompleteException
 
 	boolean retainsScopeEvidence(@NonNull Object candidate) {
 		Object exactCandidate = requireNonNull(candidate);
-		return this.retainedScopeEvidence == exactCandidate
+		return sameInstance(this.retainedScopeEvidence, exactCandidate)
 				|| (this.retainedScopeEvidence
 						instanceof SimulatorConfigurationScopeIdentity scopeIdentity
 						&& exactCandidate instanceof SimulatorConfig simulatorConfig

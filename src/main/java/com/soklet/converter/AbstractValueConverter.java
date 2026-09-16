@@ -231,7 +231,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 			@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions) {
 		if (type instanceof TypeVariable<?> variable) {
 			Type replacement = substitutions.get(variable);
-			return replacement == null || replacement == variable
+			return replacement == null || replacement.equals(variable)
 					? variable : resolve(replacement, substitutions);
 		}
 		if (type instanceof GenericArrayType array) {

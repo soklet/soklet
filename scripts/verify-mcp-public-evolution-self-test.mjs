@@ -17,6 +17,8 @@ import {
   hasDeprecationSuppressionForTest,
   renderActiveTextAudit,
   verifyActiveText,
+  verifyLifecycle,
+  verifySuppressionSchema,
 } from './verify-mcp-public-evolution.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
@@ -30,6 +32,89 @@ assert.equal(rows.filter(({ partition }) => partition === 'externalSketch').leng
 const fingerprints = rows.map((row) =>
   `${row.partition}|${row.path}|${declarationKey(row.declaration)}`);
 assert.equal(new Set(fingerprints).size, 18);
+const removedFingerprints = new Set(inventory.suppressionBaseline
+  .removedDeclarations.map(({ baselineFingerprint }) => baselineFingerprint));
+assert.equal(removedFingerprints.size, 7);
+verifySuppressionSchema(root, inventory);
+
+function expectEvolutionRejected(mutator, pattern) {
+  const changed = structuredClone(inventory);
+  mutator(changed);
+  assert.throws(() => verifySuppressionSchema(root, changed), pattern);
+}
+
+expectEvolutionRejected((changed) => {
+  changed.suppressionBaseline.removedDeclarations.pop();
+}, /exactly seven retired suppression declarations/u);
+expectEvolutionRejected((changed) => {
+  changed.suppressionBaseline.removedDeclarations[1] =
+    changed.suppressionBaseline.removedDeclarations[0];
+}, /Duplicate removed suppression declaration/u);
+expectEvolutionRejected((changed) => {
+  changed.suppressionBaseline.removedDeclarations[0].baselineFingerprint =
+    'candidate|src/main/java/com/soklet/McpRequestContext.java|M:unreviewed#method()';
+}, /exact candidate method baseline/u);
+expectEvolutionRejected((changed) => {
+  changed.suppressionBaseline.removedDeclarations[0].reviewedDecisionReference = null;
+}, /lacks a reviewed decision/u);
+expectEvolutionRejected((changed) => {
+  changed.suppressionBaseline.removedDeclarations[0].reviewedDecisionReference =
+    'api/mcp/phase-4-freeze-rationale.md#missing-heading';
+}, /missing reviewed decision heading/u);
+
+const reviewedIncludes = new Set(inventory.reviewedIncludeFiles.flatMap((path) =>
+  readFileSync(resolve(root, path), 'utf8').trim().split(/\r?\n/u)));
+const reviewedLedgers = inventory.reviewedIncludeFiles.flatMap((path) =>
+  readFileSync(resolve(root, path.replace('.includes', '.signatures.jsonl')),
+    'utf8').trim().split(/\r?\n/u).map((line) => JSON.parse(line)));
+verifyLifecycle(root, inventory, reviewedLedgers, reviewedIncludes);
+assert.throws(() => verifyLifecycle(root, inventory, [
+  ...reviewedLedgers, { id: 'C:com/soklet/McpLogLevel' },
+], reviewedIncludes), /Removed Soklet API entry remains/u);
+assert.throws(() => verifyLifecycle(root, inventory, [
+  ...reviewedLedgers,
+  { id: 'M:com/soklet/McpRequestContext#getLogLevel()Ljava/util/Optional;' },
+], reviewedIncludes), /Removed Soklet API entry remains/u);
+assert.throws(() => verifyLifecycle(root, inventory, reviewedLedgers,
+  new Set([...reviewedIncludes, 'com.soklet.McpLogLevel'])),
+/Removed Soklet API entry remains/u);
+const unapprovedLifecycle = structuredClone(inventory);
+unapprovedLifecycle.lifecycleEntries.find(({ element }) =>
+  element === 'com.soklet.McpLogLevel')
+  .sokletApiLifecycle.reviewedDecisionReference = null;
+assert.throws(() => verifyLifecycle(root, unapprovedLifecycle,
+  reviewedLedgers, reviewedIncludes), /lacks a reviewed decision/u);
+
+const rootsAndSamplingRemovalIds = [
+  'F:com/soklet/McpClientCapability#ROOTS:Lcom/soklet/McpClientCapability;',
+  'F:com/soklet/McpClientCapability#SAMPLING:Lcom/soklet/McpClientCapability;',
+  'F:com/soklet/McpClientCapability#SAMPLING_CONTEXT:Lcom/soklet/McpClientCapability;',
+  'F:com/soklet/McpClientCapability#SAMPLING_TOOLS:Lcom/soklet/McpClientCapability;',
+  'F:com/soklet/McpInputRequestType#ROOTS:Lcom/soklet/McpInputRequestType;',
+  'F:com/soklet/McpInputRequestType#SAMPLING:Lcom/soklet/McpInputRequestType;',
+  'M:com/soklet/McpInputRequestDeclaration#fromRoots(Lcom/soklet/McpInputRequirement;)Lcom/soklet/McpInputRequestDeclaration;',
+  'M:com/soklet/McpInputRequestDeclaration#fromSampling(Ljava/util/Set;Lcom/soklet/McpInputRequirement;)Lcom/soklet/McpInputRequestDeclaration;',
+  'M:com/soklet/annotation/McpMayRequestInput#samplingCapabilities()[Lcom/soklet/McpClientCapability;',
+];
+for (const id of rootsAndSamplingRemovalIds) {
+  assert.throws(() => verifyLifecycle(root, inventory,
+    [...reviewedLedgers, { id }], reviewedIncludes),
+  /Removed Soklet API entry remains/u,
+  `A removed Roots/Sampling member must not return: ${id}`);
+}
+for (const entry of inventory.lifecycleEntries.filter(({ sokletApiLifecycle }) =>
+  sokletApiLifecycle.reviewedDecisionReference?.endsWith(
+    '#2026-09-16-roots-and-sampling-removal-amendment'))) {
+  const changed = structuredClone(inventory);
+  changed.lifecycleEntries.find(({ element }) => element === entry.element)
+    .sokletApiLifecycle.reviewedDecisionReference = null;
+  assert.throws(() => verifyLifecycle(root, changed,
+    reviewedLedgers, reviewedIncludes), /lacks a reviewed decision/u,
+  `Removal approval must remain recorded: ${entry.element}`);
+}
+assert.equal(inventory.lifecycleEntries.filter(({ sokletApiLifecycle }) =>
+  sokletApiLifecycle.reviewedDecisionReference?.endsWith(
+    '#2026-09-16-roots-and-sampling-removal-amendment')).length, 9);
 
 const constructors = rows.filter(({ declaration }) =>
   declaration.kind === 'constructor');
@@ -95,8 +180,40 @@ assert.notEqual(
 
 for (const row of rows.filter(({ partition }) => partition === 'candidate')) {
   const source = readFileSync(resolve(root, row.path), 'utf8');
-  assert.equal(declarationResolutionCountForTest(source, row.declaration), 1,
+  const fingerprint = `${row.partition}|${row.path}|${declarationKey(row.declaration)}`;
+  const expected = removedFingerprints.has(fingerprint) ? 0 : 1;
+  assert.equal(declarationResolutionCountForTest(source, row.declaration), expected,
     `${row.path}|${declarationKey(row.declaration)}`);
+}
+
+const removalTemporary = mkdtempSync(join(tmpdir(), 'soklet-api-removal-self-test-'));
+try {
+  for (const path of new Set([
+    ...rows.filter(({ partition }) => partition === 'candidate').map(({ path }) => path),
+    'api/mcp/phase-4-freeze-rationale.md',
+  ])) {
+    const destination = join(removalTemporary, path);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, readFileSync(resolve(root, path)));
+  }
+  verifySuppressionSchema(removalTemporary, inventory);
+  const sourcePath = join(removalTemporary,
+    'src/main/java/com/soklet/McpRequestContext.java');
+  const source = readFileSync(sourcePath, 'utf8');
+  writeFileSync(sourcePath, source.replace(/\n\}\s*$/u,
+    '\n Optional<Object> getLogLevel();\n}\n'));
+  assert.throws(() => verifySuppressionSchema(removalTemporary, inventory),
+    /must resolve exactly 0 time\(s\)/u,
+    'A retired declaration must not silently return.');
+  writeFileSync(sourcePath, source);
+  const retainedPath = join(removalTemporary, 'src/main/java/com/soklet/DefaultMcpServer.java');
+  writeFileSync(retainedPath, readFileSync(retainedPath, 'utf8')
+    .replace('final class DefaultMcpRequestContext', 'final class RenamedRequestContext'));
+  assert.throws(() => verifySuppressionSchema(removalTemporary, inventory),
+    /must resolve exactly 1 time\(s\)/u,
+    'Unaffected historical declarations must still resolve.');
+} finally {
+  rmSync(removalTemporary, { force: true, recursive: true });
 }
 
 const externalRow = rows.find(({ partition }) => partition === 'externalSketch');
@@ -187,9 +304,9 @@ try {
     'headings inside inactive HTML comments must not duplicate scopes', () => {
       const path = activeTextFixturePath('MCP.md');
       writeFileSync(path, readFileSync(path, 'utf8').replace(
-        '### Deprecated compatibility surfaces\n',
-        '<!--\n### Deprecated compatibility surfaces\n-->\n\n'
-          + '### Deprecated compatibility surfaces\n'));
+        '### Protocol scope and unsupported features\n',
+        '<!--\n### Protocol scope and unsupported features\n-->\n\n'
+          + '### Protocol scope and unsupported features\n'));
     });
 
   expectActiveTextAccepted(
@@ -274,8 +391,7 @@ try {
     'unchanged compatibility text moved to the default path must fail', () => {
       const path = activeTextFixturePath('MCP.md');
       const text = readFileSync(path, 'utf8');
-      const moved = 'Retained Sampling and Roots declarations remain validated\n'
-        + 'and must be registered.';
+      const moved = 'Soklet does not implement MCP Roots, Sampling, or Logging.';
       assert.ok(text.includes(moved));
       writeFileSync(path, text.replace(moved, '').replace(
         '## Multi-round-trip input and request state\n',
@@ -375,8 +491,8 @@ try {
   expectActiveTextRejected('missing lifecycle notice must fail', () => {
     const path = activeTextFixturePath('MCP.md');
     writeFileSync(path, readFileSync(path, 'utf8').replace(
-      'SEP-2577 marks Roots, Sampling, and Logging deprecated',
-      'Upstream marks Roots, Sampling, and Logging deprecated'));
+      'Soklet does not implement MCP Roots, Sampling, or Logging.',
+      'MCP Roots, Sampling, or Logging.'));
   }, /lacks its notice/u);
 
   expectActiveTextRejected(
@@ -384,9 +500,9 @@ try {
       const path = activeTextFixturePath('MCP.md');
       const text = readFileSync(path, 'utf8');
       const start =
-        'SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,';
+        'Soklet does not implement MCP Roots, Sampling, or Logging.';
       const end =
-        'approved default-off, bounded, redacted diagnostic policy.';
+        'OpenTelemetry integrations.';
       const startOffset = text.indexOf(start);
       const endOffset = text.indexOf(end, startOffset) + end.length;
       assert.ok(startOffset >= 0 && endOffset >= end.length);
@@ -407,9 +523,9 @@ try {
   expectActiveTextRejected('duplicate heading scope must fail closed', () => {
     const path = activeTextFixturePath('MCP.md');
     writeFileSync(path, readFileSync(path, 'utf8').replace(
-      '### Deprecated compatibility surfaces\n',
-      '### Deprecated compatibility surfaces\n\n'
-        + '### Deprecated compatibility surfaces\n'));
+      '### Protocol scope and unsupported features\n',
+      '### Protocol scope and unsupported features\n\n'
+        + '### Protocol scope and unsupported features\n'));
   }, /scope must resolve one heading/u);
 
   expectActiveTextRejected('ambiguous fenced-block scope must fail closed', () => {

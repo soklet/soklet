@@ -98,9 +98,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String SSE_MEDIA_TYPE = "text/event-stream";
-	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
-	private static final String ROOTS_RESPONSE =
-			"{\"roots\":[{\"uri\":\"file:///result-envelope/root\"}]}";
+	private static final String ELICITATION_URL_CAPABILITY = "{\"elicitation\":{\"url\":{}}}";
+	private static final String ELICITATION_URL_RESPONSE =
+			"{\"action\":\"accept\"}";
 	private static final String TOOL_NAME = "result.complete";
 	private static final String PROMPT_NAME = "result.prompt";
 	private static final URI RESOURCE_URI =
@@ -432,7 +432,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	public void everyInputRequiredPermutationAndFreshIdRetryMatchesGoldens()
 			throws Exception {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		AtomicInteger toolInvocations = new AtomicInteger();
 		AtomicInteger promptInvocations = new AtomicInteger();
 		AtomicInteger resourceInvocations = new AtomicInteger();
@@ -470,7 +470,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 					resourceInvocations.incrementAndGet();
 					if (request.getFrameworkRequestState().isEmpty())
 						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
-										roots, McpJsonObject.emptyInstance()))
+										roots, McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.frameworkRequestState(McpJsonObject.builder()
 										.put("phase", "combined")
 										.build())
@@ -509,12 +509,12 @@ public class McpResultEnvelopeGoldenProductionTests {
 					"input-required-tools-call-input-requests-string.json",
 					"\"tool-input-initial\"", "tools/call",
 					",\"name\":\"" + INPUT_TOOL_NAME + "\",\"arguments\":{}",
-					ROOTS_CAPABILITY, INPUT_TOOL_NAME, "input_required");
+					ELICITATION_URL_CAPABILITY, INPUT_TOOL_NAME, "input_required");
 			assertJsonGolden(port, "complete-tools-call-input-retry-integer.json",
 					"201", "tools/call", ",\"name\":\"" + INPUT_TOOL_NAME
 							+ "\",\"arguments\":{},\"inputResponses\":{"
-							+ "\"roots\":" + ROOTS_RESPONSE + "}",
-					ROOTS_CAPABILITY, INPUT_TOOL_NAME, "complete");
+							+ "\"roots\":" + ELICITATION_URL_RESPONSE + "}",
+					ELICITATION_URL_CAPABILITY, INPUT_TOOL_NAME, "complete");
 			assertJsonGolden(port, "input-required-prompts-get-state-integer.json",
 					"202", "prompts/get", ",\"name\":\"" + INPUT_PROMPT_NAME
 							+ "\",\"arguments\":{}", "", INPUT_PROMPT_NAME,
@@ -528,14 +528,14 @@ public class McpResultEnvelopeGoldenProductionTests {
 					"input-required-resources-read-combined-string.json",
 					"\"resource-combined-initial\"", "resources/read",
 					",\"uri\":\"" + INPUT_RESOURCE_URI + "\"",
-					ROOTS_CAPABILITY, INPUT_RESOURCE_URI.toString(),
+					ELICITATION_URL_CAPABILITY, INPUT_RESOURCE_URI.toString(),
 					"input_required");
 			assertJsonGolden(port,
 					"complete-resources-read-combined-retry-integer.json",
 					"203", "resources/read", ",\"uri\":\"" + INPUT_RESOURCE_URI
-							+ "\",\"inputResponses\":{\"roots\":" + ROOTS_RESPONSE
+							+ "\",\"inputResponses\":{\"roots\":" + ELICITATION_URL_RESPONSE
 							+ "},\"requestState\":\"" + FRAMEWORK_STATE + "\"",
-					ROOTS_CAPABILITY, INPUT_RESOURCE_URI.toString(), "complete");
+					ELICITATION_URL_CAPABILITY, INPUT_RESOURCE_URI.toString(), "complete");
 
 			Assertions.assertEquals(2, toolInvocations.get());
 			Assertions.assertEquals(2, promptInvocations.get());
@@ -551,7 +551,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 	public void requestScopedAndSubscriptionSseTerminalsMatchGoldens()
 			throws Exception {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		AtomicInteger completeInvocations = new AtomicInteger();
 		AtomicInteger inputInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> complete = McpToolRegistration
@@ -595,11 +595,11 @@ public class McpResultEnvelopeGoldenProductionTests {
 			assertRequestSseGolden(port,
 					"input-required-tools-call-request-sse-string.sse.hex",
 					"\"sse-input-string\"", "result.sse.input",
-					ROOTS_CAPABILITY, "\"progress-input-string\"",
+					ELICITATION_URL_CAPABILITY, "\"progress-input-string\"",
 					"input_required");
 			assertRequestSseGolden(port,
 					"input-required-tools-call-request-sse-integer.sse.hex",
-					"302", "result.sse.input", ROOTS_CAPABILITY, "402",
+					"302", "result.sse.input", ELICITATION_URL_CAPABILITY, "402",
 					"input_required");
 			Assertions.assertEquals(2, completeInvocations.get());
 			Assertions.assertEquals(2, inputInvocations.get());
@@ -985,7 +985,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			McpInputRequestDeclaration roots, String authority,
 			boolean includeFrameworkState) {
 		McpInputRequiredResult.Builder builder = McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
-						roots, McpJsonObject.emptyInstance()))
+						roots, McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 				.metadata(metadata(authority));
 		if (includeFrameworkState)
 			builder.frameworkRequestState(McpJsonObject.builder()

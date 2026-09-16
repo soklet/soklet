@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 enum InternalLifecycleComponentType {
@@ -926,8 +927,8 @@ final class InternalTerminationGroup {
 		Throwable exactPrimary = requireNonNull(primary);
 		Throwable exactSecondary = requireNonNull(secondary);
 		if (this.state == State.DISCARDED || this.frozenEvidence != null
-				|| exactPrimary == exactSecondary || member.failure == null
-				|| member.failure.cause().orElseThrow() != exactPrimary
+				|| sameInstance(exactPrimary, exactSecondary) || member.failure == null
+				|| !sameInstance(member.failure.cause().orElseThrow(), exactPrimary)
 				|| member.failureDiagnostic != null)
 			return false;
 		member.failureDiagnostic = new InternalTerminationEvent(
@@ -1397,7 +1398,8 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportIdentity identity(
 							@NonNull HttpServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
-						return identity == null ? null : identity.internalIdentity();
+						return Optional.ofNullable(identity)
+								.map(TransportIdentity::internalIdentity).orElse(null);
 					}
 
 					@Override
@@ -1409,7 +1411,8 @@ final class InternalTransportAttachmentContext<H> {
 										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
 												(InternalTransportAttachmentContext<?>) context),
 								startupContext);
-						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+						return Optional.ofNullable(runtime)
+								.map(InternalPublicTransportRuntime::new).orElse(null);
 					}
 				});
 		return ((InternalPublicTransportRuntime) attachment.runtime()).publicRuntime();
@@ -1426,7 +1429,8 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportIdentity identity(
 							@NonNull HttpServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
-						return identity == null ? null : identity.internalIdentity();
+						return Optional.ofNullable(identity)
+								.map(TransportIdentity::internalIdentity).orElse(null);
 					}
 
 					@Override
@@ -1438,7 +1442,8 @@ final class InternalTransportAttachmentContext<H> {
 										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
 												(InternalTransportAttachmentContext<?>) context),
 								startupContext);
-						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+						return Optional.ofNullable(runtime)
+								.map(InternalPublicTransportRuntime::new).orElse(null);
 					}
 				});
 		TransportRuntime runtime = ((InternalPublicTransportRuntime)
@@ -1456,7 +1461,8 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportIdentity identity(
 							@NonNull SseServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
-						return identity == null ? null : identity.internalIdentity();
+						return Optional.ofNullable(identity)
+								.map(TransportIdentity::internalIdentity).orElse(null);
 					}
 
 					@Override
@@ -1468,7 +1474,8 @@ final class InternalTransportAttachmentContext<H> {
 										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
 												(InternalTransportAttachmentContext<?>) context),
 								startupContext);
-						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+						return Optional.ofNullable(runtime)
+								.map(InternalPublicTransportRuntime::new).orElse(null);
 					}
 				});
 		return ((InternalPublicTransportRuntime) attachment.runtime()).publicRuntime();
@@ -1485,7 +1492,8 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportIdentity identity(
 							@NonNull SseServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
-						return identity == null ? null : identity.internalIdentity();
+						return Optional.ofNullable(identity)
+								.map(TransportIdentity::internalIdentity).orElse(null);
 					}
 
 					@Override
@@ -1497,7 +1505,8 @@ final class InternalTransportAttachmentContext<H> {
 										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
 												(InternalTransportAttachmentContext<?>) context),
 								startupContext);
-						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+						return Optional.ofNullable(runtime)
+								.map(InternalPublicTransportRuntime::new).orElse(null);
 					}
 				});
 		TransportRuntime runtime = ((InternalPublicTransportRuntime)
@@ -1602,7 +1611,7 @@ final class InternalTransportAttachmentContext<H> {
 	}
 
 	private void requireActiveAttachThread() {
-		if (!this.active || this.activeThread != Thread.currentThread() || !this.group.isOpen())
+		if (!this.active || !sameInstance(this.activeThread, Thread.currentThread()) || !this.group.isOpen())
 			throw inactiveException();
 	}
 

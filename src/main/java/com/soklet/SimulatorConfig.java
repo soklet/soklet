@@ -28,6 +28,7 @@ import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -157,8 +158,8 @@ public final class SimulatorConfig {
 	}
 
 	boolean belongsTo(@NonNull Object configurationIdentity) {
-		return this.configurationGraph.configurationIdentity()
-				== requireNonNull(configurationIdentity);
+		return sameInstance(this.configurationGraph.configurationIdentity(),
+				requireNonNull(configurationIdentity));
 	}
 
 	@NonNull
@@ -726,7 +727,7 @@ public final class SimulatorConfig {
 		}
 
 		private boolean buildAllowed() {
-			return this.buildThread == Thread.currentThread();
+			return sameInstance(this.buildThread, Thread.currentThread());
 		}
 
 		@Override

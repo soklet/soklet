@@ -659,7 +659,7 @@ public interface LifecycleObserver {
 		Throwable throwable = logEvent.getThrowable().orElse(null);
 
 		if (throwable == null) {
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);

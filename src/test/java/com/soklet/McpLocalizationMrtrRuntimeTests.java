@@ -171,7 +171,7 @@ class McpLocalizationMrtrRuntimeTests {
 
 	private static McpEndpoint endpoint(AtomicInteger handlerInvocations) {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL)
 				.jsonObjectArguments()
@@ -181,7 +181,7 @@ class McpLocalizationMrtrRuntimeTests {
 					if (request.getFrameworkRequestState().isEmpty())
 						return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,
-												McpJsonObject.emptyInstance()))
+												McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 								.frameworkRequestState(McpJsonObject.builder()
 										.put("phase", "waiting")
 										.build())
@@ -262,7 +262,7 @@ class McpLocalizationMrtrRuntimeTests {
 				+ "\",\"method\":\"tools/call\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{\"roots\":{}}}"
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{\"elicitation\":{\"url\":{}}}}"
 				+ ",\"name\":\"" + TOOL + "\",\"arguments\":{}"
 				+ additionalParameters + "}}";
 		Map<String, Set<String>> headers = new LinkedHashMap<>();

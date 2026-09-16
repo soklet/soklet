@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -715,10 +716,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didBroadcastSseEvent(@NonNull ResourcePathDeclaration route,
-																					int attempted,
-																					int enqueued,
-																					int dropped) {
+																					@NonNull Integer attempted,
+																					@NonNull Integer enqueued,
+																					@NonNull Integer dropped) {
 		requireNonNull(route);
+		requireNonNull(attempted);
+		requireNonNull(enqueued);
+		requireNonNull(dropped);
 
 		if (attempted > 0) {
 			counterFor(this.sseEventEnqueueOutcomesByRoute,
@@ -742,11 +746,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didBroadcastSseComment(@NonNull ResourcePathDeclaration route,
 																								 SseComment.@NonNull CommentType commentType,
-																								 int attempted,
-																								 int enqueued,
-																								 int dropped) {
+																								 @NonNull Integer attempted,
+																								 @NonNull Integer enqueued,
+																								 @NonNull Integer dropped) {
 		requireNonNull(route);
 		requireNonNull(commentType);
+		requireNonNull(attempted);
+		requireNonNull(enqueued);
+		requireNonNull(dropped);
 
 		if (attempted > 0) {
 			counterFor(this.sseCommentEnqueueOutcomesByRoute,
@@ -2368,7 +2375,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				return true;
 			if (!(object instanceof IdentityKey<?> identityKey))
 				return false;
-			return this.value == identityKey.value;
+			return sameInstance(this.value, identityKey.value);
 		}
 
 		@Override

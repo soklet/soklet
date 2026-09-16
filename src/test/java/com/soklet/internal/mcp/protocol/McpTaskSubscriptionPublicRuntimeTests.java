@@ -102,8 +102,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	private static final String TOOL_NAME = "tasks.notifications.seed";
 	private static final String ALPHA = "alpha";
 	private static final String BETA = "beta";
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL);
+	private static final McpInputRequestDeclaration ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 	private static final Instant CREATED_AT =
 			Instant.parse("2026-09-01T12:00:00Z");
 	private static final Instant WORKING_UPDATED_AT =
@@ -1152,7 +1152,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId.getValue());
 				})
-				.addInputRequestDeclaration(ROOTS_DECLARATION)
+				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(path,
@@ -1305,8 +1305,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			boolean rootsCapable) {
 		String capabilities = tasksCapable
 				? "{\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}"
-						+ (rootsCapable ? ",\"roots\":{}" : "") + "}"
-				: (rootsCapable ? "{\"roots\":{}}" : "{}");
+						+ (rootsCapable ? ",\"elicitation\":{\"url\":{}}" : "") + "}"
+				: (rootsCapable ? "{\"elicitation\":{\"url\":{}}}" : "{}");
 		return "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
@@ -1443,7 +1443,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				+ "\",\"lastUpdatedAt\":\"" + INPUT_REQUIRED_UPDATED_AT
 				+ "\",\"ttlMs\":60000,\"pollIntervalMs\":250,"
 				+ "\"inputRequests\":{\"approval\":{\"method\":"
-				+ "\"roots/list\",\"params\":{}}},"
+				+ "\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}},"
 				+ "\"_meta\":{\"com.example/task-metadata\":"
 				+ "\"input-required\","
 				+ "\"io.modelcontextprotocol/subscriptionId\":"
@@ -1509,7 +1509,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.timeToLive(TASK_TIME_TO_LIVE)
 				.pollInterval(POLL_INTERVAL)
 				.addInputRequest("approval", McpInputRequest.fromDeclaration(
-						ROOTS_DECLARATION, McpJsonObject.emptyInstance()))
+						ELICITATION_URL_DECLARATION, McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 				.metadata(McpJsonObject.builder()
 						.put("com.example/task-metadata", "input-required")
 						.build())

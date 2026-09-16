@@ -1,6 +1,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.MetricsCollector.TransportFailureReason;
+import com.soklet.HttpDate;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import org.jspecify.annotations.Nullable;
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 
 /**
  * This class represents an independent, threaded event loop for managing a group of connections.
@@ -228,10 +231,6 @@ class ConnectionEventLoop {
     private final Consumer<Throwable> unexpectedTerminationHandler;
     private final Runnable terminationHandler;
     private final TransportFailureObserver transportFailureObserver;
-    private final byte[] badRequestResponse;
-    private final byte[] expectationFailedResponse;
-    private final byte[] requestHeaderFieldsTooLargeResponse;
-    private final byte[] requestUriTooLongResponse;
 
     private final Scheduler timeoutQueue;
     private final Queue<Runnable> taskQueue;
@@ -265,11 +264,10 @@ class ConnectionEventLoop {
         this.unexpectedTerminationHandler = unexpectedTerminationHandler;
         this.terminationHandler = terminationHandler;
         this.transportFailureObserver = transportFailureObserver;
-        this.badRequestResponse = rawErrorResponse(400, "Bad Request");
-        this.expectationFailedResponse = rawErrorResponse(417, "Expectation Failed");
-        this.requestHeaderFieldsTooLargeResponse = rawErrorResponse(
-                431, "Request Header Fields Too Large");
-        this.requestUriTooLongResponse = rawErrorResponse(414, "URI Too Long");
+        for (Header header : options.earlyErrorResponseHeaders()) {
+            if (!validEarlyErrorHeader(header))
+                throw new IllegalArgumentException("Invalid early-error response header.");
+        }
 
         connectionCount = new AtomicInteger();
         pendingRegistrationCount = new AtomicInteger();
@@ -659,14 +657,14 @@ class ConnectionEventLoop {
             if (reason == RequestTooLargeException.Reason.HEADERS) {
                 respondToUnparsedRequest(
                         UnparsedRequestRejection.Reason.REQUEST_HEADERS_TOO_LARGE,
-                        requestHeaderFieldsTooLargeResponse);
+                        rawErrorResponse(431, "Request Header Fields Too Large"));
                 return;
             }
 
             if (reason == RequestTooLargeException.Reason.URI_TOO_LONG) {
                 respondToUnparsedRequest(
                         UnparsedRequestRejection.Reason.REQUEST_TARGET_TOO_LONG,
-                        requestUriTooLongResponse);
+                        rawErrorResponse(414, "URI Too Long"));
                 return;
             }
 
@@ -699,13 +697,13 @@ class ConnectionEventLoop {
         private void respondToMalformedRequest() {
             respondToUnparsedRequest(
                     UnparsedRequestRejection.Reason.MALFORMED_REQUEST,
-                    badRequestResponse);
+                    rawErrorResponse(400, "Bad Request"));
         }
 
         private void respondToExpectationFailed() {
             respondToUnparsedRequest(
                     UnparsedRequestRejection.Reason.EXPECTATION_FAILED,
-                    expectationFailedResponse);
+                    rawErrorResponse(417, "Expectation Failed"));
         }
 
         private void respondToUnparsedRequest(
@@ -911,7 +909,7 @@ class ConnectionEventLoop {
         private void wakeupSelectorForCallback() {
             // selector wakeup is not necessary if callback was invoked within event loop thread
             // since scheduler tasks are processed at the end of every event loop iteration
-            if (Thread.currentThread() != thread) {
+            if (!sameInstance(Thread.currentThread(), thread)) {
                 selector.wakeup();
             }
         }
@@ -1003,6 +1001,11 @@ class ConnectionEventLoop {
                     }
                 } else if (shouldAddContentLength(microhttpResponse)) {
                     headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
+                }
+                // Responses that bypass owner-level marshaling (MCP and failsafes included)
+                // still need a generation-time Date. Preserve an explicit application value.
+                if (!microhttpResponse.hasHeader("Date")) {
+                    headers.add(new Header("Date", HttpDate.currentSecondHeaderValue()));
                 }
                 byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
                 disableReadInterest();
@@ -1097,7 +1100,7 @@ class ConnectionEventLoop {
                 }
                 onWritable();
             });
-            if (Thread.currentThread() != thread) {
+            if (!sameInstance(Thread.currentThread(), thread)) {
                 selector.wakeup();
             }
         }
@@ -1787,11 +1790,17 @@ class ConnectionEventLoop {
                 .append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
                 .append("Connection: close\r\n")
                 .append("Content-Length: 0\r\n");
+        boolean hasDate = false;
         for (Header header : options.earlyErrorResponseHeaders()) {
             if (!validEarlyErrorHeader(header))
                 throw new IllegalArgumentException("Invalid early-error response header.");
-            response.append(header.name()).append(": ").append(header.value()).append("\r\n");
+            hasDate |= "date".equalsIgnoreCase(header.name());
         }
+        // Generate at rejection time, not event-loop construction time.
+        if (!hasDate)
+            response.append("Date: ").append(HttpDate.currentSecondHeaderValue()).append("\r\n");
+        for (Header header : options.earlyErrorResponseHeaders())
+            response.append(header.name()).append(": ").append(header.value()).append("\r\n");
         response.append("\r\n");
         return response.toString().getBytes(StandardCharsets.US_ASCII);
     }

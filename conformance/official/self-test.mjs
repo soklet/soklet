@@ -38,8 +38,8 @@ try {
 	const manifests = verifyManifestSet();
 	assert.equal(manifests.selection.currentImplementationPhase, 5);
 	assert.equal(activeScenarios(manifests.selection, 4).length, 23);
-	assert.equal(activeScenarios(manifests.selection, 5).length, 49);
-	assert.equal(manifests.expectedChecks.profiles.length, 49);
+	assert.equal(activeScenarios(manifests.selection, 5).length, 45);
+	assert.equal(manifests.expectedChecks.profiles.length, 45);
 	assert.equal(
 		manifests.expectedChecks.profiles.filter((profile) => profile.frozenInPhase < 5).length,
 		23,

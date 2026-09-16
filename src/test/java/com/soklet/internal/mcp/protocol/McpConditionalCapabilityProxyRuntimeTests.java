@@ -70,7 +70,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 	@Timeout(120)
 	public void proxyIdleExpiryCancelsSilentHoldAndSupportedControlForwardsSse()
 			throws Exception {
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration.roots(
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration.elicitationUrl(
 				McpInputRequirement.CONDITIONAL);
 		McpInputRequestPlan inputPlan = new McpInputRequestPlan(List.of(roots));
 		ManualMonotonicClock proxyClock = new ManualMonotonicClock();
@@ -89,7 +89,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 				invocation -> {
 			invocation.requireHandlerEntry();
 			if (invocation.request().params().metadata().clientCapabilities()
-					.supports(McpCoreClientCapability.ROOTS)) {
+					.supports(McpCoreClientCapability.ELICITATION_URL)) {
 				supportedHandlerEntered.countDown();
 				McpServerRuntimeBridge.ProgressEmitter emitter =
 						McpServerRuntimeBridge.progressEmitterFor(invocation,
@@ -330,7 +330,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 
 	private static McpChunkedHttpClient call(int port, String requestId,
 			boolean rootsCapability) throws IOException {
-		String capabilities = rootsCapability ? "{\"roots\":{}}" : "{}";
+		String capabilities = rootsCapability ? "{\"elicitation\":{\"url\":{}}}" : "{}";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + METHOD + "\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""

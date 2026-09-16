@@ -1,10 +1,13 @@
 # Migrating from Soklet 3.5.1 to 4.0.0
 
 Soklet 4.0.0 is a deliberate breaking release. Upgrade the lifecycle first,
-then HTTP/SSE integration and simulation, and finally MCP. Do not place the
+then HTTP/SSE integration and simulation. Do not place the
 4.0.0 JAR under an unchanged 3.5.1 application and expect binary compatibility.
 The machine-readable [incompatibility ledger](api/mcp/current-incompatibilities.jsonl)
 is an audit aid; this guide is the migration path.
+
+For MCP development, start with the [MCP quickstart](MCP_QUICKSTART.md) and
+[current API and wire reference](MCP.md).
 
 ## Supported release lines
 
@@ -16,8 +19,6 @@ that stay on them do so without project support.
 
 After publication, only the latest 4.x patch release is supported. Snapshots,
 older 4.x patches, and unreleased source builds are not supported releases.
-This policy is intentionally explicit because 4.0.0 has no adapter for the
-legacy MCP protocol or Java API.
 
 ## Recommended migration order
 
@@ -32,10 +33,9 @@ legacy MCP protocol or Java API.
    add a simulator-specific builder only where a test needs an override.
 5. Recompile all annotation-driven code with `-parameters` and
    `SokletProcessor` enabled.
-6. Rebuild MCP registrations and handlers for the exact `2026-07-28` profile.
-7. Update deployment termination budgets, lifecycle observers, metrics, and
+6. Update deployment termination budgets, lifecycle observers, metrics, and
    downstream integrations.
-8. Exercise the application through a real loopback listener in addition to
+7. Exercise the application through a real loopback listener in addition to
    off-network simulation.
 
 ### Public API naming pass
@@ -47,18 +47,40 @@ Applications built against an earlier 4.0.0 preview must update these calls; the
 | Previous name | 4.0.0 name |
 | --- | --- |
 | `CorsPreflight.with(...)` | `CorsPreflight.fromOrigin(...)` |
-| `McpInputRequest.getMethod()` | `McpInputRequest.getJsonRpcMethod()` |
+| `MultipartField.Copier.contentType(Charset)` | `MultipartField.Copier.charset(Charset)` |
 | `MetricsCollector.HttpServerRouteKey.getMethod()` | `getHttpMethod()` |
 | `MetricsCollector.HttpServerRouteStatusKey.getMethod()` | `getHttpMethod()` |
-| `McpEndpoint.getServerInformation()` | `getServerInfo()` |
-| `McpEndpoint.isServerInformationIncluded()` | `isServerInfoIncluded()` |
-| `McpEndpoint.Builder.serverInformation(...)` | `serverInfo(...)` |
-| `McpEndpoint.Builder.serverInformationIncluded(...)` | `serverInfoIncluded(...)` |
 
 `fromOrigin(...)` remains overloaded for calls with and without requested
 headers. It names the origin—the value from which the preflight representation
 is constructed—without misidentifying the preflight's actual HTTP method,
 which is always `OPTIONS`.
+
+### Metric snapshot keys
+
+The thirteen HTTP/SSE/transport `MetricsCollector` key types are final classes
+instead of records. Replace record-component accessors with bean-style getters:
+`method()` becomes `getHttpMethod()`, `route()` becomes `getRoute()`,
+`routeType()` becomes `getRouteType()`, `serverType()` becomes `getServerType()`,
+and `reason()` becomes `getReason()`. Likewise, use `getStatusClass()`,
+`getCommentType()`, `getOutcome()`, `getDropReason()`, or
+`getTerminationReason()` for those former components.
+Record deconstruction patterns no longer apply.
+
+The affected types are `TransportFailureKey`, `RequestReadFailureKey`,
+`RequestRejectionKey`, `HttpServerRouteKey`, `HttpServerRouteStatusKey`,
+`SseCommentRouteKey`, `SseEventRouteKey`, `SseEventRouteHandshakeFailureKey`,
+`SseEventRouteEnqueueOutcomeKey`, `SseCommentRouteEnqueueOutcomeKey`,
+`SseEventRouteDropKey`, `SseCommentRouteDropKey`, and
+`SseStreamRouteTerminationKey`, all nested in `MetricsCollector`.
+
+### SSE broadcast callback counts
+
+The `attempted`, `enqueued`, and `dropped` parameters of
+`MetricsCollector.didBroadcastSseEvent(...)` and `didBroadcastSseComment(...)`
+now use `@NonNull Integer` rather than primitive `int`. Update custom overrides
+and recompile; direct callers can continue passing primitive counts through
+autoboxing. Zero remains a valid count, but `null` is not.
 
 ### HTTP server type
 
@@ -68,11 +90,16 @@ recompile custom transports, lifecycle observers, metrics collectors, and
 other integrations that reference it. Migrate stored enum names or
 `ServerType.valueOf("STANDARD_HTTP")` inputs to `HTTP` as well.
 
+`ServerType` contains `HTTP` and `SSE`. MCP uses its dedicated request,
+lifecycle, and metrics APIs instead of the `ServerType`-parameterized
+HTTP/SSE callbacks.
+
 The built-in Prometheus and OpenMetrics export now uses
 `soklet_transport_failures_total{server_type="HTTP",reason="..."}` for HTTP
 transport failures. Update filters, dashboards, and alerts that selected
 `server_type="STANDARD_HTTP"`. The metric name and SSE/MCP label values are
-unchanged. This uppercase built-in label is separate from `soklet-otel`'s
+unchanged; the MCP label is emitted by the dedicated MCP metrics path, not
+by a `ServerType.MCP` constant. This uppercase built-in label is separate from `soklet-otel`'s
 explicit `soklet.server.type` vocabulary, which remains lowercase `http`,
 `sse`, and `mcp`.
 
@@ -158,7 +185,6 @@ graceful cap.
 | Cancelation of live startup after shutdown intent | Not a shared phase | 2 s | A non-cooperative startup can produce an incomplete result after this boundary. |
 | HTTP graceful shutdown | 5 s default; 30 s production guidance | 15 s | More time than the old default, less than the old guidance. |
 | SSE graceful shutdown | 1 s | 15 s | Idle streams close promptly; outstanding writes, loops, and executors share the 15 s boundary. |
-| MCP graceful shutdown | 5 s | 15 s | MCP receives three times the old graceful interval; recalculate any explicit deployment budget. |
 | Forced shutdown | Not a shared phase | 3 s | Owned work is interrupted/canceled and observed within this separate phase. |
 
 The default 15-second graceful drain is independent of the default 60-second
@@ -234,8 +260,7 @@ is the terminal evidence for successful, forced, unexpected, residual, and
 unknown termination. Observer callbacks are observational: exceptions are
 contained and do not rewrite lifecycle results.
 
-Metrics and downstream OpenTelemetry projections must replace the old MCP
-`clean`/`residual_handlers` vocabulary with exactly:
+MCP shutdown metrics and downstream OpenTelemetry projections use exactly:
 
 - `not_started`
 - `graceful_termination`
@@ -359,35 +384,6 @@ route-aware `413` path when Soklet parsed enough input to construct a real
 request, including body-only and post-decompression size violations. The new
 method is only for failures where that trustworthy request context does not
 exist.
-
-MCP is intentionally different in 4.0.0. `McpServer` is sealed to Soklet's
-built-in request-scoped HTTP/1.1 implementation, and there is no public MCP
-attachment context or transport SPI. A 3.5.1 custom `McpServer`
-implementation cannot be migrated through the HTTP/SSE attachment methods;
-move application behavior into endpoint, admission, rate-limit, interceptor,
-and handler APIs, and place any deployment-specific proxying outside Soklet's
-MCP listener.
-
-The built-in builder retains the 3.5.1 transport-hardening setters:
-`requestHeaderTimeout`, `requestBodyTimeout`, `maximumRequestSizeInBytes`,
-`maximumHeaderCount`, `maximumHeadersSizeInBytes`,
-`maximumRequestTargetLengthInBytes`, `requestReadBufferSizeInBytes`,
-`concurrentConnectionLimit`, and `connectionQueueCapacity`. The default body
-limit remains 10 MiB; 4.0.0 accepts configured values only through the reviewed
-16 MiB production-JSON ceiling. `connectionQueueCapacity` is the historical
-alias for `streamQueueCapacity`; they configure the same 128-item default
-outbound stream queue, and the most recent setter call wins. The other defaults
-remain 60 seconds for each read timeout, 100 headers, 64 KiB of aggregate
-headers, an 8,192-byte request target, a 64 KiB read buffer, and 8,192 concurrent
-connections. Setting the connection limit to zero disables Soklet's cap and
-requires an effective deployment-layer bound.
-
-A loopback bind literal or `localhost` seeds the listener's effective Host
-authority. A non-loopback `host(...)` now requires at least one explicit
-deployment hostname or IP literal in `allowedHosts(...)`, or server
-construction fails. Existing container or remote-listener configurations must
-add that allowlist during migration; the non-loopback bind address itself is
-not implicitly accepted.
 
 If migrating from an earlier 4.0.0 snapshot, update lifecycle result and exception
 names as a hard cutover:
@@ -533,6 +529,11 @@ Both adapters now require core Soklet 4.0.0; compatibility with core 3.x is no
 longer supported. Their Soklet dependency remains `provided`, so the application
 must explicitly supply `com.soklet:soklet:4.0.0`. The adapter entry-point API is
 retained, but this minimum-core change is a breaking dependency migration.
+The four nested adapter builder types are now final. Internal mutation hooks
+`SokletHttpSession.setSessionId(...)` and
+`SokletHttpServletResponse.setPrintWriter(...)` are no longer public: use
+`HttpServletRequest.changeSessionId()` and `HttpServletResponse.getWriter()`
+for their supported servlet operations.
 Empty 204 and 304 responses remain bodyless through either conversion method;
 ordinary empty 200 responses retain their byte-array representation.
 
@@ -540,164 +541,11 @@ See the [javax Javadocs](https://javax.javadoc.soklet.com/com/soklet/servlet/jav
 or [Jakarta Javadocs](https://jakarta.javadoc.soklet.com/com/soklet/servlet/jakarta/package-summary.html)
 for the matching container namespace.
 
-## MCP wire migration
-
-Treat MCP as a new integration, not a rename exercise. Soklet 4.0.0 supports
-exactly the modern `2026-07-28` profile. There is no automatic “latest” mode,
-fallback, or legacy adapter.
-
-| 3.5.1 behavior | 4.0.0 behavior |
-| --- | --- |
-| `initialize` negotiation followed by initialized state | First request may be `server/discover`; no initialization state exists. |
-| Server-managed session IDs and session store | Stateless per-request metadata and application-owned durable state. |
-| `GET` event stream plus `DELETE` session termination | Streamable HTTP `POST`; `GET` and `DELETE` return 405. |
-| `MCP-Session-Id` / `Last-Event-ID` | Ignored and never emitted; attempts to add legacy headers fail closed. |
-| Legacy SSE stream and request-result carriers | A POST response stream owns progress, input requests, and its terminal result. |
-| Session-scoped client/capability state | Validated protocol metadata and client capabilities are supplied per request. |
-| Legacy operation set | `server/discover`, current list/read/get/call methods, input responses, listening/subscriptions, and profile-defined notifications. |
-| Experimental or application-specific task shapes | The negotiated `io.modelcontextprotocol/tasks` extension uses server-directed task creation plus `tasks/get`, `tasks/update`, and `tasks/cancel`; legacy `task`, `tasks/list`, and `tasks/result` forms are not revived. |
-
-Task-change hints are a bounded, advisory projection; `tasks/get` remains
-authoritative. Soklet now coalesces repeated hints per accepted subscription,
-keeps distinct task IDs in first-event order, and contributes at most one
-queued or running projection job per subscription to the shared scheduler. A
-256-ID filter can no longer exhaust that scheduler by itself. Lookups are
-serialized within one subscription, however, so a slow or hung task-manager
-lookup delays that subscription's other task IDs while unrelated subscriptions
-continue through the scheduler's bounded parallel workers.
-
-A readable legacy `initialize` request receives a narrow modern-only migration
-diagnostic naming `2026-07-28`. It is not negotiation or a compatibility
-handshake. Malformed transport/JSON and unrelated methods do not acquire that
-diagnostic.
-
-### MCP Origin and CORS migration
-
-The 3.5.1 `McpCorsAuthorizer` type is removed. Configure the shared
-`CorsAuthorizer` on `McpServer.Builder` instead. The built-in
-`CorsAuthorizer.fromWhitelistedOrigins(...)` factories support both ordinary
-HTTP resource-method preflights and MCP's transport-neutral preflights.
-
-A custom `CorsAuthorizer` must explicitly implement
-`authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)` for MCP. The
-default implementation of that overload rejects; implementing only the older
-`Map<HttpMethod, ResourceMethod>` overload still compiles but causes every MCP
-preflight to receive HTTP 403. This fail-closed default is deliberate. Verify
-the transport-neutral overload during migration rather than delegating it
-blindly when the application uses different policy for MCP and ordinary HTTP.
-
-An absent `Origin` remains allowed unless `McpAbsentOriginPolicy.REQUIRE_ORIGIN`
-is configured. A present `Origin` is denied unless the configured authorizer
-approves it. Supplying no authorizer restores reject-all behavior for present
-origins; use `CorsAuthorizer.rejectAllInstance()` to make that deployment
-choice explicit.
-
-## MCP Java API migration
-
-The 3.5.1 MCP Java API was removed and rebuilt. Important migration patterns
-are:
-
-- Replace `McpServer.fromPort(...)` with `McpServer.withPort(...)` and finish
-  the builder. If any endpoint registers tools, configure `toolRateLimiter(...)`;
-  there is no implicit tool execution quota. For local development:
-
-  ```java
-  McpServer server = McpServer.withPort(8081)
-      .endpointRegistry(endpointRegistry)
-      .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
-      .build();
-  ```
-
-  The in-memory limiter is node-local; production deployments must choose an
-  application-appropriate, fleet-aware limiting policy.
-- Replace `McpArray`, `McpObject`, `McpString`, `McpNumber`, `McpBoolean`,
-  `McpNull`, and `McpValue` with the immutable `McpJsonArray`,
-  `McpJsonObject`, `McpJsonString`, `McpJsonNumber`, `McpJsonBoolean`,
-  `McpJsonNull`, and `McpJsonValue` family.
-- Replace session, initialization, stored-session, legacy SSE-stream, response-
-  marshaler, legacy schema, and old request-result types with current request
-  contexts, operation registrations/results, response features, and
-  application-owned durable state.
-- Build endpoints with `McpEndpoint`/`McpEndpointRegistry` or generated
-  `@McpServerEndpoint` descriptors. Capabilities are derived from registrations.
-- MCP endpoint paths are fixed in 4.0.0. Templated endpoint HTTP paths such as
-  `/tenants/{tenantId}/mcp` and their `@McpEndpointPathParameter` bindings have
-  no direct replacement. For a bounded tenant set, register one fixed endpoint
-  per tenant; otherwise carry tenant identity through application-owned
-  admission or register a required `Mcp-Param-*` header whose value application
-  admission authenticates and authorizes. The header alone is untrusted. The
-  retained request/admission endpoint-path-parameter maps are always empty in
-  4.0.0. This is separate from resource URI templates, which remain supported.
-- Prefer Java-first typed schemas. Soklet derives the closed Tool Schema
-  Profile 1 schema from supported records, maps, lists, arrays, scalars,
-  enums, and bounded optional properties. When Java derivation cannot express
-  the required input constraints, use
-  `McpToolRegistration.ArgumentTypeStage.inputSchema(...)` with a direct
-  object-root authored Profile 1 document and a raw `McpJsonObject` handler.
-  Profile 1 remains a bounded closed subset, not universal JSON Schema Draft
-  2020-12 support, and authored output schemas are not supported.
-- Replace old handler/context pairs with the operation-specific current
-  contexts and registrations. Interceptors receive an explicit
-  `McpRequestContext`, `McpInvocationFeatures`, and
-  `McpHandlerContinuation`; the continuation only proceeds downstream.
-- Continue using `McpOperationType` as the high-level branching abstraction
-  from 3.5.1, now with values for the modern profile and `OTHER` for an
-  unrecognized, future, or extension method. Request, admission, and rate-limit
-  contexts expose it through `getOperationType()`; use `getJsonRpcMethod()`
-  only when exact validated wire text is required. Keep a default enum branch
-  because the recognized set may grow in later supported profiles.
-- Replace request-admission/session policy with `McpAdmissionController`.
-  Authentication, token verification, authorization rules, protected resource
-  metadata, and identity-provider behavior remain application-owned.
-- Replace `McpShutdownOutcome`-style reporting with aggregate
-  `ShutdownResult`, `ShutdownComponentResult`, and
-  `ShutdownComponentDisposition` evidence.
-- Replace the six legacy `MetricsCollector` MCP callbacks—`didCreateMcpSession`,
-  `didTerminateMcpSession`, `didStartMcpRequestHandling`,
-  `didFinishMcpRequestHandling`, `didEstablishMcpSseStream`, and
-  `didTerminateMcpSseStream`—with `didRecordMcpMetricsEvent(McpMetricsEvent)`.
-  Consume the event's bounded fields rather than retaining the old session/stream
-  object model. This replacement is MCP-specific; HTTP/SSE callbacks are separate.
-- To return durable work from `tools/call`, configure one application-wide
-  [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
-  on
-  [`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>),
-  persist the invocation's
-  [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html)
-  with the application work by storing
-  `taskControl.getTaskOrigin().toPersistedString()`, reconstruct it on read with
-  `McpTaskOrigin.fromPersistedString(...)`, and return
-  [`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html).
-  Soklet owns protocol adaptation and deferred typed-output validation; the
-  application owns durable storage, authorization binding, work publication,
-  leases, retry/idempotency, and crash recovery. The built-in in-memory
-  manager is not a production durability backend.
-
-The [MCP quickstart](MCP_QUICKSTART.md) is a copy/paste starting point and
-[MCP.md](MCP.md) is the full current API and wire reference.
-
 ## Annotation-processing migration
 
 Enable `SokletProcessor` and `-parameters` for every module containing Soklet
 annotations. Runtime handler-method classpath scanning is not a fallback.
 Generated resources must survive shading and packaging.
-
-Common annotation replacements include:
-
-| 3.5.1 | 4.0.0 |
-| --- | --- |
-| `@McpArgument` on a tool parameter | `@McpToolArgument` |
-| `@McpArgument` on a prompt parameter | `@McpPromptArgument`, with `String` or `Optional<String>` values |
-| Hand-described record properties | `@McpToolProperty` on record components when metadata is needed |
-| `@McpListResources` | `@McpResourceList` |
-| `@McpUriParameter` | `@McpResourceUriParameter` on a resource URI-template parameter |
-| `@McpEndpointPathParameter` | No direct replacement; MCP endpoint HTTP paths are fixed in 4.0.0. Use separate fixed endpoints or application-owned admitted/header tenancy as described above. |
-
-The equivalent CORS type replacement is `McpCorsAuthorizer` →
-`CorsAuthorizer`. A custom replacement must implement the transport-neutral
-`authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)` overload described
-under [MCP Origin and CORS migration](#mcp-origin-and-cors-migration); relying on
-its default implementation deliberately rejects MCP preflight requests.
 
 The processor rejects unsupported or ambiguous method/record shapes at build
 time. This can surface errors that 3.5.1 deferred until runtime.

@@ -11,8 +11,7 @@ The current source version is `4.0.0`.
 Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md): it includes the
 dependency and annotation-processor setup, `-parameters`, one annotated tool,
 endpoint/server construction, application lifecycle, raw localhost discovery,
-and an exact Inspector command. Existing 3.5.1 integrations should first read
-the [MCP migration guide](MIGRATING_TO_4_0.md#mcp-wire-migration).
+and an exact Inspector command.
 
 This reference covers multi-round-trip request state, durable Tasks,
 progress/cancelation, subscriptions, localization, lifecycle and aggregate
@@ -138,7 +137,7 @@ the normalized exact request path. Tool, prompt, and resource names may repeat
 on different endpoint paths without leaking across them, while handler slots,
 the admitted queue, and the server lifecycle remain server-wide.
 
-Endpoint paths are fixed in 4.0.0. Both annotated and programmatic endpoint
+Endpoint paths are fixed. Both annotated and programmatic endpoint
 registration reject `{...}` path templates, and `McpServer` exposes only its
 built-in HTTP/1.1 listener rather than a public MCP transport or routing SPI.
 For a bounded, startup-known tenant set, register one fixed endpoint path per
@@ -147,9 +146,9 @@ admission identity or register a required `Mcp-Param-*` header and have
 application admission authenticate and authorize its value; do not treat a
 self-reported header as an authorization decision. Because every endpoint path
 is fixed, `McpRequestContext.getEndpointPathParameters()` and
-`McpAdmissionContext.getEndpointPathParameters()` are always empty in 4.0.0.
+`McpAdmissionContext.getEndpointPathParameters()` are always empty.
 
-The built-in listener retains the 3.5.1 hardening controls on
+Configure the built-in listener's transport bounds through
 `McpServer.Builder`. Request-header and request-body read timeouts each default
 to 60 seconds; the request-body limit defaults to 10 MiB and may be configured
 only from 1 byte through the reviewed 16 MiB production-JSON ceiling. That
@@ -159,7 +158,7 @@ across fields or transferred out of band. The defaults are 100 headers, 64 KiB
 of aggregate headers, an 8,192-byte request target, a 64 KiB request-read
 buffer, and 8,192 concurrent connections. A zero concurrent-connection limit
 disables Soklet's cap and therefore requires an effective external bound.
-`connectionQueueCapacity(...)` is the historical name for
+`connectionQueueCapacity(...)` is an alias for
 `streamQueueCapacity(...)`; both configure the same per-stream outbound queue,
 whose default is 128, and the most recent call wins.
 
@@ -567,14 +566,9 @@ JSON-RPC method and its base client capability:
 | --- | --- | --- |
 | `ELICITATION_FORM` | `elicitation/create` | `ELICITATION_FORM` |
 | `ELICITATION_URL` | `elicitation/create` | `ELICITATION_URL` |
-| `SAMPLING` | `sampling/createMessage` | `SAMPLING` |
-| `ROOTS` | `roots/list` | `ROOTS` |
 
-The annotation's optional `samplingCapabilities` may contain only
-`SAMPLING_CONTEXT` and `SAMPLING_TOOLS`, and only when `type` is `SAMPLING`.
-Generated-registration validation rejects all other combinations instead of
-letting an annotation declare a mismatched method and capability set. For
-example:
+Generated-registration validation derives the method and capability from the
+selected elicitation mode. For example:
 
 ```text
 @McpTool(name = "catalog.continue",
@@ -588,14 +582,14 @@ public McpOperationResult continueCatalog(...) {
 
 The programmatic factories remain
 `McpInputRequestDeclaration.fromElicitationForm(...)`,
-`fromElicitationUrl(...)`, `fromSampling(...)`, and `fromRoots(...)`. A
+and `fromElicitationUrl(...)`. A
 declaration exposes the selected type through `getInputRequestType()`, the
 derived wire method through `getJsonRpcMethod()`, and the complete derived
 capability set through `getCapabilities()`.
 
 Soklet supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
-"latest" profile nor falls back. Active Elicitation is the default teaching surface;
-deprecated compatibility surfaces are documented separately below.
+"latest" profile nor falls back. Form and URL elicitation are the supported
+client input operations.
 
 Those client operations are embedded values, not standalone JSON-RPC
 requests. Soklet writes each `method`/`params` pair only inside the
@@ -625,8 +619,7 @@ correlate every response key to the request it emitted, handle missing,
 `accept`, `decline`, and `cancel` outcomes explicitly, and validate accepted
 form content against the exact requested policy before a side effect. The
 application likewise owns secret-field classification, verified-user binding
-for URL flows, sensitive-data and finite-loop sampling policy, and canonical
-filesystem containment for returned roots. The public-API-only
+for URL flows, and side-effect authorization. The public-API-only
 [input-security examples](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
 compile-check each of those patterns; [SECURITY.md](SECURITY.md#mcp-deployment-security)
 defines the deployment boundary.
@@ -1552,11 +1545,13 @@ the existing shared `CorsAuthorizer` approves it. Omitting the authorizer uses
 reject-all behavior for present origins and emits one fixed startup diagnostic;
 supplying `CorsAuthorizer.rejectAllInstance()` makes that choice explicit.
 
-Custom CORS implementations must be thread-safe and support the shared
-transport-neutral preflight overload. Deliberate denial is HTTP 403. A null,
-throwing, or out-of-surface authorizer result fails closed without CORS allow
-headers. See [SECURITY.md](SECURITY.md#mcp-deployment-security) for deployment
-guidance.
+Custom CORS implementations must be thread-safe and implement the shared
+transport-neutral `authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)`
+overload. Its default implementation rejects; implementing only the ordinary
+HTTP `Map<HttpMethod, ResourceMethod>` overload does not authorize MCP
+preflights. Deliberate denial is HTTP 403. A null, throwing, or out-of-surface
+authorizer result fails closed without CORS allow headers. See
+[SECURITY.md](SECURITY.md#mcp-deployment-security) for deployment guidance.
 
 The allowed request-header surface contains the modern protocol/name headers,
 registered `Mcp-Param-*` headers, and `Authorization`; it contains no legacy
@@ -2110,7 +2105,7 @@ Exact aggregate coverage is
 `#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 Live authority remains covered by
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-`#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+`#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
 `#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
 `#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
 `McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
@@ -2254,7 +2249,7 @@ Core authority remains
 `#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
 `#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
 `#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-`#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+`#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
 `McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
 `#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
 `#baggageParsingIsBoundedDecodedAndImmutable`,
@@ -2338,7 +2333,7 @@ guarantee.
 
 Representative exact citations from the full 46-test simulator/API gate are
 `McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-`McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+`McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
 `McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
 `#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
 `#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
@@ -2346,7 +2341,7 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#mcpSimulationCompletionRetainsStreamCaptureFailures`,
 `#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-`McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+`McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
 
 At the V21 boundary, this was the twenty-first production vertical plus the
 same three unnumbered checkpoints. `phase-6.includes` owned 15 types, the
@@ -2875,10 +2870,8 @@ second terminal result.
 
 ## Compatibility and unsupported features
 
-The 4.0.0 MCP API and wire behavior are intentionally incompatible with
-Soklet's pre-4.0.0 MCP implementation. Applications that require MCP
-`2025-11-25` must remain on Soklet 3.5.x; there is no adapter or dual-protocol
-mode.
+Soklet supports exactly the MCP `2026-07-28` server profile. There is no
+adapter, profile fallback, or dual-protocol mode.
 
 Client extension settings are open but do not implicitly enable server
 behavior. Keys in `clientCapabilities.extensions` must use a valid namespaced
@@ -2925,21 +2918,13 @@ Doing so does not by itself make core Soklet or the deployment fully conformant
 with MCP Authorization; the deployment must meet every applicable
 authorization-server and resource-server obligation.
 
-### Deprecated compatibility surfaces
+### Protocol scope and unsupported features
 
-SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,
-with specification removal eligible no earlier than 2027-07-28. This upstream
-MCP lifecycle is separate from Soklet's Java API lifecycle: the corresponding
-Java surfaces remain supported and carry no Java deprecation marker, and
-Soklet has made no API-removal decision. New applications should pass files or
-directories through explicit tool parameters, resource URIs, or server
-configuration instead of Roots, and integrate directly with a model provider
-instead of Sampling. Retained Sampling and Roots declarations remain validated
-and must be registered. Soklet parses retained Logging metadata but neither
-advertises nor implements MCP Logging; applications use Soklet's existing
-observability path. Soklet emits no negotiation-triggered warning through
-`LogEvent` or developer tooling. A future warning requires a separately
-approved default-off, bounded, redacted diagnostic policy.
+Soklet does not implement MCP Roots, Sampling, or Logging. Pass file or
+directory information through explicit tool parameters, resource URIs, or
+server configuration, and integrate directly with a model provider when
+needed. Use application logging and Soklet's existing observability and
+OpenTelemetry integrations.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
@@ -3008,11 +2993,18 @@ unfrozen.
 
 ## Current Phase 6 and release state
 
-The current MCP API universe is 248 owners: 134 Phase 4, 36 Phase 5, and all 64
+The current result-envelope and error-mapping fixture manifests retain 25 and
+twelve fixtures, respectively, using elicitation for client-input examples.
+Their SHA-256 values are
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`
+and `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`.
+The dated development checkpoints below retain their original hashes.
+
+The current MCP API universe is 247 owners: 133 Phase 4, 36 Phase 5, and all 64
 Phase 6 owners are frozen. The 14 Tasks owners retain their provisional
 maturity classification, but their 4.0.0 signatures are also frozen through
-the dedicated `provisional.signatures.jsonl` gate. Fifty-one non-MCP owners
-bring current-side coverage to 299. The
+the dedicated `provisional.signatures.jsonl` gate. Sixty-one non-MCP owners
+bring current-side coverage to 308. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed
@@ -3245,7 +3237,7 @@ unsupported classified-notification handling, universal MCP HTTP `no-store`,
 and the exact request/notification validation order. The separate
 `conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 canonical complete-response fixtures and has SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests comprise three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest
 parity gate; four diagnostic tests include 23
 readable-`initialize` rejection cases and the negative pre-JSON/method
@@ -3272,14 +3264,14 @@ The subsequent 2026-08-21 core-result/error closure adds two independent
 corpora. The checksum-bound
 `conformance/golden-result-envelope/live/manifest.sha256` binds 25 production
 JSON/SSE fixtures at SHA-256
-`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` result-envelope authorities; extension result
 types remain separately bounded by `MCP-BASE-006`. The separate
 `conformance/golden-error-mapping/live/manifest.sha256` binds twelve canonical
 complete HTTP responses across the eight frozen ordinary error families at
 SHA-256
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
 Two live-listener tests cover every fixture. Existing readable-`initialize`
 and path-specific `-32602`, input-response, and request-state evidence remain
 explicit supplements; the ordinary corpus does not claim every data-bearing

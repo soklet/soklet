@@ -31,19 +31,14 @@ import static java.util.Objects.requireNonNull;
  * Immutable declaration of an MCP client request that an operation may emit.
  *
  * <p>The declaration binds a core client request method to the complete set
- * of client capabilities required to emit it. Soklet 4.0 accepts only the
- * core {@code elicitation/create}, {@code sampling/createMessage}, and
- * {@code roots/list} methods; this type is not an extension escape hatch.
+ * of client capabilities required to emit it. Soklet supports only form and
+ * URL elicitation through {@code elicitation/create}; this type is not an
+ * extension escape hatch.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public final class McpInputRequestDeclaration {
-	@NonNull
-	private static final Set<@NonNull McpClientCapability>
-			OPTIONAL_SAMPLING_CAPABILITIES = Set.of(
-					McpClientCapability.SAMPLING_CONTEXT,
-					McpClientCapability.SAMPLING_TOOLS);
 	@NonNull
 	private final McpInputRequestType inputRequestType;
 	@NonNull
@@ -61,7 +56,7 @@ public final class McpInputRequestDeclaration {
 	 * @param requirement when the capabilities are required
 	 * @throws NullPointerException if an argument or capability is null
 	 * @throws IllegalArgumentException if the type or capability combination
-	 * is not one of Soklet 4.0's supported core declarations
+	 * is not one of Soklet's supported core declarations
 	 */
 	private McpInputRequestDeclaration(
 			@NonNull McpInputRequestType inputRequestType,
@@ -113,64 +108,6 @@ public final class McpInputRequestDeclaration {
 			@NonNull McpInputRequirement requirement) {
 		return new McpInputRequestDeclaration(McpInputRequestType.ELICITATION_URL,
 				Set.of(McpClientCapability.ELICITATION_URL), requirement);
-	}
-
-	/**
-	 * Creates a sampling declaration.
-	 *
-	 * <p>SEP-2577 marks Sampling deprecated in MCP 2026-07-28, with
-	 * specification removal eligible no earlier than 2027-07-28. Prefer direct
-	 * model-provider integration. Soklet keeps this factory functional for every
-	 * supported profile containing Sampling and has made no Java API-removal
-	 * decision.
-	 *
-	 * <p>Base {@link McpClientCapability#SAMPLING} support is included
-	 * automatically. The supplied set may additionally contain only
-	 * {@link McpClientCapability#SAMPLING_CONTEXT} and
-	 * {@link McpClientCapability#SAMPLING_TOOLS}.
-	 *
-	 * @param optionalCapabilities optional sampling capabilities
-	 * @param requirement when sampling support is required
-	 * @return sampling declaration
-	 * @throws NullPointerException if an argument or capability is null
-	 * @throws IllegalArgumentException if anything other than an optional
-	 * sampling capability is supplied
-	 */
-	@NonNull
-	public static McpInputRequestDeclaration fromSampling(
-			@NonNull Set<@NonNull McpClientCapability> optionalCapabilities,
-			@NonNull McpInputRequirement requirement) {
-		requireNonNull(optionalCapabilities);
-		Set<McpClientCapability> capabilities = new LinkedHashSet<>();
-		capabilities.add(McpClientCapability.SAMPLING);
-		for (McpClientCapability capability : optionalCapabilities) {
-			requireNonNull(capability);
-			if (!OPTIONAL_SAMPLING_CAPABILITIES.contains(capability))
-				throw new IllegalArgumentException(
-						"Only optional sampling capabilities may be supplied.");
-			capabilities.add(capability);
-		}
-		return new McpInputRequestDeclaration(McpInputRequestType.SAMPLING,
-				capabilities, requirement);
-	}
-
-	/**
-	 * Creates a roots-list declaration.
-	 *
-	 * <p>SEP-2577 marks Roots deprecated in MCP 2026-07-28, with specification
-	 * removal eligible no earlier than 2027-07-28. Prefer explicit tool
-	 * parameters, resource URIs, or server configuration. Soklet keeps this
-	 * factory functional for every supported profile containing Roots and has
-	 * made no Java API-removal decision.
-	 *
-	 * @param requirement when roots support is required
-	 * @return roots-list declaration
-	 */
-	@NonNull
-	public static McpInputRequestDeclaration fromRoots(
-			@NonNull McpInputRequirement requirement) {
-		return new McpInputRequestDeclaration(McpInputRequestType.ROOTS,
-				Set.of(McpClientCapability.ROOTS), requirement);
 	}
 
 	/** @return core client-input request type */
@@ -235,19 +172,6 @@ public final class McpInputRequestDeclaration {
 			case ELICITATION_URL -> requireExactCapabilities(capabilities,
 					McpClientCapability.ELICITATION_URL,
 					"URL-elicitation declarations require exactly the ELICITATION_URL capability.");
-			case SAMPLING -> {
-				Set<McpClientCapability> allowed = Set.of(
-						McpClientCapability.SAMPLING,
-						McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS);
-				if (!capabilities.contains(McpClientCapability.SAMPLING)
-						|| !allowed.containsAll(capabilities))
-					throw new IllegalArgumentException(
-							"Sampling declarations require SAMPLING and only sampling capabilities.");
-			}
-			case ROOTS -> requireExactCapabilities(capabilities,
-					McpClientCapability.ROOTS,
-					"Roots declarations require exactly the ROOTS capability.");
 		}
 	}
 
@@ -264,8 +188,6 @@ public final class McpInputRequestDeclaration {
 			@NonNull McpInputRequestType inputRequestType) {
 		return switch (inputRequestType) {
 			case ELICITATION_FORM, ELICITATION_URL -> "elicitation/create";
-			case SAMPLING -> "sampling/createMessage";
-			case ROOTS -> "roots/list";
 		};
 	}
 }

@@ -795,8 +795,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertEquals(PROTOCOL_VERSION, context.getProtocolVersion());
 			McpClientCapabilities capabilities =
 					context.getClientCapabilities().orElseThrow();
-			Assertions.assertTrue(capabilities.supports(McpClientCapability.ROOTS));
-			Assertions.assertFalse(capabilities.supports(McpClientCapability.SAMPLING));
+			Assertions.assertTrue(capabilities.toJson().find("roots").isPresent());
+			Assertions.assertFalse(capabilities.toJson().find("sampling").isPresent());
 			Assertions.assertTrue(capabilities.toJson().find("roots").isPresent());
 			Assertions.assertTrue(
 					context.getRequestedResourceSubscriptionUris().isEmpty(),

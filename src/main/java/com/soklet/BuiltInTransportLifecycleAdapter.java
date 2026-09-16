@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -381,7 +382,7 @@ final class BuiltInTransportLifecycleAdapter {
 			} catch (RuntimeException | Error catchUpFailure) {
 				if (startFailure == null)
 					throw catchUpFailure;
-				if (startFailure != catchUpFailure)
+				if (!sameInstance(startFailure, catchUpFailure))
 					startFailure.addSuppressed(catchUpFailure);
 			}
 
@@ -838,7 +839,7 @@ final class BuiltInTransportLifecycleAdapter {
 			Throwable primary = requireNonNull(generation.startupFailure.get());
 			generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 					GenerationStartupState.FAILED);
-			if (primary == exactCause)
+			if (sameInstance(primary, exactCause))
 				generation.signal.signalTerminationFailure(primary);
 			else
 				generation.group.trySuppressFailureBeforeFreeze(
@@ -1116,7 +1117,7 @@ final class BuiltInTransportLifecycleAdapter {
 			residual = requireNonNull(this.operations.residualActivity(),
 					"operations.residualActivity()");
 		} catch (Throwable diagnosticFailure) {
-			if (diagnosticFailure != failure)
+			if (!sameInstance(diagnosticFailure, failure))
 				failure.addSuppressed(diagnosticFailure);
 			residual = Set.of();
 		}
@@ -1139,7 +1140,7 @@ final class BuiltInTransportLifecycleAdapter {
 				.primaryEventsInSequence().stream()
 				.flatMap(event -> event.cause().stream())
 				.toList());
-		if (failures.stream().noneMatch(candidate -> candidate == failure))
+		if (failures.stream().noneMatch(candidate -> sameInstance(candidate, failure)))
 			failures.add(failure);
 		return List.copyOf(failures);
 	}

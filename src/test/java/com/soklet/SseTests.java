@@ -1964,6 +1964,7 @@ public class SseTests {
 				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for missing Host header");
+				assertFreshResponseDate(rawHeaders);
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
 		}
@@ -3487,6 +3488,46 @@ public class SseTests {
 	}
 
 	@Test
+	public void handshakeSerializersAddFreshDateAndPreserveExplicitDate() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		Method handshake = DefaultSseServer.class.getDeclaredMethod("createHandshakeHttpResponse", HttpRequestResult.class);
+		handshake.setAccessible(true);
+		Method failsafe = DefaultSseServer.class.getDeclaredMethod("createFailsafeHandshakeHttpResponse", StatusCode.class);
+		failsafe.setAccessible(true);
+		for (StatusCode status : List.of(StatusCode.HTTP_400, StatusCode.HTTP_408, StatusCode.HTTP_414,
+				StatusCode.HTTP_431, StatusCode.HTTP_500, StatusCode.HTTP_503)) {
+			assertFreshResponseDate(new String((byte[]) failsafe.invoke(null, status), StandardCharsets.ISO_8859_1));
+		}
+		String explicitDate = "Thu, 01 Jan 1970 00:00:00 GMT";
+		for (boolean accepted : List.of(false, true)) {
+			for (boolean explicit : List.of(false, true)) {
+				MarshaledResponse response = MarshaledResponse.withStatusCode(accepted ? 200 : 503)
+						.headers(explicit ? Map.of("dAtE", Set.of(explicitDate)) : Map.of()).build();
+				HttpRequestResult result = HttpRequestResult.withMarshaledResponse(response)
+						.sseHandshakeResult(accepted ? SseHandshakeResult.accept() : null).build();
+				String wire = new String((byte[]) handshake.invoke(server, result), StandardCharsets.ISO_8859_1);
+				if (explicit)
+					Assertions.assertEquals(List.of(explicitDate), responseDateValues(wire));
+				else
+					assertFreshResponseDate(wire);
+			}
+		}
+	}
+
+	private static List<String> responseDateValues(String wire) {
+		return wire.substring(0, wire.indexOf("\r\n\r\n")).lines()
+				.filter(line -> line.regionMatches(true, 0, "Date:", 0, 5))
+				.map(line -> line.substring(5).trim()).toList();
+	}
+
+	private static void assertFreshResponseDate(String wire) {
+		List<String> values = responseDateValues(wire);
+		Assertions.assertEquals(1, values.size(), wire);
+		java.time.Instant date = HttpDate.fromHeaderValue(values.get(0)).orElseThrow();
+		Assertions.assertTrue(Math.abs(Duration.between(date, java.time.Instant.now()).toSeconds()) <= 2, wire);
+	}
+
+	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
@@ -3512,17 +3553,31 @@ public class SseTests {
 		Assertions.assertEquals(2, parts.length, "Missing header/body separator");
 
 		String[] lines = parts[0].split("\\r?\\n");
-		Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 503"), "Expected 503 status line");
+		Assertions.assertEquals("HTTP/1.1 503 Service Unavailable", lines[0]);
+		assertFreshResponseDate(output);
 
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines).subList(1, lines.length));
 
 		Assertions.assertEquals("one", firstOrEmpty(headers, "x-test"));
 		Assertions.assertEquals("text/plain", firstOrEmpty(headers, "content-type"));
+		Assertions.assertEquals("7", firstOrEmpty(headers, "content-length"));
 
 		String setCookie = firstOrEmpty(headers, "set-cookie");
 		Assertions.assertTrue(setCookie.contains("session=abc"), "Missing Set-Cookie header");
 
 		Assertions.assertEquals("payload", parts[1]);
+	}
+
+	@Test
+	public void unknownHandshakeStatusRetainsRequiredSeparatorAndLatin1Headers() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		Method method = DefaultSseServer.class.getDeclaredMethod("createHandshakeHttpResponse", HttpRequestResult.class);
+		method.setAccessible(true);
+		byte[] bytes = (byte[]) method.invoke(server, HttpRequestResult.withMarshaledResponse(
+				MarshaledResponse.withStatusCode(599).headers(Map.of("X-Text", Set.of("\u00e9"))).build()).build());
+		String wire = new String(bytes, StandardCharsets.ISO_8859_1);
+		Assertions.assertTrue(wire.startsWith("HTTP/1.1 599 \r\n"), wire);
+		Assertions.assertTrue(wire.contains("X-Text: \u00e9\r\n"), wire);
 	}
 
 	@Test

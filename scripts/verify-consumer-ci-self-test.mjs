@@ -27,6 +27,7 @@ export function verifyConsumerCiContract(workflow, installationScript, consumerR
     "{ jdk: '25', pin: toystoreJava, environment: SOKLET_RELEASE_TOYSTORE_JAVA_HOME }",
     'install-pinned-node-linux-x64.sh', 'install-pinned-corretto-linux-x64.sh',
     'install-pinned-maven-linux-x64.sh', 'install-pinned-gradle-linux-x64.sh',
+    'javadocJava "${RUNNER_TEMP}"',
     '-Dgpg.skip=true -DskipTests clean package',
     'org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file',
     'node verification/consumer-build/self-test.mjs',
@@ -36,6 +37,8 @@ export function verifyConsumerCiContract(workflow, installationScript, consumerR
   ]) assert.ok(job.includes(required), `Consumer CI contract omitted ${required}`);
   assert.ok(job.indexOf('java "${RUNNER_TEMP}"') < job.indexOf('-DskipTests clean package'),
     'Canonical JDK 17 must be installed before packaging');
+  assert.ok(job.indexOf('javadocJava "${RUNNER_TEMP}"') < job.indexOf('-DskipTests clean package'),
+    'Separate checksum-pinned Javadoc JDK must be installed before packaging');
   assert.ok(job.indexOf('consumer-prewarm/pom.xml') < job.indexOf('node verification/consumer-build/verify.mjs'),
     'Maven plugin preparation must precede the independent consumer run');
   assert.ok(!job.includes('actions/setup-java@'), 'Consumer CI must use checksum-pinned Java');

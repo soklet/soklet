@@ -969,11 +969,17 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	void malformedCookiePercentEncodingIsRejected() {
+	void literalCookiePercentSignsArePreservedAlongsideEncodedValues() {
 		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("Cookie", Set.of("session=%ZZ"));
+		headers.put("Cookie", Set.of("session=%ZZ; percent=100%; short=%A; mixed=%25%ZZ; neighbor=ok; encoded=%E2%9C%93"));
 
-		assertThrows(IllegalRequestException.class, () -> Utilities.extractCookiesFromHeaders(headers));
+		var cookies = Utilities.extractCookiesFromHeaders(headers);
+		assertEquals(Set.of("%ZZ"), cookies.get("session"));
+		assertEquals(Set.of("100%"), cookies.get("percent"));
+		assertEquals(Set.of("%A"), cookies.get("short"));
+		assertEquals(Set.of("%%ZZ"), cookies.get("mixed"));
+		assertEquals(Set.of("ok"), cookies.get("neighbor"));
+		assertEquals(Set.of("✓"), cookies.get("encoded"));
 	}
 
 	@Test

@@ -149,21 +149,6 @@ public interface McpRequestContext {
 	Optional<@NonNull String> getApplicationRequestState();
 
 	/**
-	 * Returns the protocol's per-request log-level metadata.
-	 *
-	 * <p>SEP-2577 marks MCP Logging deprecated in the 2026-07-28 profile, with
-	 * earliest specification removal eligibility on or after 2027-07-28. Both
-	 * This accessor and its returned type remain supported Soklet API for every
-	 * supported profile containing the wire feature; Soklet has made no Java
-	 * API-removal decision. Exposing the value neither advertises nor implements
-	 * MCP Logging; applications use Soklet's existing observability path.
-	 *
-	 * @return deprecated log level, if supplied
-	 */
-	@NonNull
-	Optional<@NonNull McpLogLevel> getLogLevel();
-
-	/**
 	 * Returns the validated distributed trace context supplied through MCP
 	 * request metadata. This value does not fall back to HTTP trace headers;
 	 * those remain independently available from {@link #getRequest()}.

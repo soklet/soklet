@@ -67,6 +67,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static com.soklet.Utilities.emptyByteArray;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -294,6 +295,9 @@ public final class Soklet implements AutoCloseable {
 		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
 		AtomicReference<Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
 		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
+		// The handler's effective request may be replaced by either interceptor hook. Paired
+		// lifecycle/metrics callbacks retain the original per-dispatch identity, as do HTTP
+		// stream handles, so observers never have to correlate caller-controlled request IDs.
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
 		AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 
@@ -359,7 +363,7 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				try {
-					lifecycleObserver.didStartRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get());
+					lifecycleObserver.didStartRequestHandling(serverType, request, resourceMethodHolder.get());
 				} catch (Throwable t) {
 					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
 									format("An exception occurred while invoking %s::didStartRequestHandling",
@@ -374,7 +378,7 @@ public final class Soklet implements AutoCloseable {
 
 				safelyCollectMetrics.accept(
 						format("An exception occurred while invoking %s::didStartRequestHandling", MetricsCollector.class.getSimpleName()),
-						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get()));
+						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(serverType, request, resourceMethodHolder.get()));
 
 				try {
 					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
@@ -415,7 +419,7 @@ public final class Soklet implements AutoCloseable {
 
 							return updatedMarshaledResponse;
 							} catch (Throwable t) {
-								if (t != resourceMethodResolutionExceptionHolder.get()) {
+								if (!sameInstance(t, resourceMethodResolutionExceptionHolder.get())) {
 									throwables.add(t);
 
 								safelyLog.accept(LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED,
@@ -564,10 +568,10 @@ public final class Soklet implements AutoCloseable {
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
 						try {
-							lifecycleObserver.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+							lifecycleObserver.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 						} catch (Throwable t) {
 							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 											format("An exception occurred while invoking %s::didFinishRequestHandling",
@@ -710,10 +714,10 @@ public final class Soklet implements AutoCloseable {
 
 					safelyCollectMetrics.accept(
 							format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
-							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
 					try {
-						lifecycleObserver.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+						lifecycleObserver.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 					} catch (Throwable t2) {
 						safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 										format("An exception occurred while invoking %s::didFinishRequestHandling",
@@ -914,8 +918,7 @@ public final class Soklet implements AutoCloseable {
 	private MarshaledResponse toMarshaledResponse(SseHandshakeResult.@NonNull Accepted accepted) {
 		requireNonNull(accepted);
 
-		Map<String, Set<String>> acceptedHeaders = accepted.getHeaders();
-		Map<String, Set<String>> headers = acceptedHeaders == null ? Map.of() : acceptedHeaders;
+		Map<String, Set<String>> headers = accepted.getHeaders();
 		LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_ACCEPTED_HANDSHAKE_HEADERS.size() + headers.size());
 
 		// Start with defaults
@@ -1134,7 +1137,7 @@ public final class Soklet implements AutoCloseable {
 
 		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", charset.name()))))
-				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset))
+				.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset))
 				.build();
 	}
 
@@ -1463,7 +1466,9 @@ public final class Soklet implements AutoCloseable {
 		public HttpRequestResult performHttpRequest(@NonNull Request request) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.HTTP);
 			try {
-				return performHttpRequestWhileAdmitted(requireNonNull(request));
+				// A caller may concurrently reuse an immutable Request. Each simulated
+				// dispatch needs its own identity, shared by handling and stream callbacks.
+				return performHttpRequestWhileAdmitted(requireNonNull(request).copy().finish());
 			} finally {
 				releaseScope.run();
 			}
@@ -1860,7 +1865,7 @@ public final class Soklet implements AutoCloseable {
 		public SseRequestResult performSseRequest(@NonNull Request request) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
-				return performSseRequestWhileAdmitted(requireNonNull(request));
+				return performSseRequestWhileAdmitted(requireNonNull(request).copy().finish());
 			} finally {
 				releaseScope.run();
 			}
@@ -2479,7 +2484,7 @@ public final class Soklet implements AutoCloseable {
 			this.getEventConsumers().forEach((consumer, context) -> {
 				try {
 					// 2. Derive the key from the subscriber's context
-					Object clientContext = context == NULL_CONTEXT_SENTINEL
+					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL)
 							? null : context;
 					T key = keySelector.apply(clientContext);
 
@@ -2508,7 +2513,7 @@ public final class Soklet implements AutoCloseable {
 			this.getCommentConsumers().forEach((consumer, context) -> {
 				try {
 					// 2. Derive key
-					Object clientContext = context == NULL_CONTEXT_SENTINEL
+					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL)
 							? null : context;
 					T key = keySelector.apply(clientContext);
 

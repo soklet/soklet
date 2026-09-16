@@ -299,7 +299,7 @@ public final class MultipartField {
 		}
 
 		@NonNull
-		public Copier contentType(@Nullable Charset charset) {
+		public Copier charset(@Nullable Charset charset) {
 			this.builder.charset(charset);
 			return this;
 		}
@@ -343,6 +343,11 @@ public final class MultipartField {
 
 	/**
 	 * The filename associated with this field, if available.
+	 * <p>
+	 * This is untrusted client input, not a safe filesystem path. It may contain
+	 * directory components or other unsafe characters (including decoded HTML
+	 * entities). Applications must validate it and select their own storage path;
+	 * do not resolve it directly against an upload directory.
 	 *
 	 * @return the filename, or {@link Optional#empty()} if not available
 	 */

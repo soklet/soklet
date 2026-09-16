@@ -53,16 +53,12 @@ public class McpInputResponsesPublicRuntimeTests {
 	private static final String TOOL_NAME = "retry.tool";
 	private static final String PROMPT_NAME = "retry.prompt";
 	private static final URI RESOURCE_URI = URI.create("test://retry/resource");
-	private static final String ALL_INPUT_CAPABILITIES =
-			"{\"elicitation\":{\"form\":{}},\"sampling\":{},\"roots\":{}}";
+	private static final String ALL_INPUT_CAPABILITIES = "{\"elicitation\":{\"form\":{},\"url\":{}}}";
 	private static final String VALID_INPUT_RESPONSES = """
 			{"approval":{"action":"accept","content":{"name":"Alice"},
 			 "com.example/responseExtension":"preserved"},
-			 "sample":{"role":"assistant","content":{"type":"text",
-			 "text":"Paris"},"model":"fixture-model","stopReason":"endTurn",
-			 "com.example/sampleExtension":true},
-			 "roots":{"roots":[{"uri":"file:///tmp/project","name":"Project",
-			 "com.example/rootExtension":1}],"com.example/rootsExtension":false},
+			 "url":{"action":"accept","content":{"city":"Paris"},
+			 "com.example/urlExtension":true},
 			 "extra":{"action":"decline","com.example/extraExtension":[true]}}
 			""".replaceAll("\\s+", "");
 
@@ -77,10 +73,8 @@ public class McpInputResponsesPublicRuntimeTests {
 				new ConcurrentHashMap<>();
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
-				.fromSampling(Set.of(), McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonObjectArguments()
@@ -91,7 +85,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					handlerContexts.put(TOOL_NAME, request);
 					return McpCompleteResult.fromToolText("tool retry complete");
 				})
-				.addInputRequestDeclarations(form, sampling, roots)
+				.addInputRequestDeclarations(form, roots)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(PROMPT_NAME)
@@ -106,7 +100,7 @@ public class McpInputResponsesPublicRuntimeTests {
 											McpTextContent.fromText(
 													"prompt retry complete"))));
 				})
-				.addInputRequestDeclarations(form, sampling, roots)
+				.addInputRequestDeclarations(form, roots)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "retry resource")
@@ -121,7 +115,7 @@ public class McpInputResponsesPublicRuntimeTests {
 											.build())
 									.build());
 				})
-				.addInputRequestDeclarations(form, sampling, roots)
+				.addInputRequestDeclarations(form, roots)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
@@ -337,7 +331,7 @@ public class McpInputResponsesPublicRuntimeTests {
 							+ "\"arguments\":{},\"inputResponses\":{"
 							+ "\"approval\":{\"action\":\"accept\","
 							+ "\"content\":{\"name\":\"Alice\"}},"
-							+ "\"ignored-extra\":{\"roots\":[]}}",
+							+ "\"ignored-extra\":{\"action\":\"accept\"}}",
 					ALL_INPUT_CAPABILITIES);
 			assertComplete(complete, "complete");
 			Assertions.assertTrue(complete.body().contains(
@@ -365,7 +359,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(McpInputRequestDeclaration.fromRoots(
+				.addInputRequestDeclarations(McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.REQUIRED))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
@@ -451,7 +445,7 @@ public class McpInputResponsesPublicRuntimeTests {
 	private static void assertExactInputResponses(
 			@NonNull McpRequestContext request) {
 		McpInputResponses responses = request.getInputResponses();
-		Assertions.assertEquals(List.of("approval", "sample", "roots", "extra"),
+		Assertions.assertEquals(List.of("approval", "url", "extra"),
 				new ArrayList<>(responses.asMap().keySet()));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> responses.asMap().clear());
@@ -466,25 +460,12 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpJsonObject approvalContent = object(approval, "content");
 		Assertions.assertEquals("Alice", string(approvalContent, "name"));
 
-		McpJsonObject sample = Assertions.assertInstanceOf(McpJsonObject.class,
-				responses.find("sample").orElseThrow());
-		Assertions.assertEquals("assistant", string(sample, "role"));
-		Assertions.assertEquals("fixture-model", string(sample, "model"));
+		McpJsonObject url = Assertions.assertInstanceOf(McpJsonObject.class,
+				responses.find("url").orElseThrow());
+		Assertions.assertEquals("accept", string(url, "action"));
 		Assertions.assertEquals(McpJsonBoolean.fromValue(true),
-				sample.find("com.example/sampleExtension").orElseThrow());
-		McpJsonObject sampleContent = object(sample, "content");
-		Assertions.assertEquals("text", string(sampleContent, "type"));
-		Assertions.assertEquals("Paris", string(sampleContent, "text"));
-
-		McpJsonObject roots = Assertions.assertInstanceOf(McpJsonObject.class,
-				responses.find("roots").orElseThrow());
-		McpJsonArray rootValues = Assertions.assertInstanceOf(McpJsonArray.class,
-				roots.find("roots").orElseThrow());
-		Assertions.assertEquals(1, rootValues.getElements().size());
-		McpJsonObject root = Assertions.assertInstanceOf(McpJsonObject.class,
-				rootValues.getElements().get(0));
-		Assertions.assertEquals("file:///tmp/project", string(root, "uri"));
-		Assertions.assertEquals("Project", string(root, "name"));
+				url.find("com.example/urlExtension").orElseThrow());
+		Assertions.assertEquals("Paris", string(object(url, "content"), "city"));
 
 		McpJsonObject extra = Assertions.assertInstanceOf(McpJsonObject.class,
 				responses.find("extra").orElseThrow());

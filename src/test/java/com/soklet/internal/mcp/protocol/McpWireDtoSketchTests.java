@@ -234,10 +234,6 @@ public class McpWireDtoSketchTests {
 		Assertions.assertSame(McpJsonNull.INSTANCE, serialized.members().get("futureNull"));
 		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.ELICITATION_FORM));
 		Assertions.assertFalse(capabilities.supports(McpCoreClientCapability.ELICITATION_URL));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.ROOTS));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.SAMPLING));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.SAMPLING_CONTEXT));
-		Assertions.assertFalse(capabilities.supports(McpCoreClientCapability.SAMPLING_TOOLS));
 
 		McpClientCapabilities legacyEmptyElicitation = McpClientCapabilities.builder()
 				.elicitation(McpJsonObject.empty())
@@ -274,9 +270,9 @@ public class McpWireDtoSketchTests {
 	public void request_metadata_uses_exact_final_schema_keys_and_preserves_extensions() {
 		McpClientCapabilities.Builder capabilitiesBuilder = McpClientCapabilities.builder()
 				.capability(McpCoreClientCapability.ELICITATION_FORM)
-				.capability(McpCoreClientCapability.SAMPLING_CONTEXT);
+				.capability(McpCoreClientCapability.ELICITATION_URL);
 		McpClientCapabilities capabilities = capabilitiesBuilder.build();
-		capabilitiesBuilder.capability(McpCoreClientCapability.ROOTS);
+		capabilitiesBuilder.capability(McpCoreClientCapability.ELICITATION_URL);
 		McpImplementationMetadata clientInformation =
 				McpImplementationMetadata.withNameAndVersion("test-client", "1.2.3");
 		BigInteger progress = new BigInteger("184467440737095516160");
@@ -439,9 +435,9 @@ public class McpWireDtoSketchTests {
 				() -> new McpEmbeddedInputRequest(declaration, null,
 						McpJsonObject.empty()));
 		McpEmbeddedInputRequest rootsRequest = McpEmbeddedInputRequest.fromDeclaration(
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL),
-				McpJsonObject.empty());
-		Assertions.assertEquals(McpJsonObject.empty(),
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL),
+				new McpJsonObject(Map.of("mode", new McpJsonString("url"), "message", new McpJsonString("Authorize access"), "url", new McpJsonString("https://example.com/authorize"))));
+		Assertions.assertEquals(rootsRequest.params(),
 				rootsRequest.toJsonObject().members().get("params"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> requestsBuilder.inputRequest("approval", inputRequest));
@@ -565,8 +561,8 @@ public class McpWireDtoSketchTests {
 				unsupportedData.members().get("supported"));
 
 		Set<McpClientCapabilityRequirement> missing = Set.of(
-				McpCoreClientCapability.SAMPLING,
-				McpCoreClientCapability.SAMPLING_CONTEXT);
+				McpCoreClientCapability.ELICITATION_FORM,
+				McpCoreClientCapability.ELICITATION_URL);
 		McpJsonRpcError missingCapability =
 				McpJsonRpcError.missingRequiredClientCapabilities(missing);
 		Assertions.assertEquals(McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
@@ -575,9 +571,10 @@ public class McpWireDtoSketchTests {
 				(McpJsonObject) missingCapability.data().orElseThrow();
 		McpJsonObject requiredCapabilities =
 				(McpJsonObject) missingData.members().get("requiredCapabilities");
-		McpJsonObject sampling =
-				(McpJsonObject) requiredCapabilities.members().get("sampling");
-		Assertions.assertTrue(sampling.members().containsKey("context"));
+		McpJsonObject elicitation =
+				(McpJsonObject) requiredCapabilities.members().get("elicitation");
+		Assertions.assertTrue(elicitation.members().containsKey("form"));
+		Assertions.assertTrue(elicitation.members().containsKey("url"));
 		Assertions.assertEquals(new McpJsonNumber(-32021L),
 				missingCapability.toJsonObject().members().get("code"));
 	}

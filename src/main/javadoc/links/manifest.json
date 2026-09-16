@@ -1,0 +1,27 @@
+{
+  "description": "Versioned Javadoc indexes; stored UTF-8 with LF line endings. SHA-256 pins the stored bytes.",
+  "indexes": [
+    {
+      "path": "java-26/element-list",
+      "url": "https://docs.oracle.com/en/java/javase/26/docs/api/",
+      "sha256": "3143beaa92ca9819f9c5792eba5d804f4c34a9ed6100aed6c91fd9c1dd329642",
+      "source": "https://docs.oracle.com/en/java/javase/26/docs/api/element-list"
+    },
+    {
+      "path": "jsr305-3.0.2/package-list",
+      "url": "https://javadoc.io/static/com.google.code.findbugs/jsr305/3.0.2/",
+      "sha256": "37ee8c44844e378307d6b896bd66fa0cfd34a3fddb3ba71f516c1c98f0cf7463",
+      "upstreamIndexSha256": "b8c4fc56316190ac5fcbac8833b2f49bfafc783a02a2142f6e41b7d391260ee9",
+      "archiveSha256": "3791d601c8757344a5b9714a1122e2f852743114a9d55c1b1fed64b13116c353",
+      "source": "https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2-javadoc.jar"
+    },
+    {
+      "path": "jspecify-1.0.1/element-list",
+      "url": "https://javadoc.io/static/org.jspecify/jspecify/1.0.1/",
+      "sha256": "1dba046069510663f78b129cc61773be18ad96170b8eb8f15affea922fc65be2",
+      "upstreamIndexSha256": "1dba046069510663f78b129cc61773be18ad96170b8eb8f15affea922fc65be2",
+      "archiveSha256": "2d93f0c653fe8bf469783c513a43940e5ad7c694a24a24ab7ac93c5d1277d212",
+      "source": "https://repo.maven.apache.org/maven2/org/jspecify/jspecify/1.0.1/jspecify-1.0.1-javadoc.jar"
+    }
+  ]
+}

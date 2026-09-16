@@ -1172,6 +1172,40 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void transportAddsFreshDateAndPreservesExplicitDateWithoutDuplicates() throws Exception {
+		String explicitDate = "Thu, 01 Jan 1970 00:00:00 GMT";
+		Options options = OptionsBuilder.newBuilder().withPort(0).withConcurrency(1).build();
+		EventLoop eventLoop = new EventLoop(options, new RecordingLogger(), (request, callback) -> {
+			List<Header> headers = "/explicit".equals(request.uri())
+					? List.of(new Header("dAtE", explicitDate)) : List.of();
+			callback.accept(new MicrohttpResponse(200, "OK", headers, ascii("pong")));
+		});
+		eventLoop.start();
+		try {
+			Thread.sleep(1_100L);
+			java.time.Instant beforeRequest = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+			for (String path : List.of("/fresh", "/explicit")) {
+				String response = sendRequestAndReadResponse(eventLoop.getPort(),
+						"GET " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+				List<String> dates = response.substring(0, response.indexOf("\r\n\r\n")).lines()
+						.filter(line -> line.regionMatches(true, 0, "Date:", 0, 5))
+						.map(line -> line.substring(5).trim()).toList();
+				Assertions.assertEquals(1, dates.size(), response);
+				if ("/explicit".equals(path)) {
+					Assertions.assertEquals(explicitDate, dates.get(0));
+				} else {
+					java.time.Instant date = com.soklet.HttpDate.fromHeaderValue(dates.get(0)).orElseThrow();
+					Assertions.assertFalse(date.isBefore(beforeRequest), "Date was cached before response generation");
+					Assertions.assertFalse(date.isAfter(java.time.Instant.now()));
+				}
+			}
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void pipelinedMalformedChunkAfterResponseReturnsBadRequest() throws Exception {
 		Options options = OptionsBuilder.newBuilder()
 				.withPort(0)
@@ -1201,6 +1235,13 @@ public class MicrohttpInternalTests {
 
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
 			Assertions.assertTrue(response.contains("\r\n\r\npongHTTP/1.1 400 Bad Request"), response);
+			String fallback = response.substring(response.indexOf("HTTP/1.1 400 Bad Request"));
+			String date = fallback.lines().filter(line -> line.startsWith("Date: "))
+					.findFirst().orElseThrow().substring("Date: ".length());
+			Assertions.assertTrue(com.soklet.HttpDate.fromHeaderValue(date).isPresent(), date);
+			Assertions.assertTrue(Math.abs(Duration.between(
+					com.soklet.HttpDate.fromHeaderValue(date).orElseThrow(),
+					java.time.Instant.now()).toSeconds()) <= 2, date);
 			Assertions.assertTrue(logger.containsFailureEvent("malformed_request"), logger.events().toString());
 			Assertions.assertFalse(logger.containsFailureEvent("write_error"), logger.events().toString());
 		} finally {

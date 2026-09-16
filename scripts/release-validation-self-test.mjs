@@ -471,6 +471,16 @@ try {
   assert.equal(tracked.value.formatVersion, 2);
   assert.equal(tracked.gates.length, 26);
   assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
+  assert.deepEqual(tracked.toolchains.javadocJava, {
+    archive: 'amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',
+    archiveSha256: 'f61206891b8e1009b117eefe38784cf31b0a5cdb02fd2e023556f436b85dedaa',
+    distribution: 'corretto',
+    distributionUrl:
+      'https://corretto.aws/downloads/resources/26.0.2.11.1/amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',
+    runtimeVersion: '26.0.2.1+11-FR',
+    vendorVersion: 'Corretto-26.0.2.11.1',
+    version: '26.0.2.1',
+  });
   assert.deepEqual(tracked.toolchains.coreJdk21, {
     archive: 'amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
     archiveSha256: 'f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2',
@@ -583,7 +593,8 @@ try {
   assert.match(trackedBarebonesGate.reason, /canonical vendored Soklet 4.0.0 JAR/);
   for (const gateId of ['soklet-servlet-javax', 'soklet-servlet-jakarta']) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
-    assert.match(gate.reason, /uncommitted local POM/);
+    assert.match(gate.reason, /owner-created retrievable commit and a fresh pin/);
+    assert.match(gate.reason, /existing pin is not the final candidate/);
     assert.equal(gate.defaultArtifactIdentity, 'com.soklet:soklet:4.0.0');
     assert.equal(gate.defaultArtifactSha256, null);
     assert.equal(gate.artifactIdentity, `com.soklet:${gateId}:2.0.0`);
@@ -1343,6 +1354,22 @@ try {
     /\tif \[\[ "\$gate_id" == "toystore-app" \|\| "\$gate_id" == "soklet-otel" \]\]; then\n([\s\S]*?)\n\tfi\n/,
   );
   assert.notEqual(candidateOnlyBranch, null);
+  const candidateJavadocExtraction = releaseValidator.slice(
+    releaseValidator.indexOf('\ncandidate_javadoc_root="$work_root/candidate-javadoc"'),
+    releaseValidator.indexOf('\ndeclare -A gate_repository'),
+  );
+  assert.match(candidateJavadocExtraction, /"\$evidence_helper" sha256 "\$candidate_javadoc_jar"/);
+  assert.match(candidateJavadocExtraction, /cd "\$candidate_javadoc_root"\n\t"\$core_java_home\/bin\/jar" -xf "\$candidate_javadoc_jar"/);
+  assert.match(candidateJavadocExtraction, /-s "\$candidate_javadoc_root\/element-list"/);
+  assert.match(candidateJavadocExtraction, /! -L "\$candidate_javadoc_root\/element-list"/);
+  assert.match(candidateJavadocExtraction, /Candidate Javadoc JAR changed during extraction/);
+  assert.equal(releaseValidator.match(/"\$core_java_home\/bin\/jar" -xf "\$candidate_javadoc_jar"/g)?.length, 1);
+  const mavenDownstreamFunction = releaseValidator.match(/run_maven_downstream\(\) \{([\s\S]*?)\n\}\n/)[1];
+  assert.equal(mavenDownstreamFunction.match(/-Dsoklet\.javadoc\.location="\$candidate_javadoc_root"/g)?.length, 3);
+  assert.equal(mavenDownstreamFunction.match(/clean verify/g)?.length, 3);
+  for (const leg of mavenDownstreamFunction.matchAll(/mvn -B -ntp[\s\S]*?clean verify/g))
+    assert.match(leg[0], /-Dsoklet\.javadoc\.location="\$candidate_javadoc_root"/);
+  assert.doesNotMatch(candidateJavadocExtraction, /curl|https?:\/\//);
   assert.equal(candidateOnlyBranch[1].match(/clean verify/g)?.length, 1);
   assert.match(candidateOnlyBranch[1], /downstream_java_home=\$core_java_home/);
   assert.match(candidateOnlyBranch[1], /downstream_java_home=\$toystore_java_home/);
@@ -1492,7 +1519,14 @@ run_barebones
   assert.match(pinnedJavaInstaller, /java\.runtime\.version/);
   assert.match(pinnedJavaInstaller, /java\.vendor\.version/);
   assert.match(pinnedJavaInstaller, /coreJdk21\)/);
-  assert.match(pinnedJavaInstaller, /\^21\\\.0\\\.\[0-9\]\+\(\\\.\[0-9\]\+\)\?\$/);
+  assert.match(pinnedJavaInstaller, /javadocJava\)/);
+  assert.match(pinnedJavaInstaller, /environment_name=SOKLET_JAVADOC_HOME/);
+  assert.match(pinnedJavaInstaller, /if \[\[ "\$expected_major" -eq 26 \]\]; then\n\trelease_kind=FR/);
+  assert.match(pinnedJavaInstaller, /"\$java_home\/bin\/javadoc" --version/);
+  assert.match(pinnedJavaInstaller, /if \[\[ "\$toolchain_name" == "java" \]\]; then\n\tprintf.*github_path/);
+  assert.match(releaseValidator, /actual_javadoc_java_runtime_version.*java\.runtime\.version/);
+  assert.match(releaseValidator, /actual_javadoc_version.*javadoc.*--version/);
+  assert.match(releaseValidator, /export SOKLET_EVIDENCE_JAVADOC_JAVA_VERSION=/);
 
   const readyManifest = JSON.parse(readFileSync(trackedManifestPath, 'utf8'));
   readyManifest.toolchains.coreJdk21 = {
@@ -1749,6 +1783,26 @@ run_barebones
     /READY gate core-jdk-21 cannot use unavailable toolchain coreJdk21/,
   );
   assertRejectsManifestMutation(
+    (manifest) => { delete manifest.toolchains.javadocJava; },
+    /toolchains keys must be exactly/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.toolchains.javadocJava.runtimeVersion = '26.0.2.1+11-LTS'; },
+    /Javadoc Java toolchain runtime version must be exactly 26\.0\.2\.1\+11-FR/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.toolchains.javadocJava.version = '26.0.2.2'; },
+    /Javadoc Java toolchain must pin an exact Corretto 26 build/,
+  );
+  for (const key of ['java', 'coreJdk21', 'toystoreJava']) {
+    assertRejectsManifestMutation(
+      (manifest) => {
+        manifest.toolchains[key].runtimeVersion = manifest.toolchains[key].runtimeVersion.replace('-LTS', '-FR');
+      },
+      /runtime version must be exactly .*LTS/,
+    );
+  }
+  assertRejectsManifestMutation(
     (manifest) => {
       manifest.toolchains.coreJdk21.version = '21.0.12.2';
       manifest.toolchains.coreJdk21.runtimeVersion = '21.0.12.2+9-LTS';
@@ -1933,6 +1987,7 @@ run_barebones
     SOKLET_EVIDENCE_GIT_VERSION: 'git version 2.50.1',
     SOKLET_EVIDENCE_GO_VERSION: 'go version go1.25.12 linux/amd64',
     SOKLET_EVIDENCE_JAVA_VERSION: '17.0.20',
+    SOKLET_EVIDENCE_JAVADOC_JAVA_VERSION: '26.0.2.1',
     SOKLET_EVIDENCE_MAVEN_VERSION: '3.9.16',
     SOKLET_EVIDENCE_NODE_VERSION: '26.5.0',
     SOKLET_EVIDENCE_NPM_VERSION: '11.17.0',
@@ -2365,7 +2420,8 @@ run_barebones
     );
     mkdirSync(dirname(path), { recursive: true });
     if (specification.candidateArtifact === 'gateToolchainDistribution') {
-      const toolchain = ready.toolchains[gate.toolchain];
+      const toolchain = ready.toolchains[
+        specification.role === 'javadoc-distribution' ? 'javadocJava' : gate.toolchain];
       writeFileSync(
         path,
         `distribution=${toolchain.distribution}\n`
@@ -2563,6 +2619,29 @@ run_barebones
     writeFileSync(coreJdk21DistributionPath, coreJdk21Distribution);
   }
 
+  const candidateBuildGate = ready.gates.find(({ id }) => id === 'candidate-build');
+  const candidateBuildRolePaths = rolePathsForGate(candidateBuildGate);
+  const javadocDistributionPath = candidateBuildRolePaths
+    .find((rolePath) => rolePath.startsWith('javadoc-distribution='))
+    .slice('javadoc-distribution='.length);
+  const javadocDistribution = readFileSync(javadocDistributionPath, 'utf8');
+  for (const [label, pattern, replacement] of [
+    ['sha', /^archiveSha256=.*$/m, `archiveSha256=${'9'.repeat(64)}`],
+    ['runtime', /^runtimeVersion=.*$/m, 'runtimeVersion=26.0.2.1+11-LTS'],
+  ]) {
+    writeFileSync(javadocDistributionPath, javadocDistribution.replace(pattern, replacement));
+    assert.throws(() => recordGateEvidence(
+      fixtureManifestPath, candidateCommit, artifactDescriptorPath, candidateBuildGate.id,
+      fixturePath(`evidence/javadoc-wrong-${label}.json`), candidateBuildRolePaths,
+    ), /does not match the gate's exact manifest toolchain distribution/);
+    writeFileSync(javadocDistributionPath, javadocDistribution);
+  }
+  assert.throws(() => recordGateEvidence(
+    fixtureManifestPath, candidateCommit, artifactDescriptorPath, candidateBuildGate.id,
+    fixturePath('evidence/javadoc-missing-receipt.json'),
+    candidateBuildRolePaths.filter((rolePath) => !rolePath.startsWith('javadoc-distribution=')),
+  ), /evidence roles and order must be exactly/);
+
   const matrixClosureGate = ready.gates.find(({ id }) => id === 'matrix-closure');
   function assertRejectsMatrixReport(label, text, pattern) {
     const path = fixturePath(
@@ -2674,6 +2753,7 @@ run_barebones
       interoperability.candidateSha256 === descriptor.artifacts.mainJar.sha256));
   assert.equal(evidence.toolchains.coreJdk21, '21.0.12.1');
   assert.equal(evidence.toolchains.java, '17.0.20');
+  assert.equal(evidence.toolchains.javadocJava, '26.0.2.1');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
 
   const savedMatrixResidualEvidence = readFileSync(

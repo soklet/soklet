@@ -1300,52 +1300,43 @@
     },
     {
       "id": "MCP-SAMPLING-001",
-      "disposition": "RELEASE_GATED",
+      "disposition": "NOT_APPLICABLE",
       "evidence": [
-        "release/release-validation-manifest.json",
-        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java"
+        "api/mcp/phase-4-freeze-rationale.md",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       ],
-      "releaseGates": [
-        "candidate-conformance"
-      ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+      "releaseGates": [],
+      "reason": ""
     },
     {
       "id": "MCP-SAMPLING-002",
-      "disposition": "CORE_COMPLETE",
+      "disposition": "NOT_APPLICABLE",
       "evidence": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
-        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+        "api/mcp/phase-4-freeze-rationale.md",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       ],
       "releaseGates": [],
       "reason": ""
     },
     {
       "id": "MCP-SAMPLING-003",
-      "disposition": "CORE_COMPLETE",
+      "disposition": "NOT_APPLICABLE",
       "evidence": [
-        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java"
+        "api/mcp/phase-4-freeze-rationale.md",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       ],
       "releaseGates": [],
       "reason": ""
     },
     {
       "id": "MCP-ROOTS-001",
-      "disposition": "RELEASE_GATED",
+      "disposition": "NOT_APPLICABLE",
       "evidence": [
-        "release/release-validation-manifest.json",
-        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
-        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpInputResponseValidatorTests.java",
-        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+        "api/mcp/phase-4-freeze-rationale.md",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       ],
-      "releaseGates": [
-        "candidate-conformance"
-      ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+      "releaseGates": [],
+      "reason": ""
     },
     {
       "id": "MCP-DISC-001",

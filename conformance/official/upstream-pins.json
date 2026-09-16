@@ -95,9 +95,13 @@
   },
   "scenarioInventory": {
     "fullCount": 50,
-    "selectedRunCount": 49,
+    "selectedRunCount": 45,
     "excludedNames": [
-      "completion-complete"
+      "completion-complete",
+      "input-required-result-basic-sampling",
+      "input-required-result-basic-list-roots",
+      "input-required-result-multiple-input-requests",
+      "input-required-result-capability-check"
     ],
     "serialization": {
       "encoding": "UTF-8",
@@ -108,7 +112,7 @@
       "order": "PINNED_CLI_OUTPUT"
     },
     "fullInventorySha256": "25a6351c04df32aa7866e5f962770c00cd14856250ac6c3bf2dbbef8f5985613",
-    "selectedRunSetSha256": "16904eae94d5cda8cc7114d3c05620903b9ea3ef3a99321978ba977fb47c9115"
+    "selectedRunSetSha256": "842360f4fe0d5a7aa2307a7f79e41fa115a28fbe73debd05721f0a2b10ec90ec"
   },
   "upstreamDriftReview": {
     "reviewedOn": "2026-09-13",

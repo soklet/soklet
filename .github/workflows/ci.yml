@@ -48,8 +48,24 @@ jobs:
       - name: Verify pinned JSON Schema Test Suite
         run: node scripts/json-schema-test-suite/verify.mjs
 
+      - name: Verify pinned Javadoc indexes
+        run: node scripts/verify-javadoc-links.mjs
+
+      - name: Self-test separate Javadoc toolchain installation
+        run: node scripts/verify-javadoc-toolchain-self-test.mjs
+
+      - name: Verify current release-history producer contracts
+        run: node scripts/produce-release-history-self-test.mjs
+
       - name: Run tests
         run: mvn -B -ntp clean test
+
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/test-javadoc-java-distribution.txt"
 
       - name: Package main, source, and Javadoc JARs
         run: mvn -B -ntp -DskipTests clean package
@@ -110,6 +126,13 @@ jobs:
           bash release/scripts/install-pinned-gradle-linux-x64.sh
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/consumer-gradle-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/packaged-consumer-javadoc-java-distribution.txt"
 
       - name: Package and install exact core JAR and POM
         shell: bash
@@ -347,6 +370,13 @@ jobs:
           mvn -B -ntp
           -Dtest=McpFinalTagGoldenWireProductionTests
           test
+
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/mcp-conformance-phase-5-javadoc-java-distribution.txt"
 
       - name: Package candidate and build candidate-artifact fixture
         shell: bash
@@ -651,6 +681,13 @@ jobs:
           restore-keys: |
             release-fuzz-history-${{ runner.os }}-${{ github.sha }}-
 
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/fuzz-nightly-history-javadoc-java-distribution.txt"
+
       - name: Package exact candidate main JAR
         run: mvn -B -ntp -DskipTests package
 
@@ -775,6 +812,13 @@ jobs:
             soak/target/soak-report.md
             soak/target/surefire-reports
             ${{ runner.temp }}/soak-nightly-java-distribution.txt
+
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/soak-nightly-javadoc-java-distribution.txt"
 
       - name: Package exact candidate main JAR
         run: mvn -B -ntp -DskipTests package
@@ -903,6 +947,13 @@ jobs:
         run: |
           node scripts/produce-release-history-self-test.mjs
           node scripts/produce-operational-history-self-test.mjs
+
+      - name: Install checksum-pinned Corretto 26 for Javadoc only
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/operational-history-javadoc-java-distribution.txt"
 
       - name: Build exact candidate main JAR
         run: mvn -B -ntp -DskipTests clean package

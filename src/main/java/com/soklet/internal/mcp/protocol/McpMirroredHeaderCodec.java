@@ -59,9 +59,12 @@ final class McpMirroredHeaderCodec {
 		requireNonNull(encodedValue);
 
 		if (encodedValue.startsWith(BASE64_PREFIX)
-				&& encodedValue.endsWith(BASE64_SUFFIX))
+				&& encodedValue.endsWith(BASE64_SUFFIX)) {
+			if (encodedValue.length() < BASE64_PREFIX.length() + BASE64_SUFFIX.length())
+				throw invalidValue();
 			return decodeBase64(encodedValue.substring(BASE64_PREFIX.length(),
 					encodedValue.length() - BASE64_SUFFIX.length()));
+		}
 
 		validatePlainValue(encodedValue);
 		return encodedValue;

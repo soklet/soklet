@@ -85,6 +85,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -133,18 +134,6 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
-	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
-	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
-	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE;
-	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE;
-	@NonNull
-	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE;
-	@NonNull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@NonNull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
@@ -176,14 +165,6 @@ final class DefaultSseServer implements SseServer {
 		DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
-
-		// Cache off a special failsafe response
-		FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400);
-		FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_414);
-		FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_431);
-		FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_408);
-		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
-		FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
 
 		// Create a sentinel ResourcePathDeclaration that represents "no match found".
 		// This allows us to cache negative lookups and avoid repeated O(n) scans.
@@ -831,7 +812,7 @@ final class DefaultSseServer implements SseServer {
 		this.idleBroadcastersByResourcePath = new ConcurrentLruMap<>(idleBroadcasterCacheCapacity, (resourcePath, broadcaster) -> {
 			try {
 				this.broadcastersByResourcePath.computeIfPresent(resourcePath, (rp, existing) -> {
-					if (existing == broadcaster && existing.getSseConnections().isEmpty())
+					if (sameInstance(existing, broadcaster) && existing.getSseConnections().isEmpty())
 						return null; // remove from main registry -> eligible for GC
 					return existing;
 				});
@@ -1039,7 +1020,7 @@ final class DefaultSseServer implements SseServer {
 				try {
 					getLifecycleAdapter().failedStart(adapterGeneration, error, false);
 				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != error)
+					if (!sameInstance(cleanupFailure, error))
 						error.addSuppressed(cleanupFailure);
 				}
 			}
@@ -1306,7 +1287,7 @@ final class DefaultSseServer implements SseServer {
 				.tryAdmit(adapterGeneration).orElse(null);
 		if (admission == null) {
 			writeFailsafeHandshakeAndClose(clientSocketChannel,
-					FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+					createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
 			return;
 		}
 		AdmissionFence.Admission existingAdmission = this.activeHandshakes.putIfAbsent(
@@ -1314,7 +1295,7 @@ final class DefaultSseServer implements SseServer {
 		if (existingAdmission != null) {
 			admission.close();
 			writeFailsafeHandshakeAndClose(clientSocketChannel,
-					FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+					createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
 			return;
 		}
 		if (!getLifecycleAdapter().admissionOpen(adapterGeneration)) {
@@ -1356,7 +1337,7 @@ final class DefaultSseServer implements SseServer {
 					.throwable(e)
 					.build());
 
-			writeFailsafeHandshakeAndClose(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+			writeFailsafeHandshakeAndClose(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
 		} catch (Throwable t) {
 			if (!submitted && handshakeContext != null) {
 				notifyDidFailToAcceptRequest(remoteAddress, null, RequestRejectionReason.INTERNAL_ERROR, t);
@@ -1502,7 +1483,7 @@ final class DefaultSseServer implements SseServer {
 					timeoutException);
 		}
 
-		byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
+		byte[] responseBytes = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
 
 		try {
 			ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
@@ -1602,7 +1583,7 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_431));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1626,7 +1607,7 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_414));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1666,7 +1647,7 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1693,7 +1674,7 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1722,7 +1703,7 @@ final class DefaultSseServer implements SseServer {
 				// Request read timed out before we could parse a handshake, return 408 and close.
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_408));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1749,7 +1730,7 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE);
+						writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500));
 					}
 				} catch (Throwable t) {
 					// best effort
@@ -1888,7 +1869,7 @@ final class DefaultSseServer implements SseServer {
 						releaseReservedSlot(connectionSlotReserved);
 						if (acceptanceFinalized.compareAndSet(false, true))
 							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, t);
-						handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
+						handshakeHttpResponse = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
 					}
 
 					try {
@@ -1929,7 +1910,7 @@ final class DefaultSseServer implements SseServer {
 				if (writeFailsafeResponse) {
 					try {
 						synchronized (channelLock) {
-							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE);
+							writeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500));
 						}
 					} catch (Throwable t2) {
 						// best effort
@@ -2483,6 +2464,7 @@ final class DefaultSseServer implements SseServer {
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 		SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
+		boolean hasDate = !marshaledResponse.getHeaders().getOrDefault("Date", Set.of()).isEmpty();
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
@@ -2536,6 +2518,8 @@ final class DefaultSseServer implements SseServer {
 					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
 
 				// Terminate header section
+				if (!hasDate)
+					printWriter.print("Date: " + HttpDate.currentSecondHeaderValue() + "\r\n");
 				printWriter.print("\r\n");
 				printWriter.flush();
 
@@ -2546,10 +2530,7 @@ final class DefaultSseServer implements SseServer {
 				int statusCode = marshaledResponse.getStatusCode();
 				String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
 
-				if (reasonPhrase.length() > 0)
-					printWriter.print("HTTP/1.1 " + statusCode + " " + reasonPhrase + "\r\n");
-				else
-					printWriter.print("HTTP/1.1 " + statusCode + "\r\n");
+				printWriter.print("HTTP/1.1 " + statusCode + " " + reasonPhrase + "\r\n");
 
 				// Write headers
 				boolean hasContentLength = false;
@@ -2596,6 +2577,8 @@ final class DefaultSseServer implements SseServer {
 				printWriter.print("Connection: close\r\n");
 
 				// End headers
+				if (!hasDate)
+					printWriter.print("Date: " + HttpDate.currentSecondHeaderValue() + "\r\n");
 				printWriter.print("\r\n");
 				printWriter.flush();
 
@@ -2639,7 +2622,7 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(statusCode);
 
 		String reasonPhrase = statusCode.getReasonPhrase();
-		String body = format("HTTP %d: %s", statusCode.getStatusCode(), reasonPhrase);
+		String body = format("HTTP %s: %s", statusCode.getStatusCode(), reasonPhrase);
 		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
 
 		String response =
@@ -2647,6 +2630,7 @@ final class DefaultSseServer implements SseServer {
 						"Content-Type: text/plain; charset=UTF-8\r\n" +
 						"Content-Length: " + bodyBytes.length + "\r\n" +
 						"Connection: close\r\n" +
+						"Date: " + HttpDate.currentSecondHeaderValue() + "\r\n" +
 						"\r\n";
 
 		byte[] headerBytes = response.getBytes(StandardCharsets.UTF_8);
@@ -2695,32 +2679,8 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(socketChannel);
 		requireNonNull(marshaledResponse);
 
-		// Write Status Line
-		String statusLine = "HTTP/1.1 " + marshaledResponse.getStatusCode() + "\r\n";
-		writeFully(socketChannel, statusLine.getBytes(StandardCharsets.UTF_8));
-
-		// Write Headers
-		for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
-			for (String value : entry.getValue()) {
-				String header = entry.getKey() + ": " + value + "\r\n";
-				writeFully(socketChannel, header.getBytes(StandardCharsets.UTF_8));
-			}
-		}
-
-		// Write Cookies
-		for (ResponseCookie cookie : marshaledResponse.getCookies()) {
-			String header = "Set-Cookie: " + cookie.toSetCookieHeaderRepresentation() + "\r\n";
-			writeFully(socketChannel, header.getBytes(StandardCharsets.UTF_8));
-		}
-
-		// Headers end
-		writeFully(socketChannel, new byte[]{'\r', '\n'});
-
-		// Write Body
-		byte[] body = marshaledResponse.bodyBytesOrNull();
-
-		if (body != null)
-			writeFully(socketChannel, body);
+		writeFully(socketChannel, createHandshakeHttpResponse(
+				HttpRequestResult.withMarshaledResponse(marshaledResponse).build()));
 	}
 
 	@NonNull
@@ -3234,7 +3194,7 @@ final class DefaultSseServer implements SseServer {
 		try {
 			getBroadcastersByResourcePath().computeIfPresent(broadcaster.getResourcePath(), (path, existingBroadcaster) -> {
 						// Only remove if it's the same instance AND empty
-						if (existingBroadcaster == broadcaster && existingBroadcaster.getSseConnections().isEmpty())
+						if (sameInstance(existingBroadcaster, broadcaster) && existingBroadcaster.getSseConnections().isEmpty())
 							return null;  // Remove the mapping
 
 						return existingBroadcaster; // Keep the mapping
@@ -3958,7 +3918,7 @@ final class DefaultSseServer implements SseServer {
 			long absoluteDeadlineNanos) throws InterruptedException {
 		if (thread == null || !thread.isAlive())
 			return true;
-		if (thread == Thread.currentThread())
+		if (sameInstance(thread, Thread.currentThread()))
 			return false;
 		while (thread.isAlive()) {
 			long remainingNanos = LifecycleDeadlines.remainingNanos(
@@ -4018,9 +3978,10 @@ final class DefaultSseServer implements SseServer {
 				getStopPoisonPill().set(true);
 			}
 
-			if (snapshot.serverSocketChannel() != null) {
+			ServerSocketChannel serverSocketChannel = snapshot.serverSocketChannel();
+			if (serverSocketChannel != null) {
 				try {
-					snapshot.serverSocketChannel().close();
+					serverSocketChannel.close();
 				} catch (IOException exception) {
 					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 								"Unable to close Server-Sent Event listener during quiesce")
@@ -4043,14 +4004,18 @@ final class DefaultSseServer implements SseServer {
 						.throwable(exception).build());
 				}
 			}
-			if (snapshot.requestHandlerExecutor() != null)
-				snapshot.requestHandlerExecutor().shutdown();
-			if (snapshot.requestTimeoutScheduler() != null)
-				snapshot.requestTimeoutScheduler().shutdown();
-			if (snapshot.requestReaderExecutor() != null)
-				snapshot.requestReaderExecutor().shutdown();
-			if (snapshot.connectionExecutor() != null)
-				snapshot.connectionExecutor().shutdown();
+			ExecutorService requestHandlerExecutor = snapshot.requestHandlerExecutor();
+			if (requestHandlerExecutor != null)
+				requestHandlerExecutor.shutdown();
+			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
+			if (requestTimeoutScheduler != null)
+				requestTimeoutScheduler.shutdown();
+			ExecutorService requestReaderExecutor = snapshot.requestReaderExecutor();
+			if (requestReaderExecutor != null)
+				requestReaderExecutor.shutdown();
+			ExecutorService connectionExecutor = snapshot.connectionExecutor();
+			if (connectionExecutor != null)
+				connectionExecutor.shutdown();
 		}
 
 		@Override
@@ -4058,16 +4023,21 @@ final class DefaultSseServer implements SseServer {
 			quiesce();
 			SseRuntimeSnapshot snapshot = retained();
 			forceCloseConnections(snapshot.establishedConnections());
-			if (snapshot.eventLoopThread() != null)
-				snapshot.eventLoopThread().interrupt();
-			if (snapshot.requestHandlerExecutor() != null)
-				snapshot.requestHandlerExecutor().shutdownNow();
-			if (snapshot.requestTimeoutScheduler() != null)
-				snapshot.requestTimeoutScheduler().shutdownNow();
-			if (snapshot.requestReaderExecutor() != null)
-				snapshot.requestReaderExecutor().shutdownNow();
-			if (snapshot.connectionExecutor() != null)
-				snapshot.connectionExecutor().shutdownNow();
+			Thread eventLoopThread = snapshot.eventLoopThread();
+			if (eventLoopThread != null)
+				eventLoopThread.interrupt();
+			ExecutorService requestHandlerExecutor = snapshot.requestHandlerExecutor();
+			if (requestHandlerExecutor != null)
+				requestHandlerExecutor.shutdownNow();
+			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
+			if (requestTimeoutScheduler != null)
+				requestTimeoutScheduler.shutdownNow();
+			ExecutorService requestReaderExecutor = snapshot.requestReaderExecutor();
+			if (requestReaderExecutor != null)
+				requestReaderExecutor.shutdownNow();
+			ExecutorService connectionExecutor = snapshot.connectionExecutor();
+			if (connectionExecutor != null)
+				connectionExecutor.shutdownNow();
 		}
 
 		@Override
@@ -4084,8 +4054,9 @@ final class DefaultSseServer implements SseServer {
 					absoluteDeadlineNanos);
 			boolean connectionsTerminated = awaitExecutor(snapshot.connectionExecutor(),
 					absoluteDeadlineNanos);
-			boolean listenerClosed = snapshot.serverSocketChannel() == null
-					|| !snapshot.serverSocketChannel().isOpen();
+			ServerSocketChannel serverSocketChannel = snapshot.serverSocketChannel();
+			boolean listenerClosed = serverSocketChannel == null
+					|| !serverSocketChannel.isOpen();
 			return eventLoopTerminated && requestHandlersTerminated
 					&& requestTimeoutsTerminated && readersTerminated
 					&& connectionsTerminated && listenerClosed
@@ -4100,7 +4071,8 @@ final class DefaultSseServer implements SseServer {
 			SseRuntimeSnapshot snapshot = retained();
 			Set<InternalResidualActivityType> kinds =
 					EnumSet.noneOf(InternalResidualActivityType.class);
-			if (snapshot.eventLoopThread() != null && snapshot.eventLoopThread().isAlive())
+			Thread eventLoopThread = snapshot.eventLoopThread();
+			if (eventLoopThread != null && eventLoopThread.isAlive())
 				kinds.add(InternalResidualActivityType.EVENT_LOOP);
 			if (!DefaultSseServer.this.activeHandshakes.isEmpty()
 					|| !getGlobalConnections().isEmpty()

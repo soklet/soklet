@@ -30,7 +30,7 @@ const EXPECTED_ROW_COUNT = 263;
 const EXPECTED_ROW_IDS_SHA256 =
   'd7a55f3218e4ea8d18e2f6295f56d9b9b70ecdba9deb8be5a624bae3a9b647b0';
 const EXPECTED_ROW_ATTRIBUTIONS_SHA256 =
-  'e4036d03459f11c189b88b00c8b0d02da6be6f6af491c7a7e662cbca68d95110';
+  'd32e23861c4e2157236c39d56bd9dc78c26c4798481369ab6c644537f30c76d5';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ROW_ID_PATTERN = /^(?:MCP-[A-Z0-9]+-\d{3}|SOK-[A-Z0-9]+-\d{3}|AMB-\d{3})$/;
 const DISPOSITIONS = Object.freeze([
@@ -79,6 +79,11 @@ const EXPECTED_NOT_APPLICABLE_IDS = new Set([
   'MCP-AUTH-001',
   'MCP-AUTH-008',
   'MCP-AUTH-009',
+  // Owner-approved pre-release removal; retain the original matrix row IDs.
+  'MCP-SAMPLING-001',
+  'MCP-SAMPLING-002',
+  'MCP-SAMPLING-003',
+  'MCP-ROOTS-001',
   'SOK-RATE-002',
   'SOK-NA-001',
   'SOK-NA-002',
@@ -229,7 +234,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  '1693bae8d44192fd78fbe15ed1e87d9b6f485f218e7c3b9a475c5002f90e4f58';
+  '1a3bbb61c9ef0a8f1386da7b69b7437f7e3501b20eead0a4b75b3b7ec89f708b';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -514,9 +519,9 @@ const EXPECTED_NUMERIC_BOUNDS_AUTHORITY = Object.freeze({
 });
 const EXPECTED_FINAL_DISPOSITION_COUNTS = Object.freeze({
   APPLICATION_OWNED: 12,
-  CORE_COMPLETE: 113,
-  NOT_APPLICABLE: 19,
-  RELEASE_GATED: 119,
+  CORE_COMPLETE: 111,
+  NOT_APPLICABLE: 23,
+  RELEASE_GATED: 117,
   UNRESOLVED: 0,
 });
 const PRIVACY_SINK_PATTERN =

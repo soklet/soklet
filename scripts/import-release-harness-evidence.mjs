@@ -29,6 +29,11 @@ const MAXIMUM_BUNDLE_BYTES = 256 * 1024 * 1024;
 const MAXIMUM_ROLE_BYTES = 128 * 1024 * 1024;
 const APPROVED_REGISTRY_SHA256 =
   '9276535363b871dcd73e1e20d0e65a5885e70b0b6d0e253b64b175af2db8a51a';
+// Current pins include the source-compatible nightly-profile correction and
+// the owner-requested scanner refresh and exact current filter. Keep the U7 approval identity
+// separate: refreshing these pins is not a new scan result or release approval.
+const CURRENT_REGISTRY_SHA256 =
+  '098d8b4ad86fc8d845e813ad328586c2d38298d993d40c78f223c18899f92bd6';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',
@@ -383,12 +388,45 @@ export function verifyReleaseHarnessConfiguration(
     MAXIMUM_REGISTRY_BYTES,
   );
   const registrySha256 = sha256(bytes);
-  if (registrySha256 !== APPROVED_REGISTRY_SHA256) {
+  if (registrySha256 !== CURRENT_REGISTRY_SHA256) {
     fail(
-      'Release-harness contract registry bytes differ from the reviewed U7 '
-        + `approval: expected ${APPROVED_REGISTRY_SHA256}, found ${registrySha256}.`,
+      'Release-harness contract registry bytes differ from the pinned current '
+        + `registry: expected ${CURRENT_REGISTRY_SHA256}, found ${registrySha256}.`,
     );
   }
+  const historical = structuredClone(value);
+  historical.contracts.find((contract) => contract.id === 'soak-nightly-history')
+    .policy.profileSha256 = 'e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3';
+  // Project only the exact refreshed scanner fields back to their historical
+  // values before checking the original approval digest. No historical bytes,
+  // approvals, findings, thresholds, historical exclusions, or exception rules are changed.
+  const historicalScans = historical.contracts.find((contract) => contract.id === 'release-scans');
+  historicalScans.policy.codeql.actionCommit = '5595ccaf912efad79be6eef63a5619ff05969be3';
+  historicalScans.policy.codeql.bundle = {
+    commit: '18420e3271f74589575af831a523c833acda327f',
+    linuxTarGzSha256: 'cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7',
+    version: '2.26.2',
+  };
+  historicalScans.policy.codeql.javaQueries.qlpackSha256 =
+    'eda3c4b42579797a140a92848e18b9f98dc4e4d92b9cf63886d5f17ba5747bc9';
+  historicalScans.policy.codeql.javaQueries.version = '1.11.7';
+  Object.assign(historicalScans.policy.spotbugs, {
+    engineJarSha256: '4469bc080afe7cd2290a20bf63e28392b80abcc7c7ace33c8f55da52a17c7ca5',
+    engineVersion: '4.9.8',
+    exclusionFileSha256: '2c7559cc6d288da637316de4957ffd8cc86aa22014dede34f3a581716f82f63c',
+    mavenPluginJarSha256: 'bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757',
+    mavenPluginVersion: '4.9.8.3',
+  });
+  Object.assign(historicalScans.toolchains.find(({ artifact }) => artifact === 'codeql-bundle-linux64.tar.gz'), {
+    digest: 'sha256:cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7',
+    version: '2.26.2',
+  });
+  Object.assign(historicalScans.toolchains.find(({ artifact }) => artifact === 'spotbugs-maven-plugin.jar'), {
+    digest: 'sha256:bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757',
+    version: '4.9.8.3',
+  });
+  if (sha256(Buffer.from(`${JSON.stringify(historical, null, 2)}\n`)) !== APPROVED_REGISTRY_SHA256)
+    fail('Current release-harness registry changes exceed the exact profile and scanner-pin refresh.');
   exactKeys(value, ['contracts', 'formatVersion'], 'Release-harness contract registry');
   if (value.formatVersion !== 1)
     fail('Release-harness contract registry formatVersion must be 1.');

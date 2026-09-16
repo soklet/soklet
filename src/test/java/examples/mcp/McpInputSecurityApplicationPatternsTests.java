@@ -44,11 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Public-API-only examples for application-owned MCP input security policy.
  *
- * <p>The framework validates the open wire union, capabilities, protected
- * request state, and structural sampling flow. These examples deliberately
+ * <p>The framework validates elicitation responses, capabilities, and protected
+ * request state. These examples deliberately
  * cover the decisions that remain application-owned: semantic form policy,
- * response-to-request correlation, user binding, URL construction, sampling
- * data classification and loop bounds, and filesystem containment.
+ * response-to-request correlation, user binding, URL construction, direct
+ * model-provider data classification and loop bounds, and filesystem containment
+ * for explicit file inputs. The latter two patterns are application utilities,
+ * not implementations of the deprecated MCP Sampling or Roots features.
  */
 public class McpInputSecurityApplicationPatternsTests {
 	private static final String RESPONSE_KEY = "profile";
@@ -137,6 +139,7 @@ public class McpInputSecurityApplicationPatternsTests {
 
 	@Test
 	void samplingPolicyClassifiesContentAndAppliesAFixedLoopBudget() {
+		// This policy belongs to a direct model-provider integration, not MCP Sampling.
 		Predicate<McpJsonValue> dataPolicy = value ->
 				!(value instanceof McpJsonString string)
 						|| !string.getValue().contains("SECRET-CANARY");
@@ -155,6 +158,7 @@ public class McpInputSecurityApplicationPatternsTests {
 	@Test
 	void rootsAreResolvedToRealPathsInsideAnApplicationBoundary(
 			@TempDir Path temporaryDirectory) throws IOException {
+		// Explicit file URI parameters still need containment without MCP Roots.
 		Path allowed = Files.createDirectory(temporaryDirectory.resolve("allowed"));
 		Path inside = Files.writeString(allowed.resolve("project.txt"), "ok");
 		Path outside = Files.writeString(

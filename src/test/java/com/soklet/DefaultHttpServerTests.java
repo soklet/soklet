@@ -2,6 +2,7 @@ package com.soklet;
 
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Header;
+import com.soklet.internal.microhttp.Handler;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import org.junit.jupiter.api.Assertions;
@@ -38,6 +39,60 @@ import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
 
 public class DefaultHttpServerTests {
+	@Test
+	@Timeout(60)
+	public void equalPipelinedRequestsKeepIndependentLifecycleAdmissions() throws Exception {
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).host("127.0.0.1").build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build(), (request, response) ->
+				response.accept(HttpRequestResult.withMarshaledResponse(
+						MarshaledResponse.withStatusCode(204).build()).build()));
+		CountDownLatch completed = new CountDownLatch(2);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		try {
+			server.start();
+			Field loopsField = EventLoop.class.getDeclaredField("connectionEventLoops");
+			loopsField.setAccessible(true);
+			Object connectionLoop = ((List<?>) loopsField.get(server.getEventLoop().orElseThrow())).get(0);
+			Field handlerField = connectionLoop.getClass().getDeclaredField("handler");
+			handlerField.setAccessible(true);
+			Handler handler = (Handler) handlerField.get(connectionLoop);
+			byte[] emptyBody = new byte[0];
+			List<Header> headers = List.of(new Header("Host", "localhost"));
+			MicrohttpRequest first = new MicrohttpRequest("GET", "/", "HTTP/1.1", headers, emptyBody, false, null);
+			MicrohttpRequest second = new MicrohttpRequest("GET", "/", "HTTP/1.1", headers, emptyBody, false, null);
+			Assertions.assertNotSame(first, second);
+			Assertions.assertEquals(first, second, "The parser reuses its empty body for identical pipelined requests");
+			handler.handle(first, firstResponse -> {
+				try {
+					Assertions.assertEquals(204, firstResponse.status());
+					// The first response has been queued, but its admission's finally has
+					// not run. Force the next dispatch in precisely that scheduling window.
+					handler.handle(second, secondResponse -> {
+						try {
+							Assertions.assertEquals(204, secondResponse.status());
+						} catch (Throwable t) {
+							failure.set(t);
+						} finally {
+							completed.countDown();
+						}
+					});
+				} catch (Throwable t) {
+					failure.set(t);
+					completed.countDown();
+				} finally {
+					completed.countDown();
+				}
+			});
+			Assertions.assertTrue(completed.await(5, TimeUnit.SECONDS), "Both requests must complete");
+			Assertions.assertNull(failure.get(), () -> String.valueOf(failure.get()));
+		} finally {
+			server.stop();
+		}
+	}
+
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))

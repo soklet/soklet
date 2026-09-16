@@ -68,11 +68,11 @@ public class McpTasksPublicRuntimeTests {
 					.principal(PRINCIPAL)
 					.applicationContext(APPLICATION_CONTEXT)
 					.build();
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(
+	private static final McpInputRequestDeclaration ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(
 					McpInputRequirement.CONDITIONAL);
-	private static final McpInputRequestDeclaration REQUIRED_ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED);
+	private static final McpInputRequestDeclaration REQUIRED_ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.REQUIRED);
 
 	@Test
 	public void typedTaskRequiredToolPreflightsEveryMissingCapabilityBeforeApplicationEffects()
@@ -111,7 +111,7 @@ public class McpTasksPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<DeferredResult>fromTaskId("typed-required-task");
 				})
-				.addInputRequestDeclaration(REQUIRED_ROOTS_DECLARATION)
+				.addInputRequestDeclaration(REQUIRED_ELICITATION_URL_DECLARATION)
 				.structuredContentMirroredAsText(false)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
@@ -172,7 +172,7 @@ public class McpTasksPublicRuntimeTests {
 							+ "\"id\":\"typed-required-missing\","
 							+ "\"error\":{\"code\":-32021,\"message\":"
 							+ "\"Missing required client capability\",\"data\":{"
-							+ "\"requiredCapabilities\":{\"roots\":{},"
+							+ "\"requiredCapabilities\":{\"elicitation\":{\"url\":{}},"
 							+ "\"extensions\":{\"" + TASKS_EXTENSION_ID
 							+ "\":{}}}}}}",
 					missing.body());
@@ -352,14 +352,14 @@ public class McpTasksPublicRuntimeTests {
 			Assertions.assertEquals(taskResponse("get-input-missing-roots",
 					inputRequired, false,
 					",\"inputRequests\":{\"approval\":{"
-							+ "\"method\":\"roots/list\",\"params\":{}},"
-							+ "\"secondary\":{\"method\":\"roots/list\","
-							+ "\"params\":{}}}"), missingRoots.body());
+							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}},"
+							+ "\"secondary\":{\"method\":\"elicitation/create\","
+							+ "\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}}"), missingRoots.body());
 			assertTaskGet(port, "get-input", inputRequired,
 					",\"inputRequests\":{\"approval\":{"
-							+ "\"method\":\"roots/list\",\"params\":{}},"
-							+ "\"secondary\":{\"method\":\"roots/list\","
-							+ "\"params\":{}}}");
+							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}},"
+							+ "\"secondary\":{\"method\":\"elicitation/create\","
+							+ "\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}}");
 
 			McpTask completed = task("task-completed", taskOrigin,
 					McpTaskStatus.COMPLETED);
@@ -837,7 +837,7 @@ public class McpTasksPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId);
 				})
-				.addInputRequestDeclaration(ROOTS_DECLARATION)
+				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(MCP_PATH,
@@ -913,11 +913,11 @@ public class McpTasksPublicRuntimeTests {
 						.build());
 		switch (taskStatus) {
 			case INPUT_REQUIRED -> builder.addInputRequest("approval",
-					McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
-							McpJsonObject.emptyInstance()))
+					McpInputRequest.fromDeclaration(ELICITATION_URL_DECLARATION,
+							McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 					.addInputRequest("secondary",
-							McpInputRequest.fromDeclaration(ROOTS_DECLARATION,
-									McpJsonObject.emptyInstance()));
+							McpInputRequest.fromDeclaration(ELICITATION_URL_DECLARATION,
+									McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()));
 			case COMPLETED -> builder.completedResult(
 					McpCompleteResult.fromToolText("completed-output")
 							.withMetadata(McpJsonObject.builder()
@@ -1035,9 +1035,9 @@ public class McpTasksPublicRuntimeTests {
 			boolean rootsCapable) {
 		String capabilities = tasksCapable
 				? "{\"extensions\":{\"" + TASKS_EXTENSION_ID
-						+ "\":{}}" + (rootsCapable ? ",\"roots\":{}" : "")
+						+ "\":{}}" + (rootsCapable ? ",\"elicitation\":{\"url\":{}}" : "")
 						+ "}"
-				: (rootsCapable ? "{\"roots\":{}}" : "{}");
+				: (rootsCapable ? "{\"elicitation\":{\"url\":{}}}" : "{}");
 		return "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"

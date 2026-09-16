@@ -41,8 +41,36 @@ its profile evidence.
 The current gate is pinned to `@modelcontextprotocol/conformance`
 `0.2.0-alpha.11`, commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`.
 `scenarios.json` preserves the 50 relevant names in exact CLI order: 40
-`2026-07-28` core rows and ten Tasks extension rows. Its 49 `RUN` rows for Soklet 4.0.0 exclude
-only unsupported `completion-complete`. The unfiltered `list --server` output
+`2026-07-28` core rows and ten Tasks extension rows. For Soklet 4.0.0, after the owner-approved
+Roots/Sampling removal, its 45 `RUN` rows exclude unsupported
+`completion-complete` and four scenarios whose assertions require Sampling or
+Roots: basic-sampling, basic-list-roots, multiple-input-requests, and
+capability-check. The last two names refer to generic concepts, but the pinned
+upstream implementations specifically require those deprecated methods.
+Elicitation-based local tests retain the generic behavior coverage. These
+exclusions are explicit scope decisions, not successful conformance results.
+
+The current elicitation-based development fixtures are production-tested and
+bound by the error-mapping manifest SHA-256
+`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+and result-envelope manifest SHA-256
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`.
+Historical dated checkpoints below retain their original hashes and results.
+
+The native 2026-09-16 run passed 44 of the 45 selected scenarios and validated
+all 48 schema-bound golden messages. `server-stateless` remains **failing**:
+`sep-2575-server-rejects-undeclared-capability` and
+`sep-2575-missing-capability-http-400` both report `FAILURE` with
+`details.untestable: true` because the pinned suite requires a diagnostic tool
+whose assertions hard-code Sampling. Its other checks produced 26 `SUCCESS`
+and the two existing mutable-list `SKIPPED` results. The fixture's elicitation
+diagnostic is independently tested, but does not turn those raw upstream
+failures into passing or skipped checks. The existing expected success profile
+is unchanged, so the conformance gate stays red pending an upstream correction
+or a separately reviewed handling decision. No expected-failure suppression,
+upstream source modification, or synthetic Sampling response is used.
+
+The unfiltered `list --server` output
 also includes 12 legacy-only rows; strict parsing validates those rows but
 excludes them from this modern-profile inventory. Unknown extensions, missing
 Tasks names, duplicate names, or reordered selected rows fail verification.
@@ -215,7 +243,7 @@ The preceding four-row HTTP-contract reconciliation added a third, independent
 evidence surface without changing the official corpus: 22 canonical complete
 HTTP response fixtures bound by
 `../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests—three real-listener goldens, one exhaustive response-
 authority inventory, and one six-document manifest-digest parity gate—and four
 initialize-diagnostic tests pass 9/9 in the current focused execution. Full
@@ -241,7 +269,7 @@ is `00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 A second separate corpus contains twelve canonical complete HTTP fixtures across
 the eight frozen ordinary error families and two production-listener tests;
 its manifest SHA-256 is
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
 Readable-`initialize` and path-specific errors remain separate supplemental
 evidence. Five deterministic tests additionally freeze progress/error enqueue
 and mapped-error/cancellation ownership in both winning directions.
@@ -557,10 +585,10 @@ registration, and uses `jdeps` to reject any compiled dependency on
 `com.soklet.internal`. It also compiles and runs standalone public-API contract
 tests for both the exact Phase 5 registrations and the external transport graph
 shapes. The test output also contains a public-API-only local simulator driver.
-`run-local-simulator.mjs` derives the 39 core RUN rows from the pinned
+`run-local-simulator.mjs` derives the 35 core RUN rows from the pinned
 `scenarios.json` manifest in exact CLI ordinal order, omitting the ten Tasks
 extension rows (which have separate live and simulator coverage), executes every row
-off-network against the packaged candidate, and byte-compares the driver's 39
+off-network against the packaged candidate, and byte-compares the driver's 35
 PASS records. The driver covers real fixture handlers, response and SSE shapes,
 Host/Origin/header policy, progress isolation, protected multi-round state, and
 stopped/unbound diagnostics without opening a socket. Its classes are never

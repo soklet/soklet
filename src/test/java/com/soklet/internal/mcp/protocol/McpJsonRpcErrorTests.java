@@ -56,7 +56,7 @@ public class McpJsonRpcErrorTests {
 				Assertions.assertDoesNotThrow(() -> error(code), Integer.toString(code)));
 
 		McpJsonRpcError missing = McpJsonRpcError.missingRequiredClientCapabilities(
-				Set.of(McpCoreClientCapability.SAMPLING));
+				Set.of(McpCoreClientCapability.ELICITATION_FORM));
 		Assertions.assertEquals(McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
 				missing.code());
 		Assertions.assertEquals("Missing required client capability", missing.message());

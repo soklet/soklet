@@ -26,7 +26,7 @@ const INCLUDE_FILES = [
 ];
 const ALLOWED_PARTITIONS = new Set(['candidate', 'externalSketch']);
 const ALLOWED_MCP_STATES = new Set(['Active', 'Deprecated', 'Removed']);
-const ALLOWED_API_STATES = new Set(['Supported', 'Deprecated']);
+const ALLOWED_API_STATES = new Set(['Supported', 'Deprecated', 'Removed']);
 const ACTIVE_TEXT_EXPECTATIONS = new Set(['zero', 'nonzero-with-notice']);
 const ACTIVE_TEXT_MATCHER_KINDS = new Set(['literal', 'regex']);
 const ACTIVE_TEXT_ROLES = new Set([
@@ -157,7 +157,7 @@ const ACTIVE_TEXT_REQUIRED_LIFECYCLE_SCOPES = Object.freeze([
       headingPath: Object.freeze([
         'Model Context Protocol (MCP)',
         'Compatibility and unsupported features',
-        'Deprecated compatibility surfaces',
+        'Protocol scope and unsupported features',
       ]),
       kind: 'headingSubtree',
       role: 'compatibility',
@@ -170,7 +170,7 @@ const ACTIVE_TEXT_REQUIRED_LIFECYCLE_SCOPES = Object.freeze([
       headingPath: Object.freeze([
         'What Else Does It Do?',
         'Model Context Protocol (MCP)',
-        'Deprecated compatibility surfaces',
+        'Protocol scope and unsupported features',
       ]),
       kind: 'headingSubtree',
       role: 'compatibility',
@@ -183,7 +183,7 @@ const ACTIVE_TEXT_REQUIRED_LIFECYCLE_SCOPES = Object.freeze([
       headingPath: Object.freeze([
         'Security Policy',
         'MCP Deployment Security',
-        'Deprecated compatibility surfaces',
+        'Protocol scope and unsupported features',
       ]),
       kind: 'headingSubtree',
       role: 'security',
@@ -1000,7 +1000,21 @@ function deprecatedLedgerIds(ledgers, includes) {
   }).map(({ id }) => id);
 }
 
-function verifyLifecycle(inventory, ledgers, includes) {
+function verifyDecisionReference(root, reference, label) {
+  if (typeof reference !== 'string' || !reference.trim())
+    fail(`${label} lacks a reviewed decision.`);
+  const parts = reference.split('#');
+  if (parts.length !== 2 || !parts[1])
+    fail(`${label} must reference a reviewed decision heading.`);
+  const text = readActiveTextCandidateFile(root, parts[0], label);
+  const anchors = text.split(/\r?\n/u).filter((line) => /^#{1,6} /u.test(line))
+    .map((line) => line.replace(/^#{1,6} /u, '').toLowerCase()
+      .replace(/[^a-z0-9 -]/gu, '').replace(/ /gu, '-'));
+  if (!anchors.includes(parts[1]))
+    fail(`${label} references a missing reviewed decision heading.`);
+}
+
+export function verifyLifecycle(root, inventory, ledgers, includes) {
   const elements = new Set();
   for (const entry of inventory.lifecycleEntries) {
     exactKeys(entry, ['element', 'mcpLifecycle', 'sokletApiLifecycle'], `lifecycle entry ${entry.element}`);
@@ -1013,22 +1027,57 @@ function verifyLifecycle(inventory, ledgers, includes) {
       ['state', 'reviewedDecisionReference'], `Soklet API lifecycle ${entry.element}`);
     if (!ALLOWED_MCP_STATES.has(entry.mcpLifecycle.state)) fail(`Invalid MCP lifecycle state: ${entry.element}`);
     if (!ALLOWED_API_STATES.has(entry.sokletApiLifecycle.state)) fail(`Invalid Soklet API lifecycle state: ${entry.element}`);
-    if (entry.sokletApiLifecycle.state === 'Deprecated'
-      && (typeof entry.sokletApiLifecycle.reviewedDecisionReference !== 'string'
-        || !entry.sokletApiLifecycle.reviewedDecisionReference.trim()))
-      fail(`Deprecated Soklet API entry lacks a reviewed decision: ${entry.element}`);
+    if (entry.sokletApiLifecycle.state !== 'Supported')
+      verifyDecisionReference(root,
+        entry.sokletApiLifecycle.reviewedDecisionReference,
+        `${entry.sokletApiLifecycle.state} Soklet API entry ${entry.element}`);
+    if (entry.sokletApiLifecycle.state === 'Removed') {
+      const method = entry.element.match(/^(.*)\.([^.()]+)\(([^()]*)\)$/u);
+      const field = !method && entry.element.match(/^(.*)\.([A-Z][A-Z0-9_]*)$/u);
+      const owner = method ? method[1] : field ? field[1] : entry.element;
+      const ownerId = owner.replaceAll('.', '/');
+      const retained = method
+        ? ledgers.some(({ id }) => id.startsWith(`M:${ownerId}#${method[2]}(`))
+        : field ? ledgers.some(({ id }) => id.startsWith(`F:${ownerId}#${field[2]}:`))
+        : includes.has(owner) || ledgers.some(({ id }) =>
+          id === `C:${ownerId}` || id.startsWith(`F:${ownerId}#`)
+            || id.startsWith(`M:${ownerId}#`)
+            || id.includes(`L${ownerId};`));
+      if (retained)
+        fail(`Removed Soklet API entry remains in the current surface: ${entry.element}`);
+    }
   }
   const annotated = deprecatedLedgerIds(ledgers, includes);
   if (annotated.length)
     fail(`Supported lifecycle entries retain Java @Deprecated markers in signature ledgers: ${annotated.join(', ')}`);
 }
 
-function verifySuppressionSchema(root, inventory) {
-  exactKeys(inventory.suppressionBaseline, ['fingerprintGrammarVersion', 'rows'], 'suppression baseline');
+export function verifySuppressionSchema(root, inventory) {
+  exactKeys(inventory.suppressionBaseline,
+    ['fingerprintGrammarVersion', 'rows', 'removedDeclarations'], 'suppression baseline');
   if (inventory.suppressionBaseline.fingerprintGrammarVersion !== 1)
     fail('Suppression fingerprint grammar version must be 1.');
   const rows = inventory.suppressionBaseline.rows;
   if (!Array.isArray(rows) || rows.length !== 18) fail('Suppression baseline must contain exactly 18 rows.');
+  const removed = inventory.suppressionBaseline.removedDeclarations;
+  if (!Array.isArray(removed) || removed.length !== 7)
+    fail('Reviewed logging API removal must contain exactly seven retired suppression declarations.');
+  const removedFingerprints = new Set();
+  for (const entry of removed) {
+    exactKeys(entry, ['baselineFingerprint', 'reviewedDecisionReference'],
+      'removed suppression declaration');
+    const key = entry.baselineFingerprint;
+    if (removedFingerprints.has(key))
+      fail(`Duplicate removed suppression declaration: ${key}`);
+    const row = rows.find((candidate) =>
+      `${candidate.partition}|${candidate.path}|${declarationKey(candidate.declaration)}` === key);
+    if (!row || row.partition !== 'candidate'
+      || !['method', 'anonymousMethod'].includes(row.declaration.kind))
+      fail(`Removed suppression declaration must name an exact candidate method baseline: ${key}`);
+    verifyDecisionReference(root, entry.reviewedDecisionReference,
+      `Removed suppression declaration ${key}`);
+    removedFingerprints.add(key);
+  }
   const fingerprints = new Set();
   let candidateCount = 0;
   let externalCount = 0;
@@ -1049,8 +1098,9 @@ function verifySuppressionSchema(root, inventory) {
       if (!existsSync(sourcePath)) fail(`Candidate suppression source is missing: ${row.path}`);
       const resolutionCount = declarationResolutionCount(
         readFileSync(sourcePath, 'utf8'), row.declaration);
-      if (resolutionCount !== 1)
-        fail(`Candidate suppression fingerprint must resolve exactly once (${key}); found ${resolutionCount}.`);
+      const expectedCount = removedFingerprints.has(key) ? 0 : 1;
+      if (resolutionCount !== expectedCount)
+        fail(`Candidate suppression fingerprint must resolve exactly ${expectedCount} time(s) (${key}); found ${resolutionCount}.`);
     } else {
       externalCount++;
       if (row.enforcementHost !== 'R4/R7-workspace') fail('External suppression row has wrong enforcementHost.');
@@ -1112,7 +1162,7 @@ export function verifyRoot(root, { externalSketchRoot } = {}) {
   verifyStructuralOwners(root, inventory, includes, ledgers);
   verifySuppressionSchema(root, inventory);
   verifyCandidateSuppressionScan(root);
-  verifyLifecycle(inventory, ledgers, includes);
+  verifyLifecycle(root, inventory, ledgers, includes);
   verifyActiveText(root);
   if (externalSketchRoot !== undefined) verifyExternal(root, inventory, externalSketchRoot);
   return { structuralOwnerCount: inventory.structuralOwners.length,

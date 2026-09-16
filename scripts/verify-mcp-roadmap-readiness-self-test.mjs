@@ -181,7 +181,7 @@ try {
     'A clean roadmap verification must not mutate candidate or signature bytes/metadata.');
   assert.equal(result.negativeInventoryCount, 14);
   assert.equal(result.deferredFeatureCount, 16);
-  assert.equal(result.opennessValidatorCount, 53);
+  assert.equal(result.opennessValidatorCount, 38);
   assert.equal(result.activeTextRuleCount, 22);
 
   expectRejected('planning-authority JSON must be canonical', () => {
@@ -618,9 +618,9 @@ try {
       const path = fixturePath('MCP.md');
       const text = readFileSync(path, 'utf8');
       const start =
-        'SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,';
+        'Soklet does not implement MCP Roots, Sampling, or Logging.';
       const end =
-        'approved default-off, bounded, redacted diagnostic policy.';
+        'OpenTelemetry integrations.';
       const startOffset = text.indexOf(start);
       const endOffset = text.indexOf(end, startOffset) + end.length;
       assert.ok(startOffset >= 0 && endOffset >= end.length);
@@ -661,8 +661,7 @@ try {
     'active-text compatibility claim moved into a default path must fail', () => {
       const path = fixturePath('MCP.md');
       const text = readFileSync(path, 'utf8');
-      const moved = 'Retained Sampling and Roots declarations remain validated\n'
-        + 'and must be registered.';
+      const moved = 'Soklet does not implement MCP Roots, Sampling, or Logging.';
       assert.ok(text.includes(moved));
       writeFileSync(path, text.replace(moved, '').replace(
         '## Multi-round-trip input and request state\n',

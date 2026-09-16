@@ -208,7 +208,7 @@ public class McpProgressAndCancelationRuntimeTests {
 				Optional.of(new McpProgressToken.StringToken("held")),
 				McpClientCapabilities.empty(), ignored -> true);
 		McpInputRequestPlan conditionalPlan = new McpInputRequestPlan(List.of(
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL)));
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL)));
 		Assertions.assertTrue(McpServerRuntimeBridge.progressEmitterFor(
 				held, conditionalPlan).isEmpty(),
 				"Conditional-capability holds suppress progress without replay.");
@@ -221,13 +221,13 @@ public class McpProgressAndCancelationRuntimeTests {
 		McpApplicationInvocation invocation = invocation(
 				Optional.of(new McpProgressToken.StringToken("opaque")),
 				McpClientCapabilities.fromRequirements(
-						java.util.Set.of(McpCoreClientCapability.ROOTS)),
+						java.util.Set.of(McpCoreClientCapability.ELICITATION_URL)),
 				ignored -> {
 					writes.incrementAndGet();
 					return false;
 				});
 		McpInputRequestPlan conditionalPlan = new McpInputRequestPlan(List.of(
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL)));
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL)));
 		McpServerRuntimeBridge.ProgressEmitter emitter =
 				McpServerRuntimeBridge.progressEmitterFor(invocation,
 						conditionalPlan).orElseThrow();

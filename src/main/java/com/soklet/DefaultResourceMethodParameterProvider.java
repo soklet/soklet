@@ -58,6 +58,7 @@ import java.util.Set;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static java.util.Objects.requireNonNullElse;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -174,7 +175,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 			try {
 				Optional<Object> valueConverterResult = valueConverter.convert(pathParameterValue);
-				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
+				result = requireNonNullElse(valueConverterResult, Optional.empty()).orElse(null);
 			} catch (ValueConversionException ignored) {
 				throw new IllegalPathParameterException(
 						"A path parameter could not be converted to the resource method parameter type.",
@@ -267,8 +268,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				Optional<Object> marshaledRequestBody = getSokletConfig()
 						.getRequestBodyMarshaler().marshalRequestBody(request,
 								resourceMethod, parameter, requestBodyType);
-				requestBodyObject = marshaledRequestBody == null
-						? null : marshaledRequestBody.orElse(null);
+				requestBodyObject = requireNonNullElse(marshaledRequestBody, Optional.empty()).orElse(null);
 
 				if (parameterType.isWrappedInOptional())
 					return Optional.ofNullable(requestBodyObject);
@@ -605,7 +605,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 			ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
 			Optional<Object> valueConverterResult = activeValueConverter.convert(multipartField.getDataAsString().orElse(null));
-			return valueConverterResult == null ? null : valueConverterResult.orElse(null);
+			return requireNonNullElse(valueConverterResult, Optional.empty()).orElse(null);
 		};
 
 		RequestValueExtractionConfig<MultipartField> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<MultipartField>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
@@ -670,7 +670,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					if (value != null && trimAggressivelyToNull(value) != null)
 						try {
 							Optional<Object> valueConverterResult = activeValueConverter.convert(value);
-							results.add(valueConverterResult == null ? null : valueConverterResult.orElse(null));
+							results.add(requireNonNullElse(valueConverterResult, Optional.empty()).orElse(null));
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("A %s could not be converted to the resource method parameter type.",
@@ -749,7 +749,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
 			try {
 				Optional<Object> valueConverterResult = activeValueConverter.convert(value);
-				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
+				result = requireNonNullElse(valueConverterResult, Optional.empty()).orElse(null);
 			} catch (ValueConversionException e) {
 				throw illegalExceptionProvider.provide(
 						format("A %s could not be converted to the resource method parameter type.",

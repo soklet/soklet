@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -244,7 +245,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		requireNonNull(unknownMirroredHeaderPolicy);
 
 		if (!corsAuthorizerExplicitlyConfigured
-				&& corsAuthorizer != CorsAuthorizer.rejectAllInstance())
+				&& !sameInstance(corsAuthorizer, CorsAuthorizer.rejectAllInstance()))
 			throw new IllegalArgumentException(
 					"An omitted CORS authorizer must use the reject-all default.");
 	}

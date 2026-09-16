@@ -50,61 +50,7 @@ public class McpInputResponseValidatorTests {
 		}
 	}
 
-	@Test
-	public void acceptsEverySamplingContentShapeAndOpenExtensions() {
-		for (String json : List.of(
-				"""
-				{"role":"assistant","model":"fixture-model",
-				 "content":{"type":"text","text":"hello",
-				  "annotations":{"audience":["user"],"priority":0.5,
-				   "lastModified":"future-format"},"future":true},
-				 "stopReason":"future-reason",
-				 "_meta":{"com.example/trace_id":true},
-				 "future":{"preserved":true}}
-				""",
-				"""
-				{"role":"user","model":"fixture-model","content":[
-				 {"type":"image","data":"AA==","mimeType":"image/png"},
-				 {"type":"audio","data":"AA==","mimeType":"audio/wav"},
-				 {"type":"tool_use","id":"call-1","name":"fixture.tool",
-				  "input":{"future":true}},
-				 {"type":"tool_result","toolUseId":"call-1","isError":false,
-				  "content":[
-				   {"type":"text","text":"done"},
-				   {"type":"image","data":"AA==","mimeType":"image/png"},
-				   {"type":"audio","data":"AA==","mimeType":"audio/wav"},
-				   {"type":"resource_link","name":"fixture",
-				    "uri":"https://example.com/resource","title":"Fixture",
-				    "description":"Description","mimeType":"text/plain",
-				    "size":1,"icons":[{"src":"data:image/png;base64,AA==",
-				     "mimeType":"image/png","sizes":["any"],"theme":"dark"}]},
-				   {"type":"resource","resource":{"uri":"urn:test:text",
-				    "mimeType":"text/plain","text":"text","_meta":{}}},
-				   {"type":"resource","resource":{"uri":"urn:test:blob",
-				    "blob":"AA=="}}
-				  ]}
-				 ]}
-				""")) {
-			Assertions.assertDoesNotThrow(() ->
-					McpInputResponseValidator.validate(JSON_CODEC.parse(json)));
-		}
-	}
 
-	@Test
-	public void acceptsRootsResultsAndTheOpenUnionSemantics() {
-		for (String json : List.of(
-				"{\"roots\":[]}",
-				"""
-				{"roots":[{"uri":"file:///tmp/project","name":"Project",
-				 "_meta":{"future":true},"future":[null]}],
-				 "com.example/extension":true}
-				""",
-				"{\"action\":\"decline\",\"role\":false,\"future\":{}}",
-				"{\"roots\":[],\"action\":7,\"future\":{}}")) {
-			Assertions.assertDoesNotThrow(() ->
-					McpInputResponseValidator.validate(JSON_CODEC.parse(json)));
-		}
-	}
 
 	@Test
 	public void rejectsValuesThatMatchNoInputResponseBranch() {

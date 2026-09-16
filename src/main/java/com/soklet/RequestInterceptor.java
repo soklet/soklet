@@ -39,6 +39,12 @@ public interface RequestInterceptor {
 	 * <p>
 	 * Routing happens after this callback, so changes to the HTTP method or path affect which
 	 * <em>Resource Method</em> is selected.
+	 * The paired {@code didStartRequestHandling}/{@code didFinishRequestHandling} lifecycle and metrics
+	 * callbacks observe the original request instance received by Soklet, not a replacement supplied here.
+	 * The simulator creates a fresh dispatch copy, preserving the caller's request ID, for each simulated request.
+	 * Their resource-method argument still reflects the route selected from the effective wrapped request.
+	 * HTTP stream handles retain that same original request identity. Response-writing callbacks and
+	 * application request processing receive the effective request, including interceptor replacements.
 	 * <p>
 	 * You must call {@code requestProcessor.accept(...)} exactly once before returning to advance processing.
 	 * If you do not, Soklet logs the error and returns a 500 response.
@@ -62,6 +68,9 @@ public interface RequestInterceptor {
 
 	/**
 	 * Intercepts request processing, allowing the request to be replaced and/or the response to be transformed.
+	 * Replacement affects application processing, not the original request identity supplied to the paired
+	 * request-handling lifecycle/metrics callbacks or HTTP stream handles. Use {@link #wrapRequest} to
+	 * change routing; the resource method is already selected when this method is invoked.
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}

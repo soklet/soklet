@@ -468,12 +468,6 @@ public class McpFinalTagGoldenWireProductionTests {
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration url = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
-				.fromSampling(Set.of(McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
 		McpJsonObject requestedSchema = McpJsonObject.builder()
 				.put("type", "object")
 				.put("properties", McpJsonObject.builder()
@@ -493,30 +487,6 @@ public class McpFinalTagGoldenWireProductionTests {
 				.put("mode", "url")
 				.put("url", "https://example.test/continue")
 				.build();
-		McpJsonObject samplingParams = McpJsonObject.builder()
-				.put("maxTokens", 64)
-				.put("messages", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("role", "user")
-								.put("content", McpJsonObject.builder()
-										.put("type", "text")
-										.put("text", "Return one canonical word")
-										.build())
-								.build())
-						.build())
-				.put("includeContext", "thisServer")
-				.put("tools", McpJsonArray.builder()
-						.add(McpJsonObject.builder()
-								.put("name", "golden.lookup")
-								.put("inputSchema", McpJsonObject.builder()
-										.put("type", "object")
-										.build())
-								.build())
-						.build())
-				.put("toolChoice", McpJsonObject.builder()
-						.put("mode", "auto")
-						.build())
-				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.input-required")
 				.jsonObjectArguments()
@@ -525,16 +495,11 @@ public class McpFinalTagGoldenWireProductionTests {
 										form, formParams))
 								.addInputRequest("url", McpInputRequest.fromDeclaration(
 										url, urlParams))
-								.addInputRequest("sampling", McpInputRequest.fromDeclaration(
-										sampling, samplingParams))
-								.addInputRequest("roots", McpInputRequest.fromDeclaration(
-										roots,
-												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("fixture", "phase-5-input-required")
 										.build())
 								.build())
-				.addInputRequestDeclarations(form, url, sampling, roots)
+				.addInputRequestDeclarations(form, url)
 				.build();
 		McpToolRegistration<McpJsonObject> inputResponsesTool = McpToolRegistration
 				.withName("golden.input-responses")
@@ -609,13 +574,6 @@ public class McpFinalTagGoldenWireProductionTests {
 				.fromElicitationForm(McpInputRequirement.REQUIRED);
 		McpInputRequestDeclaration url = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
-		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
-				.fromSampling(new LinkedHashSet<>(List.of(
-						McpClientCapability.SAMPLING_CONTEXT,
-						McpClientCapability.SAMPLING_TOOLS)),
-						McpInputRequirement.REQUIRED);
-		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.missing-capability")
 				.jsonObjectArguments()
@@ -623,7 +581,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("unexpected handler execution");
 				})
-				.addInputRequestDeclarations(form, url, sampling, roots)
+				.addInputRequestDeclarations(form, url)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())

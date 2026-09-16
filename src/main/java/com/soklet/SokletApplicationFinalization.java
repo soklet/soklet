@@ -355,9 +355,10 @@ final class SokletApplicationFinalization {
 						"A different core snapshot was already published");
 			return;
 		}
-		if (plan.immediateOutcome() != null)
+		InternalShutdownCleanupOutcome immediateOutcome = plan.immediateOutcome();
+		if (immediateOutcome != null)
 			freezeCleanupOutcome(withPublicationNanos(
-					plan.immediateOutcome(), this.clock.nanoTime()));
+					immediateOutcome, this.clock.nanoTime()));
 		this.waiter.signal();
 	}
 

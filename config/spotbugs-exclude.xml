@@ -75,4 +75,33 @@
 		<Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
 	</Match>
 
+	<!-- SpotBugs 4.10.4 misindexes JSpecify constructor annotations when javac inserts
+	     enum name/ordinal or enclosing-instance parameters. Exact parameter-level
+	     exceptions only; see docs/spotbugs-jspecify-constructor-analysis.md for the
+	     reproducer, bytecode evidence, and pending current scanner-policy approval. -->
+	<Match>
+		<Class name="com.soklet.internal.mcp.protocol.McpApplicationExecution$Exchange"/>
+		<Method name="&lt;init&gt;" params="com.soklet.internal.mcp.protocol.McpApplicationExecution,long,com.soklet.internal.microhttp.MicrohttpRequest,com.soklet.Request,com.soklet.internal.mcp.protocol.McpJsonRpcMessage$Request,com.soklet.internal.mcp.protocol.McpProtocolProfile,com.soklet.McpRequestContext,com.soklet.internal.mcp.protocol.McpEffectiveAdmissionIdentity,java.util.Optional,com.soklet.internal.mcp.protocol.McpApplicationRequestHandler,com.soklet.internal.mcp.protocol.McpApplicationRequestInterceptor,com.soklet.internal.mcp.protocol.McpApplicationEntryGate,long,com.soklet.internal.mcp.protocol.McpApplicationResponseWriter,java.lang.Runnable" returns="void"/>
+		<Local name="?"/>
+		<Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.internal.mcp.protocol.McpApplicationExecution$Exchange"/>
+		<Method name="&lt;init&gt;" params="com.soklet.internal.mcp.protocol.McpApplicationExecution,long,com.soklet.internal.microhttp.MicrohttpRequest,com.soklet.Request,com.soklet.internal.mcp.protocol.McpJsonRpcMessage$Request,com.soklet.internal.mcp.protocol.McpProtocolProfile,com.soklet.McpRequestContext,com.soklet.internal.mcp.protocol.McpEffectiveAdmissionIdentity,java.util.Optional,com.soklet.internal.mcp.protocol.McpApplicationRequestHandler,com.soklet.internal.mcp.protocol.McpApplicationRequestInterceptor,com.soklet.internal.mcp.protocol.McpApplicationEntryGate,long,com.soklet.internal.mcp.protocol.McpApplicationResponseWriter,java.lang.Runnable" returns="void"/>
+		<Local name="request"/>
+		<Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.internal.mcp.protocol.McpHttpServerRuntime"/>
+		<Method name="submitRequest" params="java.util.concurrent.ThreadPoolExecutor,com.soklet.internal.mcp.protocol.McpApplicationExecution,java.net.InetSocketAddress,com.soklet.internal.microhttp.MicrohttpRequest,com.soklet.Request,com.soklet.internal.mcp.protocol.McpSimulationRuntime,java.lang.Runnable,java.util.function.Consumer" returns="com.soklet.internal.mcp.protocol.McpHttpServerRuntime$RequestControl"/>
+		<Local name="lifecycleAdmission"/>
+		<Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.internal.mcp.schema.McpTypedSchemaScalar"/>
+		<Method name="&lt;init&gt;" params="java.lang.String,int,java.lang.String,java.math.BigDecimal,java.math.BigDecimal" returns="void"/>
+		<Local name="jsonType"/>
+		<Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+	</Match>
+
 </FindBugsFilter>

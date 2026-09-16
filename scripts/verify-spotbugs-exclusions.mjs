@@ -347,6 +347,20 @@ function assertExactMethodName(value, label) {
     fail(`${label} is not an exact JVM method name: ${value}`);
 }
 
+function exactTypeDescriptor(value, allowVoid, label) {
+  const match = /^([A-Za-z_$][A-Za-z0-9_$.]*)(\[\])*$/.exec(value);
+  if (match === null)
+    fail(`${label} must be an exact Java type: ${value}`);
+  const name = match[1];
+  const dimensions = (value.length - name.length) / 2;
+  const primitives = { boolean: 'Z', byte: 'B', char: 'C', short: 'S', int: 'I', long: 'J', float: 'F', double: 'D', void: 'V' };
+  if (name === 'void' && (!allowVoid || dimensions !== 0))
+    fail(`${label} may not use void here.`);
+  if (!(name in primitives))
+    assertExactClassName(name, label);
+  return '['.repeat(dimensions) + (primitives[name] ?? `L${name.replaceAll('.', '/')};`);
+}
+
 function targetsFromMatch(match, matchIndex) {
   const classNodes = descendants(match, 'Class');
   const methodNodes = descendants(match, 'Method');
@@ -363,6 +377,15 @@ function targetsFromMatch(match, matchIndex) {
   const bugNodes = match.children.filter((child) => child.name === 'Bug');
   if (bugNodes.length !== 1)
     fail(`${label} must contain exactly one direct Bug selector.`);
+  exactAttributeNames(bugNodes[0], ['pattern'], `${label} Bug`);
+  const localNodes = match.children.filter((child) => child.name === 'Local');
+  if (localNodes.length > 1)
+    fail(`${label} may contain at most one exact Local selector.`);
+  for (const local of localNodes) {
+    exactAttributeNames(local, ['name'], `${label} Local`);
+    if (!/^(?:[A-Za-z_$][A-Za-z0-9_$]*|\?)$/.test(local.attributes.name))
+      fail(`${label} Local must be an exact variable name.`);
+  }
   let selectedMethodNodes = [];
   const directMethods = match.children.filter((child) => child.name === 'Method');
   const compounds = match.children.filter((child) => COMPOUND_ELEMENTS.has(child.name));
@@ -384,18 +407,35 @@ function targetsFromMatch(match, matchIndex) {
     fail(`${label} contains an unsupported compound target condition.`);
   }
 
-  const allowedDirect = new Set([classNode, bugNodes[0], ...directMethods, ...compounds]);
+  const allowedDirect = new Set([classNode, bugNodes[0], ...localNodes, ...directMethods, ...compounds]);
   if (match.children.some((child) => !allowedDirect.has(child)))
     fail(`${label} contains an unsupported target condition.`);
-  const methodNames = selectedMethodNodes.map((node, methodIndex) => {
-    exactAttributeNames(node, ['name'], `${label} Method ${methodIndex + 1}`);
+  const methodSelectors = selectedMethodNodes.map((node, methodIndex) => {
+    const hasSignature = node.attributes.params !== undefined || node.attributes.returns !== undefined;
+    exactAttributeNames(node, hasSignature ? ['name', 'params', 'returns'] : ['name'], `${label} Method ${methodIndex + 1}`);
     const name = node.attributes.name;
     assertExactMethodName(name, `${label} Method ${methodIndex + 1}`);
-    return name;
+    const descriptor = !hasSignature ? null : `(${node.attributes.params.split(',')
+      .map((type) => exactTypeDescriptor(type, false, `${label} Method parameter`)).join('')})`
+      + exactTypeDescriptor(node.attributes.returns, true, `${label} Method return`);
+    return Object.freeze({ name, descriptor });
   });
+  const methodNames = methodSelectors.map(({ name }) => name);
   if (new Set(methodNames).size !== methodNames.length)
     fail(`${label} contains duplicate Method selectors.`);
-  return Object.freeze({ className, matchIndex: matchIndex + 1, methodNames });
+  // Synthetic-constructor analysis exceptions must never expand to an entire
+  // class, overload family, category, or other parameter. This validates scope,
+  // not owner approval of the current scanner policy.
+  const constructorAnnotationPattern = 'NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE';
+  if (bugNodes[0].attributes.pattern?.split(',').includes(constructorAnnotationPattern)
+      || localNodes.length !== 0) {
+    exactAttributeNames(bugNodes[0], ['pattern'], `${label} Bug`);
+    if (bugNodes[0].attributes.pattern !== constructorAnnotationPattern
+        || methodSelectors.length !== 1 || methodSelectors[0].descriptor === null
+        || localNodes.length !== 1)
+      fail(`${label} constructor annotation exception requires one exact pattern, method signature, and Local selector.`);
+  }
+  return Object.freeze({ className, matchIndex: matchIndex + 1, methodNames, methodSelectors });
 }
 
 function validateApprovedUnscopedMatch(match, matchIndex, state) {
@@ -775,10 +815,13 @@ export function verifySpotbugsExclusions(options = {}) {
       fail(`SpotBugs Match ${target.matchIndex} class does not resolve in compiled inventory: ${target.className}`);
     }
     selectedSources.add(sourceForClass(entry, sourceDirectory));
-    for (const methodName of target.methodNames) {
-      if (!entry.methods.has(methodName)) {
-        fail(`SpotBugs Match ${target.matchIndex} method does not resolve: ${target.className}.${methodName}`);
+    for (const { name, descriptor } of target.methodSelectors) {
+      const descriptors = entry.methods.get(name);
+      if (descriptors === undefined) {
+        fail(`SpotBugs Match ${target.matchIndex} method does not resolve: ${target.className}.${name}`);
       }
+      if (descriptor !== null && !descriptors.has(descriptor))
+        fail(`SpotBugs Match ${target.matchIndex} method signature does not resolve: ${target.className}.${name}${descriptor}`);
     }
   }
   return Object.freeze({

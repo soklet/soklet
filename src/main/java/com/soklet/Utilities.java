@@ -617,7 +617,8 @@ public final class Utilities {
 	}
 
 	/**
-	 * Percent-decodes %HH to bytes->UTF-8. Does NOT treat '+' specially.
+	 * Percent-decodes %HH to bytes->UTF-8. Does NOT treat '+' specially, and
+	 * preserves literal percent signs that are not followed by two hex digits.
 	 */
 	@NonNull
 	private static String percentDecodeCookieValue(@NonNull String cookieValue) {
@@ -627,18 +628,14 @@ public final class Utilities {
 
 		for (int i = 0; i < cookieValue.length(); ) {
 			char c = cookieValue.charAt(i);
-			if (c == '%') {
-				if (i + 2 >= cookieValue.length())
-					throw new IllegalRequestException("Invalid percent-encoding in Cookie header");
-
+			if (c == '%' && i + 2 < cookieValue.length()) {
 				int hi = Character.digit(cookieValue.charAt(i + 1), 16);
 				int lo = Character.digit(cookieValue.charAt(i + 2), 16);
-				if (hi < 0 || lo < 0)
-					throw new IllegalRequestException("Invalid percent-encoding in Cookie header");
-
-				out.write((hi << 4) + lo);
-				i += 3;
-				continue;
+				if (hi >= 0 && lo >= 0) {
+					out.write((hi << 4) + lo);
+					i += 3;
+					continue;
+				}
 			}
 
 			String rawCharacter;
@@ -1146,8 +1143,9 @@ public final class Utilities {
 
 		Map<String, Set<String>> headers = effectiveOriginResolver.getHeaders();
 		boolean trustForwardedHeaders = shouldTrustForwardedHeaders(effectiveOriginResolver);
-		boolean allowOriginFallback = effectiveOriginResolver.getAllowOriginFallback() != null
-				? effectiveOriginResolver.getAllowOriginFallback()
+		Boolean configuredAllowOriginFallback = effectiveOriginResolver.getAllowOriginFallback();
+		boolean allowOriginFallback = configuredAllowOriginFallback != null
+				? configuredAllowOriginFallback
 				: effectiveOriginResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL;
 
 		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
@@ -1880,7 +1878,7 @@ public final class Utilities {
 	 * See <a href="https://www.compart.com/en/unicode/U+202F">https://www.compart.com/en/unicode/U+202F</a> for details.
 	 *
 	 * @param string the string to trim
-	 * @return the trimmed string, or {@code null} if the input string is {@code null} or the trimmed representation is of length {@code 0}
+	 * @return the trimmed string (which may be empty), or {@code null} if the input string is {@code null}
 	 */
 	@Nullable
 	public static String trimAggressively(@Nullable String string) {

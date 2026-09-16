@@ -356,6 +356,8 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
         'release-validation-java-distribution.txt',
         'gateToolchainDistribution',
       ),
+      fileRole('javadoc-distribution', 'text/plain',
+        'release-validation-javadoc-java-distribution.txt', 'gateToolchainDistribution'),
     ],
   ),
   'core-jdk-21': gateEvidenceContract(
@@ -823,7 +825,7 @@ function validateCorrettoToolchain(toolchain, major, description) {
   );
 
   const versionMatch = new RegExp(
-    major === 21
+    major === 21 || major === 26
       ? `^${major}\\.0\\.([0-9]+)(?:\\.([0-9]+))?$`
       : `^${major}\\.0\\.([0-9]+)$`,
   ).exec(toolchain.version);
@@ -840,7 +842,8 @@ function validateCorrettoToolchain(toolchain, major, description) {
   }
 
   const distributionVersion = toolchain.vendorVersion.slice('Corretto-'.length);
-  const expectedRuntimeVersion = `${toolchain.version}+${vendorVersionMatch[2]}-LTS`;
+  const releaseKind = major === 26 ? 'FR' : 'LTS';
+  const expectedRuntimeVersion = `${toolchain.version}+${vendorVersionMatch[2]}-${releaseKind}`;
   const expectedArchive = `amazon-corretto-${distributionVersion}-linux-x64.tar.gz`;
   const expectedUrl = `https://corretto.aws/downloads/resources/${distributionVersion}/${expectedArchive}`;
 
@@ -864,6 +867,7 @@ function validateToolchains(toolchains, projectRoot) {
       'coreJdk21',
       'go',
       'java',
+      'javadocJava',
       'maven',
       'nodePin',
       'releaseSoakTimeoutSeconds',
@@ -890,6 +894,7 @@ function validateToolchains(toolchains, projectRoot) {
   requireExactKeys(toolchains.nodePin, ['path', 'sha256'], 'Node toolchain pin');
 
   validateCorrettoToolchain(toolchains.java, 17, 'Candidate Java toolchain');
+  validateCorrettoToolchain(toolchains.javadocJava, 26, 'Javadoc Java toolchain');
   if (toolchains.coreJdk21 !== null)
     validateCorrettoToolchain(toolchains.coreJdk21, 21, 'Core JDK 21 toolchain');
   validateCorrettoToolchain(toolchains.toystoreJava, 25, 'ToyStore Java toolchain');
@@ -1597,7 +1602,7 @@ function validateGateToolchainDistribution(
   description,
 ) {
   const expectedBytes = canonicalToolchainDistributionBytes(
-    toolchains[gate.toolchain],
+    toolchains[specification.role === 'javadoc-distribution' ? 'javadocJava' : gate.toolchain],
     description,
   );
   if (evidence.type !== 'FILE'
@@ -2180,6 +2185,7 @@ function runtimeToolchainEvidence(config) {
     coreJdk21: config.toolchains.coreJdk21.version,
     go: `go version go${config.toolchains.go.version} linux/amd64`,
     java: config.toolchains.java.version,
+    javadocJava: config.toolchains.javadocJava.version,
     maven: config.toolchains.maven.version,
     node: nodePin?.toolchain?.node,
     npm: nodePin?.toolchain?.npm,
@@ -2190,6 +2196,7 @@ function runtimeToolchainEvidence(config) {
     git: requireEnvironment('SOKLET_EVIDENCE_GIT_VERSION'),
     go: requireEnvironment('SOKLET_EVIDENCE_GO_VERSION'),
     java: requireEnvironment('SOKLET_EVIDENCE_JAVA_VERSION'),
+    javadocJava: requireEnvironment('SOKLET_EVIDENCE_JAVADOC_JAVA_VERSION'),
     maven: requireEnvironment('SOKLET_EVIDENCE_MAVEN_VERSION'),
     node: requireEnvironment('SOKLET_EVIDENCE_NODE_VERSION'),
     npm: requireEnvironment('SOKLET_EVIDENCE_NPM_VERSION'),

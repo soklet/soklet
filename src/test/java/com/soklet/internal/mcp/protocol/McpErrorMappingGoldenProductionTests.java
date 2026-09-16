@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.HttpDate;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -331,9 +332,9 @@ public class McpErrorMappingGoldenProductionTests {
 
 	private static McpServer server(FixtureState state) {
 		McpInputRequestDeclaration requiredRoots =
-				McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED);
+				McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpInputRequestDeclaration conditionalRoots =
-				McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL);
+				McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> regular = McpToolRegistration
 				.withName(REGULAR_TOOL)
 				.jsonObjectArguments()
@@ -358,7 +359,7 @@ public class McpErrorMappingGoldenProductionTests {
 					state.conditionalHandlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("roots-" + CONDITIONAL_SECRET,
 									McpInputRequest.fromDeclaration(conditionalRoots,
-											McpJsonObject.emptyInstance()))
+											McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 							.metadata(McpJsonObject.builder()
 									.put("secret", CONDITIONAL_SECRET).build())
 							.build();
@@ -667,7 +668,7 @@ public class McpErrorMappingGoldenProductionTests {
 		private final CountDownLatch releaseHandlers = new CountDownLatch(1);
 	}
 
-	private record WireResponse(byte[] raw, int status,
+	private record WireResponse(byte[] raw, int status, boolean liveResponse,
 			Map<String, List<String>> headers, String body) {
 		private WireResponse {
 			raw = raw.clone();
@@ -710,7 +711,7 @@ public class McpErrorMappingGoldenProductionTests {
 			Map<String, List<String>> copied = new LinkedHashMap<>();
 			mutable.forEach((name, values) ->
 					copied.put(name, List.copyOf(values)));
-			return new WireResponse(raw, Integer.parseInt(status[1]), copied,
+			return new WireResponse(raw, Integer.parseInt(status[1]), "\r\n".equals(newline), copied,
 					text.substring(boundary + delimiter.length()));
 		}
 
@@ -725,11 +726,28 @@ public class McpErrorMappingGoldenProductionTests {
 		}
 
 		private byte[] canonicalWire() {
+			String dateValue = singleHeader("Date");
+			byte[] responseBytes = raw;
+			if (liveResponse) {
+				java.time.Instant date = HttpDate.fromHeaderValue(dateValue).orElseThrow();
+				Assertions.assertTrue(Math.abs(Duration.between(date, java.time.Instant.now()).toSeconds()) <= 10,
+						"Date must reflect response generation, not listener startup");
+				String text = new String(raw, StandardCharsets.ISO_8859_1);
+				int headLength = text.indexOf("\r\n\r\n") + 4;
+				byte[] head = text.substring(0, headLength).replaceFirst("(?im)^Date: [^\\r\\n]*",
+						"Date: Thu, 01 Jan 1970 00:00:00 GMT").getBytes(StandardCharsets.ISO_8859_1);
+				ByteArrayOutputStream normalized = new ByteArrayOutputStream();
+				normalized.writeBytes(head);
+				normalized.write(raw, headLength, raw.length - headLength);
+				responseBytes = normalized.toByteArray();
+			} else {
+				Assertions.assertEquals("Thu, 01 Jan 1970 00:00:00 GMT", dateValue);
+			}
 			ByteArrayOutputStream canonical = new ByteArrayOutputStream(raw.length);
-			for (int index = 0; index < raw.length; index++) {
-				byte value = raw[index];
+			for (int index = 0; index < responseBytes.length; index++) {
+				byte value = responseBytes[index];
 				if (value == '\r') {
-					if (index + 1 >= raw.length || raw[index + 1] != '\n')
+					if (index + 1 >= responseBytes.length || responseBytes[index + 1] != '\n')
 						throw new AssertionError("Response contains a bare CR byte.");
 					canonical.write('\n');
 					index++;

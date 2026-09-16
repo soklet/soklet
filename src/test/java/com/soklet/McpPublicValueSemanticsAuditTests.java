@@ -389,8 +389,8 @@ class McpPublicValueSemanticsAuditTests {
 
 	private static McpInputRequiredResult inputRequired(String state) {
 		McpInputRequest inputRequest = McpInputRequest.fromDeclaration(
-				McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL),
-				McpJsonObject.emptyInstance());
+				McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL),
+				McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 		return McpInputRequiredResult.withInputRequest("roots", inputRequest)
 				.frameworkRequestState(McpJsonString.fromValue(state))
 				.metadata(metadata("result", "metadata"))

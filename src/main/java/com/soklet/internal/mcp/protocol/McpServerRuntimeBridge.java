@@ -4314,10 +4314,6 @@ public final class McpServerRuntimeBridge {
 		return switch (requireNonNull(capability)) {
 			case ELICITATION_FORM -> McpCoreClientCapability.ELICITATION_FORM;
 			case ELICITATION_URL -> McpCoreClientCapability.ELICITATION_URL;
-			case SAMPLING -> McpCoreClientCapability.SAMPLING;
-			case SAMPLING_CONTEXT -> McpCoreClientCapability.SAMPLING_CONTEXT;
-			case SAMPLING_TOOLS -> McpCoreClientCapability.SAMPLING_TOOLS;
-			case ROOTS -> McpCoreClientCapability.ROOTS;
 		};
 	}
 

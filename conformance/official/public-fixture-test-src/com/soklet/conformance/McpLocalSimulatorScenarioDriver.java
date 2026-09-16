@@ -67,10 +67,6 @@ public final class McpLocalSimulatorScenarioDriver {
 	private static final String EMPTY_CAPABILITIES = "{}";
 	private static final String FORM_CAPABILITY =
 			"{\"elicitation\":{\"form\":{}}}";
-	private static final String SAMPLING_CAPABILITY = "{\"sampling\":{}}";
-	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
-	private static final String ALL_INPUT_CAPABILITIES =
-			"{\"elicitation\":{\"form\":{}},\"sampling\":{},\"roots\":{}}";
 	private static final String FORM_NAME_RESPONSE =
 			"{\"action\":\"accept\",\"content\":{\"name\":\"Alice\"}}";
 	private static final String FORM_CONFIRM_RESPONSE =
@@ -79,11 +75,6 @@ public final class McpLocalSimulatorScenarioDriver {
 			"{\"action\":\"accept\",\"content\":{\"context\":\"test context\"}}";
 	private static final String FORM_COLOR_RESPONSE =
 			"{\"action\":\"accept\",\"content\":{\"color\":\"blue\"}}";
-	private static final String SAMPLING_RESPONSE =
-			"{\"role\":\"assistant\",\"model\":\"local-simulator\","
-					+ "\"content\":{\"type\":\"text\",\"text\":\"Paris\"}}";
-	private static final String ROOTS_RESPONSE =
-			"{\"roots\":[{\"uri\":\"file:///test/root\"}]}";
 	private static final List<ScenarioRow> EXPECTED_ROWS = List.of(
 			new ScenarioRow(1, "server-stateless"),
 			new ScenarioRow(3, "tools-list"),
@@ -111,17 +102,13 @@ public final class McpLocalSimulatorScenarioDriver {
 			new ScenarioRow(25, "http-header-validation"),
 			new ScenarioRow(26, "http-custom-header-server-validation"),
 			new ScenarioRow(37, "input-required-result-basic-elicitation"),
-			new ScenarioRow(38, "input-required-result-basic-sampling"),
-			new ScenarioRow(39, "input-required-result-basic-list-roots"),
 			new ScenarioRow(40, "input-required-result-request-state"),
-			new ScenarioRow(41, "input-required-result-multiple-input-requests"),
 			new ScenarioRow(42, "input-required-result-multi-round"),
 			new ScenarioRow(43, "input-required-result-missing-input-response"),
 			new ScenarioRow(44, "input-required-result-non-tool-request"),
 			new ScenarioRow(45, "input-required-result-result-type"),
 			new ScenarioRow(46, "input-required-result-unsupported-methods"),
 			new ScenarioRow(47, "input-required-result-tampered-state"),
-			new ScenarioRow(48, "input-required-result-capability-check"),
 			new ScenarioRow(49, "input-required-result-ignore-extra-params"),
 			new ScenarioRow(50, "input-required-result-validate-input"));
 
@@ -218,10 +205,7 @@ public final class McpLocalSimulatorScenarioDriver {
 					"http-header-validation",
 					"http-custom-header-server-validation",
 					"input-required-result-basic-elicitation",
-					"input-required-result-basic-sampling",
-					"input-required-result-basic-list-roots",
 					"input-required-result-request-state",
-					"input-required-result-multiple-input-requests",
 					"input-required-result-non-tool-request",
 					"input-required-result-unsupported-methods",
 					"input-required-result-tampered-state" -> 2;
@@ -292,14 +276,8 @@ public final class McpLocalSimulatorScenarioDriver {
 					customHeaderValidation(simulator, prefix);
 			case "input-required-result-basic-elicitation" ->
 					basicElicitation(simulator, prefix);
-			case "input-required-result-basic-sampling" ->
-					basicSampling(simulator, prefix);
-			case "input-required-result-basic-list-roots" ->
-					basicRoots(simulator, prefix);
 			case "input-required-result-request-state" ->
 					requestState(simulator, prefix);
-			case "input-required-result-multiple-input-requests" ->
-					multipleInputs(simulator, prefix);
 			case "input-required-result-multi-round" ->
 					multiRound(simulator, prefix);
 			case "input-required-result-missing-input-response" ->
@@ -312,8 +290,6 @@ public final class McpLocalSimulatorScenarioDriver {
 					unsupportedInputMethods(simulator, prefix);
 			case "input-required-result-tampered-state" ->
 					tamperedState(simulator, prefix);
-			case "input-required-result-capability-check" ->
-					capabilityCheck(simulator, prefix);
 			case "input-required-result-ignore-extra-params" ->
 					ignoreExtraResponses(simulator, prefix);
 			case "input-required-result-validate-input" ->
@@ -331,7 +307,7 @@ public final class McpLocalSimulatorScenarioDriver {
 				+ PROTOCOL_VERSION + "\"]", "\"capabilities\":{", "\"tools\":",
 				"\"prompts\":", "\"resources\":", "soklet-public-conformance");
 		JsonExchange missingCapability = json(simulator, toolRequest(
-				id + "-missing-capability", "test_missing_capability", "{}",
+				id + "-missing-capability", "test_missing_elicitation_capability", "{}",
 				EMPTY_CAPABILITIES, "", Map.of()));
 		assertError(missingCapability, 400, -32021,
 				id + "-missing-capability");
@@ -618,35 +594,6 @@ public final class McpLocalSimulatorScenarioDriver {
 		assertComplete(complete, id + "-complete", "Hello, Alice!");
 	}
 
-	private static void basicSampling(Simulator simulator, String id) {
-		String tool = "test_input_required_result_sampling";
-		JsonExchange initial = json(simulator, toolRequest(id + "-initial", tool,
-				"{}", SAMPLING_CAPABILITY, "", Map.of()));
-		assertInputRequired(initial, id + "-initial", "\"capital_question\":{",
-				"\"method\":\"sampling/createMessage\"", "capital of France",
-				"\"maxTokens\":100");
-		JsonExchange complete = json(simulator, toolRequest(id + "-complete", tool,
-				"{}", SAMPLING_CAPABILITY,
-				",\"inputResponses\":{\"capital_question\":"
-						+ SAMPLING_RESPONSE + "}", Map.of()));
-		assertComplete(complete, id + "-complete",
-				"The capital of France is Paris.");
-	}
-
-	private static void basicRoots(Simulator simulator, String id) {
-		String tool = "test_input_required_result_list_roots";
-		JsonExchange initial = json(simulator, toolRequest(id + "-initial", tool,
-				"{}", ROOTS_CAPABILITY, "", Map.of()));
-		assertInputRequired(initial, id + "-initial", "\"client_roots\":{",
-				"\"method\":\"roots/list\"");
-		JsonExchange complete = json(simulator, toolRequest(id + "-complete", tool,
-				"{}", ROOTS_CAPABILITY,
-				",\"inputResponses\":{\"client_roots\":" + ROOTS_RESPONSE + "}",
-				Map.of()));
-		assertComplete(complete, id + "-complete",
-				"Client root file:///test/root accepted.");
-	}
-
 	private static void requestState(Simulator simulator, String id) {
 		String tool = "test_input_required_result_request_state";
 		JsonExchange initial = json(simulator, toolRequest(id + "-initial", tool,
@@ -659,26 +606,6 @@ public final class McpLocalSimulatorScenarioDriver {
 				",\"inputResponses\":{\"confirm\":" + FORM_CONFIRM_RESPONSE + "}"
 						+ ",\"requestState\":\"" + state + "\"", Map.of()));
 		assertComplete(complete, id + "-complete", "state-ok");
-	}
-
-	private static void multipleInputs(Simulator simulator, String id) {
-		String tool = "test_input_required_result_multiple_inputs";
-		JsonExchange initial = json(simulator, toolRequest(id + "-initial", tool,
-				"{}", ALL_INPUT_CAPABILITIES, "", Map.of()));
-		assertInputRequired(initial, id + "-initial", "\"user_name\":{",
-				"\"greeting\":{", "\"client_roots\":{",
-				"\"method\":\"elicitation/create\"",
-				"\"method\":\"sampling/createMessage\"",
-				"\"method\":\"roots/list\"");
-		String state = extractState(initial.body());
-		String responses = "{\"user_name\":" + FORM_NAME_RESPONSE
-				+ ",\"greeting\":" + SAMPLING_RESPONSE
-				+ ",\"client_roots\":" + ROOTS_RESPONSE + "}";
-		JsonExchange complete = json(simulator, toolRequest(id + "-complete", tool,
-				"{}", ALL_INPUT_CAPABILITIES,
-				",\"inputResponses\":" + responses + ",\"requestState\":\""
-						+ state + "\"", Map.of()));
-		assertComplete(complete, id + "-complete", "All input responses accepted.");
 	}
 
 	private static void multiRound(Simulator simulator, String id) {
@@ -761,20 +688,11 @@ public final class McpLocalSimulatorScenarioDriver {
 		assertNotContains(tampered.body(), "Protected state accepted.");
 	}
 
-	private static void capabilityCheck(Simulator simulator, String id) {
-		JsonExchange exchange = json(simulator, toolRequest(id,
-				"test_input_required_result_capabilities", "{}", SAMPLING_CAPABILITY,
-				"", Map.of()));
-		assertInputRequired(exchange, id, "\"sampling\":{",
-				"\"method\":\"sampling/createMessage\"");
-		assertNotContains(exchange.body(), "elicitation/create");
-	}
-
 	private static void ignoreExtraResponses(Simulator simulator, String id) {
 		String responses = "{\"user_name\":" + FORM_NAME_RESPONSE
-				+ ",\"unknown_extra_key\":{\"roots\":[]}}";
+				+ ",\"unknown_extra_key\":" + FORM_CONFIRM_RESPONSE + "}";
 		JsonExchange exchange = json(simulator, toolRequest(id,
-				"test_input_required_result_elicitation", "{}", ALL_INPUT_CAPABILITIES,
+				"test_input_required_result_elicitation", "{}", FORM_CAPABILITY,
 				",\"inputResponses\":" + responses, Map.of()));
 		assertComplete(exchange, id, "Hello, Alice!");
 		assertNotContains(exchange.body(), "input_required");

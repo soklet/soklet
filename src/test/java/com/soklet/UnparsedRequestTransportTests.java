@@ -67,6 +67,30 @@ class UnparsedRequestTransportTests {
 					.build();
 
 	@Test
+	void directlySerializedUnparsedResponsesAddDateAndPreserveExplicitDate() throws Exception {
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).build();
+		java.lang.reflect.Method serializer = DefaultHttpServer.class.getDeclaredMethod(
+				"serializeUnparsedRequestResponse", MarshaledResponse.class);
+		serializer.setAccessible(true);
+		String explicitDate = "Thu, 01 Jan 1970 00:00:00 GMT";
+		for (boolean explicit : List.of(false, true)) {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(400)
+					.headers(explicit ? Map.of("dAtE", Set.of(explicitDate)) : Map.of()).build();
+			String wire = new String((byte[]) serializer.invoke(server, response), StandardCharsets.ISO_8859_1);
+			List<String> values = wire.substring(0, wire.indexOf("\r\n\r\n")).lines()
+					.filter(line -> line.regionMatches(true, 0, "Date:", 0, 5))
+					.map(line -> line.substring(5).trim()).toList();
+			Assertions.assertEquals(1, values.size(), wire);
+			if (explicit) {
+				Assertions.assertEquals(explicitDate, values.get(0));
+			} else {
+				java.time.Instant date = HttpDate.fromHeaderValue(values.get(0)).orElseThrow();
+				Assertions.assertTrue(Math.abs(Duration.between(date, java.time.Instant.now()).toSeconds()) <= 2, wire);
+			}
+		}
+	}
+
+	@Test
 	void pipelinedFragmentedHeaderLimitRejectsOnlyTheOffendingRequest()
 			throws Exception {
 		assertPipelinedSectionRejected("GET /bad-request HTTP/1.1\r\nHost: a\r\nX: ",

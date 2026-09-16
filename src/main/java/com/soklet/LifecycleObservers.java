@@ -25,6 +25,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -102,7 +103,7 @@ final class LifecycleObservers {
 		requireNonNull(method);
 
 		return switch (method.getName()) {
-			case "equals" -> proxy == args[0];
+			case "equals" -> sameInstance(proxy, args[0]);
 			case "hashCode" -> System.identityHashCode(proxy);
 			case "toString" -> LifecycleObserver.class.getSimpleName() + "[aggregate=true]";
 			default -> throw new UnsupportedOperationException(method.toString());
@@ -118,7 +119,7 @@ final class LifecycleObservers {
 		if (firstThrowable == null)
 			return throwable;
 
-		if (firstThrowable != throwable)
+		if (!sameInstance(firstThrowable, throwable))
 			firstThrowable.addSuppressed(throwable);
 		return firstThrowable;
 	}

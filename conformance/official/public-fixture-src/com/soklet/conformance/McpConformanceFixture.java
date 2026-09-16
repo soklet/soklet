@@ -140,11 +140,7 @@ public final class McpConformanceFixture {
 	private static final McpInputRequestDeclaration FORM_INPUT =
 			McpInputRequestDeclaration.fromElicitationForm(
 					McpInputRequirement.REQUIRED);
-	private static final McpInputRequestDeclaration SAMPLING_INPUT =
-			McpInputRequestDeclaration.fromSampling(Set.of(),
-					McpInputRequirement.REQUIRED);
-	private static final McpInputRequestDeclaration ROOTS_INPUT =
-			McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED);
+
 	private static final McpCachePolicy CACHE_POLICY =
 			McpCachePolicy.fromPublicTimeToLive(Duration.ofMinutes(5));
 	private static final LifecyclePolicy LIFECYCLE_POLICY =
@@ -190,17 +186,13 @@ public final class McpConformanceFixture {
 			"http-header-validation",
 			"http-custom-header-server-validation",
 			"input-required-result-basic-elicitation",
-			"input-required-result-basic-sampling",
-			"input-required-result-basic-list-roots",
 			"input-required-result-request-state",
-			"input-required-result-multiple-input-requests",
 			"input-required-result-multi-round",
 			"input-required-result-missing-input-response",
 			"input-required-result-non-tool-request",
 			"input-required-result-result-type",
 			"input-required-result-unsupported-methods",
 			"input-required-result-tampered-state",
-			"input-required-result-capability-check",
 			"input-required-result-ignore-extra-params",
 			"input-required-result-validate-input",
 			"tasks-lifecycle",
@@ -422,9 +414,7 @@ public final class McpConformanceFixture {
 								"Validates one string-valued custom mirrored header.")
 						.build()));
 		if ("server-stateless".equals(scenario)) {
-			McpInputRequestDeclaration sampling =
-					McpInputRequestDeclaration.fromSampling(Set.of(),
-							McpInputRequirement.REQUIRED);
+
 			McpInputRequestDeclaration elicitation =
 					McpInputRequestDeclaration.fromElicitationForm(
 							McpInputRequirement.REQUIRED);
@@ -435,13 +425,13 @@ public final class McpConformanceFixture {
 							.put("properties", McpJsonObject.emptyInstance())
 							.build())
 					.build();
-			tools.add(McpToolRegistration.withName("test_missing_capability")
+			tools.add(McpToolRegistration.withName("test_missing_elicitation_capability")
 					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText(
-									"Sampling capability was declared."))
-					.addInputRequestDeclarations(sampling)
-					.description("Requires the base sampling capability.")
+									"Form elicitation capability was declared."))
+					.addInputRequestDeclarations(elicitation)
+					.description("Requires the form elicitation capability.")
 					.build());
 			tools.add(McpToolRegistration.withName("test_streaming_elicitation")
 					.jsonObjectArguments()
@@ -597,20 +587,12 @@ public final class McpConformanceFixture {
 			String scenario) {
 		if (ELICITATION_TOOL_SCENARIOS.contains(scenario))
 			tools.add(elicitationTool());
-		else if ("input-required-result-basic-sampling".equals(scenario))
-			tools.add(samplingTool());
-		else if ("input-required-result-basic-list-roots".equals(scenario))
-			tools.add(listRootsTool());
 		else if ("input-required-result-request-state".equals(scenario))
 			tools.add(requestStateTool());
-		else if ("input-required-result-multiple-input-requests".equals(scenario))
-			tools.add(multipleInputsTool());
 		else if ("input-required-result-multi-round".equals(scenario))
 			tools.add(multiRoundTool());
 		else if ("input-required-result-tampered-state".equals(scenario))
 			tools.add(tamperedStateTool());
-		else if ("input-required-result-capability-check".equals(scenario))
-			tools.add(capabilityTool());
 	}
 
 	private static McpToolRegistration<McpJsonObject> elicitationTool() {
@@ -629,39 +611,7 @@ public final class McpConformanceFixture {
 				.build();
 	}
 
-	private static McpToolRegistration<McpJsonObject> samplingTool() {
-		return McpToolRegistration.withName(
-				"test_input_required_result_sampling")
-				.jsonObjectArguments()
-				.handler((request, arguments, features) -> {
-					if (request.getInputResponses().find(
-							"capital_question").isPresent())
-						return McpCompleteResult.fromToolText(
-								"The capital of France is Paris.");
-					return McpInputRequiredResult.withInputRequest("capital_question", samplingInput(
-									"What is the capital of France?", 100))
-							.build();
-				})
-				.addInputRequestDeclarations(SAMPLING_INPUT)
-				.description("Collects a sampling answer about France.")
-				.build();
-	}
 
-	private static McpToolRegistration<McpJsonObject> listRootsTool() {
-		return McpToolRegistration.withName(
-				"test_input_required_result_list_roots")
-				.jsonObjectArguments()
-				.handler((request, arguments, features) -> {
-					if (request.getInputResponses().find("client_roots").isPresent())
-						return McpCompleteResult.fromToolText(
-								"Client root file:///test/root accepted.");
-					return McpInputRequiredResult.withInputRequest("client_roots", rootsInput())
-							.build();
-				})
-				.addInputRequestDeclarations(ROOTS_INPUT)
-				.description("Collects the current client roots.")
-				.build();
-	}
 
 	private static McpToolRegistration<McpJsonObject> requestStateTool() {
 		return McpToolRegistration.withName(
@@ -682,31 +632,6 @@ public final class McpConformanceFixture {
 				.build();
 	}
 
-	private static McpToolRegistration<McpJsonObject> multipleInputsTool() {
-		return McpToolRegistration.withName(
-				"test_input_required_result_multiple_inputs")
-				.jsonObjectArguments()
-				.handler((request, arguments, features) -> {
-					boolean complete = hasFrameworkState(request, "multiple-inputs")
-							&& request.getInputResponses().find("user_name").isPresent()
-							&& request.getInputResponses().find("greeting").isPresent()
-							&& request.getInputResponses().find("client_roots").isPresent();
-					if (complete)
-						return McpCompleteResult.fromToolText(
-								"All input responses accepted.");
-					return McpInputRequiredResult.withInputRequest("user_name", formInput(
-									"What is your name?", "name", "string"))
-							.addInputRequest("greeting", samplingInput(
-									"Generate a greeting", 50))
-							.addInputRequest("client_roots", rootsInput())
-							.frameworkRequestState(McpJsonString.fromValue("multiple-inputs"))
-							.build();
-				})
-				.addInputRequestDeclarations(FORM_INPUT, SAMPLING_INPUT, ROOTS_INPUT)
-				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
-				.description("Collects elicitation, sampling, and roots responses.")
-				.build();
-	}
 
 	private static McpToolRegistration<McpJsonObject> multiRoundTool() {
 		return McpToolRegistration.withName(
@@ -755,22 +680,6 @@ public final class McpConformanceFixture {
 				.build();
 	}
 
-	private static McpToolRegistration<McpJsonObject> capabilityTool() {
-		return McpToolRegistration.withName(
-				"test_input_required_result_capabilities")
-				.jsonObjectArguments()
-				.handler((request, arguments, features) -> {
-					if (request.getInputResponses().find("sampling").isPresent())
-						return McpCompleteResult.fromToolText(
-								"Sampling response accepted.");
-					return McpInputRequiredResult.withInputRequest("sampling", samplingInput(
-									"Generate one supported response", 50))
-							.build();
-				})
-				.addInputRequestDeclarations(SAMPLING_INPUT)
-				.description("Requests only the declared sampling capability.")
-				.build();
-	}
 
 	private static McpInputRequest formInput(String message, String field,
 			String fieldType) {
@@ -790,26 +699,7 @@ public final class McpConformanceFixture {
 						.build());
 	}
 
-	private static McpInputRequest samplingInput(String prompt,
-			Integer maximumTokens) {
-		McpJsonObject message = McpJsonObject.builder()
-				.put("role", "user")
-				.put("content", McpJsonObject.builder()
-						.put("type", "text")
-						.put("text", prompt)
-						.build())
-				.build();
-		return McpInputRequest.fromDeclaration(SAMPLING_INPUT,
-				McpJsonObject.builder()
-						.put("messages", McpJsonArray.builder().add(message).build())
-						.put("maxTokens", maximumTokens)
-						.build());
-	}
 
-	private static McpInputRequest rootsInput() {
-		return McpInputRequest.fromDeclaration(ROOTS_INPUT,
-				McpJsonObject.emptyInstance());
-	}
 
 	private static boolean hasFrameworkState(
 			com.soklet.McpRequestContext request, String expectedValue) {

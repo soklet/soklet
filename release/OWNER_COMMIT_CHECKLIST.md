@@ -49,6 +49,32 @@ intended changes to be staged, no omitted required files, and no unrelated
 additions—not an empty pre-commit `git status`. Review binary provenance and
 hashes separately; a text diff cannot verify a vendored JAR.
 
+Unchanged tracked files are already in the index and will remain in the resulting
+commit. Do not re-stage them merely because an older checklist called them new;
+verify presence and contents in the final commit instead.
+
+## Prepare the validation workflow before freezing a candidate
+
+GitHub permits manual dispatch only after the workflow is registered on the
+repository's default branch. Before relying on `.github/workflows/release-validation.yml`,
+the owner must verify that registration and the reviewed workflow version. If
+necessary, make a separately reviewed, non-deploying default-branch preparation
+change first. A workflow visible only on a feature branch is not a runnable
+release gate. Do not merge unrelated release content or trigger a website
+deployment merely to register it.
+
+Finish code, dependency, documentation, changelog-date, and packaged-Javadoc
+repairs before G4. Build and independently reproduce the candidate artifacts;
+import the exact packaged Javadoc JARs into the four site previews and verify
+full payload parity. Then obtain owner-created, retrievable downstream commits
+and update the six candidate pins. The manifest must name the actual final
+commits, not earlier migrations or moving branch names. CI's pre-downstream core
+source pin is a separate acyclic build input; do not replace it with a future
+final core tag that depends on those same downstream receipts.
+
+G5 does not make these edits or regenerate artifacts. If a repair changes any
+approved input, prepare and accept a new candidate before publication.
+
 ## Load-bearing new files in the September 13–14 handoff
 
 This explicit list prevents omission; it is not a substitute for the complete
@@ -128,6 +154,7 @@ override that masks an incompatible baseline.
 - `soklet.com/scripts/verify-core-blob-links-self-test.mjs`
 - `soklet.com/scripts/verify-mcp-api-reference.mjs`
 - `soklet.com/scripts/verify-mcp-api-reference-self-test.mjs`
+- `soklet.com/scripts/verify-site-presentation.mjs`
 
 Review these with the website's package scripts and README. Discovery includes
 all source links, including navigation, and checks the generated page/HTML
@@ -136,6 +163,10 @@ link sets without a hardcoded document list. Run `npm run test:core-links` and
 after generation. This offline working-tree preflight does not establish public
 availability; add `--core-ref FULL_40_CHARACTER_COMMIT_SHA` to check the intended
 owner-committed core tree instead.
+
+Run `node scripts/verify-site-presentation.mjs /absolute/soklet.com/dist`
+from the website checkout after generation; it checks metadata, pager links,
+icons, and dark 404 presentation across all 32 internal pages.
 
 Also run the API-reference guard and its self-tests. Review the API-freeze
 counts, type/member links, provisional Tasks maturity, authored-schema wording,

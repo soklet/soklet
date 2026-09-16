@@ -997,6 +997,28 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void request_target_preserves_origin_paths_and_authorizes_absolute_authority() throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+		try {
+			int port = runtime.start().getPort();
+			byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);
+			Assertions.assertEquals(200, send(port, "POST", "http://localhost:" + port + "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", "untrusted.example:" + port), body).status());
+			Assertions.assertEquals(421, send(port, "POST", "http://untrusted.example:" + port + "/mcp",
+					standardHeaders(port, DISCOVER_METHOD), body).status());
+			Assertions.assertEquals(421, send(port, "POST", "http://localhost:1/mcp",
+					standardHeaders(port, DISCOVER_METHOD), body).status());
+			Assertions.assertEquals(404, send(port, "POST", "//arbitrary/mcp",
+					standardHeaders(port, DISCOVER_METHOD), body).status());
+			for (String invalid : List.of("/mcp#fragment", "http://user@localhost:" + port + "/mcp", "ftp://localhost:" + port + "/mcp"))
+				Assertions.assertEquals(400, send(port, "POST", invalid,
+						standardHeaders(port, DISCOVER_METHOD), body).status(), invalid);
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void ipv4_loopback_bind_authorizes_reserved_loopback_aliases()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());

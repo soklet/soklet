@@ -298,7 +298,7 @@
       "phase": 5,
       "source": "production",
       "path": "phase-5/input-required-tool-response.json",
-      "sha256": "50c242b2d4c2b7f4d168127ca1d39c6cc2df028ed0096033fc4387940b6c2fb6",
+      "sha256": "3c50f639dbefd8c89f0160780aa5ed96d44381a4e5775c501d28d9d314003a06",
       "schemaRef": "#/$defs/CallToolResultResponse",
       "transportForm": "http-json-body",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
@@ -328,7 +328,7 @@
       "phase": 5,
       "source": "production",
       "path": "phase-5/missing-capability-error.json",
-      "sha256": "8cec2e410f51a0f86609b50ab0a0726236a1903965818fd9acdc55140e115207",
+      "sha256": "461efe5a306a17abd9035fa915545553b095ee9f8db8a090aa45e4830371b8e9",
       "schemaRef": "#/$defs/MissingRequiredClientCapabilityError",
       "transportForm": "http-json-body",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_missing_capability_messages_match_the_production_listener"

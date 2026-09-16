@@ -34,6 +34,55 @@ import java.util.Set;
  */
 @ThreadSafe
 public class MultipartEdgeCaseTests {
+	@Test
+	public void copierSeparatesContentTypeAndCharsetIncludingNull() {
+		MultipartField field = MultipartField.withName("field")
+				.contentType("text/plain").charset(StandardCharsets.UTF_8).build();
+		MultipartField copy = field.copy().contentType(null).charset(null).finish();
+		Assertions.assertTrue(copy.getContentType().isEmpty());
+		Assertions.assertTrue(copy.getCharset().isEmpty());
+		Assertions.assertEquals(Optional.of(StandardCharsets.US_ASCII),
+				field.copy().charset(StandardCharsets.US_ASCII).finish().getCharset());
+	}
+
+	@Test
+	public void invalidFilenameCharacterEntitiesYieldRedacted400() {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
+				}).build(), simulator -> {
+			for (String entity : Set.of("&#1114112;", "&#-1;", "&#55296;", "&#0;", "&#13;", "&#x110000;")) {
+				Request request = Request.withPath(HttpMethod.POST, "/upload")
+						.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=entity")))
+						.body(multipartBodyWithContentDisposition("entity",
+								"form-data; name=\"a\"; filename=\"secret" + entity + ".txt\""))
+						.build();
+				IllegalRequestBodyException exception = Assertions.assertThrows(
+						IllegalRequestBodyException.class, request::getMultipartFields, entity);
+				Assertions.assertEquals("Multipart filename contains an invalid character entity.", exception.getMessage());
+				Assertions.assertNull(exception.getCause(), "The diagnostic must not retain client input in a cause");
+				HttpRequestResult result = simulator.performHttpRequest(request);
+				Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode(), entity);
+				Assertions.assertEquals("HTTP 400: Bad Request", new String(
+						result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+			}
+		});
+	}
+
+	@Test
+	public void validFilenameEntitiesAndDuplicatePartsRemainPreserved() {
+		String part = "--entity\r\nContent-Disposition: form-data; name=\"a\"; "
+				+ "filename=\"a&#8239;&#x1F36A;.txt\"\r\n\r\nx\r\n";
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=entity")))
+				.body((part + part + "--entity--\r\n").getBytes(StandardCharsets.US_ASCII)).build();
+		Set<MultipartField> fields = request.getMultipartFields().get("a");
+		Assertions.assertEquals(2, fields.size(), "Identical uploaded parts must not be silently collapsed");
+		for (MultipartField field : fields)
+			Assertions.assertEquals(Optional.of("a\u202f🍪.txt"), field.getFilename());
+	}
+
 	private static byte[] multipartBody(String boundary) {
 		// Very small multipart body with exactly one field: a=1
 		String body = ""

@@ -22,6 +22,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -60,7 +61,7 @@ final class DefaultMcpSubscriptionEventPublisher
 			} catch (RuntimeException exception) {
 				if (firstFailure == null)
 					firstFailure = exception;
-				else if (firstFailure != exception)
+				else if (!sameInstance(firstFailure, exception))
 					firstFailure.addSuppressed(exception);
 			}
 		}

@@ -76,14 +76,6 @@ public final class McpClientCapabilities {
 	public Boolean supports(@NonNull McpClientCapability capability) {
 		requireNonNull(capability);
 		return switch (capability) {
-			case ROOTS -> this.json.find("roots").filter(McpJsonObject.class::isInstance).isPresent();
-			case SAMPLING -> object("sampling").isPresent();
-			case SAMPLING_CONTEXT -> object("sampling")
-					.map(value -> value.find("context").filter(McpJsonObject.class::isInstance).isPresent())
-					.orElse(false);
-			case SAMPLING_TOOLS -> object("sampling")
-					.map(value -> value.find("tools").filter(McpJsonObject.class::isInstance).isPresent())
-					.orElse(false);
 			case ELICITATION_FORM -> object("elicitation")
 					.map(value -> value.getMembers().isEmpty()
 							|| value.find("form").filter(McpJsonObject.class::isInstance).isPresent())

@@ -58,8 +58,8 @@ class McpTasksFleetPublicRuntimeTests {
 	private static final String TOOL_NAME = "tasks.fleet";
 	private static final String TENANT_ALPHA = "tenant-alpha";
 	private static final String TENANT_BETA = "tenant-beta";
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(
+	private static final McpInputRequestDeclaration ELICITATION_URL_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationUrl(
 					McpInputRequirement.CONDITIONAL);
 	private static final Instant CREATED_AT =
 			Instant.parse("2026-09-09T12:00:00Z");
@@ -263,7 +263,7 @@ class McpTasksFleetPublicRuntimeTests {
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();
 		McpServer rootsServer = server("node-roots", taskManager,
-				NodeAOutput.class, "nodeAValue", List.of(ROOTS_DECLARATION));
+				NodeAOutput.class, "nodeAValue", List.of(ELICITATION_URL_DECLARATION));
 		McpServer emptyServer = server("node-empty", taskManager,
 				NodeBOutput.class, "nodeBValue");
 		McpServer removedServer = serverWithoutTool("node-removed", taskManager);
@@ -281,7 +281,7 @@ class McpTasksFleetPublicRuntimeTests {
 			McpTask rootsSource = taskManager.requireTask("roots-origin-source");
 			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
 					"persisted-roots-task", rootsSource.getTaskOrigin(),
-					ROOTS_DECLARATION, "persisted-roots-canary"));
+					ELICITATION_URL_DECLARATION, "persisted-roots-canary"));
 
 			assertRootsInputRequired(taskRequest(boundPort(emptyServer), MAIN_PATH,
 					"tasks/get", "narrower-current-registration",
@@ -295,7 +295,7 @@ class McpTasksFleetPublicRuntimeTests {
 			McpTask emptySource = taskManager.requireTask("empty-origin-source");
 			taskManager.putTaskLike(emptySource.getTaskId(), inputRequiredTask(
 					"current-registration-must-not-broaden",
-					emptySource.getTaskOrigin(), ROOTS_DECLARATION,
+					emptySource.getTaskOrigin(), ELICITATION_URL_DECLARATION,
 					"broadened-contract-canary"));
 			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
 					MAIN_PATH, "tasks/get", "broader-current-registration",
@@ -307,7 +307,7 @@ class McpTasksFleetPublicRuntimeTests {
 					rootsSource.getTaskOrigin(), "inputRequestDeclarations");
 			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
 					"missing-declarations-task", missingDeclarations,
-					ROOTS_DECLARATION, "missing-declarations-canary"));
+					ELICITATION_URL_DECLARATION, "missing-declarations-canary"));
 			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
 					MAIN_PATH, "tasks/get", "missing-declarations",
 					"missing-declarations-task", TENANT_ALPHA, true),
@@ -318,11 +318,29 @@ class McpTasksFleetPublicRuntimeTests {
 					McpJsonObject.emptyInstance());
 			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
 					"malformed-declarations-task", malformedDeclarations,
-					ROOTS_DECLARATION, "malformed-declarations-canary"));
+					ELICITATION_URL_DECLARATION, "malformed-declarations-canary"));
 			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
 					MAIN_PATH, "tasks/get", "malformed-declarations",
 					"malformed-declarations-task", TENANT_ALPHA, true),
 					"malformed-declarations-task", "malformed-declarations-canary");
+
+			for (String retiredType : List.of("roots", "sampling")) {
+				String taskId = "retired-" + retiredType + "-task";
+				String canary = "retired-" + retiredType + "-canary";
+				McpJsonObject retiredDeclaration = McpJsonObject.builder()
+						.put("inputRequestType", retiredType)
+						.put("capabilities", McpJsonArray.builder().add(retiredType).build())
+						.put("requirement", "conditional")
+						.build();
+				McpTaskOrigin retiredOrigin = taskOriginWith(rootsSource.getTaskOrigin(),
+						"inputRequestDeclarations",
+						McpJsonArray.builder().add(retiredDeclaration).build());
+				taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
+						taskId, retiredOrigin, ELICITATION_URL_DECLARATION, canary));
+				assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
+						MAIN_PATH, "tasks/get", "retired-" + retiredType,
+						taskId, TENANT_ALPHA, true), taskId, canary);
+			}
 		} finally {
 			removed.close();
 			empty.close();
@@ -460,7 +478,7 @@ class McpTasksFleetPublicRuntimeTests {
 				+ PROTOCOL_VERSION + "\",\"io.modelcontextprotocol/"
 				+ "clientCapabilities\":{\"extensions\":{\""
 				+ TASKS_EXTENSION_ID + "\":{}}"
-				+ (rootsCapable ? ",\"roots\":{}" : "") + "}}";
+				+ (rootsCapable ? ",\"elicitation\":{\"url\":{}}" : "") + "}}";
 	}
 
 	@NonNull
@@ -511,7 +529,7 @@ class McpTasksFleetPublicRuntimeTests {
 		Assertions.assertTrue(response.body().contains(
 				"\"status\":\"input_required\""), response.body());
 		Assertions.assertTrue(response.body().contains(
-				"\"method\":\"roots/list\""), response.body());
+				"\"method\":\"elicitation/create\""), response.body());
 		Assertions.assertTrue(response.body().contains(
 				"\"persisted-roots\""), response.body());
 	}
@@ -575,7 +593,7 @@ class McpTasksFleetPublicRuntimeTests {
 				.pollInterval(Duration.ofMillis(250))
 				.addInputRequest("persisted-roots",
 						McpInputRequest.fromDeclaration(declaration,
-								McpJsonObject.emptyInstance()))
+								McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 				.build();
 	}
 

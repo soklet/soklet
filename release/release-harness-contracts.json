@@ -356,17 +356,17 @@
           "wildcardSuppression": "PROHIBITED"
         },
         "codeql": {
-          "actionCommit": "5595ccaf912efad79be6eef63a5619ff05969be3",
+          "actionCommit": "b96794f015dfd88f77b49b1c93e0fa7110f94c63",
           "bundle": {
-            "commit": "18420e3271f74589575af831a523c833acda327f",
-            "linuxTarGzSha256": "cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7",
-            "version": "2.26.2"
+            "commit": "977e6ceaea7361825998245d787fa3b4d6b9e5df",
+            "linuxTarGzSha256": "8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305",
+            "version": "2.27.0"
           },
           "javaQueries": {
-            "qlpackSha256": "eda3c4b42579797a140a92848e18b9f98dc4e4d92b9cf63886d5f17ba5747bc9",
+            "qlpackSha256": "993ad1ce6f5a2ae10fe10b80308d5647a7f5b1864bbbea7afdb12f882fcb525c",
             "securityExtendedSuiteSelectorSha256": "b7aa198be7e5e8ab999591c2c9848e96d0ba8e5b9b5db702790f039ff6bcdb56",
             "securityExtendedSuiteSha256": "37219d0083acd6da13923eb01986f4c83efaf041077393b424fed6e387168978",
-            "version": "1.11.7"
+            "version": "1.11.10"
           },
           "querySuite": "security-extended",
           "rejection": "EVERY_SECURITY_TAGGED_RESULT_UNLESS_EXACTLY_ALLOWLISTED; HIGH_OR_CRITICAL_RESULTS_CANNOT_BE_ALLOWLISTED"
@@ -412,12 +412,12 @@
         },
         "spotbugs": {
           "effort": "Max",
-          "engineJarSha256": "4469bc080afe7cd2290a20bf63e28392b80abcc7c7ace33c8f55da52a17c7ca5",
-          "engineVersion": "4.9.8",
-          "exclusionFileSha256": "2c7559cc6d288da637316de4957ffd8cc86aa22014dede34f3a581716f82f63c",
+          "engineJarSha256": "a88cad2e0ea9bb74b908ce82ae89416c61fa8f8ea5cfcc9368b1baac2da878d2",
+          "engineVersion": "4.10.4",
+          "exclusionFileSha256": "c1005b521f8a047fdedaf418661a6c54d92d59e6c3ea1c0ab6fb24c710628ed5",
           "failOnError": true,
-          "mavenPluginJarSha256": "bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757",
-          "mavenPluginVersion": "4.9.8.3",
+          "mavenPluginJarSha256": "405114389d4c93ab6ce0ddb09bad5b0f1da95ffac0bb36c04094066c5b01e338",
+          "mavenPluginVersion": "4.10.4.1",
           "rejection": "EVERY_UNFILTERED_MEDIUM_OR_HIGH_FINDING",
           "threshold": "Medium"
         }
@@ -448,8 +448,8 @@
       "toolchains": [
         {
           "artifact": "codeql-bundle-linux64.tar.gz",
-          "digest": "sha256:cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7",
-          "version": "2.26.2"
+          "digest": "sha256:8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305",
+          "version": "2.27.0"
         },
         {
           "artifact": "gitleaks_8.30.1_linux_x64.tar.gz",
@@ -458,8 +458,8 @@
         },
         {
           "artifact": "spotbugs-maven-plugin.jar",
-          "digest": "sha256:bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757",
-          "version": "4.9.8.3"
+          "digest": "sha256:405114389d4c93ab6ce0ddb09bad5b0f1da95ffac0bb36c04094066c5b01e338",
+          "version": "4.10.4.1"
         }
       ]
     },
@@ -491,7 +491,7 @@
           "minimum": 144
         },
         "profile": "nightly",
-        "profileSha256": "e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3",
+        "profileSha256": "bda8d65e27624660e5c1abcc5565366fc2468b911fbce453b9b94ffdd877b418",
         "scenarios": [
           {
             "id": "HTTP abort churn",

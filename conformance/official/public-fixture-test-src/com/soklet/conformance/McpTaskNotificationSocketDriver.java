@@ -116,8 +116,16 @@ public final class McpTaskNotificationSocketDriver {
 	private static final String TOOL_NAME = "tasks.notifications.seed";
 	private static final String ALPHA = "alpha";
 	private static final String BETA = "beta";
-	private static final McpInputRequestDeclaration ROOTS_DECLARATION =
-			McpInputRequestDeclaration.fromRoots(McpInputRequirement.CONDITIONAL);
+	private static final McpInputRequestDeclaration FORM_DECLARATION =
+			McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+	private static final McpJsonObject FORM_PARAMETERS = McpJsonObject.builder()
+			.put("message", "Approve task?")
+			.put("mode", "form")
+			.put("requestedSchema", McpJsonObject.builder()
+					.put("type", "object")
+					.put("properties", McpJsonObject.emptyInstance())
+					.build())
+			.build();
 	private static final Instant CREATED_AT =
 			Instant.parse("2026-09-01T12:00:00Z");
 	private static final Instant WORKING_UPDATED_AT =
@@ -223,8 +231,8 @@ public final class McpTaskNotificationSocketDriver {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
 		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient withoutRoots = null;
-		McpChunkedHttpClient withRoots = null;
+		McpChunkedHttpClient withoutForm = null;
+		McpChunkedHttpClient withForm = null;
 
 		try {
 			soklet.start();
@@ -235,41 +243,41 @@ public final class McpTaskNotificationSocketDriver {
 			taskManager.replaceTask(inputRequiredTask(
 					taskManager.requireTask("task-input-initial")));
 
-			withoutRoots = listen(port, "\"without-roots\"", ALPHA, true,
+			withoutForm = listen(port, "\"without-form\"", ALPHA, true,
 					false, "{\"taskIds\":[\"task-input-initial\","
 							+ "\"task-input-transition\",\"task-input-control\"]}");
-			assertSseHead(withoutRoots.readHead());
-			Assertions.assertEquals(acknowledgment("\"without-roots\"", List.of(
+			assertSseHead(withoutForm.readHead());
+			Assertions.assertEquals(acknowledgment("\"without-form\"", List.of(
 					"task-input-transition", "task-input-control")),
-					withoutRoots.readChunkText(),
+					withoutForm.readChunkText(),
 					"Initial authorization must omit an input-required task when "
-							+ "the subscriber lacks Roots support.");
+							+ "the subscriber lacks form elicitation support.");
 
-			withRoots = listen(port, "\"with-roots\"", ALPHA, true, true,
+			withForm = listen(port, "\"with-form\"", ALPHA, true, true,
 					"{\"taskIds\":[\"task-input-initial\","
 							+ "\"task-input-transition\"]}");
-			assertSseHead(withRoots.readHead());
-			Assertions.assertEquals(acknowledgment("\"with-roots\"", List.of(
+			assertSseHead(withForm.readHead());
+			Assertions.assertEquals(acknowledgment("\"with-form\"", List.of(
 					"task-input-initial", "task-input-transition")),
-					withRoots.readChunkText(),
-					"A Roots-capable subscriber must retain the same task.");
+					withForm.readChunkText(),
+					"A form-elicitation-capable subscriber must retain the same task.");
 
 			taskManager.replaceTask(inputRequiredTask(
 					taskManager.requireTask("task-input-transition")));
 			taskManager.publishTaskChanged("task-input-transition");
-			Assertions.assertEquals(inputRequiredNotification("\"with-roots\"",
-					"task-input-transition"), withRoots.readChunkText());
+			Assertions.assertEquals(inputRequiredNotification("\"with-form\"",
+					"task-input-transition"), withForm.readChunkText());
 
 			taskManager.publishTaskChanged("task-input-control");
-			Assertions.assertEquals(workingNotification("\"without-roots\"",
-					"task-input-control"), withoutRoots.readChunkText(),
+			Assertions.assertEquals(workingNotification("\"without-form\"",
+					"task-input-control"), withoutForm.readChunkText(),
 					"Event projection must suppress input-required state only for "
-							+ "the subscriber that lacks Roots support.");
+							+ "the subscriber that lacks form elicitation support.");
 		} finally {
-			if (withoutRoots != null)
-				withoutRoots.closeWithReset();
-			if (withRoots != null)
-				withRoots.closeWithReset();
+			if (withoutForm != null)
+				withoutForm.closeWithReset();
+			if (withForm != null)
+				withForm.closeWithReset();
 			soklet.close();
 		}
 	}
@@ -614,7 +622,7 @@ public final class McpTaskNotificationSocketDriver {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId.getValue());
 				})
-				.addInputRequestDeclaration(ROOTS_DECLARATION)
+				.addInputRequestDeclaration(FORM_DECLARATION)
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(path,
@@ -707,9 +715,9 @@ public final class McpTaskNotificationSocketDriver {
 	}
 
 	private static McpChunkedHttpClient listen(int port, String idJson,
-			String tenant, boolean tasksCapable, boolean rootsCapable,
+			String tenant, boolean tasksCapable, boolean formCapable,
 			String notificationsJson) throws Exception {
-		return listen(port, idJson, tenant, tasksCapable, rootsCapable,
+		return listen(port, idJson, tenant, tasksCapable, formCapable,
 				notificationsJson, 0);
 	}
 
@@ -722,12 +730,12 @@ public final class McpTaskNotificationSocketDriver {
 	}
 
 	private static McpChunkedHttpClient listen(int port, String idJson,
-			String tenant, boolean tasksCapable, boolean rootsCapable,
+			String tenant, boolean tasksCapable, boolean formCapable,
 			String notificationsJson, int receiveBufferBytes)
 			throws Exception {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":" + idJson
 				+ ",\"method\":\"subscriptions/listen\",\"params\":{"
-				+ taskMetadata(tasksCapable, rootsCapable)
+				+ taskMetadata(tasksCapable, formCapable)
 				+ ",\"notifications\":"
 				+ notificationsJson + "}}";
 		return McpChunkedHttpClient.postMcpMessage(port, body, List.of(
@@ -744,11 +752,11 @@ public final class McpTaskNotificationSocketDriver {
 	}
 
 	private static String taskMetadata(boolean tasksCapable,
-			boolean rootsCapable) {
+			boolean formCapable) {
 		String capabilities = tasksCapable
 				? "{\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}"
-						+ (rootsCapable ? ",\"roots\":{}" : "") + "}"
-				: (rootsCapable ? "{\"roots\":{}}" : "{}");
+						+ (formCapable ? ",\"elicitation\":{\"form\":{}}" : "") + "}"
+				: (formCapable ? "{\"elicitation\":{\"form\":{}}}" : "{}");
 		return "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
@@ -834,7 +842,9 @@ public final class McpTaskNotificationSocketDriver {
 				+ "\",\"lastUpdatedAt\":\"" + INPUT_REQUIRED_UPDATED_AT
 				+ "\",\"ttlMs\":60000,\"pollIntervalMs\":250,"
 				+ "\"inputRequests\":{\"approval\":{\"method\":"
-				+ "\"roots/list\",\"params\":{}}},"
+				+ "\"elicitation/create\",\"params\":{\"message\":\"Approve task?\","
+				+ "\"mode\":\"form\",\"requestedSchema\":{\"type\":\"object\","
+				+ "\"properties\":{}}}}},"
 				+ "\"_meta\":{\"com.example/task-metadata\":"
 				+ "\"input-required\","
 				+ "\"io.modelcontextprotocol/subscriptionId\":"
@@ -900,7 +910,7 @@ public final class McpTaskNotificationSocketDriver {
 				.timeToLive(TASK_TIME_TO_LIVE)
 				.pollInterval(POLL_INTERVAL)
 				.addInputRequest("approval", McpInputRequest.fromDeclaration(
-						ROOTS_DECLARATION, McpJsonObject.emptyInstance()))
+						FORM_DECLARATION, FORM_PARAMETERS))
 				.metadata(McpJsonObject.builder()
 						.put("com.example/task-metadata", "input-required")
 						.build())

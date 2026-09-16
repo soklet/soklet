@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Objects;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -73,7 +74,7 @@ final class McpContentValueSupport {
 			@NonNull McpResourceContents second) {
 		requireNonNull(first);
 		requireNonNull(second);
-		if (first == second)
+		if (sameInstance(first, second))
 			return true;
 		if (first instanceof McpTextResourceContents firstText
 				&& second instanceof McpTextResourceContents secondText) {

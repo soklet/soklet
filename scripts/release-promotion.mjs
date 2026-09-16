@@ -102,6 +102,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
       evidenceRole('maven-distribution', 'FILE', 'text/plain', 'release-validation-maven-distribution.txt'),
       evidenceRole('go-distribution', 'FILE', 'text/plain', 'release-validation-go-distribution.txt'),
       evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-java-distribution.txt', 'gateToolchainDistribution'),
+      evidenceRole('javadoc-distribution', 'FILE', 'text/plain', 'release-validation-javadoc-java-distribution.txt', 'gateToolchainDistribution'),
     ]),
   }),
   'core-jdk-21': Object.freeze({
@@ -872,11 +873,12 @@ function canonicalToolchainDistributionBytes(toolchain, description) {
       || version[1] !== vendor[1]
       || version[2] !== vendor[2]
       || (version[3] !== undefined
-        && (version[1] !== '21' || version[3] !== vendor[4]))) {
+        && (!['21', '26'].includes(version[1]) || version[3] !== vendor[4]))) {
     fail(`${description} is not an exact supported Corretto identity`);
   }
   const distributionVersion = toolchain.vendorVersion.slice('Corretto-'.length);
-  const expectedRuntimeVersion = `${toolchain.version}+${vendor[3]}-LTS`;
+  const releaseKind = version[1] === '26' ? 'FR' : 'LTS';
+  const expectedRuntimeVersion = `${toolchain.version}+${vendor[3]}-${releaseKind}`;
   const expectedArchive = `amazon-corretto-${distributionVersion}-linux-x64.tar.gz`;
   const expectedUrl = `https://corretto.aws/downloads/resources/${distributionVersion}/${expectedArchive}`;
   if (toolchain.runtimeVersion !== expectedRuntimeVersion
@@ -898,7 +900,7 @@ function canonicalToolchainDistributionBytes(toolchain, description) {
 
 function requireGateToolchainDistribution(item, gate, expected, toolchains, gateId) {
   const expectedBytes = canonicalToolchainDistributionBytes(
-    toolchains[gate.toolchain],
+    toolchains[expected.role === 'javadoc-distribution' ? 'javadocJava' : gate.toolchain],
     `Reviewed release manifest ${gateId} toolchain`,
   );
   if (item.artifact.type !== 'FILE'
@@ -1109,7 +1111,7 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
 
   requireExactKeys(
     value.toolchains,
-    ['coreJdk21', 'git', 'go', 'java', 'maven', 'node', 'npm', 'toystoreJava'],
+    ['coreJdk21', 'git', 'go', 'java', 'javadocJava', 'maven', 'node', 'npm', 'toystoreJava'],
     'release-validation toolchains',
   );
   for (const [name, version] of Object.entries(value.toolchains))

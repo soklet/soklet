@@ -37,12 +37,12 @@ public class McpInputRequestContractTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> new McpInputRequestDeclaration(
 						"sampling/createMessage",
-						Set.of(McpCoreClientCapability.SAMPLING_CONTEXT),
+						Set.of(McpCoreClientCapability.ELICITATION_FORM),
 						McpInputRequirement.REQUIRED));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> new McpInputRequestDeclaration(
 						"roots/list",
-						Set.of(McpCoreClientCapability.SAMPLING),
+						Set.of(McpCoreClientCapability.ELICITATION_FORM),
 						McpInputRequirement.REQUIRED));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> new McpInputRequestDeclaration(
@@ -56,7 +56,7 @@ public class McpInputRequestContractTests {
 		McpInputRequestDeclaration required =
 				McpInputRequestDeclaration.elicitationForm(McpInputRequirement.REQUIRED);
 		McpInputRequestDeclaration conditional =
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL);
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpInputRequestPlan plan =
 				new McpInputRequestPlan(List.of(required, conditional));
 		McpClientCapabilities emptyCapabilities = McpClientCapabilities.empty();
@@ -64,24 +64,23 @@ public class McpInputRequestContractTests {
 		Assertions.assertEquals(Set.of(McpCoreClientCapability.ELICITATION_FORM),
 				plan.missingAtAdmission(emptyCapabilities));
 		Assertions.assertTrue(plan.requiresUncommittedResponse(emptyCapabilities));
-		Assertions.assertEquals(Set.of(McpCoreClientCapability.ROOTS),
+		Assertions.assertEquals(Set.of(McpCoreClientCapability.ELICITATION_URL),
 				plan.missingForEmission(conditional, emptyCapabilities));
 
 		McpClientCapabilities completeCapabilities = McpClientCapabilities.builder()
 				.capability(McpCoreClientCapability.ELICITATION_FORM)
-				.capability(McpCoreClientCapability.ROOTS)
+				.capability(McpCoreClientCapability.ELICITATION_URL)
 				.build();
 		Assertions.assertTrue(plan.missingAtAdmission(completeCapabilities).isEmpty());
 		Assertions.assertFalse(plan.requiresUncommittedResponse(completeCapabilities));
 		Assertions.assertTrue(plan.missingForEmission(
 				conditional, completeCapabilities).isEmpty());
 		McpInputRequestDeclaration undeclared =
-				McpInputRequestDeclaration.sampling(
-						Set.of(), McpInputRequirement.CONDITIONAL);
+				McpInputRequestDeclaration.elicitationForm(McpInputRequirement.CONDITIONAL);
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> plan.missingForEmission(undeclared, completeCapabilities));
 		Assertions.assertDoesNotThrow(() -> plan.missingForEmission(
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL),
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL),
 				completeCapabilities));
 	}
 
@@ -97,27 +96,11 @@ public class McpInputRequestContractTests {
 		Assertions.assertDoesNotThrow(() ->
 				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL));
 		Assertions.assertDoesNotThrow(() ->
-				McpInputRequestDeclaration.sampling(
-						Set.of(McpCoreClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.CONDITIONAL));
+				McpInputRequestDeclaration.elicitationForm(McpInputRequirement.CONDITIONAL));
 		Assertions.assertDoesNotThrow(() ->
-				McpInputRequestDeclaration.roots(McpInputRequirement.REQUIRED));
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.REQUIRED));
 	}
 
-	@Test
-	public void sampling_subcapabilities_imply_sampling_in_builder_but_not_raw_wire_shape() {
-		McpClientCapabilities built = McpClientCapabilities.builder()
-				.capability(McpCoreClientCapability.SAMPLING_TOOLS)
-				.build();
-		Assertions.assertTrue(built.supports(McpCoreClientCapability.SAMPLING));
-		Assertions.assertTrue(built.supports(McpCoreClientCapability.SAMPLING_TOOLS));
-		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpClientCapabilities(
-						Optional.empty(), Optional.empty(), Optional.of(
-								new McpJsonObject(Map.of(
-										"tools", new McpJsonString("not-an-object")))),
-						Map.of(), Map.of(), Map.of()));
-	}
 
 	@Test
 	public void capability_preflight_uses_only_the_current_request() {
@@ -138,7 +121,7 @@ public class McpInputRequestContractTests {
 	@Test
 	public void executable_routes_preserve_input_request_plans_and_default_legacy_constructors() {
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
-				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL)));
+				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL)));
 		McpApplicationRequestHandler handler =
 				ignored -> McpWireResult.complete(McpJsonObject.empty());
 		McpApplicationResourceReadHandler resourceHandler =
@@ -196,8 +179,7 @@ public class McpInputRequestContractTests {
 	@Test
 	public void normalized_tool_and_prompt_factories_preserve_input_request_plans() {
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
-				McpInputRequestDeclaration.sampling(
-						Set.of(), McpInputRequirement.CONDITIONAL)));
+				McpInputRequestDeclaration.elicitationForm(McpInputRequirement.CONDITIONAL)));
 		McpNormalizedToolDescriptor tool =
 				McpNormalizedToolDescriptor.minimal("lookup");
 		McpMirroredHeaderPlan mirroredHeaders = McpMirroredHeaderPlan.empty();

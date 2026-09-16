@@ -490,10 +490,14 @@ public class McpAuthorizationIntegrationTests {
 
 		private String canonicalHead() {
 			Assertions.assertTrue(this.rawHead.endsWith("\r\n\r\n"), this.rawHead);
+			java.time.Instant date = HttpDate.fromHeaderValue(singleHeader("Date")).orElseThrow();
+			Assertions.assertTrue(Math.abs(java.time.Duration.between(date, java.time.Instant.now()).toSeconds()) <= 10,
+					"Date must reflect response generation, not listener startup");
 			String withoutCrlf = this.rawHead.replace("\r\n", "");
 			Assertions.assertFalse(withoutCrlf.contains("\r")
 					|| withoutCrlf.contains("\n"), this.rawHead);
 			return this.rawHead.substring(0, this.rawHead.length() - 2)
+					.replaceFirst("(?im)^Date: [^\\r\\n]*", "Date: Thu, 01 Jan 1970 00:00:00 GMT")
 					.replace("\r\n", "\n");
 		}
 

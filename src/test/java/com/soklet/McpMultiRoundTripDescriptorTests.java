@@ -23,7 +23,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,26 +42,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class McpMultiRoundTripDescriptorTests {
 	@Test
 	void declarationFactoriesProduceTheClosedValidatedCoreUnion() {
-		Set<McpClientCapability> mutableCapabilities = new LinkedHashSet<>(
-				Set.of(McpClientCapability.SAMPLING_CONTEXT));
-		McpInputRequestDeclaration copiedSampling =
-				McpInputRequestDeclaration.fromSampling(mutableCapabilities,
-						McpInputRequirement.CONDITIONAL);
-		mutableCapabilities.clear();
 		McpInputRequestDeclaration form =
 				McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.REQUIRED);
 		McpInputRequestDeclaration url =
 				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration sampling =
-				McpInputRequestDeclaration.fromSampling(
-						Set.of(McpClientCapability.SAMPLING_CONTEXT,
-								McpClientCapability.SAMPLING_TOOLS),
-						McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration roots =
-				McpInputRequestDeclaration.fromRoots(
-						McpInputRequirement.REQUIRED);
 
 		assertEquals(McpInputRequestType.ELICITATION_FORM,
 				form.getInputRequestType());
@@ -72,19 +57,6 @@ class McpMultiRoundTripDescriptorTests {
 		assertEquals(McpInputRequirement.REQUIRED, form.getRequirement());
 		assertEquals(Set.of(McpClientCapability.ELICITATION_URL),
 				url.getCapabilities());
-		assertEquals(Set.of(McpClientCapability.SAMPLING,
-				McpClientCapability.SAMPLING_CONTEXT,
-				McpClientCapability.SAMPLING_TOOLS), sampling.getCapabilities());
-		assertEquals(Set.of(McpClientCapability.SAMPLING,
-				McpClientCapability.SAMPLING_CONTEXT),
-				copiedSampling.getCapabilities());
-		assertEquals(McpInputRequestType.ELICITATION_URL,
-				url.getInputRequestType());
-		assertEquals(McpInputRequestType.SAMPLING,
-				sampling.getInputRequestType());
-		assertEquals(McpInputRequestType.ROOTS,
-				roots.getInputRequestType());
-		assertEquals("roots/list", roots.getJsonRpcMethod());
 		assertThrows(UnsupportedOperationException.class,
 				() -> form.getCapabilities().clear());
 		assertEquals(form, McpInputRequestDeclaration.fromElicitationForm(
@@ -92,21 +64,10 @@ class McpMultiRoundTripDescriptorTests {
 		assertEquals(form.hashCode(), McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.REQUIRED).hashCode());
 
-		assertThrows(IllegalArgumentException.class,
-				() -> McpInputRequestDeclaration.fromSampling(
-						Set.of(McpClientCapability.SAMPLING),
-						McpInputRequirement.CONDITIONAL));
-		assertThrows(IllegalArgumentException.class,
-				() -> McpInputRequestDeclaration.fromSampling(
-						Set.of(McpClientCapability.ROOTS),
-						McpInputRequirement.CONDITIONAL));
 		assertThrows(NullPointerException.class,
 				() -> McpInputRequestDeclaration.fromElicitationForm(null));
 		assertThrows(NullPointerException.class,
-				() -> McpInputRequestDeclaration.fromSampling(null,
-						McpInputRequirement.CONDITIONAL));
-		assertThrows(NullPointerException.class,
-				() -> McpInputRequestDeclaration.fromRoots(null));
+				() -> McpInputRequestDeclaration.fromElicitationUrl(null));
 	}
 
 	@Test
@@ -116,9 +77,8 @@ class McpMultiRoundTripDescriptorTests {
 						McpInputRequirement.REQUIRED),
 				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL),
-				McpInputRequestDeclaration.fromSampling(Set.of(),
-						McpInputRequirement.CONDITIONAL),
-				McpInputRequestDeclaration.fromRoots(
+				McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.CONDITIONAL),
+				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.REQUIRED));
 
 		for (McpInputRequestDeclaration declaration : declarations) {
@@ -205,11 +165,10 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.REQUIRED));
 		McpInputRequest second = inputRequest(
-				McpInputRequestDeclaration.fromRoots(
+				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL));
 		McpInputRequest third = inputRequest(
-				McpInputRequestDeclaration.fromSampling(Set.of(),
-						McpInputRequirement.CONDITIONAL));
+				McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.CONDITIONAL));
 		String secretId = "secret-input-request-id";
 		McpInputRequiredResult.Builder builder = McpInputRequiredResult.withInputRequest("", first)
 				.addInputRequest("   ", second)
@@ -246,7 +205,7 @@ class McpMultiRoundTripDescriptorTests {
 	@Test
 	void inputRequiredBuilderUsesLastCallWinsForStateAndMetadata() {
 		McpInputRequest request = inputRequest(
-				McpInputRequestDeclaration.fromRoots(
+				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL));
 		McpJsonObject firstState = McpJsonObject.builder()
 				.put("round", 1)
@@ -422,7 +381,7 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromElicitationForm(
 						McpInputRequirement.REQUIRED);
 		McpInputRequestDeclaration roots =
-				McpInputRequestDeclaration.fromRoots(
+				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL);
 		McpInputRequestDeclaration[] mutableDeclarations = {approval};
 

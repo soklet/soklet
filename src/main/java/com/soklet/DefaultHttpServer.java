@@ -58,7 +58,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
@@ -78,6 +78,7 @@ import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static com.soklet.Utilities.emptyByteArray;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.lang.String.format;
@@ -770,8 +771,10 @@ final class DefaultHttpServer implements HttpServer {
 					}
 				}
 			});
+			// Distinct pipelined dispatches can be record-equal, especially when the
+			// parser reuses its empty body. Admissions belong to dispatch identity.
 			Map<MicrohttpRequest, AdmissionFence.Admission> lifecycleAdmissions =
-					new ConcurrentHashMap<>();
+					Collections.synchronizedMap(new IdentityHashMap<>());
 			Handler handler = new Handler() {
 				@Override
 				public void handle(@NonNull MicrohttpRequest request,
@@ -870,7 +873,7 @@ final class DefaultHttpServer implements HttpServer {
 				try {
 					getLifecycleAdapter().failedStart(lifecycleGeneration, error, false);
 				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != error)
+					if (!sameInstance(cleanupFailure, error))
 						error.addSuppressed(cleanupFailure);
 				}
 				throw error;
@@ -905,7 +908,7 @@ final class DefaultHttpServer implements HttpServer {
 				.map(StatusCode::getReasonPhrase)
 				.orElse("Unknown");
 		List<Header> headers = List.of(new Header("Content-Type", format("text/plain; charset=%s", charset.name())));
-		byte[] body = format("HTTP %d: %s", statusCode, reasonPhrase).getBytes(charset);
+		byte[] body = format("HTTP %s: %s", statusCode, reasonPhrase).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
 	}
@@ -1085,7 +1088,7 @@ final class DefaultHttpServer implements HttpServer {
 				// into application work on the selector thread. Check before
 				// entering the FutureTask so timeout cancellation can never
 				// interrupt the selector through the task's runner reference.
-				if (Thread.currentThread() == submittingThread) {
+				if (sameInstance(Thread.currentThread(), submittingThread)) {
 					executedInline.set(true);
 					return;
 				}
@@ -1221,6 +1224,8 @@ final class DefaultHttpServer implements HttpServer {
 		if (!statusMustNotIncludeBody(statusCode))
 			transportHeaders.add(new Header("Content-Length",
 					Integer.toString(body.length)));
+		if (!response.hasHeader("Date"))
+			transportHeaders.add(new Header("Date", HttpDate.currentSecondHeaderValue()));
 		return response.serialize("HTTP/1.1", transportHeaders,
 				UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES);
 	}
@@ -2546,15 +2551,15 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void releaseRuntimeSnapshot(@NonNull HttpRuntimeSnapshot snapshot) {
 		requireNonNull(snapshot);
-		if (this.eventLoop == snapshot.eventLoop())
+		if (sameInstance(this.eventLoop, snapshot.eventLoop()))
 			this.eventLoop = null;
-		if (this.requestHandlerExecutorService == snapshot.requestHandlerExecutor())
+		if (sameInstance(this.requestHandlerExecutorService, snapshot.requestHandlerExecutor()))
 			this.requestHandlerExecutorService = null;
-		if (this.streamingExecutorService == snapshot.streamingExecutor())
+		if (sameInstance(this.streamingExecutorService, snapshot.streamingExecutor()))
 			this.streamingExecutorService = null;
-		if (this.streamingTimeoutExecutorService == snapshot.streamingTimeoutExecutor())
+		if (sameInstance(this.streamingTimeoutExecutorService, snapshot.streamingTimeoutExecutor()))
 			this.streamingTimeoutExecutorService = null;
-		if (this.streamingForcedShutdownStarted == snapshot.streamingForcedShutdownStarted())
+		if (sameInstance(this.streamingForcedShutdownStarted, snapshot.streamingForcedShutdownStarted()))
 			this.streamingForcedShutdownStarted = null;
 		if (this.requestHandlerTimeoutScheduler == snapshot.requestTimeoutScheduler())
 			this.requestHandlerTimeoutScheduler = null;
@@ -2601,40 +2606,51 @@ final class DefaultHttpServer implements HttpServer {
 				eventLoop.stopAccepting();
 				eventLoop.beginDrain();
 			}
-			if (snapshot.requestHandlerExecutor() != null)
-				snapshot.requestHandlerExecutor().shutdown();
-			if (snapshot.streamingExecutor() != null)
-				snapshot.streamingExecutor().shutdown();
-			if (snapshot.streamingTimeoutExecutor() != null)
-				snapshot.streamingTimeoutExecutor().shutdown();
-			if (snapshot.requestTimeoutScheduler() != null)
-				snapshot.requestTimeoutScheduler().shutdown();
+			ExecutorService requestHandlerExecutor = snapshot.requestHandlerExecutor();
+			if (requestHandlerExecutor != null)
+				requestHandlerExecutor.shutdown();
+			ExecutorService streamingExecutor = snapshot.streamingExecutor();
+			if (streamingExecutor != null)
+				streamingExecutor.shutdown();
+			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
+			if (streamingTimeoutExecutor != null)
+				streamingTimeoutExecutor.shutdown();
+			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
+			if (requestTimeoutScheduler != null)
+				requestTimeoutScheduler.shutdown();
 		}
 
 		@Override
 		public void force() {
 			quiesce();
 			HttpRuntimeSnapshot snapshot = retained();
-			if (snapshot.streamingForcedShutdownStarted() != null)
-				snapshot.streamingForcedShutdownStarted().set(true);
-			if (snapshot.eventLoop() != null)
-				snapshot.eventLoop().stopConnections();
-			if (snapshot.requestHandlerExecutor() != null)
-				snapshot.requestHandlerExecutor().shutdownNow();
-			if (snapshot.streamingExecutor() != null)
-				snapshot.streamingExecutor().shutdownNow();
-			if (snapshot.streamingTimeoutExecutor() != null)
-				snapshot.streamingTimeoutExecutor().shutdownNow();
-			if (snapshot.requestTimeoutScheduler() != null)
-				snapshot.requestTimeoutScheduler().shutdownNow();
+			AtomicBoolean streamingForcedShutdownStarted = snapshot.streamingForcedShutdownStarted();
+			if (streamingForcedShutdownStarted != null)
+				streamingForcedShutdownStarted.set(true);
+			EventLoop eventLoop = snapshot.eventLoop();
+			if (eventLoop != null)
+				eventLoop.stopConnections();
+			ExecutorService requestHandlerExecutor = snapshot.requestHandlerExecutor();
+			if (requestHandlerExecutor != null)
+				requestHandlerExecutor.shutdownNow();
+			ExecutorService streamingExecutor = snapshot.streamingExecutor();
+			if (streamingExecutor != null)
+				streamingExecutor.shutdownNow();
+			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
+			if (streamingTimeoutExecutor != null)
+				streamingTimeoutExecutor.shutdownNow();
+			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
+			if (requestTimeoutScheduler != null)
+				requestTimeoutScheduler.shutdownNow();
 		}
 
 		@Override
 		public boolean awaitTermination(long absoluteDeadlineNanos)
 				throws InterruptedException {
 			HttpRuntimeSnapshot snapshot = retained();
-			boolean eventLoopTerminated = snapshot.eventLoop() == null
-					|| snapshot.eventLoop().joinUntil(absoluteDeadlineNanos);
+			EventLoop eventLoop = snapshot.eventLoop();
+			boolean eventLoopTerminated = eventLoop == null
+					|| eventLoop.joinUntil(absoluteDeadlineNanos);
 			boolean requestHandlersTerminated = awaitExecutor(
 					snapshot.requestHandlerExecutor(), absoluteDeadlineNanos);
 			boolean streamingTerminated = awaitExecutor(
@@ -2654,10 +2670,10 @@ final class DefaultHttpServer implements HttpServer {
 			HttpRuntimeSnapshot snapshot = retained();
 			Set<InternalResidualActivityType> kinds =
 					EnumSet.noneOf(InternalResidualActivityType.class);
-			if (snapshot.eventLoop() != null && !snapshot.eventLoop().isTerminated())
+			EventLoop eventLoop = snapshot.eventLoop();
+			if (eventLoop != null && !eventLoop.isTerminated())
 				kinds.add(InternalResidualActivityType.EVENT_LOOP);
-			if (snapshot.eventLoop() != null
-					&& snapshot.eventLoop().numAdmittedConnections() > 0)
+			if (eventLoop != null && eventLoop.numAdmittedConnections() > 0)
 				kinds.add(InternalResidualActivityType.CONNECTION);
 			if (!terminated(snapshot.requestHandlerExecutor())
 					|| !terminated(snapshot.streamingExecutor())

@@ -5,13 +5,19 @@
 ### Breaking Changes
 
 - **HTTP server type:** `ServerType.STANDARD_HTTP` is now `ServerType.HTTP`,
-  with no deprecated alias. Update source references, switch cases, and stored
+  with no deprecated alias, and `ServerType.MCP` is removed in favor of the
+  dedicated MCP lifecycle and metrics APIs. Update source references, switch cases, and stored
   enum names, then recompile integrations. The built-in Prometheus/OpenMetrics
   `soklet_transport_failures_total` label changes from
   `server_type="STANDARD_HTTP"` to `server_type="HTTP"`; update metric queries,
   dashboards, and alerts. The explicit OpenTelemetry `soklet.server.type`
   vocabulary remains `http`, `sse`, and `mcp`. See
   [HTTP server type](MIGRATING_TO_4_0.md#http-server-type).
+- **Metric snapshot keys:** thirteen public HTTP/SSE/transport
+  `MetricsCollector` key records are now final classes with getter accessors;
+  for example, `method()` becomes `getHttpMethod()` and `route()` becomes
+  `getRoute()`. Record deconstruction no longer applies. See
+  [Metric snapshot keys](MIGRATING_TO_4_0.md#metric-snapshot-keys).
 - **Servlet integrations:** both javax and Jakarta adapters move to 2.0.0
   and require Soklet 4.0.0. The former 3.x compatibility baseline is removed;
   applications must declare their core dependency explicitly because the
@@ -60,6 +66,9 @@
   admission/header tenancy. Resource URI templates remain supported; the
   retained request/admission endpoint-path-parameter maps are always empty.
 - **Simulator:** the static `Soklet.runSimulator` entry points are removed.
+  `Simulator.performMcpRequest` is replaced by `startMcpRequest`, returning
+  `McpSimulation`; inspect its completion instead of the removed
+  `onMcpStreamError` callback.
   `SokletSimulator.run` now accepts either an existing `SokletConfig` or a
   single-use `SimulatorConfig`, supplies a scope-bound `Simulator` to the
   simulation body, and returns the simulation's shutdown result. Build a fresh
@@ -72,14 +81,24 @@
   the response stream; GET/DELETE return 405; legacy session/event headers are
   never stored or emitted. Soklet 4.0.0 provides no profile fallback or
   compatibility adapter. The 4.0.0 migration is intentionally fall-forward
-  only. See [MCP wire migration](MIGRATING_TO_4_0.md#mcp-wire-migration).
+  only. See [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
   immutable `McpJson*` values, operation-specific contexts and registrations,
   Java-derived Tool Schema Profile 1 schemas, per-request admission identity,
   explicit invocation features/interceptor continuation, and aggregate
   lifecycle results. See
-  [MCP Java API migration](MIGRATING_TO_4_0.md#mcp-java-api-migration).
+  [current MCP endpoint authoring](MCP.md#endpoint-authoring).
+- **MCP logging metadata:** removed `McpLogLevel` and
+  `McpRequestContext.getLogLevel()`. Soklet does not implement MCP Logging.
+  The request metadata field remains internally validated and available through
+  `McpRequestContext.getRequestMetadata()`; applications use their own logging
+  and Soklet's observability/OpenTelemetry integrations.
+- **MCP client input:** removed the Roots and Sampling request types,
+  declarations, capabilities, and annotation configuration before release.
+  Multi-round input supports form and URL elicitation; applications pass file
+  information through tool parameters or resource URIs and call model providers
+  directly when needed.
 - **Public naming pass:** `CorsPreflight.with(...)` is now
   `fromOrigin(...)`; MCP input requests expose `getJsonRpcMethod()`; HTTP route
   metric keys expose `getHttpMethod()`; and the `McpEndpoint` server-information
@@ -1003,7 +1022,7 @@ work; it is not claimed as fixed by 4.0.0:
   `#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
   Live authority remains covered by
   `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-  `#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+  `#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
   `#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
   `#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
   `McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
@@ -1114,7 +1133,7 @@ work; it is not claimed as fixed by 4.0.0:
   `#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
   `#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
   `#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-  `#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+  `#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
   `McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
   `#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
   `#baggageParsingIsBoundedDecodedAndImmutable`,
@@ -1159,7 +1178,7 @@ work; it is not claimed as fixed by 4.0.0:
   carrier rendering is redacted but accessors intentionally expose them.
 - Representative exact citations from the full 46-test simulator/API gate are
   `McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-  `McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+  `McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
   `McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
   `#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
   `#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
@@ -1167,7 +1186,7 @@ work; it is not claimed as fixed by 4.0.0:
   `#mcpSimulationCompletionRetainsStreamCaptureFailures`,
   `#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
   `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-  `McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+  `McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
 - V21 brings Phase 6/provisional/reviewed owners to 15/32/219. The canonical
   comparison is 558 records with SHA-256
   `d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`;

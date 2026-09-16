@@ -2775,9 +2775,9 @@ final class McpPrivacyBoundaryFuzzTests {
   );
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 12,
-    CORE_COMPLETE: 113,
-    NOT_APPLICABLE: 19,
-    RELEASE_GATED: 119,
+    CORE_COMPLETE: 111,
+    NOT_APPLICABLE: 23,
+    RELEASE_GATED: 117,
     UNRESOLVED: 0,
   });
   assert.deepEqual(current.report.unresolvedRows, []);
@@ -3067,7 +3067,7 @@ final class McpPrivacyBoundaryFuzzTests {
     cwd: projectRoot,
     encoding: 'utf8', env: semanticGitEnvironment(),
   });
-  assert.equal(checkedInCli.status, 0);
+  assert.equal(checkedInCli.status, 0, checkedInCli.stderr);
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(checkedInCli.stderr, '');
 
@@ -3413,7 +3413,7 @@ final class McpPrivacyBoundaryFuzzTests {
     value.rows[0].releaseGates = ['candidate-build'];
     value.rows[0].reason =
       'Remaining immutable or scheduled evidence is owned by: candidate-build.';
-  }, /final disposition CORE_COMPLETE must equal 113/);
+  }, /final disposition CORE_COMPLETE must equal 111/);
   expectInvalid('balanced-row-attribution-swap', resolvedRegistry, (value) => {
     const coreComplete = row(value, 'MCP-BASE-001');
     const releaseGated = row(value, 'MCP-BASE-012');

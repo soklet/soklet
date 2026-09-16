@@ -21,9 +21,6 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.net.URI;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -45,8 +42,6 @@ final class McpEmbeddedInputRequestValidator {
 			McpJsonLimits.productionDefaults();
 	@NonNull
 	private static final McpJsonCodec JSON_CODEC = new McpJsonCodec(JSON_LIMITS);
-	@NonNull
-	private static final Set<@NonNull String> ROLES = Set.of("assistant", "user");
 
 	private McpEmbeddedInputRequestValidator() {
 	}
@@ -63,8 +58,6 @@ final class McpEmbeddedInputRequestValidator {
 
 			switch (declaration.method()) {
 				case "elicitation/create" -> validateElicitation(declaration, params);
-				case "sampling/createMessage" -> validateSampling(declaration, params);
-				case "roots/list" -> validateRoots(params);
 				default -> throw invalid();
 			}
 		} catch (IllegalArgumentException exception) {
@@ -209,317 +202,6 @@ final class McpEmbeddedInputRequestValidator {
 		optionalInteger(fields, "maxItems");
 	}
 
-	private static void validateSampling(
-			@NonNull McpInputRequestDeclaration declaration,
-			@NonNull McpJsonObject params) {
-		Map<String, McpJsonValue> fields = params.members();
-		McpJsonArray messages = requiredArray(fields, "messages");
-		requiredInteger(fields, "maxTokens");
-		optionalString(fields, "systemPrompt");
-		optionalNumber(fields, "temperature");
-		optionalStringArray(fields, "stopSequences");
-
-		if (fields.containsKey("includeContext")) {
-			String includeContext = requireStringValue(fields.get("includeContext"),
-					Set.of("none", "thisServer", "allServers"));
-			if (!"none".equals(includeContext))
-				requireCapability(declaration,
-						McpCoreClientCapability.SAMPLING_CONTEXT);
-		}
-
-		if (fields.containsKey("metadata"))
-			validateJsonObject(requiredObject(fields, "metadata"));
-		if (fields.containsKey("modelPreferences"))
-			validateModelPreferences(requiredObject(fields, "modelPreferences"));
-		if (fields.containsKey("toolChoice")) {
-			validateToolChoice(requiredObject(fields, "toolChoice"));
-			requireCapability(declaration, McpCoreClientCapability.SAMPLING_TOOLS);
-		}
-		if (fields.containsKey("tools")) {
-			for (McpJsonValue tool : requiredArray(fields, "tools").values())
-				validateTool(requireObject(tool));
-			requireCapability(declaration, McpCoreClientCapability.SAMPLING_TOOLS);
-		}
-
-		if (validateSamplingMessages(messages))
-			requireCapability(declaration, McpCoreClientCapability.SAMPLING_TOOLS);
-	}
-
-	private static void validateModelPreferences(
-			@NonNull McpJsonObject preferences) {
-		Map<String, McpJsonValue> fields = preferences.members();
-		optionalUnitInterval(fields, "costPriority");
-		optionalUnitInterval(fields, "intelligencePriority");
-		optionalUnitInterval(fields, "speedPriority");
-
-		if (fields.containsKey("hints")) {
-			for (McpJsonValue hint : requireArray(fields.get("hints")).values())
-				optionalString(requireObject(hint).members(), "name");
-		}
-	}
-
-	private static void validateToolChoice(@NonNull McpJsonObject toolChoice) {
-		Map<String, McpJsonValue> fields = toolChoice.members();
-		if (fields.containsKey("mode"))
-			requireStringValue(fields.get("mode"),
-					Set.of("auto", "required", "none"));
-	}
-
-	private static void validateTool(@NonNull McpJsonObject tool) {
-		Map<String, McpJsonValue> fields = tool.members();
-		requiredString(fields, "name");
-		optionalString(fields, "title");
-		optionalString(fields, "description");
-		optionalMetadata(fields, "_meta");
-		optionalIcons(fields, "icons");
-
-		McpJsonObject inputSchema = requiredObject(fields, "inputSchema");
-		requireStringValue(required(inputSchema.members(), "type"), Set.of("object"));
-		optionalString(inputSchema.members(), "$schema");
-
-		if (fields.containsKey("outputSchema"))
-			optionalString(requiredObject(fields, "outputSchema").members(), "$schema");
-
-		if (fields.containsKey("annotations")) {
-			Map<String, McpJsonValue> annotations =
-					requiredObject(fields, "annotations").members();
-			optionalString(annotations, "title");
-			optionalBoolean(annotations, "readOnlyHint");
-			optionalBoolean(annotations, "destructiveHint");
-			optionalBoolean(annotations, "idempotentHint");
-			optionalBoolean(annotations, "openWorldHint");
-		}
-	}
-
-	private static boolean validateSamplingMessages(@NonNull McpJsonArray messages) {
-		Map<String, Integer> pendingToolUses = Map.of();
-		Set<String> observedToolUseIds = new LinkedHashSet<>();
-		boolean usesTools = false;
-
-		for (McpJsonValue value : messages.values()) {
-			McpJsonObject message = requireObject(value);
-			Map<String, McpJsonValue> fields = message.members();
-			String role = requireStringValue(required(fields, "role"), ROLES);
-			optionalMetadata(fields, "_meta");
-			List<McpJsonValue> blocks = contentBlocks(required(fields, "content"));
-			Map<String, Integer> toolUses = new LinkedHashMap<>();
-			Map<String, Integer> toolResults = new LinkedHashMap<>();
-
-			for (McpJsonValue block : blocks) {
-				String toolIdentifier = validateSamplingContentBlock(
-						requireObject(block), role);
-				String type = requiredString(requireObject(block).members(), "type");
-				if ("tool_use".equals(type)) {
-					if (!observedToolUseIds.add(toolIdentifier))
-						throw invalid();
-					toolUses.merge(toolIdentifier, 1, Integer::sum);
-				} else if ("tool_result".equals(type)) {
-					toolResults.merge(toolIdentifier, 1, Integer::sum);
-				}
-			}
-
-			if (!toolResults.isEmpty()) {
-				usesTools = true;
-				if (!"user".equals(role) || toolResults.size() > blocks.size()
-						|| toolResults.values().stream().mapToInt(Integer::intValue).sum()
-								!= blocks.size()
-						|| !pendingToolUses.equals(toolResults))
-					throw invalid();
-				pendingToolUses = Map.of();
-			} else if (!pendingToolUses.isEmpty()) {
-				throw invalid();
-			}
-
-			if (!toolUses.isEmpty()) {
-				usesTools = true;
-				if (!"assistant".equals(role) || !pendingToolUses.isEmpty())
-					throw invalid();
-				pendingToolUses = Map.copyOf(toolUses);
-			}
-		}
-
-		if (!pendingToolUses.isEmpty())
-			throw invalid();
-
-		return usesTools;
-	}
-
-	@NonNull
-	private static List<@NonNull McpJsonValue> contentBlocks(
-			@NonNull McpJsonValue content) {
-		if (content instanceof McpJsonArray array)
-			return array.values();
-		return List.of(requireObject(content));
-	}
-
-	@NonNull
-	private static String validateSamplingContentBlock(@NonNull McpJsonObject block,
-			@NonNull String role) {
-		Map<String, McpJsonValue> fields = block.members();
-		String type = requiredString(fields, "type");
-		optionalMetadata(fields, "_meta");
-
-		switch (type) {
-			case "text" -> {
-				requiredString(fields, "text");
-				optionalAnnotations(fields, "annotations");
-			}
-			case "image", "audio" -> {
-				requiredString(fields, "data");
-				requiredString(fields, "mimeType");
-				optionalAnnotations(fields, "annotations");
-			}
-			case "tool_use" -> {
-				if (!"assistant".equals(role))
-					throw invalid();
-				requiredString(fields, "name");
-				requiredObject(fields, "input");
-				return requiredString(fields, "id");
-			}
-			case "tool_result" -> {
-				if (!"user".equals(role))
-					throw invalid();
-				for (McpJsonValue content : requiredArray(fields, "content").values())
-					validateToolResultContentBlock(requireObject(content));
-				optionalBoolean(fields, "isError");
-				return requiredString(fields, "toolUseId");
-			}
-			default -> throw invalid();
-		}
-
-		return "";
-	}
-
-	private static void validateToolResultContentBlock(@NonNull McpJsonObject block) {
-		Map<String, McpJsonValue> fields = block.members();
-		String type = requiredString(fields, "type");
-		optionalMetadata(fields, "_meta");
-
-		switch (type) {
-			case "text" -> {
-				requiredString(fields, "text");
-				optionalAnnotations(fields, "annotations");
-			}
-			case "image", "audio" -> {
-				requiredString(fields, "data");
-				requiredString(fields, "mimeType");
-				optionalAnnotations(fields, "annotations");
-			}
-			case "resource_link" -> validateResourceLink(fields);
-			case "resource" -> validateEmbeddedResource(fields);
-			default -> throw invalid();
-		}
-	}
-
-	private static void validateResourceLink(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
-		requiredString(fields, "name");
-		requireAbsoluteUri(requiredString(fields, "uri"));
-		optionalString(fields, "title");
-		optionalString(fields, "description");
-		optionalString(fields, "mimeType");
-		optionalInteger(fields, "size");
-		optionalIcons(fields, "icons");
-		optionalAnnotations(fields, "annotations");
-	}
-
-	private static void validateEmbeddedResource(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
-		optionalAnnotations(fields, "annotations");
-		Map<String, McpJsonValue> resource =
-				requiredObject(fields, "resource").members();
-
-		if (matches(() -> validateTextResourceContents(resource))
-				|| matches(() -> validateBlobResourceContents(resource)))
-			return;
-
-		throw invalid();
-	}
-
-	private static void validateTextResourceContents(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
-		validateResourceContents(fields);
-		requiredString(fields, "text");
-	}
-
-	private static void validateBlobResourceContents(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
-		validateResourceContents(fields);
-		requiredString(fields, "blob");
-	}
-
-	private static void validateResourceContents(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> resource) {
-		requireAbsoluteUri(requiredString(resource, "uri"));
-		optionalString(resource, "mimeType");
-		optionalMetadata(resource, "_meta");
-	}
-
-	private static void optionalAnnotations(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		if (!fields.containsKey(name))
-			return;
-		Map<String, McpJsonValue> annotations =
-				requireObject(fields.get(name)).members();
-		optionalStringArrayValues(annotations, "audience", ROLES);
-		optionalString(annotations, "lastModified");
-		optionalUnitInterval(annotations, "priority");
-	}
-
-	private static void optionalIcons(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		if (!fields.containsKey(name))
-			return;
-		for (McpJsonValue value : requireArray(fields.get(name)).values()) {
-			Map<String, McpJsonValue> icon = requireObject(value).members();
-			requireAbsoluteUri(requiredString(icon, "src"));
-			optionalString(icon, "mimeType");
-			optionalStringArray(icon, "sizes");
-			if (icon.containsKey("theme"))
-				requireStringValue(icon.get("theme"), Set.of("dark", "light"));
-		}
-	}
-
-	private static void validateRoots(@NonNull McpJsonObject params) {
-		optionalMetadata(params.members(), "_meta");
-	}
-
-	private static void optionalMetadata(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		if (fields.containsKey(name))
-			McpProtocolSupport.requireApplicationMetadataFields(
-					requireObject(fields.get(name)), Set.of());
-	}
-
-	private static void validateJsonObject(@NonNull McpJsonObject object) {
-		for (McpJsonValue value : object.members().values())
-			validateJsonValue(value);
-	}
-
-	private static void validateJsonValue(@NonNull McpJsonValue value) {
-		if (value instanceof McpJsonObject object) {
-			validateJsonObject(object);
-		} else if (value instanceof McpJsonArray array) {
-			for (McpJsonValue element : array.values())
-				validateJsonValue(element);
-		} else if (value instanceof McpJsonNumber number) {
-			McpJsonIntegerSupport.toSerializableInteger(number.value(), JSON_LIMITS);
-		} else if (!(value instanceof McpJsonString)
-				&& !(value instanceof McpJsonBoolean)) {
-			throw invalid();
-		}
-	}
-
-	private static void requireCapability(
-			@NonNull McpInputRequestDeclaration declaration,
-			@NonNull McpCoreClientCapability capability) {
-		if (!declaration.capabilities().contains(capability))
-			throw invalid();
-	}
-
 	private static boolean matches(@NonNull Runnable validator) {
 		try {
 			validator.run();
@@ -551,13 +233,6 @@ final class McpEmbeddedInputRequestValidator {
 		if (!(value instanceof McpJsonObject object))
 			throw invalid();
 		return object;
-	}
-
-	@NonNull
-	private static McpJsonArray requiredArray(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		return requireArray(required(fields, name));
 	}
 
 	@NonNull
@@ -597,12 +272,6 @@ final class McpEmbeddedInputRequestValidator {
 			requireString(fields.get(name));
 	}
 
-	private static void requiredInteger(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		requireInteger(required(fields, name));
-	}
-
 	private static void optionalInteger(
 			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String name) {
@@ -628,17 +297,6 @@ final class McpEmbeddedInputRequestValidator {
 		return number.value();
 	}
 
-	private static void optionalUnitInterval(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name) {
-		if (!fields.containsKey(name))
-			return;
-		BigDecimal value = requireNumber(fields.get(name));
-		if (value.compareTo(BigDecimal.ZERO) < 0
-				|| value.compareTo(BigDecimal.ONE) > 0)
-			throw invalid();
-	}
-
 	private static void optionalBoolean(
 			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String name) {
@@ -656,15 +314,6 @@ final class McpEmbeddedInputRequestValidator {
 	private static void requireStringArray(@NonNull McpJsonValue value) {
 		for (McpJsonValue element : requireArray(value).values())
 			requireString(element);
-	}
-
-	private static void optionalStringArrayValues(
-			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
-			@NonNull String name, @NonNull Set<@NonNull String> permittedValues) {
-		if (!fields.containsKey(name))
-			return;
-		for (McpJsonValue element : requireArray(fields.get(name)).values())
-			requireStringValue(element, permittedValues);
 	}
 
 	private static void requireTitledOptions(@NonNull McpJsonValue value) {

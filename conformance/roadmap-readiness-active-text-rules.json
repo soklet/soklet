@@ -7,14 +7,14 @@
       "rationale": "Every retained automatic/latest-profile reference is qualified by explicit fixed-profile and no-fallback language.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
-        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}}
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}}
       ],
       "matcher": {"kind":"regex","pattern":"automatic\\s+\"latest\"\\s+profile","caseSensitive":true},
       "expectation": "nonzero-with-notice",
       "noticePattern": {"kind":"regex","pattern":"neither selects an automatic\\s+\"latest\"\\s+profile nor falls back(?: to another revision)?","caseSensitive":true},
       "allowedMatches": [
         {"path":"MCP.md","matchedText":"automatic\n\"latest\" profile","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
-        {"path":"README.md","matchedText":"automatic\n\"latest\" profile","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}}
+        {"path":"README.md","matchedText":"automatic\n\"latest\" profile","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}}
       ]
     },
     {
@@ -255,24 +255,14 @@
       ],
       "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"SEP-2577","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet does not implement","caseSensitive":true},
       "allowedMatches": [
         {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"README.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"README.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"README.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"SECURITY.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"security"}},
         {"path":"SECURITY.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"security"}},
@@ -306,35 +296,25 @@
     {
       "id": "LIFECYCLE-004",
       "classification": "mcp-deprecated-reviewed-regions",
-      "rationale": "Deprecated MCP capability references are allowed only in clearly labeled compatibility/security regions carrying the lifecycle notice.",
+      "rationale": "Unsupported MCP capability references are allowed only in clearly labeled scope/security regions carrying the explicit non-support notice.",
       "files": [
-        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}}
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"],"role":"security"}}
       ],
       "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"regex","pattern":"SEP-2577 (?:marks Roots,\\s+Sampling, and Logging deprecated|deprecates Roots and Sampling at the MCP layer)","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet does not implement","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
-        {"path":"SECURITY.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}},
-        {"path":"SECURITY.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}},
-        {"path":"SECURITY.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}}
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}},
+        {"path":"SECURITY.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"],"role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"],"role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Protocol scope and unsupported features"],"role":"security"}}
       ]
     },
     {

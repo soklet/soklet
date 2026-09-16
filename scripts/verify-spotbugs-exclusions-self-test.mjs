@@ -259,6 +259,48 @@ try {
   assert.equal(tightened.broadMatchCount, 0);
   assert.equal(tightened.broadBugPatternCount, 0);
 
+  const constructorAnnotationMatch = '  <Match>\n'
+    + '    <Class name="fixture.Target"/>\n'
+    + '    <Method name="start" params="int" returns="void"/>\n'
+    + '    <Local name="parameter"/>\n'
+    + '    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>\n'
+    + '  </Match>\n';
+  assert.equal(verifyFilter(valid, constructorAnnotationMatch).methodSelectorCount, 1);
+  expectInvalid(valid, 'wrong exact overload',
+    constructorAnnotationMatch.replace('params="int"', 'params="long"'),
+    /method signature does not resolve/);
+  expectInvalid(valid, 'wrong exact return type',
+    constructorAnnotationMatch.replace('returns="void"', 'returns="int"'),
+    /method signature does not resolve/);
+  expectInvalid(valid, 'annotation exception may not match every overload',
+    constructorAnnotationMatch.replace(' params="int" returns="void"', ''),
+    /requires one exact pattern, method signature, and Local selector/);
+  expectInvalid(valid, 'annotation exception may not match every parameter',
+    constructorAnnotationMatch.replace('    <Local name="parameter"/>\n', ''),
+    /requires one exact pattern, method signature, and Local selector/);
+  expectInvalid(valid, 'annotation exception may not become a category exclusion',
+    constructorAnnotationMatch.replace('pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"', 'category="STYLE"'),
+    /attributes must be exactly: pattern/);
+  expectInvalid(valid, 'dropping a local may not permit category-wide suppression',
+    constructorAnnotationMatch.replace('    <Local name="parameter"/>\n', '')
+      .replace('pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"', 'category="STYLE"'),
+    /attributes must be exactly: pattern/);
+  expectInvalid(valid, 'annotation exception may not include another pattern',
+    constructorAnnotationMatch.replace('MARKED_AS_NULLABLE"', 'MARKED_AS_NULLABLE,NP_ALWAYS_NULL"'),
+    /requires one exact pattern, method signature, and Local selector/);
+  expectInvalid(valid, 'parameter selector may not be a regular expression',
+    constructorAnnotationMatch.replace('name="parameter"', 'name="~.*"'),
+    /Local must be an exact variable name/);
+  expectInvalid(valid, 'signature may not be a regular expression',
+    constructorAnnotationMatch.replace('params="int"', 'params="~.*"'),
+    /must be an exact Java type/);
+  expectInvalid(valid, 'void is not a parameter type',
+    constructorAnnotationMatch.replace('params="int"', 'params="void"'),
+    /may not use void here/);
+  expectInvalid(valid, 'annotation exception may not become global',
+    '  <Match><Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/></Match>\n',
+    /unapproved unscoped Bug pattern/);
+
   expectInvalid(
     valid,
     'scoped exclusion may not become global',
@@ -341,9 +383,9 @@ try {
   );
   expectInvalid(
     valid,
-    'nonempty signature attributes require verifier extension',
+    'signature attributes must include both parameter and return types',
     nestedMatch.replace('name="nested"', 'name="nested" returns="void"'),
-    /attributes must be exactly: name/,
+    /attributes must be exactly: name, params, returns/,
   );
   expectInvalid(
     valid,

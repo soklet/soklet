@@ -37,6 +37,61 @@ public class MetricsCollectorReleaseRegressionTests {
 	private static final String JSON_RPC_METHOD = "tools/call";
 
 	@Test
+	public void broadcastCallbacksUseExplicitlyNonNullBoxedCounts() throws Exception {
+		for (Class<?> type : List.of(MetricsCollector.class, DefaultMetricsCollector.class)) {
+			Method event = type.getMethod("didBroadcastSseEvent",
+					ResourcePathDeclaration.class, Integer.class, Integer.class, Integer.class);
+			Method comment = type.getMethod("didBroadcastSseComment",
+					ResourcePathDeclaration.class, SseComment.CommentType.class,
+					Integer.class, Integer.class, Integer.class);
+			for (Method callback : List.of(event, comment)) {
+				var parameters = callback.getAnnotatedParameterTypes();
+				for (int index = parameters.length - 3; index < parameters.length; index++)
+					Assertions.assertTrue(parameters[index].isAnnotationPresent(NonNull.class),
+							callback + " count parameter " + index + " must be explicitly non-null");
+			}
+			Assertions.assertThrows(NoSuchMethodException.class, () -> type.getMethod(
+					"didBroadcastSseEvent", ResourcePathDeclaration.class, int.class, int.class, int.class));
+			Assertions.assertThrows(NoSuchMethodException.class, () -> type.getMethod(
+					"didBroadcastSseComment", ResourcePathDeclaration.class, SseComment.CommentType.class,
+					int.class, int.class, int.class));
+		}
+	}
+
+	@Test
+	public void broadcastCountsRejectNullBeforeRecordingAnyOutcome() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
+		ResourcePathDeclaration route = ResourcePathDeclaration.fromPath("/events");
+		for (Integer[] counts : List.of(new Integer[]{null, 2, 1},
+				new Integer[]{3, null, 1}, new Integer[]{3, 2, null})) {
+			Assertions.assertThrows(NullPointerException.class, () -> collector.didBroadcastSseEvent(
+					route, counts[0], counts[1], counts[2]));
+			Assertions.assertThrows(NullPointerException.class, () -> collector.didBroadcastSseComment(
+					route, SseComment.CommentType.COMMENT, counts[0], counts[1], counts[2]));
+		}
+		MetricsCollector.Snapshot empty = collector.snapshot().orElseThrow();
+		Assertions.assertTrue(empty.getSseEventEnqueueOutcomes().isEmpty());
+		Assertions.assertTrue(empty.getSseCommentEnqueueOutcomes().isEmpty());
+
+		collector.didBroadcastSseEvent(route, 3, 2, 1);
+		collector.didBroadcastSseComment(route, SseComment.CommentType.COMMENT, 6, 4, 2);
+		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
+		for (MetricsCollector.SseEventEnqueueOutcome outcome : MetricsCollector.SseEventEnqueueOutcome.values()) {
+			long expected = switch (outcome) {
+				case ATTEMPTED -> 3L;
+				case ENQUEUED -> 2L;
+				case DROPPED -> 1L;
+			};
+			Assertions.assertEquals(expected, snapshot.getSseEventEnqueueOutcomes().get(
+					new MetricsCollector.SseEventRouteEnqueueOutcomeKey(MetricsCollector.RouteType.MATCHED,
+							route, outcome)));
+			Assertions.assertEquals(expected * 2, snapshot.getSseCommentEnqueueOutcomes().get(
+					new MetricsCollector.SseCommentRouteEnqueueOutcomeKey(MetricsCollector.RouteType.MATCHED,
+							route, SseComment.CommentType.COMMENT, outcome)));
+		}
+	}
+
+	@Test
 	public void serverTypesUseHttpAndSseNames() {
 		Assertions.assertArrayEquals(new ServerType[]{ServerType.HTTP, ServerType.SSE},
 				ServerType.values());

@@ -1,5 +1,6 @@
 HTTP/1.1 204 No Content
 Connection: close
+Date: Thu, 01 Jan 1970 00:00:00 GMT
 Cache-Control: no-store
 Access-Control-Allow-Origin: https://allowed.example
 Access-Control-Allow-Methods: POST, OPTIONS

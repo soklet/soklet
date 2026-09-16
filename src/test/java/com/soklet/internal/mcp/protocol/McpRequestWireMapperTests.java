@@ -200,10 +200,6 @@ public class McpRequestWireMapperTests {
 		McpClientCapabilities capabilities = mapped.params().metadata().clientCapabilities();
 		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.ELICITATION_FORM));
 		Assertions.assertFalse(capabilities.supports(McpCoreClientCapability.ELICITATION_URL));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.ROOTS));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.SAMPLING));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.SAMPLING_CONTEXT));
-		Assertions.assertTrue(capabilities.supports(McpCoreClientCapability.SAMPLING_TOOLS));
 		Assertions.assertEquals(McpJsonBoolean.TRUE,
 				capabilities.extensions().get("com.example/client-extension")
 						.members().get("enabled"));
@@ -232,6 +228,8 @@ public class McpRequestWireMapperTests {
 			McpRequestMetadata metadata = metadataWithOptionalFields(
 					"\"io.modelcontextprotocol/logLevel\":\"" + level.wireValue() + "\"");
 			Assertions.assertEquals(Optional.of(level), metadata.deprecatedLogLevel());
+			Assertions.assertEquals(new McpJsonString(level.wireValue()),
+					metadata.toJsonObject().members().get("io.modelcontextprotocol/logLevel"));
 		}
 	}
 
@@ -335,6 +333,8 @@ public class McpRequestWireMapperTests {
 				"\"progressToken\":true",
 				"\"io.modelcontextprotocol/logLevel\":null",
 				"\"io.modelcontextprotocol/logLevel\":\"verbose\"",
+				"\"io.modelcontextprotocol/logLevel\":\"WARNING\"",
+				"\"io.modelcontextprotocol/logLevel\":true",
 				"\"io.modelcontextprotocol/clientInfo\":null",
 				"\"io.modelcontextprotocol/clientInfo\":[]")) {
 			assertInvalidParams(requestWithOptionalFields(optionalField));

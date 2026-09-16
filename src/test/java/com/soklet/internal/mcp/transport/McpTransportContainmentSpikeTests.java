@@ -573,12 +573,14 @@ public class McpTransportContainmentSpikeTests {
 				}
 			}
 
+			// The writer can finish cleanup before the timer increments its reservation counter.
 			McpTransportRuntime.Snapshot cleaned = awaitSnapshot(
 					runtime,
 					value -> value.liveExchanges() == 0
 							&& value.dispatcher().activeSlots() == 0
 							&& value.dispatcher().queueDepth() == 0
-							&& value.cleanupCount() == 2,
+							&& value.cleanupCount() == 2
+							&& value.terminalReservations() == 1,
 					"deadline outcomes did not clean up");
 			Assertions.assertEquals(1L, cleaned.terminalReservations());
 			Assertions.assertEquals(2L, cleaned.cleanupCount());
@@ -662,8 +664,9 @@ public class McpTransportContainmentSpikeTests {
 				await(handlersStarted, "timer-isolation handlers did not both start");
 				assertStreamingHead(alpha.readHead());
 				assertStreamingHead(beta.readHead());
-				clock.advance(requestDeadline.plusNanos(1));
+				// Arm failure injection before an exchange can observe an expired deadline.
 				probeArmed.set(true);
+				clock.advance(requestDeadline.plusNanos(1));
 				await(failureInjected, "timer thread did not execute the injected exchange failure");
 
 				String failedId = failedRequestId.get();
@@ -685,11 +688,13 @@ public class McpTransportContainmentSpikeTests {
 						cancelationReasons.get(deadlineId));
 			}
 
+			// Response cleanup alone does not establish that the timer's counter has updated.
 			McpTransportRuntime.Snapshot isolated = awaitSnapshot(
 					runtime,
 					value -> value.liveExchanges() == 0
 							&& value.dispatcher().activeSlots() == 0
-							&& value.cleanupCount() == 2,
+							&& value.cleanupCount() == 2
+							&& value.terminalReservations() == 1,
 					"timer failure did not remain isolated to one exchange");
 			Assertions.assertEquals(1L, isolated.terminalReservations());
 			Assertions.assertTrue(runtime.timerThreadAlive(), "one exchange failure killed the timer thread");

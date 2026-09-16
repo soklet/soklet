@@ -32,8 +32,8 @@ compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 649 records and has SHA-256
-`981f1c85c1e81ca6f1cf75cab1cc333c08421e40c4e785a20d9fd46d1f26738a`.
+4.0.0 source tree. It currently contains 653 records and has SHA-256
+`65dadff569a4ebc708ba35b5ccc9fad5b8f2d370d740077c72a578f81ed96d65`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -74,20 +74,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 134 | frozen Phase 4 types and shared hosts |
+| `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
-| `non-mcp-public-api.allowlist` | 60 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, and server-type owners |
+| `non-mcp-public-api.allowlist` | 61 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, and value-converter owners |
 
-The 248-entry MCP union plus the 60-entry non-MCP allowlist owns exactly 308 current types.
+The 247-entry MCP union plus the 61-entry non-MCP allowlist owns exactly 308 current types.
 Ownership alone does not freeze a type. The three phase snapshots freeze their
 phase inventories, and the separate `provisional.signatures.jsonl` snapshot
 now freezes the 14 Tasks owners while retaining their explicit provisional
 maturity classification.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`,
+`5078bbafc91268306b8a6f032e648a02db0e35c1efc3e5a4ba8dc1c662323979`,
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`,
 and
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
@@ -99,6 +99,49 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+The [2026-09-16 Roots and Sampling removal amendment](phase-4-freeze-rationale.md#2026-09-16-roots-and-sampling-removal-amendment)
+records the owner's explicit removal decision for nine public members while
+retaining form/URL Elicitation and shared request-state machinery. The current
+Phase 4/5/6 and provisional signature counts are 1,119/195/425/98. The owner
+partition remains 133/36/64/14 plus 61 non-MCP owners (308 total), and the
+released-artifact incompatibility ledger remains at 653 records. Phase 4 and
+Phase 5 signature SHA-256 values are
+`ed4a7c16caa71602558e83964946b4403e856e939d7f0d3b92da74fccdaea97a` and
+`5173902c25e8610b2daa38f6aaa3c2d3cf4b244e20fe5f63061845b859716f3a`.
+Their reflection/nullability SHA-256 values are respectively
+`b7c2c5340cb8b1105c1fdbe8f6d43306572df0717086b9c4d238f8ba5017a0de` and
+`5313e39d3809ae81b4d664838bb6690a5d677d1e388547422b2d52ec88f2230c`.
+Fresh local JAR/japicmp reports match all four signature snapshots and the
+complete owner inventory. The public-evolution gate retains 17 lifecycle
+entries, including 11 explicit removals, and tests each removed member against
+reintroduction. These are development-artifact checks, not a captured release
+candidate or publication approval.
+
+The current development fixtures exercise retained Elicitation rather than
+the removed input methods. Their current manifest SHA-256 values are
+`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+for `conformance/golden-error-mapping/live/manifest.sha256`,
+`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`
+for `conformance/golden-result-envelope/live/manifest.sha256`, and
+`b78b70dff4ee4ad3689e750e7fb913942acf8bfa29ddf620b9e5ed941760ac5b`
+for `conformance/official/golden-wire/manifest.json`. Historical checkpoint
+hashes below remain records of their original bytes, not current fixture pins.
+
+The [2026-09-16 unsupported logging API removal amendment](phase-4-freeze-rationale.md#2026-09-16-unsupported-logging-api-removal-amendment)
+records the owner's approval to remove the unused public enum and accessor
+while preserving internal wire validation and raw request metadata. At that
+checkpoint, Phase 4/5/6 and provisional signature counts were 1,123/200/425/98,
+with 308 exact owners and 653 released-artifact incompatibility records. The
+Phase 4 signature SHA-256 is
+`34485a8b9747f912408335f7b56c78e141b4b62f05125278d991186b8ceb5dfe`,
+and its reflection/nullability SHA-256 is
+`ae0b0c0dcddbf0043b6643edcd3b2a268c1c0f55ed2d95fd5fd93000cf34d5f2`.
+The lifecycle inventory records those two Java APIs as removed, retains their
+protocol deprecation history, and preserves the complete historical
+suppression baseline with seven exact declaration retirements. The fresh
+local JAR's API report matched those snapshots; this was not an immutable
+release-candidate capture. The dated checkpoints below remain historical.
 
 The 2026-09-11 unparsed-request API reconciliation was green at 648
 incompatibilities, 307 exact owners, 1,135/200/425 Phase 4/5/6 signature
@@ -382,7 +425,7 @@ separate evidence is recorded below.
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
 freezes 1,135 canonical records across all 134 selected owners: 134 classes,
 one constructor, 96 fields, and 904 methods. Its SHA-256 is
-`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`.
+`648c5167a2366cf1c5b762b77cb7729eaad2824b9bfe06dbc1f726d449fdc643`.
 `phase-5.signatures.jsonl` freezes 200 canonical records across all 36
 selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
 Its SHA-256 is
@@ -396,7 +439,7 @@ the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
 Its SHA-256 is
 `70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
 The Phase 4/5/6 reflection/nullability digests are respectively
-`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`,
+`4ae05a45303bda3f3bcfd2d8d1aec52cd96c27d1e30e2feae3a4931e5e9cd51a`,
 `79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`,
 and
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
@@ -1175,7 +1218,7 @@ Exact aggregate coverage is
 `#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 Live authority remains covered by
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-`#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+`#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
 `#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
 `#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
 `McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
@@ -1283,7 +1326,7 @@ Core authority is
 `#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
 `#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
 `#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-`#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+`#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
 `McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
 `#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
 `#baggageParsingIsBoundedDecodedAndImmutable`,
@@ -1763,7 +1806,7 @@ and exact request/notification validation precedence. Its separate 22-response
 complete-HTTP corpus is bound
 by `conformance/golden-http-contract/precedence-no-store/manifest.sha256` at
 SHA-256
-`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
 Five contract tests comprise three real-listener goldens, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
 four diagnostic tests cover the positive post-JSON and negative pre-JSON/
 unreadable-method boundary. Those two classes pass 9/9 in the current focused
@@ -1785,13 +1828,13 @@ evidence or results from the release-pinned Corretto 21.0.12.9.1 toolchain.
 The subsequent 2026-08-21 core-result/error closure binds two independent
 production corpora. The 25-fixture core result-envelope manifest at
 `conformance/golden-result-envelope/live/manifest.sha256` has SHA-256
-`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 Four live tests and a checksum/source-authority inventory exhaust Soklet 3.6's
 core `complete` and `input_required` JSON/SSE envelope authorities; extension
 result types remain separately bounded by `MCP-BASE-006`. The twelve-fixture
 canonical complete-HTTP error manifest at
 `conformance/golden-error-mapping/live/manifest.sha256` has SHA-256
-`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
+`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
 Two live-listener tests cover the eight frozen ordinary mapping families,
 including both required and conditional `-32021`; readable-`initialize` and
 path-specific error evidence remain explicit supplements. Five deterministic
@@ -2214,8 +2257,10 @@ The three multi-round-trip data accessors on framework-owned
 `McpRequestContext` are now abstract so an incomplete implementation cannot
 silently discard retry responses or protected request state.
 
-`McpInputRequestType` replaces raw annotation method/capability pairing with
-four typed choices. Each choice derives its JSON-RPC method and base client
+At this historical checkpoint, `McpInputRequestType` replaced raw annotation
+method/capability pairing with four typed choices. The separately approved
+2026-09-16 removal leaves only form and URL Elicitation in the current API.
+Each original choice derived its JSON-RPC method and base client
 capability; only `SAMPLING_CONTEXT` and `SAMPLING_TOOLS` may be added to a
 sampling declaration. The annotation processor rejects invalid and duplicate
 combinations, emits declarations and request-state mode for generated tools,

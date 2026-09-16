@@ -20,12 +20,9 @@ import com.soklet.CorsAuthorizer;
 import com.soklet.LifecycleObserver;
 import com.soklet.LogEvent;
 import com.soklet.McpAdmissionController;
-import com.soklet.McpClientCapability;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
-import com.soklet.McpInputRequestDeclaration;
-import com.soklet.McpInputRequirement;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRequestContext;
 import com.soklet.McpServer;
@@ -49,7 +46,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Functional coverage for Soklet's declined SEP-2577 warning SHOULD. */
+/** Unsupported deprecated client capabilities remain available only as peer metadata. */
 @Timeout(60)
 public class McpDeprecatedCapabilityNegotiationTests {
 	private static final String LOOPBACK = "127.0.0.1";
@@ -57,7 +54,7 @@ public class McpDeprecatedCapabilityNegotiationTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 
 	@Test
-	public void deprecatedCapabilityNegotiationRemainsFunctionalAndEmitsNoWarningEvent()
+	public void deprecatedCapabilitiesRemainOpaqueWithoutNegotiatingTheirUse()
 			throws Exception {
 		List<LogEvent> logEvents = new CopyOnWriteArrayList<>();
 		AtomicReference<McpRequestContext> observedContext = new AtomicReference<>();
@@ -118,20 +115,10 @@ public class McpDeprecatedCapabilityNegotiationTests {
 			Assertions.assertEquals(200, response.statusCode(), response.body());
 			McpRequestContext context = observedContext.get();
 			Assertions.assertNotNull(context);
-			for (McpClientCapability capability : List.of(
-					McpClientCapability.ROOTS,
-					McpClientCapability.SAMPLING,
-					McpClientCapability.SAMPLING_CONTEXT,
-					McpClientCapability.SAMPLING_TOOLS))
-				Assertions.assertTrue(context.getClientCapabilities().supports(capability));
-			Assertions.assertEquals("roots/list",
-					McpInputRequestDeclaration.fromRoots(McpInputRequirement.REQUIRED)
-							.getJsonRpcMethod());
-			Assertions.assertEquals("sampling/createMessage",
-					McpInputRequestDeclaration.fromSampling(
-							Set.of(McpClientCapability.SAMPLING_CONTEXT,
-									McpClientCapability.SAMPLING_TOOLS),
-							McpInputRequirement.REQUIRED).getJsonRpcMethod());
+			Assertions.assertTrue(context.getClientCapabilities().toJson().find("roots").isPresent());
+			Assertions.assertTrue(context.getClientCapabilities().toJson().find("sampling").isPresent());
+			Assertions.assertFalse(response.body().contains("\"roots\""));
+			Assertions.assertFalse(response.body().contains("\"sampling\""));
 			Assertions.assertTrue(logEvents.isEmpty(),
 					() -> "Deprecated capability negotiation emitted LogEvent(s): "
 							+ logEvents);

@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static java.util.Objects.requireNonNullElse;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -69,7 +70,7 @@ final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 				return Optional.empty();
 
 			Optional<Object> valueConverterResult = valueConverter.convert(requestBodyAsString);
-			return valueConverterResult == null ? Optional.empty() : valueConverterResult;
+			return requireNonNullElse(valueConverterResult, Optional.empty());
 		} catch (ValueConversionException ignored) {
 			throw new IllegalRequestBodyException(
 					format("Unable to marshal the request body to %s.", requestBodyType));

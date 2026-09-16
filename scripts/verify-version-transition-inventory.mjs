@@ -130,6 +130,7 @@ const TARGET_PROJECTION_PATTERNS = Object.freeze([
 const CURRENT_STAGE_FIELDS = Object.freeze([
   'censusSha256',
   'd2RemovalAnchors',
+  'deletedBaselinePaths',
   'files',
   'name',
   'occurrences',
@@ -137,10 +138,11 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'79e46e5cad4e338e04ffdd3af85ec3553726542adffee921c209abcc92571363';
+	'1a21824647d1ba9cd72bf8df25aaf21a6d1c8e9bbeeda4cf86530793a24d3d63';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([
+  'EXTERNAL_DEPENDENCY',
   'PRESERVED',
   'REPLACED',
   'TARGET_ONLY',
@@ -578,7 +580,7 @@ function parseCurrentOccurrenceTuple(tuple, label) {
   if (classification === 'TARGET_ONLY' && !baselineIsNull) {
     fail(`${label} TARGET_ONLY anchor must have a null baseline key.`);
   }
-  if (classification !== 'TARGET_ONLY' && baselineIsNull) {
+  if (!['TARGET_ONLY', 'EXTERNAL_DEPENDENCY'].includes(classification) && baselineIsNull) {
     fail(`${label} ${classification} anchor requires a baseline key.`);
   }
   if (!baselineIsNull
@@ -691,6 +693,7 @@ function compareCurrentOccurrences(left, right) {
 export function currentStageCensusSha256(currentStage) {
   return sha256(JSON.stringify({
     d2RemovalAnchors: currentStage.d2RemovalAnchors,
+    deletedBaselinePaths: currentStage.deletedBaselinePaths,
     files: currentStage.files,
     name: currentStage.name,
     occurrences: currentStage.occurrences,
@@ -718,6 +721,7 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
   }
   for (const [field, value] of [
     ['d2RemovalAnchors', currentStage.d2RemovalAnchors],
+    ['deletedBaselinePaths', currentStage.deletedBaselinePaths],
     ['files', currentStage.files],
     ['occurrences', currentStage.occurrences],
     ['removedBaselineKeys', currentStage.removedBaselineKeys],
@@ -736,6 +740,13 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
 
   const inventoryPaths = [...new Set(inventory.occurrences.map(({ path }) => path))]
     .sort(asciiCompare);
+  const deletedPaths = new Set(currentStage.deletedBaselinePaths);
+  if (deletedPaths.size !== currentStage.deletedBaselinePaths.length
+      || JSON.stringify([...deletedPaths].sort(asciiCompare))
+        !== JSON.stringify(currentStage.deletedBaselinePaths)
+      || [...deletedPaths].some((path) => !inventoryPaths.includes(path))) {
+    fail('currentStage deletedBaselinePaths must name unique baseline paths in strict ASCII order.');
+  }
   const files = currentStage.files.map((tuple, index) =>
     parseFileTuple(tuple, `currentStage.files[${index}]`));
   for (let index = 1; index < files.length; index += 1) {
@@ -744,12 +755,16 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     }
   }
   const filePathSet = new Set(files.map(({ path }) => path));
-  const missingInventoryPath = inventoryPaths.find((path) => !filePathSet.has(path));
+  const missingInventoryPath = inventoryPaths.find((path) =>
+    !filePathSet.has(path) && !deletedPaths.has(path));
   if (missingInventoryPath !== undefined) {
     fail(`currentStage files must include every baseline-inventoried path; missing ${missingInventoryPath}.`);
   }
   if (new Set(currentStage.files).size !== currentStage.files.length) {
     fail('currentStage files contain a duplicate tuple.');
+  }
+  if ([...deletedPaths].some((path) => filePathSet.has(path))) {
+    fail('currentStage deletedBaselinePaths may not also be present in currentStage files.');
   }
 
   const baselineByKey = new Map(inventory.occurrences.map((row) => [
@@ -781,6 +796,9 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
   let previous = null;
   const anchorKeys = new Set();
   for (const [index, occurrence] of occurrences.entries()) {
+    if (deletedPaths.has(occurrence.path)) {
+      fail(`currentStage occurrence may not map a deleted baseline path: ${occurrence.path}.`);
+    }
     if (previous !== null && compareCurrentOccurrences(previous, occurrence) >= 0) {
       fail(`currentStage.occurrences[${index}] is not in strict ASCII path/location order.`);
     }
@@ -796,6 +814,12 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
       }
       continue;
     }
+    if (occurrence.classification === 'EXTERNAL_DEPENDENCY') {
+      if (!isOldVersionLiteral(occurrence.literal)
+          || occurrence.literal !== occurrence.finalLiteral)
+        fail(`EXTERNAL_DEPENDENCY anchor must preserve a non-target dependency token at ${occurrence.path}:${occurrence.line}.`);
+      if (occurrence.baselineKey === null) continue;
+    }
     const baselineKey = encodeRemovedTuple(occurrence.baselineKey);
     const baseline = baselineByKey.get(baselineKey);
     if (baseline === undefined) {
@@ -808,7 +832,10 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     if (occurrence.path !== baseline.path) {
       fail(`baseline occurrence ${baselineKey} may not move to another file.`);
     }
-    if (occurrence.classification === 'PRESERVED') {
+    if (occurrence.classification === 'EXTERNAL_DEPENDENCY') {
+      if (baseline.classification !== 'UNRELATED_VERSION_PRESERVE')
+        fail(`EXTERNAL_DEPENDENCY cannot reclassify a product baseline at ${baselineKey}.`);
+    } else if (occurrence.classification === 'PRESERVED') {
       if (!PRESERVE_CLASSIFICATIONS.has(baseline.classification)
           || occurrence.literal !== baseline.literal
           || occurrence.finalLiteral !== occurrence.literal) {
@@ -841,6 +868,15 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     }
     if (mappedBaselineKeys.has(key)) {
       fail(`baseline occurrence ${key} is both mapped and removed.`);
+    }
+  }
+  const removedKeySet = new Set(removedKeys);
+  for (const path of deletedPaths) {
+    const rows = inventory.occurrences.filter((row) => row.path === path);
+    if (rows.some((row) =>
+      !CURRENT_STAGE_REMOVAL_CLASSIFICATIONS.has(row.classification)
+        || !removedKeySet.has(printableOccurrenceKey(row)))) {
+      fail(`deleted baseline path must have every historical occurrence explicitly removed under an eligible classification: ${path}.`);
     }
   }
 
@@ -1243,7 +1279,9 @@ function currentCensusOccurrences(path, text) {
 }
 
 function requiredCurrentStagePaths(inventory, currentTexts) {
-  const paths = new Set(inventory.occurrences.map(({ path }) => path));
+  const deletedPaths = new Set(inventory.currentStage?.deletedBaselinePaths ?? []);
+  const paths = new Set(inventory.occurrences.map(({ path }) => path)
+    .filter((path) => !deletedPaths.has(path)));
   for (const [path, text] of currentTexts) {
     if (currentCensusOccurrences(path, text).length > 0) {
       paths.add(path);
@@ -1252,7 +1290,65 @@ function requiredCurrentStagePaths(inventory, currentTexts) {
   return [...paths].sort(asciiCompare);
 }
 
-function verifyReviewedStage(inventory, currentTexts, stage) {
+// New third-party versions can share the old product-version prefix. They are
+// current reviewed evidence, never additions to the immutable baseline. Bind
+// the exception to an exact version leaf and literal Maven coordinates so it
+// cannot hide product text, properties, configuration, comments, or Soklet deps.
+export function externalMavenVersionOwner(path, text, occurrence) {
+  if (!/(?:^|\/)pom\.xml$/u.test(path)) return null;
+  const source = text.replace(/<!--[\s\S]*?-->/gu,
+    (comment) => comment.replace(/[^\r\n]/gu, ' '));
+  const offset = text.split('\n').slice(0, occurrence.line - 1)
+    .reduce((sum, line) => sum + line.length + 1, 0) + occurrence.column;
+  const stack = [];
+  const nodes = [];
+  for (const match of source.matchAll(/<\/?([A-Za-z][A-Za-z0-9_.:-]*)\s*(?:[^<>]*?)>/gu)) {
+    const token = match[0];
+    if (token.startsWith('</')) {
+      const node = stack.pop();
+      if (!node || node.name !== match[1]) return null;
+      node.end = match.index;
+    } else {
+      const parent = stack.at(-1);
+      const node = { name: match[1], start: match.index + token.length,
+        end: match.index + token.length, parent, children: [] };
+      if (parent) parent.children.push(node);
+      nodes.push(node);
+      if (!token.endsWith('/>')) stack.push(node);
+    }
+  }
+  if (stack.length) return null;
+  const leaf = (node, name) => {
+    const found = node.children.filter((child) => child.name === name);
+    return found.length === 1 && found[0].children.length === 0 ? found[0] : null;
+  };
+  for (const node of nodes) {
+    if (!['plugin', 'dependency'].includes(node.name)
+        || node.parent?.name !== (node.name === 'plugin' ? 'plugins' : 'dependencies')) continue;
+    const ancestors = [];
+    for (let parent = node.parent; parent; parent = parent.parent) ancestors.push(parent.name);
+    if (!ancestors.includes('project') || ancestors.includes('configuration')) continue;
+    const version = leaf(node, 'version');
+    const artifact = leaf(node, 'artifactId');
+    const group = leaf(node, 'groupId');
+    if (!version || !artifact) continue;
+    if (!group && node.children.some((child) => child.name === 'groupId')) continue;
+    const groupId = group ? source.slice(group.start, group.end).trim()
+      : node.name === 'plugin' ? 'org.apache.maven.plugins' : '';
+    const artifactId = source.slice(artifact.start, artifact.end).trim();
+    const value = source.slice(version.start, version.end);
+    if (!/^[A-Za-z0-9_.-]+$/u.test(groupId)
+        || !/^[A-Za-z0-9_.-]+$/u.test(artifactId)
+        || /^com\.soklet(?:\.|$)/u.test(groupId)
+        || !/^\s*\d+(?:\.\d+)+(?:[-.][A-Za-z0-9]+)*\s*$/u.test(value)) continue;
+    if (offset === version.start + value.length - value.trimStart().length
+        && value.trim().startsWith(occurrence.literal))
+      return `${node.name}:${groupId}:${artifactId}`;
+  }
+  return null;
+}
+
+function verifyReviewedStage(inventory, currentTexts, stage, baselineTexts) {
   const files = inventory.currentStage.files.map((tuple, index) =>
     parseFileTuple(tuple, `currentStage.files[${index}]`));
   const requiredPaths = requiredCurrentStagePaths(inventory, currentTexts);
@@ -1260,6 +1356,21 @@ function verifyReviewedStage(inventory, currentTexts, stage) {
     fail('reviewed current-stage files differ from the exact union of baseline paths and current bounded-version paths.');
   }
   const expected = expectedReviewedOccurrences(inventory, stage);
+  for (const occurrence of expected) {
+    if (occurrence.classification !== 'EXTERNAL_DEPENDENCY') continue;
+    const owner = externalMavenVersionOwner(occurrence.path,
+      currentTexts.get(occurrence.path) ?? '', occurrence);
+    if (owner === null)
+      fail(`EXTERNAL_DEPENDENCY anchor is not an exact external Maven version at ${occurrence.path}:${occurrence.line}.`);
+    if (occurrence.baselineKey !== null) {
+      const key = occurrence.baselineKey;
+      const baselineText = baselineTexts.get(key.path) ?? '';
+      const token = scanText(key.path, baselineText).find((candidate) =>
+        candidate.line === key.line && candidate.occurrenceIndex === key.occurrenceIndex);
+      if (!token || externalMavenVersionOwner(key.path, baselineText, token) !== owner)
+        fail(`EXTERNAL_DEPENDENCY changes its baseline Maven owner at ${key.path}:${key.line}.`);
+    }
+  }
   const actual = [];
   for (const file of files) {
     const text = currentTexts.get(file.path);
@@ -1285,7 +1396,7 @@ function verifyReviewedStage(inventory, currentTexts, stage) {
   }
 
   const expectedOld = expected
-    .filter(({ classification }) => classification === 'PRESERVED')
+    .filter(({ classification }) => ['PRESERVED', 'EXTERNAL_DEPENDENCY'].includes(classification))
     .map(({ column, line, literal, path }) => ({ column, line, literal, path }));
   const actualOld = scanTexts(currentTexts)
     .map(({ column, line, literal, path }) => ({ column, line, literal, path }));
@@ -1318,7 +1429,7 @@ function verifyStage(inventory, baselineTexts, currentTexts, stage) {
   if (stage === 'post-retarget' || stage === 'post-d2') {
     verifyEarlyStage(inventory, baselineTexts, currentTexts, stage);
   } else {
-    verifyReviewedStage(inventory, currentTexts, stage);
+    verifyReviewedStage(inventory, currentTexts, stage, baselineTexts);
   }
 }
 
@@ -1570,6 +1681,7 @@ export function derivePostU7CurrentStage({
   const currentStage = {
     censusSha256: '',
     d2RemovalAnchors,
+    deletedBaselinePaths: [],
     files,
     name: CURRENT_STAGE_NAME,
     occurrences,
@@ -1616,6 +1728,18 @@ export function verifyVersionTransition({
   );
   const baselineTexts = readBaselineTexts(absoluteRoot, inventory.baselineCommit);
   verifyBaselineCoverage(inventory, baselineTexts);
+  if (stage === 'post-u7' || stage === 'final') {
+    for (const path of inventory.currentStage.deletedBaselinePaths) {
+      let exists = true;
+      try {
+        lstatSync(join(absoluteRoot, path));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        exists = false;
+      }
+      if (exists) fail(`reviewed deleted baseline path must be absent: ${path}.`);
+    }
+  }
   const currentTexts = readCurrentTexts(absoluteRoot, pendingCurrentStagePaths);
   verifyStage(inventory, baselineTexts, currentTexts, stage);
 

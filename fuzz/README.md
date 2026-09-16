@@ -4,6 +4,12 @@ This module contains Jazzer fuzz targets for Soklet's hand-rolled parsers. It
 is intentionally separate from the main Maven reactor so fuzzing dependencies
 stay out of the published `soklet` artifact.
 
+The module uses Jazzer 0.30.0 with JUnit 6.1.3 on Java 17 or newer. The JUnit
+BOM aligns the API, parameterized-test support, engine, launcher, and Platform
+commons modules, including Jazzer's transitive dependencies. Upgrading only
+the explicit API/engine/launcher dependencies leaves older Platform classes
+on the test classpath and can fail before any corpus input is executed.
+
 ## Running Locally
 
 Replay the checked-in corpus:

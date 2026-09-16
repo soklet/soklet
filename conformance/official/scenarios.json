@@ -4,7 +4,7 @@
   "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
   "currentImplementationPhase": 5,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phaseExecutionPolicy": "Phase 5 activates all 49 RUN rows after the 2026-09-13 alpha.11 repin: the prior 39 core scenarios plus ten Tasks extension scenarios. All profiles were re-observed against the exact built CLI; tools-list.phase4.v2 records the new deterministic-order check. Tasks notification delivery remains an explicit upstream harness SKIPPED profile with independent socket-level supplements. completion-complete remains the sole NOT_APPLICABLE row.",
+  "phaseExecutionPolicy": "The complete pinned 50-scenario inventory is retained. The 2026-09-16 owner-approved Roots/Sampling removal selects 45 RUN scenarios and marks four scenarios whose assertions require those removed features NOT_APPLICABLE, alongside unsupported Completion. Prior observations are historical; changed fixture bytes require fresh observation. Exact upstream SKIPPED checks remain explicit and require independent local supplements rather than being counted as success.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -29,7 +29,7 @@
         "McpSubscriptionPublicRuntimeTests#acknowledgmentIsFirstAndPreservesExactStringAndIntegerIds",
         "McpSubscriptionPublicRuntimeTests#publisherEmitsOnlyRequestedResourceEventsForMatchingUris"
       ],
-      "rationale": "The public fixture and standalone contract provide the scenario's progress, capability-diagnostic, valid embedded-elicitation, logging, MRTR, and truthful resource-subscription registrations. The controlled complete Phase 5 observation cleanly produced 28 SUCCESS and the two exact reviewed mutable-list SKIPPED occurrences, with automatic wire counts 0/0. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
+      "rationale": "After the owner-approved Roots/Sampling removal, the fixture provides elicitation-based capability diagnostics, progress, MRTR, and truthful resource subscriptions. The 2026-09-16 native observation produced 26 SUCCESS, two existing mutable-list SKIPPED checks, and two FAILURE checks marked untestable by upstream because its diagnostic assertions hard-code Sampling. The retained expected success profile deliberately does not match those failures: candidate-conformance remains failing until the upstream mismatch is resolved. The other 44 selected scenarios passed. Earlier 28-SUCCESS observations are historical and are not current evidence."
     },
     {
       "ordinal": 2,
@@ -620,38 +620,24 @@
     {
       "ordinal": 38,
       "name": "input-required-result-basic-sampling",
-      "selection": "RUN",
-      "earliestPhase": 5,
-      "phase3Status": "DEFERRED",
-      "expectedCheckProfile": "input-required-result-basic-sampling.phase5.v1",
-      "requiredFixtureRegistrations": [
-        "test_input_required_result_sampling tool emitting capital_question sampling/createMessage and completing after the valid retry"
-      ],
-      "localSupplements": [
-        "McpInputRequestContractTests#sampling_subcapabilities_imply_sampling_in_builder_but_not_raw_wire_shape",
-        "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
-        "McpInputResponseValidatorTests#acceptsEverySamplingContentShapeAndOpenExtensions",
-        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
-      ],
-      "rationale": "Local production-listener and input-union evidence covers sampling emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
+      "selection": "NOT_APPLICABLE",
+      "earliestPhase": null,
+      "phase3Status": "NOT_APPLICABLE",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [],
+      "localSupplements": [],
+      "rationale": "The owner-approved pre-release removal of Roots and Sampling makes this pinned scenario inapplicable: its assertions require deprecated input methods. Elicitation-based local tests continue to cover shared multi-round-trip and capability semantics; this is not a conformance pass for the removed features."
     },
     {
       "ordinal": 39,
       "name": "input-required-result-basic-list-roots",
-      "selection": "RUN",
-      "earliestPhase": 5,
-      "phase3Status": "DEFERRED",
-      "expectedCheckProfile": "input-required-result-basic-list-roots.phase5.v1",
-      "requiredFixtureRegistrations": [
-        "test_input_required_result_list_roots tool emitting client_roots roots/list and completing after the valid retry"
-      ],
-      "localSupplements": [
-        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission",
-        "McpInputRequiredPublicRuntimeTests#declaredInputRequestsEmitExactWireForToolsPromptsAndResources",
-        "McpInputResponseValidatorTests#acceptsRootsResultsAndTheOpenUnionSemantics",
-        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
-      ],
-      "rationale": "Local production-listener and input-union evidence covers roots emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
+      "selection": "NOT_APPLICABLE",
+      "earliestPhase": null,
+      "phase3Status": "NOT_APPLICABLE",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [],
+      "localSupplements": [],
+      "rationale": "The owner-approved pre-release removal of Roots and Sampling makes this pinned scenario inapplicable: its assertions require deprecated input methods. Elicitation-based local tests continue to cover shared multi-round-trip and capability semantics; this is not a conformance pass for the removed features."
     },
     {
       "ordinal": 40,
@@ -674,20 +660,13 @@
     {
       "ordinal": 41,
       "name": "input-required-result-multiple-input-requests",
-      "selection": "RUN",
-      "earliestPhase": 5,
-      "phase3Status": "DEFERRED",
-      "expectedCheckProfile": "input-required-result-multiple-input-requests.phase5.v1",
-      "requiredFixtureRegistrations": [
-        "test_input_required_result_multiple_inputs tool emitting elicitation, sampling, and roots inputRequests plus requestState, then completing after all responses"
-      ],
-      "localSupplements": [
-        "McpMultiRoundTripDescriptorTests#inputRequiredResultsSupportInputStateAndCombinedForms",
-        "McpInputRequiredPublicRuntimeTests#declaredInputRequestsEmitExactWireForToolsPromptsAndResources",
-        "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener",
-        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
-      ],
-      "rationale": "Local descriptor and production-listener evidence covers combined state, ordered multi-input emission, and multi-type responses. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
+      "selection": "NOT_APPLICABLE",
+      "earliestPhase": null,
+      "phase3Status": "NOT_APPLICABLE",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [],
+      "localSupplements": [],
+      "rationale": "The owner-approved pre-release removal of Roots and Sampling makes this pinned scenario inapplicable: its assertions require deprecated input methods. Elicitation-based local tests continue to cover shared multi-round-trip and capability semantics; this is not a conformance pass for the removed features."
     },
     {
       "ordinal": 42,
@@ -789,20 +768,13 @@
     {
       "ordinal": 48,
       "name": "input-required-result-capability-check",
-      "selection": "RUN",
-      "earliestPhase": 5,
-      "phase3Status": "DEFERRED",
-      "expectedCheckProfile": "input-required-result-capability-check.phase5.v1",
-      "requiredFixtureRegistrations": [
-        "test_input_required_result_capabilities tool emitting sampling-only inputRequests when the current request declares sampling but omits elicitation"
-      ],
-      "localSupplements": [
-        "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request",
-        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission",
-        "McpInputRequiredPublicRuntimeTests#capabilityRequirementsRespectThePolicyBoundaryAndRequestScope",
-        "McpInputRequiredPublicRuntimeTests#missingCapabilityWinsOverMalformedSecretBearingOutputAndRemainsRequestScoped"
-      ],
-      "rationale": "Local production-listener evidence covers current-request capability scoping and conditional emission. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
+      "selection": "NOT_APPLICABLE",
+      "earliestPhase": null,
+      "phase3Status": "NOT_APPLICABLE",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [],
+      "localSupplements": [],
+      "rationale": "The owner-approved pre-release removal of Roots and Sampling makes this pinned scenario inapplicable: its assertions require deprecated input methods. Elicitation-based local tests continue to cover shared multi-round-trip and capability semantics; this is not a conformance pass for the removed features."
     },
     {
       "ordinal": 49,

@@ -104,13 +104,8 @@ public class McpBootstrapValueTests {
 		McpClientCapabilities capabilities =
 				McpClientCapabilities.fromJson(json);
 
-		Assertions.assertTrue(capabilities.supports(McpClientCapability.ROOTS));
-		Assertions.assertTrue(
-				capabilities.supports(McpClientCapability.SAMPLING));
-		Assertions.assertTrue(
-				capabilities.supports(McpClientCapability.SAMPLING_CONTEXT));
-		Assertions.assertFalse(
-				capabilities.supports(McpClientCapability.SAMPLING_TOOLS));
+		Assertions.assertTrue(capabilities.toJson().find("roots").isPresent());
+		Assertions.assertTrue(capabilities.toJson().find("sampling").isPresent());
 		Assertions.assertSame(extension,
 				capabilities.findExtension("example.test").orElseThrow());
 		Assertions.assertTrue(capabilities.findExtension("ignored").isEmpty());
@@ -388,19 +383,11 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
-	public void deprecatedLogLevelExposesTheExactWireVocabulary() {
-		Assertions.assertArrayEquals(new McpLogLevel[]{
-				McpLogLevel.DEBUG,
-				McpLogLevel.INFO,
-				McpLogLevel.NOTICE,
-				McpLogLevel.WARNING,
-				McpLogLevel.ERROR,
-				McpLogLevel.CRITICAL,
-				McpLogLevel.ALERT,
-				McpLogLevel.EMERGENCY
-		}, McpLogLevel.values());
-		Assertions.assertNull(McpLogLevel.class.getAnnotation(Deprecated.class),
-				"MCP lifecycle deprecation must not imply Java API deprecation");
+	public void unsupportedLoggingHasNoDedicatedPublicApi() {
+		Assertions.assertThrows(ClassNotFoundException.class,
+				() -> Class.forName("com.soklet.McpLogLevel"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpRequestContext.class.getMethod("getLogLevel"));
 	}
 
 	private static McpEndpoint endpoint(String path) {

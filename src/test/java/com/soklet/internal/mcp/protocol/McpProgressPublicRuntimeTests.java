@@ -69,7 +69,7 @@ public class McpProgressPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
-	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
+	private static final String ELICITATION_URL_CAPABILITY = "{\"elicitation\":{\"url\":{}}}";
 
 	@Test
 	public void stringAndIntegerTokensProduceExactIsolatedMonotonicStreams()
@@ -222,7 +222,7 @@ public class McpProgressPublicRuntimeTests {
 	public void conditionalCapabilityHoldSuppressesProgressAndPreservesTerminalChoice()
 			throws Exception {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		AtomicBoolean completeReporterSuppressed = new AtomicBoolean();
 		AtomicBoolean inputReporterSuppressed = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> complete =
@@ -230,7 +230,7 @@ public class McpProgressPublicRuntimeTests {
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							if (request.getClientCapabilities().supports(
-									com.soklet.McpClientCapability.ROOTS)) {
+									com.soklet.McpClientCapability.ELICITATION_URL)) {
 								features.require(McpProgressReporter.class).report(
 										McpProgressUpdate.withProgress(1.0d).build());
 							} else {
@@ -250,7 +250,7 @@ public class McpProgressPublicRuntimeTests {
 									.find(McpProgressReporter.class).isEmpty());
 							return McpInputRequiredResult.withInputRequest("roots", McpInputRequest.fromDeclaration(
 											roots,
-													McpJsonObject.emptyInstance()))
+													McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 									.build();
 						})
 						.addInputRequestDeclarations(roots)
@@ -281,13 +281,13 @@ public class McpProgressPublicRuntimeTests {
 						+ "\"code\":-32021,"
 						+ "\"message\":\"Missing required client capability\","
 						+ "\"data\":{\"requiredCapabilities\":{"
-						+ "\"roots\":{}}}}}", client.readFixedBody(head));
+						+ "\"elicitation\":{\"url\":{}}}}}}", client.readFixedBody(head));
 			}
 			Assertions.assertTrue(inputReporterSuppressed.get());
 
 			try (McpChunkedHttpClient client = callTool(port,
 					"\"conditional-supported\"",
-					"progress.conditional-complete", ROOTS_CAPABILITY,
+					"progress.conditional-complete", ELICITATION_URL_CAPABILITY,
 					"\"live\"")) {
 				assertSseHead(client.readHead());
 				Assertions.assertEquals(sse("{\"jsonrpc\":\"2.0\","

@@ -100,6 +100,7 @@ public final class EffectiveOriginResolver {
 	 * Resolves the effective origin.
 	 *
 	 * @return the effective origin, or {@link Optional#empty()} if it could not be determined
+	 * @throws IllegalStateException if {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} is selected without a trusted-proxy predicate or allowlist
 	 */
 	@NonNull
 	public Optional<@NonNull String> resolve() {

@@ -401,6 +401,12 @@ try {
   );
   assert.match(runner, /--log-opts="\$candidate_commit"/u);
   assert.match(runner, new RegExp(approved.policy.spotbugs.exclusionFileSha256, 'u'));
+  assert.ok(runner.includes('"$candidate_commit:config/spotbugs-exclude.xml"'),
+    'release scans must materialize filter bytes from the exact candidate commit');
+  assert.equal(sha256(readFileSync(join(projectRoot, 'config/spotbugs-exclude.xml'))),
+    approved.policy.spotbugs.exclusionFileSha256,
+    'current candidate-tracked exclusions must match the registered digest');
+  assertions += 2;
   const spotbugsExecutionIndex = runner.indexOf('-Pspotbugs compile spotbugs:check');
   assert.notEqual(spotbugsExecutionIndex, -1);
   assert.match(runner, /\[\[ "\$build_jdk" == 17 \]\]/u);
@@ -435,6 +441,15 @@ try {
     'both Gitleaks reports must be attempted before the producer decision',
   );
   const pom = readFileSync(join(projectRoot, 'pom.xml'), 'utf8');
+  const pluginVersion = approved.policy.spotbugs.mavenPluginVersion;
+  const engineVersion = approved.policy.spotbugs.engineVersion;
+  assert.ok(pom.includes(`<artifactId>spotbugs-maven-plugin</artifactId>\n                        <version>${pluginVersion}</version>`),
+    'developer/CI SpotBugs version must equal the release registry pin');
+  assert.ok(runner.includes(`/spotbugs-maven-plugin/${pluginVersion}/spotbugs-maven-plugin-${pluginVersion}.jar`),
+    'release producer must download the registered SpotBugs Maven plugin');
+  assert.ok(runner.includes(`/spotbugs/${engineVersion}/spotbugs-${engineVersion}.jar`),
+    'release producer must download the registered SpotBugs engine');
+  assertions += 3;
   assert.match(
     pom,
     /<soklet\.spotbugs\.excludeFilterFile>\$\{project\.basedir\}\/config\/spotbugs-exclude\.xml<\/soklet\.spotbugs\.excludeFilterFile>/u,

@@ -22,9 +22,16 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.util.AbstractMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Generic hierarchy coverage for {@link AbstractValueConverter}.
@@ -33,6 +40,47 @@ import java.util.Optional;
  */
 @ThreadSafe
 public class AbstractValueConverterTests {
+	@Test
+	public void semanticTypeVariableFixedPointDoesNotRequireReferenceIdentity() throws Exception {
+		TypeVariable<?> variable = equalVariableCopy(GenericListConverter.class.getTypeParameters()[0]);
+		TypeVariable<?> equalCopy = equalVariableCopy(variable);
+		Assertions.assertNotSame(variable, equalCopy);
+		Assertions.assertEquals(variable, equalCopy);
+		AtomicInteger lookups = new AtomicInteger();
+		// A Map may return equal, non-identical values. Bound the negative control so
+		// a resolver relying on reflection-object identity fails instead of overflowing.
+		Map<TypeVariable<?>, Type> substitutions = new AbstractMap<>() {
+			@Override
+			public Type get(Object key) {
+				if (!variable.equals(key))
+					return null;
+				if (lookups.incrementAndGet() > 2)
+					throw new AssertionError("Equal type-variable substitution must terminate");
+				return equalVariableCopy(variable);
+			}
+
+			@Override
+			public Set<Entry<TypeVariable<?>, Type>> entrySet() {
+				return Set.of(Map.entry(variable, equalCopy));
+			}
+		};
+		Method resolve = AbstractValueConverter.class.getDeclaredMethod("resolve", Type.class, Map.class);
+		resolve.setAccessible(true);
+		Assertions.assertSame(variable, resolve.invoke(null, variable, substitutions));
+		Assertions.assertEquals(1, lookups.get());
+	}
+
+	private static TypeVariable<?> equalVariableCopy(TypeVariable<?> variable) {
+		return (TypeVariable<?>) Proxy.newProxyInstance(TypeVariable.class.getClassLoader(),
+				new Class<?>[]{TypeVariable.class}, (proxy, method, arguments) -> {
+					if (method.getName().equals("equals"))
+						return arguments[0] instanceof TypeVariable<?> candidate
+								&& variable.getName().equals(candidate.getName())
+								&& variable.getGenericDeclaration().equals(candidate.getGenericDeclaration());
+					return method.invoke(variable, arguments);
+				});
+	}
+
 	@Test
 	public void unrelatedInterfaceDoesNotHideParameterizedSuperclass() {
 		ValueConverter<String, Token> converter = new MarkerConverter();

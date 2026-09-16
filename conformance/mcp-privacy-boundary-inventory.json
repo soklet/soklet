@@ -2241,15 +2241,6 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpRequestContext#getLogLevel()->ApplicationRequestCarrier.surface.getLogLevel@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getLogLevel()",
-          "occurrence": 1,
-          "owner": "com.soklet.DefaultMcpRequestContext",
-          "sink": "ApplicationRequestCarrier.surface.getLogLevel"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpRequestContext#getOperationName()->ApplicationRequestCarrier.surface.getOperationName@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "getOperationName()",
@@ -4698,15 +4689,6 @@
         },
         {
           "file": "src/main/java/com/soklet/McpRequestContext.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpRequestContext.java#com.soklet.McpRequestContext#getLogLevel()->ApplicationRequestCarrier.surface.getLogLevel@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getLogLevel()",
-          "occurrence": 1,
-          "owner": "com.soklet.McpRequestContext",
-          "sink": "ApplicationRequestCarrier.surface.getLogLevel"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpRequestContext.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpRequestContext.java#com.soklet.McpRequestContext#getOperationName()->ApplicationRequestCarrier.surface.getOperationName@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "getOperationName()",
@@ -5607,12 +5589,12 @@
         },
         {
           "file": "src/main/java/com/soklet/MultipartField.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/MultipartField.java#com.soklet.MultipartField.Copier#contentType(Charset)->ApplicationRequestCarrier.surface.contentType@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/MultipartField.java#com.soklet.MultipartField.Copier#charset(Charset)->ApplicationRequestCarrier.surface.charset@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "contentType(Charset)",
+          "member": "charset(Charset)",
           "occurrence": 1,
           "owner": "com.soklet.MultipartField.Copier",
-          "sink": "ApplicationRequestCarrier.surface.contentType"
+          "sink": "ApplicationRequestCarrier.surface.charset"
         },
         {
           "file": "src/main/java/com/soklet/MultipartField.java",
@@ -6336,9 +6318,9 @@
         },
         {
           "file": "src/main/java/com/soklet/Request.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Request.java#com.soklet.Request.PathBuilder#idGenerator(IdGenerator)->ApplicationRequestCarrier.surface.idGenerator@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Request.java#com.soklet.Request.PathBuilder#idGenerator(IdGenerator<?>)->ApplicationRequestCarrier.surface.idGenerator@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "idGenerator(IdGenerator)",
+          "member": "idGenerator(IdGenerator<?>)",
           "occurrence": 1,
           "owner": "com.soklet.Request.PathBuilder",
           "sink": "ApplicationRequestCarrier.surface.idGenerator"
@@ -6453,9 +6435,9 @@
         },
         {
           "file": "src/main/java/com/soklet/Request.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Request.java#com.soklet.Request.RawBuilder#idGenerator(IdGenerator)->ApplicationRequestCarrier.surface.idGenerator@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Request.java#com.soklet.Request.RawBuilder#idGenerator(IdGenerator<?>)->ApplicationRequestCarrier.surface.idGenerator@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "idGenerator(IdGenerator)",
+          "member": "idGenerator(IdGenerator<?>)",
           "occurrence": 1,
           "owner": "com.soklet.Request.RawBuilder",
           "sink": "ApplicationRequestCarrier.surface.idGenerator"
@@ -10947,24 +10929,6 @@
         },
         {
           "file": "src/main/java/com/soklet/Utilities.java",
-          "key": "PRIV-MATCH-006:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#percentDecodeCookieValue(String)->RequestException.IllegalRequestException@1",
-          "matcherRuleId": "PRIV-MATCH-006",
-          "member": "percentDecodeCookieValue(String)",
-          "occurrence": 1,
-          "owner": "com.soklet.Utilities",
-          "sink": "RequestException.IllegalRequestException"
-        },
-        {
-          "file": "src/main/java/com/soklet/Utilities.java",
-          "key": "PRIV-MATCH-006:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#percentDecodeCookieValue(String)->RequestException.IllegalRequestException@2",
-          "matcherRuleId": "PRIV-MATCH-006",
-          "member": "percentDecodeCookieValue(String)",
-          "occurrence": 2,
-          "owner": "com.soklet.Utilities",
-          "sink": "RequestException.IllegalRequestException"
-        },
-        {
-          "file": "src/main/java/com/soklet/Utilities.java",
           "key": "PRIV-MATCH-006:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#validatePercentEncodingInUrlComponent(String)->RequestException.IllegalRequestException@1",
           "matcherRuleId": "PRIV-MATCH-006",
           "member": "validatePercentEncodingInUrlComponent(String)",
@@ -14472,9 +14436,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor.McpInputRequestModel#McpInputRequestModel(String,List<String>,String)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor.McpInputRequestModel#McpInputRequestModel(String,String)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "McpInputRequestModel(String,List<String>,String)",
+          "member": "McpInputRequestModel(String,String)",
           "occurrence": 1,
           "owner": "com.soklet.SokletProcessor.McpInputRequestModel",
           "sink": "Diagnostic.recordConstructor"
@@ -14484,15 +14448,6 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor.McpInputRequestModel#requirement()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "requirement()",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletProcessor.McpInputRequestModel",
-          "sink": "Diagnostic.recordAccessor"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor.McpInputRequestModel#samplingCapabilities()->Diagnostic.recordAccessor@1",
-          "matcherRuleId": "PRIV-MATCH-008",
-          "member": "samplingCapabilities()",
           "occurrence": 1,
           "owner": "com.soklet.SokletProcessor.McpInputRequestModel",
           "sink": "Diagnostic.recordAccessor"
@@ -30323,6 +30278,15 @@
           "sink": "FixtureArtifact.ROOT_007"
         },
         {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTestInputs/decodeStringOnlyRejectsWithRedactedIllegalArgumentException/overlapping-sentinels.header",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTestInputs/decodeStringOnlyRejectsWithRedactedIllegalArgumentException/overlapping-sentinels.header#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
           "file": "fuzz/src/test/resources/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTestInputs/decodeStringOnlyRejectsWithRedactedIllegalArgumentException/plain.header",
           "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTestInputs/decodeStringOnlyRejectsWithRedactedIllegalArgumentException/plain.header#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
           "matcherRuleId": "PRIV-MATCH-010",
@@ -35205,27 +35169,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#fromSampling(Set<McpClientCapability>,McpInputRequirement)->Throwable.IllegalArgumentException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "fromSampling(Set<McpClientCapability>,McpInputRequirement)",
-          "occurrence": 1,
-          "owner": "com.soklet.McpInputRequestDeclaration",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#requireExactCapabilities(Set<McpClientCapability>,McpClientCapability,String)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "requireExactCapabilities(Set<McpClientCapability>,McpClientCapability,String)",
-          "occurrence": 1,
-          "owner": "com.soklet.McpInputRequestDeclaration",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#validateCapabilities(McpInputRequestType,Set<McpClientCapability>)->Throwable.IllegalArgumentException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "validateCapabilities(McpInputRequestType,Set<McpClientCapability>)",
           "occurrence": 1,
           "owner": "com.soklet.McpInputRequestDeclaration",
           "sink": "Throwable.IllegalArgumentException"
@@ -38418,24 +38364,6 @@
         },
         {
           "file": "src/main/java/com/soklet/Utilities.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#percentDecodeCookieValue(String)->Throwable.IllegalRequestException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "percentDecodeCookieValue(String)",
-          "occurrence": 1,
-          "owner": "com.soklet.Utilities",
-          "sink": "Throwable.IllegalRequestException"
-        },
-        {
-          "file": "src/main/java/com/soklet/Utilities.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#percentDecodeCookieValue(String)->Throwable.IllegalRequestException@2",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "percentDecodeCookieValue(String)",
-          "occurrence": 2,
-          "owner": "com.soklet.Utilities",
-          "sink": "Throwable.IllegalRequestException"
-        },
-        {
-          "file": "src/main/java/com/soklet/Utilities.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#validateHeaderNameAndValue(String,String)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "validateHeaderNameAndValue(String,String)",
@@ -39268,24 +39196,6 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "McpInputRequestDeclaration()",
           "occurrence": 3,
-          "owner": "com.soklet.internal.mcp.protocol.McpInputRequestDeclaration",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java#com.soklet.internal.mcp.protocol.McpInputRequestDeclaration#McpInputRequestDeclaration()->Throwable.IllegalArgumentException@4",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "McpInputRequestDeclaration()",
-          "occurrence": 4,
-          "owner": "com.soklet.internal.mcp.protocol.McpInputRequestDeclaration",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java#com.soklet.internal.mcp.protocol.McpInputRequestDeclaration#McpInputRequestDeclaration()->Throwable.IllegalArgumentException@5",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "McpInputRequestDeclaration()",
-          "occurrence": 5,
           "owner": "com.soklet.internal.mcp.protocol.McpInputRequestDeclaration",
           "sink": "Throwable.IllegalArgumentException"
         },
@@ -44193,6 +44103,15 @@
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.ByteTokenizer",
           "sink": "Throwable.MalformedRequestException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop#ConnectionEventLoop(Options,Logger,Handler,AtomicLong,AtomicBoolean,AtomicBoolean,Consumer<Throwable>,Runnable,TransportFailureObserver)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ConnectionEventLoop(Options,Logger,Handler,AtomicLong,AtomicBoolean,AtomicBoolean,Consumer<Throwable>,Runnable,TransportFailureObserver)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop",
+          "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
@@ -50595,18 +50514,18 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMetricsCollector.java#com.soklet.DefaultMetricsCollector#didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,int,int,int)->MetricsCollector.override.didBroadcastSseComment@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMetricsCollector.java#com.soklet.DefaultMetricsCollector#didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,Integer,Integer,Integer)->MetricsCollector.override.didBroadcastSseComment@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,int,int,int)",
+          "member": "didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,Integer,Integer,Integer)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMetricsCollector",
           "sink": "MetricsCollector.override.didBroadcastSseComment"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMetricsCollector.java#com.soklet.DefaultMetricsCollector#didBroadcastSseEvent(ResourcePathDeclaration,int,int,int)->MetricsCollector.override.didBroadcastSseEvent@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMetricsCollector.java#com.soklet.DefaultMetricsCollector#didBroadcastSseEvent(ResourcePathDeclaration,Integer,Integer,Integer)->MetricsCollector.override.didBroadcastSseEvent@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "didBroadcastSseEvent(ResourcePathDeclaration,int,int,int)",
+          "member": "didBroadcastSseEvent(ResourcePathDeclaration,Integer,Integer,Integer)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMetricsCollector",
           "sink": "MetricsCollector.override.didBroadcastSseEvent"
@@ -51747,18 +51666,18 @@
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector#didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,int,int,int)->MetricsCollector.surface.didBroadcastSseComment@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector#didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,Integer,Integer,Integer)->MetricsCollector.surface.didBroadcastSseComment@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,int,int,int)",
+          "member": "didBroadcastSseComment(ResourcePathDeclaration,SseComment.CommentType,Integer,Integer,Integer)",
           "occurrence": 1,
           "owner": "com.soklet.MetricsCollector",
           "sink": "MetricsCollector.surface.didBroadcastSseComment"
         },
         {
           "file": "src/main/java/com/soklet/MetricsCollector.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector#didBroadcastSseEvent(ResourcePathDeclaration,int,int,int)->MetricsCollector.surface.didBroadcastSseEvent@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/MetricsCollector.java#com.soklet.MetricsCollector#didBroadcastSseEvent(ResourcePathDeclaration,Integer,Integer,Integer)->MetricsCollector.surface.didBroadcastSseEvent@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "didBroadcastSseEvent(ResourcePathDeclaration,int,int,int)",
+          "member": "didBroadcastSseEvent(ResourcePathDeclaration,Integer,Integer,Integer)",
           "occurrence": 1,
           "owner": "com.soklet.MetricsCollector",
           "sink": "MetricsCollector.surface.didBroadcastSseEvent"
@@ -57949,7 +57868,7 @@
         "fuzz/src/test/java/com/soklet/QueryFormatFuzzTest.java#extractQueryParametersOnlyRejectsWithIllegalRequestException",
         "fuzz/src/test/java/com/soklet/internal/microhttp/RequestParserFuzzTest.java#parseIncrementalRequestOnlyRejectsWithDeclaredExceptions",
         "src/test/java/com/soklet/SokletTests.java#testMultipart",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpInputResponseValidatorTests.java#acceptsEverySamplingContentShapeAndOpenExtensions",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputResponseValidatorTests.java#acceptsOpenElicitationResultsWithoutMutatingThem",
         "src/test/java/com/soklet/internal/mcp/schema/JsonSchemaTestSuitePinTests.java#manifestAuthenticatesTheExactImportedResourceTree"
       ],
       "category": "FIXTURE",
@@ -59429,6 +59348,36 @@
           "sink": "Diagnostic.recordRenderer"
         }
       ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/MultipartEdgeCaseTests.java#invalidFilenameCharacterEntitiesYieldRedacted400"
+      ],
+      "category": "EXCEPTION",
+      "classification": "REDACTED",
+      "contract": "Invalid multipart filename numeric entities produce one fixed IllegalRequestBodyException message without interpolating the filename or entity and without retaining a cause or exact input field. Both the request-exception and general Throwable construction lenses identify this same redacted site; the standard error response remains the fixed HTTP 400 body.",
+      "id": "PRIV-BOUND-043",
+      "name": "Fixed invalid multipart filename entity failure",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.HTMLUtilities#unescapeHtml(String)->RequestException.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "unescapeHtml(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser.HTMLUtilities",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.HTMLUtilities#unescapeHtml(String)->Throwable.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "unescapeHtml(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser.HTMLUtilities",
+          "sink": "Throwable.IllegalRequestBodyException"
+        }
+      ]
     }
   ],
   "delegations": [
@@ -59608,6 +59557,28 @@
       "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
       "rationale": "This exact invocation resets the private taskNotificationProjectionQueue while holding its RequestControl lock. It clears projection scheduling and retained delivery state; the receiver is not a MetricsCollector and no metric, label, request, or Throwable is emitted. The broad reset vocabulary matcher remains unchanged so new sites still require classification.",
       "sink": "MetricsCollector.invocation.reset"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-007",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performHttpRequest(Request)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "performHttpRequest(Request)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receiver at this exact site is the Request.Copier returned by requireNonNull(request).copy(), not LogEvent.Copier. finish() constructs a fresh immutable Request identity for one HTTP simulation dispatch; it emits no log or attachment. Existing request-carrier and simulator boundaries cover the exact application values. The broad fluent-attachment matcher remains unchanged so other finish() sites still require classification.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-008",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequest(Request)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "performSseRequest(Request)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receiver at this exact site is the Request.Copier returned by requireNonNull(request).copy(), not LogEvent.Copier. finish() constructs a fresh immutable Request identity for one SSE simulation dispatch; it emits no log or attachment. Existing request-carrier and simulator boundaries cover the exact application values. The broad fluent-attachment matcher remains unchanged so other finish() sites still require classification.",
+      "sink": "LogEvent.attachment.finish"
     }
   ],
   "scanRoots": [

@@ -45,9 +45,16 @@ const expectedPins = Object.freeze({
   specificationLicenseVendoredPath: 'final-schema/LICENSE.upstream',
   finalLicenseSha256: '0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a',
   fullCount: 50,
-  runCount: 49,
+  runCount: 45,
+  excludedNames: Object.freeze([
+    'completion-complete',
+    'input-required-result-basic-sampling',
+    'input-required-result-basic-list-roots',
+    'input-required-result-multiple-input-requests',
+    'input-required-result-capability-check',
+  ]),
   fullDigest: '25a6351c04df32aa7866e5f962770c00cd14856250ac6c3bf2dbbef8f5985613',
-  runDigest: '16904eae94d5cda8cc7114d3c05620903b9ea3ef3a99321978ba977fb47c9115',
+  runDigest: '842360f4fe0d5a7aa2307a7f79e41fa115a28fbe73debd05721f0a2b10ec90ec',
   nodeVersion: '26.5.0',
   npmVersion: '11.17.0',
   nodeChecksumsUrl: 'https://nodejs.org/dist/v26.5.0/SHASUMS256.txt',
@@ -381,7 +388,7 @@ function verifyPins(pins) {
   ], 'scenario serialization pin');
   if (inventory.fullCount !== expectedPins.fullCount
       || inventory.selectedRunCount !== expectedPins.runCount
-      || JSON.stringify(inventory.excludedNames) !== '["completion-complete"]'
+      || JSON.stringify(inventory.excludedNames) !== JSON.stringify(expectedPins.excludedNames)
       || inventory.serialization.encoding !== 'UTF-8'
       || inventory.serialization.unicodeNormalization !== 'NONE'
       || inventory.serialization.trimWhitespace !== false
@@ -446,10 +453,10 @@ function verifyScenarioManifest(selection, pins) {
 
     if (scenario.selection === 'NOT_APPLICABLE') {
       notApplicableCount++;
-      if (scenario.name !== 'completion-complete' || scenario.earliestPhase !== null
+      if (!expectedPins.excludedNames.includes(scenario.name) || scenario.earliestPhase !== null
           || scenario.phase3Status !== 'NOT_APPLICABLE'
           || scenario.expectedCheckProfile !== null)
-        throw new Error('Completion must be the sole exact NOT_APPLICABLE disposition');
+        throw new Error('Only the exact reviewed unsupported-feature scenarios may be NOT_APPLICABLE');
 		} else if (scenario.selection === 'RUN') {
       runCount++;
       if (![4, 5].includes(scenario.earliestPhase))
@@ -469,7 +476,8 @@ function verifyScenarioManifest(selection, pins) {
     if (typeof scenario.rationale !== 'string' || scenario.rationale.trim().length < 20)
       throw new Error(`Scenario ${scenario.name} needs a specific rationale`);
   }
-  if (runCount !== pins.scenarioInventory.selectedRunCount || notApplicableCount !== 1)
+  if (runCount !== pins.scenarioInventory.selectedRunCount
+      || notApplicableCount !== expectedPins.excludedNames.length)
     throw new Error('Scenario selection counts differ from the reviewed pin');
   if (sha256(inventoryBytes(names)) !== pins.scenarioInventory.fullInventorySha256)
     throw new Error('Scenario manifest order/name digest differs from the reviewed pin');
@@ -479,7 +487,7 @@ function verifyScenarioManifest(selection, pins) {
   if (sha256(inventoryBytes(runNames)) !== pins.scenarioInventory.selectedRunSetSha256)
     throw new Error('Scenario manifest RUN digest differs from the reviewed pin');
   if (selection.scenarios.filter((scenario) => scenario.earliestPhase === 4).length !== 23
-      || selection.scenarios.filter((scenario) => scenario.earliestPhase === 5).length !== 26)
+      || selection.scenarios.filter((scenario) => scenario.earliestPhase === 5).length !== 22)
     throw new Error('Phase 4/5 scenario ownership counts changed');
 }
 

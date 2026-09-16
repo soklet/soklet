@@ -98,6 +98,7 @@ release_benchmarks_producer_self_test="$project_root/scripts/produce-release-ben
 release_benchmarks_release_note="$project_root/CHANGELOG.md"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
+javadoc_toolchain_self_test="$project_root/scripts/verify-javadoc-toolchain-self-test.mjs"
 for release_harness_source in \
 	"$release_harness_registry" "$release_harness_bundle_builder" \
 	"$release_harness_importer" \
@@ -111,6 +112,7 @@ for release_harness_source in \
 	"$release_scans_exceptions" "$release_scans_linux_producer" \
 	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
 	"$release_benchmarks_release_note" \
+	"$javadoc_toolchain_self_test" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
@@ -120,11 +122,13 @@ node_distribution_evidence=${SOKLET_RELEASE_NODE_DISTRIBUTION_EVIDENCE:-}
 maven_distribution_evidence=${SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE:-}
 go_distribution_evidence=${SOKLET_RELEASE_GO_DISTRIBUTION_EVIDENCE:-}
 java_distribution_evidence=${SOKLET_RELEASE_JAVA_DISTRIBUTION_EVIDENCE:-}
+javadoc_java_distribution_evidence=${SOKLET_RELEASE_JAVADOC_JAVA_DISTRIBUTION_EVIDENCE:-}
 core_jdk_21_distribution_evidence=${SOKLET_RELEASE_CORE_JDK_21_DISTRIBUTION_EVIDENCE:-}
 toystore_java_distribution_evidence=${SOKLET_RELEASE_TOYSTORE_JAVA_DISTRIBUTION_EVIDENCE:-}
 for distribution_evidence in \
 	"$node_distribution_evidence" "$maven_distribution_evidence" \
 	"$go_distribution_evidence" "$java_distribution_evidence" \
+	"$javadoc_java_distribution_evidence" \
 	"$core_jdk_21_distribution_evidence" \
 	"$toystore_java_distribution_evidence"; do
 	[[ -n "$distribution_evidence" && -f "$distribution_evidence" \
@@ -135,6 +139,7 @@ done
 # This candidate host proves the importer and its negative cases before any
 # gate evidence can be recorded or imported.
 node "$release_harness_importer" --verify-config
+node "$javadoc_toolchain_self_test"
 node "$release_harness_importer_self_test"
 node "$release_workflow_artifact_verifier_self_test"
 node "$release_scans_codeql_preparer_self_test"
@@ -206,6 +211,9 @@ manifest_value() {
 expected_java_version=$(manifest_value toolchains.java.version)
 expected_java_runtime_version=$(manifest_value toolchains.java.runtimeVersion)
 expected_java_vendor_version=$(manifest_value toolchains.java.vendorVersion)
+expected_javadoc_java_version=$(manifest_value toolchains.javadocJava.version)
+expected_javadoc_java_runtime_version=$(manifest_value toolchains.javadocJava.runtimeVersion)
+expected_javadoc_java_vendor_version=$(manifest_value toolchains.javadocJava.vendorVersion)
 expected_core_jdk_21_version=$(manifest_value toolchains.coreJdk21.version)
 expected_core_jdk_21_runtime_version=$(manifest_value toolchains.coreJdk21.runtimeVersion)
 expected_core_jdk_21_vendor_version=$(manifest_value toolchains.coreJdk21.vendorVersion)
@@ -251,6 +259,25 @@ actual_javac_version=$("$core_java_home/bin/javac" -version 2>&1)
 	|| fail "Java vendor build is $actual_java_vendor_version; expected $expected_java_vendor_version."
 [[ "$actual_javac_version" == "javac $expected_java_version" ]] \
 	|| fail "javac is $actual_javac_version; expected javac $expected_java_version."
+
+javadoc_java_home=${SOKLET_JAVADOC_HOME:-}
+[[ -n "$javadoc_java_home" && "$javadoc_java_home" == /* \
+		&& -d "$javadoc_java_home" && ! -L "$javadoc_java_home" \
+		&& -x "$javadoc_java_home/bin/java" && -x "$javadoc_java_home/bin/javadoc" ]] \
+	|| fail "SOKLET_JAVADOC_HOME must name the installed nonsymlink Javadoc JDK."
+javadoc_java_home=$(cd "$javadoc_java_home" && pwd -P)
+export SOKLET_JAVADOC_HOME=$javadoc_java_home
+actual_javadoc_java_version=$(java_property "$javadoc_java_home/bin/java" java.version)
+actual_javadoc_java_runtime_version=$(java_property "$javadoc_java_home/bin/java" java.runtime.version)
+actual_javadoc_java_vendor=$(java_property "$javadoc_java_home/bin/java" java.vendor)
+actual_javadoc_java_vendor_version=$(java_property "$javadoc_java_home/bin/java" java.vendor.version)
+actual_javadoc_version=$("$javadoc_java_home/bin/javadoc" --version 2>&1)
+[[ "$actual_javadoc_java_version" == "$expected_javadoc_java_version" \
+		&& "$actual_javadoc_java_runtime_version" == "$expected_javadoc_java_runtime_version" \
+		&& "$actual_javadoc_java_vendor" == "Amazon.com Inc." \
+		&& "$actual_javadoc_java_vendor_version" == "$expected_javadoc_java_vendor_version" \
+		&& "$actual_javadoc_version" == "javadoc $expected_javadoc_java_version" ]] \
+	|| fail "Javadoc Java/tool identity does not match the exact manifest pin."
 
 core_jdk_21_home=${SOKLET_RELEASE_CORE_JDK_21_HOME:-}
 [[ -n "$core_jdk_21_home" && "$core_jdk_21_home" == /* \
@@ -476,7 +503,26 @@ node "$evidence_helper" record-gate \
 	"node-distribution=$node_distribution_evidence" \
 	"maven-distribution=$maven_distribution_evidence" \
 	"go-distribution=$go_distribution_evidence" \
-	"java-distribution=$java_distribution_evidence"
+	"java-distribution=$java_distribution_evidence" \
+	"javadoc-distribution=$javadoc_java_distribution_evidence"
+
+# All companion Javadocs link against the exact retained candidate, never a
+# mutable public index. This scratch directory is created once for every leg.
+candidate_javadoc_root="$work_root/candidate-javadoc"
+[[ ! -e "$candidate_javadoc_root" ]] \
+	|| fail "Candidate Javadoc extraction directory already exists."
+candidate_javadoc_sha256=$(node "$evidence_helper" sha256 "$candidate_javadoc_jar")
+mkdir -p "$candidate_javadoc_root"
+(
+	cd "$candidate_javadoc_root"
+	"$core_java_home/bin/jar" -xf "$candidate_javadoc_jar"
+)
+[[ -s "$candidate_javadoc_root/element-list" \
+		&& -f "$candidate_javadoc_root/element-list" \
+		&& ! -L "$candidate_javadoc_root/element-list" ]] \
+	|| fail "Exact candidate Javadoc JAR does not contain a regular nonempty element-list."
+[[ "$(node "$evidence_helper" sha256 "$candidate_javadoc_jar")" == "$candidate_javadoc_sha256" ]] \
+	|| fail "Candidate Javadoc JAR changed during extraction."
 
 declare -A gate_repository gate_commit gate_version_property \
 	gate_artifact_identity gate_default_artifact_identity
@@ -975,6 +1021,7 @@ run_maven_downstream() {
 				PATH="$downstream_java_home/bin:$PATH" \
 				mvn -B -ntp -Dgpg.skip=true \
 				-Dmaven.repo.local="$isolated_maven_repository" \
+				-Dsoklet.javadoc.location="$candidate_javadoc_root" \
 				-DfailIfNoTests=true \
 				-D"$version_property"="$candidate_version" clean verify
 		) 2>&1 | tee "$candidate_log"
@@ -1016,6 +1063,7 @@ run_maven_downstream() {
 		cd "$checkout"
 		mvn -B -ntp -Dgpg.skip=true \
 			-Dmaven.repo.local="$isolated_maven_repository" \
+			-Dsoklet.javadoc.location="$candidate_javadoc_root" \
 			-DfailIfNoTests=true clean verify
 	) 2>&1 | tee "$default_log"
 	assert_installed_candidate_unchanged
@@ -1029,6 +1077,7 @@ run_maven_downstream() {
 		cd "$checkout"
 		mvn -B -ntp -Dgpg.skip=true \
 			-Dmaven.repo.local="$isolated_maven_repository" \
+			-Dsoklet.javadoc.location="$candidate_javadoc_root" \
 			-DfailIfNoTests=true \
 			-D"$version_property"="$candidate_version" clean verify
 	) 2>&1 | tee "$candidate_log"
@@ -1230,6 +1279,7 @@ SOKLET_EVIDENCE_GIT_VERSION=$(git --version)
 export SOKLET_EVIDENCE_CORE_JDK_21_VERSION=$actual_core_jdk_21_version
 export SOKLET_EVIDENCE_GO_VERSION=$actual_go_version_output
 export SOKLET_EVIDENCE_JAVA_VERSION=$actual_java_version
+export SOKLET_EVIDENCE_JAVADOC_JAVA_VERSION=$actual_javadoc_java_version
 export SOKLET_EVIDENCE_MAVEN_VERSION=$actual_maven_version
 export SOKLET_EVIDENCE_NODE_VERSION=$actual_node_version
 export SOKLET_EVIDENCE_NPM_VERSION=$actual_npm_version

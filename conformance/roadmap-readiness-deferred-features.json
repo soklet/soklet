@@ -231,7 +231,7 @@
     },
     {
       "id": "NI-05",
-      "rationale": "MCP feature lifecycle and Soklet Java API lifecycle remain independent axes.",
+      "rationale": "MCP feature lifecycle and Soklet Java API lifecycle remain independent axes. The owner explicitly approved removing the Roots, Sampling, and unused Logging APIs before publication; those product decisions do not automatically retire other API based on upstream lifecycle status.",
       "statement": "automatic Java `@Deprecated` annotations or Javadoc `@deprecated` tags derived only from MCP feature-lifecycle status",
       "status": "ABSENT_IN_4_0_0"
     },

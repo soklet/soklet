@@ -98,6 +98,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -1010,7 +1011,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								retentionFailure);
 					}
 				}
-				if (cleanupFailure != null && cleanupFailure != failure)
+				if (cleanupFailure != null && !sameInstance(cleanupFailure, failure))
 					failure.addSuppressed(cleanupFailure);
 				throw failure;
 			}
@@ -1023,7 +1024,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Throwable requiredNext = requireNonNull(next);
 		if (first == null)
 			return requiredNext;
-		if (first != requiredNext)
+		if (!sameInstance(first, requiredNext))
 			first.addSuppressed(requiredNext);
 		return first;
 	}
@@ -1369,8 +1370,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return;
 			if (simulationGeneration == requiredGeneration)
 				simulationGeneration = null;
-			if (residualSimulationRequestProcessor
-					== requiredGeneration.processor())
+			if (sameInstance(residualSimulationRequestProcessor,
+					requiredGeneration.processor()))
 				residualSimulationRequestProcessor = null;
 			if (residualSimulationApplicationExecution
 					== requiredGeneration.application())
@@ -1443,7 +1444,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					expectedGeneration) {
 		requireNonNull(expectedGeneration);
 		synchronized (lifecycleLock) {
-			if (lifecycleAdapter.currentGeneration() != expectedGeneration)
+			if (!sameInstance(lifecycleAdapter.currentGeneration(), expectedGeneration))
 				throw new IllegalStateException(
 						"The MCP lifecycle generation is no longer current.");
 			if (lifecycleState != LifecycleState.STOPPED)
@@ -1474,12 +1475,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (lifecycleState != LifecycleState.STARTING
 					|| !lifecycleStartupInProgress
 					|| lifecycleStartupClaimed
-					|| lifecycleStartupGeneration != expectedGeneration
-					|| lifecycleAdapter.currentGeneration() != expectedGeneration)
+					|| !sameInstance(lifecycleStartupGeneration, expectedGeneration)
+					|| !sameInstance(lifecycleAdapter.currentGeneration(), expectedGeneration))
 				throw new IllegalStateException(
 						"The MCP HTTP server has no matching prepared startup to claim.");
 			lifecycleStartupClaimed = true;
-			return lifecycleStartupGeneration;
+			// The identity checks above establish this is the claimed generation.
+			return expectedGeneration;
 		}
 	}
 
@@ -1786,7 +1788,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					catchUpFailure = runLifecycleStep(catchUpFailure,
 							() -> catchUpStartupSubscriptionRegistration(
 									registration));
-				if (catchUpFailure != null && catchUpFailure != primary)
+				if (catchUpFailure != null && !sameInstance(catchUpFailure, primary))
 					primary.addSuppressed(catchUpFailure);
 
 				synchronized (lifecycleLock) {
@@ -1802,7 +1804,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				try {
 					stopAndReportResidualApplicationExecutionsWhileMetricsDeferred();
 				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != primary)
+					if (!sameInstance(cleanupFailure, primary))
 						primary.addSuppressed(cleanupFailure);
 				}
 			}
@@ -2107,7 +2109,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull AtomicBoolean diagnosticRetained,
 			@NonNull Object failureSignalLock) {
 		Throwable exactSecondary = secondary;
-		if (exactSecondary == null || exactSecondary == primary)
+		if (exactSecondary == null || sameInstance(exactSecondary, primary))
 			return;
 		AtomicBoolean exactDiagnosticRetained = requireNonNull(
 				diagnosticRetained);
@@ -2314,7 +2316,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		for (SubscriptionSourceRegistrationControl registration
 				: List.copyOf(requireNonNull(residualRegistrations))) {
 			Throwable closeFailure = registration.latestCloseFailure();
-			if (closeFailure != null && closeFailure != failure)
+			if (closeFailure != null && !sameInstance(closeFailure, failure))
 				failure.addSuppressed(closeFailure);
 		}
 		return failure;
@@ -2557,7 +2559,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		} catch (Throwable failure) {
 			if (first == null)
 				return failure;
-			if (failure != first)
+			if (!sameInstance(failure, first))
 				first.addSuppressed(failure);
 		}
 		return first;
@@ -2572,7 +2574,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			// The startup cause may already be visible through frozen evidence.
 			// Never decorate it (or another cleanup failure) here; the lifecycle
 			// group owns the single freeze-aware secondary slot.
-			if (first == null && failure != requireNonNull(startupPrimary))
+			if (first == null && !sameInstance(failure, requireNonNull(startupPrimary)))
 				return failure;
 		}
 		return first;
@@ -3395,7 +3397,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						rejected.add(requiredJob);
 					} else {
 						rejected.addAll(removeOwnerJobsWhileLocked(victim));
-						if (victim == requiredJob.owner())
+						if (sameInstance(victim, requiredJob.owner()))
 							rejected.add(requiredJob);
 						else if (!this.jobs.offer(requiredJob))
 							throw new IllegalStateException(
@@ -3473,7 +3475,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						"The task-notification scheduler lock is required.");
 			int count = 0;
 			for (TaskNotificationProjectionJob job : this.jobs)
-				if (job.owner() == requireNonNull(owner))
+				if (sameInstance(job.owner(), requireNonNull(owner)))
 					count++;
 			return count;
 		}
@@ -3488,7 +3490,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			List<TaskNotificationProjectionJob> queued = drainJobsWhileLocked();
 			List<TaskNotificationProjectionJob> removed = new ArrayList<>();
 			for (TaskNotificationProjectionJob job : queued) {
-				if (job.owner() == requiredOwner)
+				if (sameInstance(job.owner(), requiredOwner))
 					removed.add(job);
 				else if (!this.jobs.offer(job))
 					throw new IllegalStateException(
@@ -3619,7 +3621,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								|| coordinatorOwned
 								&& previous == ListenerState.TERMINATED
 								&& lifecycleStartupInProgress
-								&& lifecycleStartupGeneration == lifecycleGeneration;
+								&& sameInstance(lifecycleStartupGeneration, lifecycleGeneration);
 						if (startupTermination) {
 							requireNonNull(startupFailure).compareAndSet(
 									null, throwable);
@@ -3743,7 +3745,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return;
 		}
 		synchronized (lifecycleLock) {
-			if (eventLoop != terminatedEventLoop)
+			if (!sameInstance(eventLoop, terminatedEventLoop))
 				return;
 			if (lifecycleState == LifecycleState.STARTED)
 				lifecycleState = LifecycleState.FAILED;
@@ -3769,7 +3771,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpApplicationExecution applicationToStop;
 		List<SubscriptionSourceRegistrationControl> registrationsToClose;
 		synchronized (lifecycleLock) {
-			if (eventLoop != terminatedEventLoop
+			if (!sameInstance(eventLoop, terminatedEventLoop)
 					|| lifecycleState != LifecycleState.STARTED)
 				return;
 			lifecycleState = LifecycleState.FAILED;
@@ -3855,7 +3857,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private RequestControl submitRequest(@NonNull ThreadPoolExecutor processor,
 			@NonNull McpApplicationExecution application,
-			@Nullable InetSocketAddress effectiveAddress,
+			@NonNull InetSocketAddress effectiveAddress,
 			@NonNull MicrohttpRequest request,
 			@Nullable Request publicRequest,
 			@Nullable McpSimulationRuntime simulation,
@@ -4140,8 +4142,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (!"HTTP/1.1".equals(request.version()))
 			return emptyResponse(505, "HTTP Version Not Supported", List.of());
 
-		EndpointRuntime endpointRuntime =
-				this.endpointsByPath.get(requestPath(request.uri()));
+		String path = requestPath(request.uri());
+		if (path.isEmpty())
+			return emptyResponse(400, "Bad Request", List.of());
+		EndpointRuntime endpointRuntime = this.endpointsByPath.get(path);
 		if (endpointRuntime == null)
 			return emptyResponse(404, "Not Found", List.of());
 		McpHttpEndpointBinding endpointBinding = endpointRuntime.binding();
@@ -4636,16 +4640,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								::requestedResourceSubscriptionUris)
 						.orElseGet(List::of),
 				Optional.of(mappedRequest.params().metadata().toJsonObject()));
-		McpAdmissionDecision admissionDecision;
+		Optional<McpAdmissionDecision> admissionResult;
 		try {
-			admissionDecision = endpointPolicy.protocolAdmissionController().admit(admissionContext);
+			admissionResult = Optional.ofNullable(
+					endpointPolicy.protocolAdmissionController().admit(admissionContext));
 		} catch (Throwable throwable) {
 			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
 		}
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
-		if (admissionDecision == null)
+		if (admissionResult.isEmpty())
 			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
+		McpAdmissionDecision admissionDecision = admissionResult.orElseThrow();
 
 		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
 			try {
@@ -5582,16 +5588,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				sokletRequest, endpoint, Map.of(), notification.method(), true,
 				Optional.empty(), protocolVersion, Optional.empty(), Optional.empty(),
 				Optional.empty(), List.of(), metadataValidation.metadata());
-		McpAdmissionDecision admissionDecision;
+		Optional<McpAdmissionDecision> admissionResult;
 		try {
-			admissionDecision = endpointPolicy.protocolAdmissionController().admit(admissionContext);
+			admissionResult = Optional.ofNullable(
+					endpointPolicy.protocolAdmissionController().admit(admissionContext));
 		} catch (Throwable throwable) {
 			return emptyResponse(500, "Internal Server Error", corsHeaders);
 		}
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
-		if (admissionDecision == null)
+		if (admissionResult.isEmpty())
 			return emptyResponse(500, "Internal Server Error", corsHeaders);
+		McpAdmissionDecision admissionDecision = admissionResult.orElseThrow();
 
 		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
 			try {
@@ -5619,12 +5627,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return null;
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
-			McpRateLimitDecision rateLimitDecision;
+			Optional<McpRateLimitDecision> rateLimitResult;
 			try {
-				rateLimitDecision = endpointPolicy.requestRateLimiter().orElseThrow().acquire(
+				rateLimitResult = Optional.ofNullable(endpointPolicy.requestRateLimiter().orElseThrow().acquire(
 						new McpRateLimitContext(sokletRequest, endpoint, effectiveIdentity,
 								McpRateLimitTarget.REQUEST, notification.method(),
-								Optional.empty()));
+								Optional.empty())));
 			} catch (Throwable throwable) {
 				requestControl.planRequestObservation(new RequestObservationResult(
 						McpRequestOutcome.INTERNAL_ERROR, null, List.of(throwable)));
@@ -5632,11 +5640,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			if (!requestControl.protocolProcessingAllowed())
 				return null;
-			if (rateLimitDecision == null) {
+			if (rateLimitResult.isEmpty()) {
 				requestControl.planRequestObservation(new RequestObservationResult(
 						McpRequestOutcome.INTERNAL_ERROR, null, List.of()));
 				return emptyResponse(500, "Internal Server Error", corsHeaders);
 			}
+			McpRateLimitDecision rateLimitDecision = rateLimitResult.orElseThrow();
 			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied) {
 				requestControl.planRequestObservation(new RequestObservationResult(
 						McpRequestOutcome.REJECTED, null, List.of()));
@@ -6160,11 +6169,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				requestedHeaders.orElseThrow());
 		CorsPreflightResponse authorization;
 		try {
-			Optional<CorsPreflightResponse> optionalAuthorization =
+			Optional<CorsPreflightResponse> optionalAuthorization = requireNonNull(
 					endpointPolicy.corsAuthorizer().authorizePreflight(
-							sokletRequest, preflight, MCP_HTTP_METHODS);
-			if (optionalAuthorization == null)
-				return emptyResponse(500, "Internal Server Error", List.of());
+							sokletRequest, preflight, MCP_HTTP_METHODS));
 			authorization = optionalAuthorization.orElse(null);
 		} catch (Throwable throwable) {
 			return emptyResponse(500, "Internal Server Error", List.of());
@@ -6257,11 +6264,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		CorsResponse response;
 		try {
-			Optional<CorsResponse> optionalResponse = endpointPolicy.corsAuthorizer()
-					.authorize(sokletRequest, Cors.fromOrigin(httpMethod, origins.get(0)));
-			if (optionalResponse == null)
-				return CorsAuthorization.rejected(
-						emptyResponse(500, "Internal Server Error", List.of()));
+			Optional<CorsResponse> optionalResponse = requireNonNull(endpointPolicy.corsAuthorizer()
+					.authorize(sokletRequest, Cors.fromOrigin(httpMethod, origins.get(0))));
 			response = optionalResponse.orElse(null);
 		} catch (Throwable throwable) {
 			return CorsAuthorization.rejected(
@@ -6850,7 +6854,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (values.size() != 1)
 			return false;
 
-		Optional<HostAuthority> authority = parseHostAuthority(values.get(0));
+		Optional<URI> target = requestTargetUri(request.uri());
+		if (target.isEmpty())
+			return false;
+		URI targetUri = target.orElseThrow();
+		// RFC 9112 absolute-form requests use their target authority, not Host.
+		String authorityValue = request.uri().startsWith("/")
+				? values.get(0) : targetUri.getRawAuthority();
+		Optional<HostAuthority> authority = parseHostAuthority(authorityValue);
 		if (authority.isEmpty())
 			return false;
 
@@ -6858,7 +6869,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (hostAuthority.port().isPresent()) {
 			if (hostAuthority.port().orElseThrow() != effectiveAddress.getPort())
 				return false;
-		} else if (effectiveAddress.getPort() != 80) {
+		} else if (effectiveAddress.getPort() !=
+				("https".equalsIgnoreCase(targetUri.getScheme()) ? 443 : 80)) {
 			return false;
 		}
 
@@ -7162,12 +7174,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private String requestPath(@NonNull String requestTarget) {
-		try {
-			URI uri = new URI(requestTarget);
+		return requestTargetUri(requestTarget).map(uri -> {
 			String path = uri.getRawPath();
 			return path == null || path.isEmpty() ? "/" : path;
+		}).orElse("");
+	}
+
+	@NonNull
+	private Optional<URI> requestTargetUri(@NonNull String requestTarget) {
+		try {
+			// An origin-form path beginning with // is still a path, not a URI authority.
+			boolean originForm = requestTarget.startsWith("/");
+			URI uri = new URI(originForm ? "http://soklet.invalid" + requestTarget : requestTarget);
+			if (uri.getRawFragment() != null || uri.getRawUserInfo() != null
+					|| uri.getRawAuthority() == null
+					|| !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+					|| (!originForm && parseHostAuthority(uri.getRawAuthority()).isEmpty()))
+				return Optional.empty();
+			return Optional.of(uri);
 		} catch (URISyntaxException exception) {
-			return "";
+			return Optional.empty();
 		}
 	}
 
@@ -8094,17 +8120,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			for (Object coalescingKey : coalescingKeys) {
 				McpJsonRpcMessage.Notification notification;
-				if (coalescingKey == SubscriptionEventKey.TOOLS_LIST_CHANGED)
+				if (SubscriptionEventKey.TOOLS_LIST_CHANGED.equals(coalescingKey))
 					notification = listChangedNotification(
 							registration.protocolProfile(),
 							registration.subscriptionId(),
 							"notifications/tools/list_changed");
-				else if (coalescingKey == SubscriptionEventKey.PROMPTS_LIST_CHANGED)
+				else if (SubscriptionEventKey.PROMPTS_LIST_CHANGED.equals(coalescingKey))
 					notification = listChangedNotification(
 							registration.protocolProfile(),
 							registration.subscriptionId(),
 							"notifications/prompts/list_changed");
-				else if (coalescingKey == SubscriptionEventKey.RESOURCES_LIST_CHANGED)
+				else if (SubscriptionEventKey.RESOURCES_LIST_CHANGED.equals(coalescingKey))
 					notification = listChangedNotification(
 							registration.protocolProfile(),
 							registration.subscriptionId(),
@@ -8561,8 +8587,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			if (reservation == null)
 				return false;
-			if (reservation.deadlineExpiration() != null)
-				finishProtocolDeadline(reservation.deadlineExpiration());
+			ProtocolDeadlineExpiration deadlineExpiration = reservation.deadlineExpiration();
+			if (deadlineExpiration != null)
+				finishProtocolDeadline(deadlineExpiration);
 			return reservation.allowed();
 		}
 
@@ -8631,7 +8658,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
-			if (submission != null && submission.rejectedCallback() != null) {
+			Consumer<MicrohttpResponse> rejectedCallback =
+					submission.rejectedCallback();
+			if (rejectedCallback != null) {
 				// No processor owns this task. Cancellation completes the protocol-work
 				// half of the common lifecycle lease before response delivery begins.
 				task.cancel(false);
@@ -8645,7 +8674,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				MicrohttpResponse response = withRequestObservationTermination(
 						terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
-						submission.rejectedCallback(), response);
+						rejectedCallback, response);
 				if (deliveryFailure != null && trackBody)
 					finishTransportLifecycle();
 				if (simulation != null)
@@ -8694,8 +8723,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			if (reservation == null)
 				return false;
-			if (reservation.deadlineExpiration() != null) {
-				finishProtocolDeadline(reservation.deadlineExpiration());
+			ProtocolDeadlineExpiration deadlineExpiration = reservation.deadlineExpiration();
+			if (deadlineExpiration != null) {
+				finishProtocolDeadline(deadlineExpiration);
 				return false;
 			}
 
@@ -8774,11 +8804,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 				return;
 			}
-			if (reservation.deadlineExpiration() != null) {
-				finishProtocolDeadline(reservation.deadlineExpiration());
+			ProtocolDeadlineExpiration deadlineExpiration = reservation.deadlineExpiration();
+			if (deadlineExpiration != null) {
+				finishProtocolDeadline(deadlineExpiration);
 				return;
 			}
-			if (reservation.responseCallback() != null) {
+			Consumer<MicrohttpResponse> callback = reservation.responseCallback();
+			if (callback != null) {
 				boolean trackBody = tracksLifecycleResponseBody();
 				if (!trackBody)
 					finishTransportLifecycle();
@@ -8789,7 +8821,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				MicrohttpResponse observedResponse =
 						withRequestObservationTermination(terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
-						reservation.responseCallback(), observedResponse);
+						callback, observedResponse);
 				if (deliveryFailure != null && trackBody)
 					finishTransportLifecycle();
 				if (simulation != null) {
@@ -9342,9 +9374,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void finishProtocolDeadline(
 				@NonNull ProtocolDeadlineExpiration expiration) {
 			requireNonNull(expiration);
-			if (expiration.task() != null) {
-				expiration.task().cancel(true);
-				processor.remove(expiration.task());
+			FutureTask<Void> task = expiration.task();
+			if (task != null) {
+				task.cancel(true);
+				processor.remove(task);
 			}
 			SubscriptionRegistration capReservation =
 					expiration.subscriptionCapReservation();

@@ -16,7 +16,6 @@
 
 package com.soklet.annotation;
 
-import com.soklet.McpClientCapability;
 import com.soklet.McpInputRequirement;
 import com.soklet.McpInputRequestType;
 import org.jspecify.annotations.NonNull;
@@ -47,18 +46,6 @@ public @interface McpMayRequestInput {
 	 */
 	@NonNull
 	McpInputRequestType type();
-
-	/**
-	 * Optional sampling capabilities required by the request.
-	 *
-	 * <p>Only {@link McpClientCapability#SAMPLING_CONTEXT} and
-	 * {@link McpClientCapability#SAMPLING_TOOLS} are permitted, and only when
-	 * {@link #type()} is {@link McpInputRequestType#SAMPLING}.
-	 *
-	 * @return optional sampling capabilities
-	 */
-	@NonNull
-	McpClientCapability @NonNull [] samplingCapabilities() default {};
 
 	/**
 	 * When the declared capabilities are required.

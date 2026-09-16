@@ -98,6 +98,10 @@ class HeaderLocaleTests {
 			Assertions.assertNotEquals('0', DecimalFormatSymbols.getInstance().getZeroDigit(),
 					"Numeric-locale probe must actually exercise non-Latin decimal digits");
 		assertHeaderNormalization();
+		Assertions.assertEquals("HTTP 404: Not Found", new String(
+				DefaultResponseMarshaler.defaultInstance()
+						.forNotFound(Request.withPath(HttpMethod.GET, "/missing").build())
+						.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 		Path directory = Files.createTempDirectory("soklet-locale-file-");
 		Path file = directory.resolve("example.txt");
 		try {
@@ -251,7 +255,7 @@ class HeaderLocaleTests {
 					() -> assertResponse(exchange(port, "/sse/reject", "Content-Length: 1\r\n", "x"),
 							"HTTP/1.1 400 Bad Request", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY),
 					() -> assertResponse(exchange(port, "/sse/unknown", "Content-Length: 1\r\n", "x"),
-							"HTTP/1.1 599", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY),
+							"HTTP/1.1 599 ", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY),
 					() -> {
 						try (Socket accepted = openRequest(port, "/sse/accepted", "", "")) {
 							String head = readHead(accepted);
@@ -262,7 +266,7 @@ class HeaderLocaleTests {
 											() -> Assertions.assertTrue(head.contains("Set-Cookie: " + COOKIE + "\r\n"), head),
 											() -> Assertions.assertFalse(head.toLowerCase(Locale.ROOT).contains("content-length:"), head)),
 									() -> assertResponse(exchange(port, "/sse/accepted", "", ""),
-											"HTTP/1.1 503", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY));
+											"HTTP/1.1 503 Service Unavailable", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY));
 						}
 					});
 		}

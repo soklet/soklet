@@ -102,10 +102,10 @@ transitions without compatibility aliases.
 - 904 methods.
 
 The reviewed file's SHA-256 is
-`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`.
+`648c5167a2366cf1c5b762b77cb7729eaad2824b9bfe06dbc1f726d449fdc643`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`.
+`4ae05a45303bda3f3bcfd2d8d1aec52cd96c27d1e30e2feae3a4931e5e9cd51a`.
 The 134-entry `phase-4.includes` inventory has SHA-256
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 
@@ -1114,3 +1114,112 @@ with SHA-256
 Phase 5, Phase 6, provisional Tasks, and all include inventories remain
 unchanged. The historical D1p preview seal is not rewritten; a release
 candidate must capture this active snapshot as fresh API-freeze evidence.
+
+## 2026-09-16 SSE broadcast count amendment
+
+The owner-approved API cleanup changes all three count parameters of
+`MetricsCollector.didBroadcastSseEvent` and `didBroadcastSseComment` from
+primitive `int` to explicitly `@NonNull Integer`. Custom overrides must adopt
+the new signatures and recompile. Direct primitive callers autobox normally;
+zero is supported and null is not. Both built-in collectors validate every
+count before recording any outcome, avoiding partial metrics on invalid calls.
+
+The two count-neutral descriptor replacements leave Phase 4 at 1,135 records,
+with signature SHA-256
+`648c5167a2366cf1c5b762b77cb7729eaad2824b9bfe06dbc1f726d449fdc643`
+and reflection/nullability SHA-256
+`4ae05a45303bda3f3bcfd2d8d1aec52cd96c27d1e30e2feae3a4931e5e9cd51a`.
+The released comparison now contains 654 incompatibility records, SHA-256
+`1d3a0238a5011546ce579aa19c62b62ae18e81187dfa1d6dd2df6f499691b6de`:
+two new removals for the replaced primitive callbacks follow the three
+previously reviewed copier/generic-ID corrections. No API owner is added or
+removed; Phase 5, Phase 6 and provisional snapshots are unchanged. Historical
+checkpoints above remain intact and are not evidence for these new bytes.
+
+## 2026-09-16 unsupported logging API removal amendment
+
+The project owner explicitly approved removing `McpLogLevel` and
+`McpRequestContext.getLogLevel()` before publication by replying "Do it" to
+the scoped recommendation. Soklet does not implement or advertise MCP Logging,
+so these public Java APIs misleadingly suggested an application-facing logging
+feature. Neither a deprecated alias nor a replacement public logging API is
+retained. The existing package-private `McpRequestLogLevel` parser still
+validates the same eight wire values, and the original metadata remains
+available through `McpRequestContext.getRequestMetadata()`.
+
+The removal deletes exactly 12 Phase 4 signatures: the enum owner, eight enum
+constants, its two compiler-generated public methods, and the request-context
+accessor. Phase 4 now contains 1,123 records: 133 classes, one constructor,
+88 fields, and 901 methods. The signature SHA-256 is
+`34485a8b9747f912408335f7b56c78e141b4b62f05125278d991186b8ceb5dfe`;
+the include-inventory SHA-256 is
+`5078bbafc91268306b8a6f032e648a02db0e35c1efc3e5a4ba8dc1c662323979`;
+and the reflection/nullability SHA-256 is
+`ae0b0c0dcddbf0043b6643edcd3b2a268c1c0f55ed2d95fd5fd93000cf34d5f2`.
+
+The complete owner partition is 133/36/64/14 plus the unchanged 61-owner
+non-MCP allowlist, or 308 owners. Phase 5, Phase 6, provisional Tasks, and their
+signatures are unchanged. The released-3.5.1 comparison drops the accessor's
+former `METHOD_ADDED_TO_INTERFACE` record and now contains 653 records with
+SHA-256
+`65dadff569a4ebc708ba35b5ccc9fad5b8f2d370d740077c72a578f81ed96d65`.
+
+The public-evolution inventory retains both logging lifecycle rows with their
+MCP deprecation evidence, but marks the Soklet Java API as `Removed` and links
+to this decision. The original 18-row suppression baseline remains historical
+evidence. Seven exact candidate method declarations removed or renamed by
+this cleanup now have reviewed retirement entries: they must be absent, while
+the other ten candidate declarations must still resolve exactly once. The
+one external-sketch row and the ban on current deprecation suppressions are
+unchanged. Reintroducing either removed public API or a retired declaration
+fails the current guards. This local amendment does not rewrite prior freezes,
+historical D1p seals, or release-candidate provenance.
+
+## 2026-09-16 Roots and Sampling removal amendment
+
+The project owner explicitly approved removing Roots and Sampling before
+publication: "Regarding Roots and Sampling: let's remove them." This removes
+the four related `McpClientCapability` constants, the two related
+`McpInputRequestType` constants, `McpInputRequestDeclaration.fromRoots(...)`
+and `fromSampling(...)`, and `McpMayRequestInput.samplingCapabilities()`.
+No deprecated aliases remain. This is a Soklet product decision, independent
+of the upstream specification's minimum deprecation window.
+
+Elicitation and shared multi-round-trip input, retry, and protection behavior
+remain supported. Structurally valid peer Roots/Sampling capability metadata
+does not enable any server behavior. The lifecycle inventory retains the
+upstream deprecation history but marks these Java surfaces as removed; guards
+reject their reintroduction. Historical freezes and candidate evidence remain
+historical, rather than being rewritten to claim verification of changed code.
+
+The fresh JAR/japicmp report removes exactly four Phase 4 fields and five
+Phase 5 members, without any new owner or descriptor. Phase 4 contains 1,119
+signatures (133 classes, one constructor, 84 fields, 901 methods), SHA-256
+`ed4a7c16caa71602558e83964946b4403e856e939d7f0d3b92da74fccdaea97a`.
+Phase 5 contains 195 signatures (36 classes, zero constructors, 17 fields,
+142 methods), SHA-256
+`5173902c25e8610b2daa38f6aaa3c2d3cf4b244e20fe5f63061845b859716f3a`.
+The corresponding reflection/nullability SHA-256 values are respectively
+`b7c2c5340cb8b1105c1fdbe8f6d43306572df0717086b9c4d238f8ba5017a0de` and
+`5313e39d3809ae81b4d664838bb6690a5d677d1e388547422b2d52ec88f2230c`.
+Phase 6 and provisional Tasks remain at 425 and 98 signatures. All four owner
+inventories are unchanged, retaining 247 MCP owners plus 61 non-MCP owners.
+The released-3.5.1 incompatibility ledger remains byte-identical at 653
+records, SHA-256
+`65dadff569a4ebc708ba35b5ccc9fad5b8f2d370d740077c72a578f81ed96d65`.
+
+The lifecycle inventory retains 17 rows with 11 explicit removals, including
+the earlier two logging API removals. The public-evolution self-test rejects
+reintroduction of every one of the nine newly removed members and loss of
+its decision reference. The unchanged 18-row historical suppression baseline
+still records seven exact logging-declaration retirements.
+
+The current source-derived openness inventory retires the deleted
+`fromSampling` validator and 14 deleted internal Roots/Sampling validators,
+leaving 38 classifications. Existing `OPEN-003` and `OPEN-054` continue to
+anchor Elicitation capability and method mapping; no artificial validator
+anchor is introduced for the simple retained factories. `OPEN-013` changes
+from a multi-selector equality cascade to the remaining closed-vocabulary
+matcher. Its generated inventory, the roadmap policy, and the 22-rule active
+documentation audit reflect the explicit non-support contract. Historical
+openness classifications and earlier verification counts remain historical.

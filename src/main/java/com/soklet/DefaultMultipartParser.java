@@ -2885,6 +2885,10 @@ final class DefaultMultipartParser implements MultipartParser {
 
 					try {
 						int entityValue = Integer.parseInt(input.substring(numStart, escEnd), radix);
+						if (!Character.isValidCodePoint(entityValue)
+								|| (entityValue >= Character.MIN_SURROGATE && entityValue <= Character.MAX_SURROGATE)
+								|| Character.isISOControl(entityValue))
+							throw new IllegalRequestBodyException("Multipart filename contains an invalid character entity.");
 
 						if (result == null)
 							result = new StringBuilder(input.length());

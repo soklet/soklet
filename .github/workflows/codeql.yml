@@ -86,19 +86,19 @@ jobs:
           node scripts/prepare-codeql-release-report-self-test.mjs
           node scripts/stage-codeql-release-provenance-self-test.mjs
 
-      - name: Download checksum-pinned CodeQL 2.26.2 bundle
+      - name: Download checksum-pinned CodeQL 2.27.0 bundle
         shell: bash
         run: |
           codeql_bundle="${RUNNER_TEMP}/codeql-bundle-linux64.tar.gz"
           curl --fail --location --retry 3 --output "$codeql_bundle" \
-            https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.2/codeql-bundle-linux64.tar.gz
-          echo "cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7  $codeql_bundle" \
+            https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.gz
+          echo "8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305  $codeql_bundle" \
             | sha256sum --check --strict
           echo "SOKLET_CODEQL_BUNDLE=$codeql_bundle" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
         id: init
-        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: java-kotlin
           build-mode: manual
@@ -123,7 +123,7 @@ jobs:
 
       - name: Perform CodeQL analysis
         id: analyze
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           category: "/language:java-kotlin"
           output: ${{ runner.temp }}/codeql-sarif

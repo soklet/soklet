@@ -17,6 +17,9 @@ import {
   baselineGovernanceSha256,
   currentStageCensusSha256,
   derivePostU7CurrentStage,
+  externalMavenVersionOwner,
+  maskedVersionFileSha256,
+  scanCurrentVersionText,
   scanText,
   verifyVersionTransition,
 } from './verify-version-transition-inventory.mjs';
@@ -31,6 +34,7 @@ const REPLACEMENTS = Object.freeze({
 const BASELINE_FILES = Object.freeze({
   'active.txt': 'snapshot=3.6.0-SNAPSHOT\nexact=3.6.0\nline=3.6\n',
   'fixture.txt': 'negative artifact path 3.6.1\n',
+  'external/pom.xml': '<project><dependencies><dependency><groupId>org.example</groupId><artifactId>library</artifactId><version>3.6.0</version></dependency></dependencies></project>\n',
   'history.txt': 'dated checkpoint for 3.6.0\ndated checkpoint for 3.6.0\n',
   'plugin.xml': '<profiles>\n<profile>\n<id>owner-a</id>\n<plugin>\n<artifactId>build-helper-maven-plugin</artifactId>\n<version>3.6.0</version>\n</plugin>\n</profile>\n</profiles>\n',
   'remove.java': '@Deprecated(since = "3.6.0")\n',
@@ -40,6 +44,7 @@ const BASELINE_FILES = Object.freeze({
 const CLASSIFICATIONS = Object.freeze({
   'active.txt': 'RETARGET_NOW',
   'fixture.txt': 'FIXTURE_PRESERVE',
+  'external/pom.xml': 'UNRELATED_VERSION_PRESERVE',
   'history.txt': 'HISTORICAL_PRESERVE',
   'plugin.xml': 'UNRELATED_VERSION_PRESERVE',
   'remove.java': 'REMOVE_BY_MCP_R4',
@@ -220,11 +225,108 @@ function runCase(name, body) {
   }
 }
 
+function reviewDeletedBaselinePath(root, path = 'remove.java') {
+  const inventory = readInventory(root);
+  inventory.currentStage.deletedBaselinePaths = [path];
+  inventory.currentStage.files = inventory.currentStage.files
+    .filter((tuple) => tuple.split('\t')[0] !== path);
+  inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+  writeInventory(root, inventory);
+  return inventory.currentStage.censusSha256;
+}
+
+runCase('reviewed complete file deletion preserves historical governance and D2 anchor', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const before = readInventory(root);
+  rmSync(join(root, 'remove.java'));
+  const pin = reviewDeletedBaselinePath(root);
+  assert.equal(verify(root, 'post-u7', pin).stage, 'post-u7');
+  applyStage(root, { final: true, removeD2: true, removeU7: true });
+  rmSync(join(root, 'remove.java'));
+  assert.equal(verify(root, 'final', pin).stage, 'final');
+  assert.equal(baselineGovernanceSha256(readInventory(root)), baselineGovernanceSha256(before));
+  assert.deepEqual(readInventory(root).currentStage.d2RemovalAnchors, before.currentStage.d2RemovalAnchors);
+});
+
+runCase('unreviewed complete file deletion remains rejected', ({ root, expectedCurrentStageCensusSha256 }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  rmSync(join(root, 'remove.java'));
+  expectFailure(root, 'post-u7', expectedCurrentStageCensusSha256, /reviewed current-stage file is missing/u);
+});
+
+runCase('reviewed deleted path cannot be reintroduced even without a version token', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const pin = reviewDeletedBaselinePath(root);
+  expectFailure(root, 'post-u7', pin, /reviewed deleted baseline path must be absent/u);
+});
+
+runCase('reviewed deleted path cannot be reintroduced as an untracked file', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const pin = reviewDeletedBaselinePath(root);
+  git(root, ['rm', '--cached', '--', 'remove.java']);
+  expectFailure(root, 'post-u7', pin, /reviewed deleted baseline path must be absent/u);
+});
+
+runCase('reviewed deletion cannot hide a surviving current occurrence', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const pin = reviewDeletedBaselinePath(root, 'active.txt');
+  expectFailure(root, 'post-u7', pin, /occurrence may not map a deleted baseline path/u);
+});
+
+runCase('reviewed deletion cannot hide an unremoved historical occurrence', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  reviewDeletedBaselinePath(root);
+  const inventory = readInventory(root);
+  inventory.currentStage.removedBaselineKeys = inventory.currentStage.removedBaselineKeys
+    .filter((key) => key !== 'remove.java\t1\t0');
+  inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+  writeInventory(root, inventory);
+  expectFailure(root, 'post-u7', inventory.currentStage.censusSha256, /every historical occurrence explicitly removed/u);
+});
+
+runCase('reviewed deletion cannot remove preserved historical evidence', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  reviewDeletedBaselinePath(root, 'history.txt');
+  const inventory = readInventory(root);
+  inventory.currentStage.occurrences = inventory.currentStage.occurrences
+    .filter((tuple) => tuple.split('\t')[1] !== 'history.txt');
+  inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+  writeInventory(root, inventory);
+  expectFailure(root, 'post-u7', inventory.currentStage.censusSha256, /every historical occurrence explicitly removed/u);
+});
+
+runCase('reviewed deleted paths reject duplicates and unknown baseline paths', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  for (const paths of [['remove.java', 'remove.java'], ['unknown.java']]) {
+    const inventory = readInventory(root);
+    inventory.currentStage.deletedBaselinePaths = paths;
+    inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+    writeInventory(root, inventory);
+    expectFailure(root, 'post-u7', inventory.currentStage.censusSha256, /unique baseline paths in strict ASCII order/u);
+  }
+});
+
+runCase('reviewed deletion cannot also list a live file hash', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const inventory = readInventory(root);
+  inventory.currentStage.deletedBaselinePaths = ['remove.java'];
+  inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+  writeInventory(root, inventory);
+  expectFailure(root, 'post-u7', inventory.currentStage.censusSha256, /may not also be present in currentStage files/u);
+});
+
+runCase('reviewed deletion is bound by the independent census pin', ({ root, expectedCurrentStageCensusSha256 }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  rmSync(join(root, 'remove.java'));
+  reviewDeletedBaselinePath(root);
+  expectFailure(root, 'post-u7', expectedCurrentStageCensusSha256, /does not match the independent verifier pin/u);
+});
+
 runCase('positive stage semantics and deterministic final conversion', ({
   expectedCurrentStageCensusSha256,
   root,
 }) => {
-  assert.equal(verify(root, 'baseline', expectedCurrentStageCensusSha256).occurrences, 10);
+  assert.equal(verify(root, 'baseline', expectedCurrentStageCensusSha256).occurrences, 11);
   applyStage(root);
   assert.equal(verify(root, 'post-retarget', expectedCurrentStageCensusSha256).stage, 'post-retarget');
   applyStage(root, { removeD2: true });
@@ -594,4 +696,67 @@ runCase('hex-encoded active product version after U7', ({
   expectFailure(root, 'post-u7', expectedCurrentStageCensusSha256, /encoded active 3\.6\.0 product-version text survives/u);
 });
 
-console.log('version-transition inventory self-test PASS (32 cases)');
+function reviewExternalVersion(root, path, text, retainBaseline) {
+  write(root, path, text);
+  git(root, ['add', '--', path]);
+  const inventory = readInventory(root);
+  const baseline = inventory.currentStage.occurrences.find((row) => row.split('\t')[1] === path)?.split('\t').slice(7);
+  inventory.currentStage.files = inventory.currentStage.files.filter((row) => row.split('\t')[0] !== path);
+  inventory.currentStage.files.push(`${path}\t${maskedVersionFileSha256(text)}`);
+  inventory.currentStage.files.sort();
+  inventory.currentStage.occurrences = inventory.currentStage.occurrences.filter((row) => row.split('\t')[1] !== path);
+  for (const token of scanCurrentVersionText(path, text)) {
+    inventory.currentStage.occurrences.push(['EXTERNAL_DEPENDENCY', path, token.line, token.column,
+      token.occurrenceIndex, token.literal, token.literal, ...(retainBaseline ? baseline : ['-', '-', '-'])].join('\t'));
+  }
+  inventory.currentStage.occurrences.sort((a, b) => {
+    const x = a.split('\t'), y = b.split('\t');
+    return x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : Number(x[2]) - Number(y[2]) || Number(x[3]) - Number(y[3]);
+  });
+  inventory.currentStage.censusSha256 = currentStageCensusSha256(inventory.currentStage);
+  writeInventory(root, inventory);
+  return inventory.currentStage.censusSha256;
+}
+
+runCase('external dependency upgrade preserves its baseline owner and governance', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const before = baselineGovernanceSha256(readInventory(root));
+  const pin = reviewExternalVersion(root, 'external/pom.xml', BASELINE_FILES['external/pom.xml'].replace('3.6.0', '3.6.2'), true);
+  assert.equal(verify(root, 'post-u7', pin).stage, 'post-u7');
+  assert.equal(baselineGovernanceSha256(readInventory(root)), before);
+});
+
+runCase('external dependency cannot launder a different baseline owner', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const pin = reviewExternalVersion(root, 'external/pom.xml', BASELINE_FILES['external/pom.xml'].replace('org.example', 'org.other'), true);
+  expectFailure(root, 'post-u7', pin, /changes its baseline Maven owner/u);
+});
+
+runCase('new external Maven plugin version is reviewed without changing baseline', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const text = '<project><build><plugins><plugin><artifactId>maven-surefire-plugin</artifactId><version>3.6.0</version></plugin></plugins></build></project>\n';
+  const before = baselineGovernanceSha256(readInventory(root));
+  const pin = reviewExternalVersion(root, 'new/pom.xml', text, false);
+  assert.equal(verify(root, 'post-u7', pin).stage, 'post-u7');
+  assert.equal(baselineGovernanceSha256(readInventory(root)), before);
+});
+
+runCase('Soklet dependencies cannot use the external exception even after resealing', ({ root }) => {
+  applyStage(root, { removeD2: true, removeU7: true });
+  const text = BASELINE_FILES['external/pom.xml'].replace('org.example', 'com.soklet');
+  const pin = reviewExternalVersion(root, 'new/pom.xml', text, false);
+  expectFailure(root, 'post-u7', pin, /not an exact external Maven version/u);
+});
+
+for (const text of [
+  '<project><version>3.6.0</version></project>',
+  '<project><properties><version>3.6.0</version></properties></project>',
+  '<project><!-- <dependency><groupId>org.example</groupId><artifactId>x</artifactId><version>3.6.0</version></dependency> --></project>',
+  '<project><configuration><dependencies><dependency><groupId>org.example</groupId><artifactId>x</artifactId><version>3.6.0</version></dependency></dependencies></configuration></project>',
+  '<project><dependencies><dependency><groupId>${group}</groupId><artifactId>x</artifactId><version>3.6.0</version></dependency></dependencies></project>',
+]) {
+  for (const token of scanCurrentVersionText('pom.xml', text))
+    assert.equal(externalMavenVersionOwner('pom.xml', text, token), null);
+}
+
+console.log('version-transition inventory self-test PASS (46 fixture cases plus 5 external-boundary negatives)');
