@@ -41,12 +41,12 @@
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
         {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ],
-      "matcher": {"kind":"literal","pattern":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "matcher": {"kind":"literal","pattern":"Soklet supports exactly the MCP `2026-07-28`","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet supports exactly the MCP `2026-07-28`","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
-        {"path":"README.md","matchedText":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
+        {"path":"MCP.md","matchedText":"Soklet supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","matchedText":"Soklet supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ]
     },
     {
@@ -177,11 +177,11 @@
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
       ],
-      "matcher": {"kind":"literal","pattern":"Soklet 4.0.0 does not provide stdio transport","caseSensitive":true},
+      "matcher": {"kind":"literal","pattern":"Soklet does not provide stdio transport","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"Soklet 4.0.0 does not provide stdio transport","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet does not provide stdio transport","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Soklet 4.0.0 does not provide stdio transport","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+        {"path":"MCP.md","matchedText":"Soklet does not provide stdio transport","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
       ]
     },
     {

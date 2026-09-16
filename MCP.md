@@ -1,6 +1,6 @@
 # Model Context Protocol (MCP)
 
-Soklet 4.0.0 targets the MCP `2026-07-28` server protocol. MCP support is part
+Soklet targets the MCP `2026-07-28` server protocol. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
@@ -282,7 +282,7 @@ tool with `McpToolRegistration`, which supports `addIcon(...)` and
 Annotations on inherited methods are not MCP operations: place each MCP
 operation annotation directly on a method declared by the endpoint class.
 
-The 4.0 annotation surface also derives schemas only from its documented Java
+The annotation surface also derives schemas only from its documented Java
 shape family: it does not translate validation annotations into numeric,
 string, collection, or format constraints, and it does not derive UUID or
 `java.time` scalar formats. Invalid annotated shapes fail deterministically,
@@ -380,7 +380,7 @@ rejected because it is ambiguous with text content. Arbitrary beans,
 variables, unsupported `CharSequence` implementations, and unsafe recursive
 record shapes fail at registration or annotation processing.
 
-Runtime schema evaluation in 4.0 deliberately exposes only the generic
+Runtime schema evaluation deliberately exposes only the generic
 invalid-arguments result; its internal, bounded instance-free diagnostics are
 not projected into the public exception or JSON-RPC error. A reviewed
 diagnostic carrier that preserves the privacy and byte-limit contract is
@@ -440,7 +440,7 @@ compile-checks one deployment-specific allowlist and canary policy; it is not a
 universal injection detector.
 
 The immutable prompt catalog follows registration order and is returned as one
-page. A present cursor is invalid because Soklet 4.0.0 does not expose dynamic
+page. A present cursor is invalid because Soklet does not expose dynamic
 prompt-list pagination or a prompt list-change publisher.
 
 Static tool and prompt catalogs are caller-neutral. Once a request passes
@@ -593,7 +593,7 @@ declaration exposes the selected type through `getInputRequestType()`, the
 derived wire method through `getJsonRpcMethod()`, and the complete derived
 capability set through `getCapabilities()`.
 
-Soklet 4.0.x supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
+Soklet supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
 "latest" profile nor falls back. Active Elicitation is the default teaching surface;
 deprecated compatibility surfaces are documented separately below.
 
@@ -858,7 +858,7 @@ restorePersistedTaskFields(taskBuilder, row);
 McpTask task = taskBuilder.build();
 ```
 
-When task creation has a selected locale, Soklet 4.0 persists that locale
+When task creation has a selected locale, Soklet persists that locale
 inside this framework-owned origin. The locale remains opaque: no current
 application API exposes it. Later `tasks/get`, `tasks/update`, and
 `tasks/cancel` requests, and task-subscription projections, do not construct,
@@ -1598,7 +1598,7 @@ corresponding `McpMetricsEvent.RequestStarted` and
 operations. Callback failures are logged and contained, and user callbacks do
 not run under MCP runtime or dispatcher locks.
 
-The 4.0 release pairing is `com.soklet:soklet:4.0.0` with
+The 4.0.0 release pairing is `com.soklet:soklet:4.0.0` with
 `com.soklet:soklet-otel:2.0.0`. Versioned snapshot coordinates in the Phase 6
 checkpoint narrative below record the exact artifacts used at those historical
 checkpoints; they are provenance, not current dependency guidance.
@@ -2897,7 +2897,7 @@ inspect namespaced inbound request metadata, and return nonreserved
 This remains application-owned behavior. It does not advertise matching server
 support or register a new protocol method.
 
-Tasks is the one namespaced protocol extension implemented by Soklet 4.0.0. It is
+Tasks is the one namespaced protocol extension implemented by Soklet. It is
 advertised only when an application configures an
 [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html),
 and it is negotiated only when the current request declares the exact
@@ -2912,7 +2912,7 @@ including the per-request client capability map, belongs inside `params._meta`.
 An arbitrary extension field or an unsupported extension capability still does
 not register a method or enable matching server behavior.
 
-Soklet 4.0.0 does not provide stdio transport, public arbitrary JSON Schema
+Soklet does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
 publishers, or an application result-extension registry. OAuth protected-
 resource metadata and identity-provider behavior remain deployment

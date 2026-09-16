@@ -41,7 +41,7 @@
   resource methods; `SseServer` broadcaster access remains supported.
   `McpServer` is now sealed to Soklet's built-in HTTP/1.1 implementation and
   has no custom transport SPI, so a 3.5.1 custom `McpServer` implementation has
-  no direct 4.0 replacement. See
+  no direct 4.0.0 replacement. See
   [HTTP, SSE, and custom transports](MIGRATING_TO_4_0.md#http-sse-and-custom-transports).
 - **MCP listener hardening controls:** restored all nine 3.5.1
   `McpServer.Builder` transport-limit setters on the sealed built-in listener.
@@ -55,7 +55,7 @@
   effective Host authority; every non-loopback bind now requires at least one
   explicit `allowedHosts(...)` entry or server construction fails.
 - **Fixed MCP endpoint paths:** templated endpoint HTTP paths and
-  `@McpEndpointPathParameter` have no 4.0 replacement. Register separate fixed
+  `@McpEndpointPathParameter` have no 4.0.0 replacement. Register separate fixed
   endpoints for a bounded tenant set, or use application-authenticated
   admission/header tenancy. Resource URI templates remain supported; the
   retained request/admission endpoint-path-parameter maps are always empty.
@@ -71,7 +71,7 @@
   `server/discover`; every request supplies its version/capabilities; POST owns
   the response stream; GET/DELETE return 405; legacy session/event headers are
   never stored or emitted. Soklet 4.0.0 provides no profile fallback or
-  compatibility adapter. The 4.0 migration is intentionally fall-forward
+  compatibility adapter. The 4.0.0 migration is intentionally fall-forward
   only. See [MCP wire migration](MIGRATING_TO_4_0.md#mcp-wire-migration).
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
@@ -168,7 +168,7 @@ maintenance or security fixes afterward. See the explicit
 
 ### Reviewed Non-Blocking Deferrals
 
-The 4.0 release review also recorded the following deliberate post-release
+The 4.0.0 release review also recorded the following deliberate post-release
 work; it is not claimed as fixed by 4.0.0:
 
 - **S7-1 / R12-2:** persisted output schemas are still compiled eagerly during
@@ -275,7 +275,7 @@ work; it is not claimed as fixed by 4.0.0:
   corpus or the three-head authorization/CORS corpus.
 - Added two independent production-golden corpora for the remaining core result
   and ordinary error contracts. Twenty-five checksum-bound JSON/SSE fixtures
-  exhaust Soklet 4.0's core `complete` and `input_required` result-envelope
+  exhaust Soklet 4.0.0's core `complete` and `input_required` result-envelope
   authorities; extension result types remain a separate capability boundary.
   Nine canonical complete-HTTP fixtures cover the eight frozen ordinary error
   mapping families, including distinct required and conditional `-32021`
@@ -399,7 +399,7 @@ work; it is not claimed as fixed by 4.0.0:
   `io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
   parameter members remain legitimate; only the method-free terminal result
   retains the initiating request's top-level `id`. Malformed JSON that fails
-  before notification classification is outside this claim. Soklet 4.0
+  before notification classification is outside this claim. Soklet 4.0.0
   registers no extension-notification handler and exposes no arbitrary
   extension-notification handler API. The exact selector passes 2/0/0/0, the
   adjacent set passes 83/0/0/0 on both JDKs, and full clean test passes
@@ -1041,7 +1041,7 @@ work; it is not claimed as fixed by 4.0.0:
   `soklet.server.type="mcp"` and `soklet.failure.reason`, never `error.type`.
   Terminal values use overflow-safe duration conversion, with no
   cross-instrument atomicity or conservation promise.
-- Removed the obsolete pre-4.0 MCP request/session/SSE tracing callbacks,
+- Removed the obsolete pre-4.0.0 MCP request/session/SSE tracing callbacks,
   session instruments, span-policy knobs, and MCP span-naming methods. The
   reviewed V19 `1.3.1` to `1.4.0-SNAPSHOT` public diff was exactly 15 removed
   legacy methods and one added `didRecordMcpMetricsEvent(McpMetricsEvent)`

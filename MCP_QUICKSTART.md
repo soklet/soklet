@@ -1,6 +1,6 @@
 # Soklet MCP quickstart
 
-This is the shortest complete Soklet 4.0.0 MCP server: one annotation-processed
+This is the shortest complete Soklet MCP server: one annotation-processed
 tool, one dedicated localhost endpoint, and a standalone application lifecycle.
 It targets exactly Soklet's MCP `2026-07-28` profile.
 

@@ -40,8 +40,8 @@ legacy MCP protocol or Java API.
 
 ### Public API naming pass
 
-The 4.0 release candidate uses the following names without deprecated aliases.
-Applications built against an earlier 4.0 preview must update these calls; the
+The 4.0.0 release candidate uses the following names without deprecated aliases.
+Applications built against an earlier 4.0.0 preview must update these calls; the
 `CorsPreflight` factory rename also applies directly to 3.5.1 applications.
 
 | Previous name | 4.0.0 name |
@@ -137,7 +137,7 @@ concurrently. Use cleanup only for a resource that is application-owned,
 ingress-exclusive, safe to clean after a complete core shutdown, and bounded by
 an explicit timeout. Stateful observers are not automatically safe cleanup
 targets: they need an application-defined delivery barrier first. Cleanup is
-skipped when core shutdown is incomplete. If you tested an earlier 4.0
+skipped when core shutdown is incomplete. If you tested an earlier 4.0.0
 snapshot, remove `SokletApplicationOptions`; create the one-shot application
 with `SokletApplication.fromConfig(config)` and pass triggers and cleanup to its
 `run(...)` invocation instead.
@@ -194,7 +194,7 @@ policy.
 `LifecyclePolicy` is a value type in 4.0.0: `equals(...)` and `hashCode()` use
 all four timeout values. Equal independently-built policies therefore compare
 equal and behave as one key in sets and maps; code written against an earlier
-4.0 prerelease that deliberately depended on object identity should use an
+4.0.0 prerelease that deliberately depended on object identity should use an
 identity-based collection instead.
 
 Review the builder Javadocs before selecting zero-duration phases or changing
@@ -389,7 +389,7 @@ construction fails. Existing container or remote-listener configurations must
 add that allowlist during migration; the non-loopback bind address itself is
 not implicitly accepted.
 
-If migrating from an earlier 4.0 snapshot, update lifecycle result and exception
+If migrating from an earlier 4.0.0 snapshot, update lifecycle result and exception
 names as a hard cutover:
 
 | Earlier snapshot | 4.0.0 |

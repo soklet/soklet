@@ -73,7 +73,7 @@ Soklet is a single JAR, available on Maven Central.
 
 JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
 
-Upgrading from 3.5.1? Read the [4.0 migration guide](MIGRATING_TO_4_0.md).
+Upgrading from 3.5.1? Read the [4.0.0 migration guide](MIGRATING_TO_4_0.md).
 Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md).
 
 #### Maven
@@ -86,74 +86,19 @@ Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTAR
 </dependency>
 ```
 
-Also configure annotation processing in your POM's `build/plugins` section.
-This generates HTTP/SSE routes and MCP endpoint descriptors; declaring only
-the dependency is not sufficient on JDK 23 and later:
-
-```xml
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-compiler-plugin</artifactId>
-  <version>3.14.0</version>
-  <configuration>
-    <parameters>true</parameters>
-    <annotationProcessorPaths>
-      <path>
-        <groupId>com.soklet</groupId>
-        <artifactId>soklet</artifactId>
-        <version>4.0.0</version>
-      </path>
-    </annotationProcessorPaths>
-    <annotationProcessors>
-      <annotationProcessor>com.soklet.SokletProcessor</annotationProcessor>
-    </annotationProcessors>
-  </configuration>
-</plugin>
-```
-
-Merge this configuration with your existing compiler-plugin configuration.
-The explicit processor path replaces compile-classpath discovery, and the named
-processor list selects which processors run. Preserve every other processor
-your build needs (such as Lombok or MapStruct) by keeping its artifact in
-`annotationProcessorPaths` and its processor class name in `annotationProcessors`
-alongside Soklet.
-
 #### Gradle
 
 ```groovy
-plugins {
-  id 'java'
-}
-
-repositories {
-  mavenCentral()
-}
-
 dependencies {
   implementation 'com.soklet:soklet:4.0.0'
-  annotationProcessor 'com.soklet:soklet:4.0.0'
-}
-
-tasks.withType(JavaCompile).configureEach {
-  options.compilerArgs += ['-parameters']
 }
 ```
 
-Gradle discovers processors through `annotationProcessor`, not `implementation`.
-If test sources declare annotated routes or endpoints, also configure
-`testAnnotationProcessor 'com.soklet:soklet:4.0.0'`. Preserve generated classes
-and `META-INF/soklet` indexes when shading or repackaging either build.
+For the required annotation processor configuration, see [Building and Running](#building-and-running).
 
 #### Direct Download
 
 If you don't use Maven or Gradle, you can drop [soklet-4.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/4.0.0/soklet-4.0.0.jar) directly into your project. No other dependencies are required.
-
-The class files retain compile-time annotation references. Static tools such as
-`jdeps` may need those annotation JARs on their analysis classpath, or
-`jdeps --ignore-missing-deps` after verifying that only those annotation types
-are missing. That option is not a `jlink` option; the automatic module name
-does not make the Soklet JAR directly linkable. See the
-[dependency audit](release/THIRD_PARTY_AUDIT.md) for the scope of this distinction.
 
 ### Code Sample
 
@@ -240,23 +185,25 @@ it cannot be run a second time or concurrently. The cleanup action is eligible
 only after Soklet has proven core shutdown complete; an incomplete core
 shutdown skips it.
 
+#### Building and Running
+
 Here we use raw `javac` to build and `java` to run.
 
 This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
-#### Build
+##### Build
 
 ```shell
 javac -parameters -cp soklet-4.0.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
-#### Run
+##### Run
 
 ```shell
 java -cp soklet-4.0.0.jar:build com/soklet/example/App
 ```
 
-#### Test
+##### Test
 
 ```shell
 # Hello, world
@@ -303,6 +250,77 @@ Set-Cookie: lastRequest=2024-04-21T16:19:01.115336Z; Max-Age=300; Secure; HttpOn
 
 francês (Canadá)
 ```
+
+##### Maven build configuration
+
+Also configure annotation processing in your POM's `build/plugins` section.
+This generates HTTP/SSE routes and MCP endpoint descriptors; declaring only
+the dependency is not sufficient on JDK 23 and later:
+
+```xml
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-compiler-plugin</artifactId>
+  <version>3.14.0</version>
+  <configuration>
+    <parameters>true</parameters>
+    <annotationProcessorPaths>
+      <path>
+        <groupId>com.soklet</groupId>
+        <artifactId>soklet</artifactId>
+        <version>4.0.0</version>
+      </path>
+    </annotationProcessorPaths>
+    <annotationProcessors>
+      <annotationProcessor>com.soklet.SokletProcessor</annotationProcessor>
+    </annotationProcessors>
+  </configuration>
+</plugin>
+```
+
+Merge this configuration with your existing compiler-plugin configuration.
+The explicit processor path replaces compile-classpath discovery, and the named
+processor list selects which processors run. Preserve every other processor
+your build needs (such as Lombok or MapStruct) by keeping its artifact in
+`annotationProcessorPaths` and its processor class name in `annotationProcessors`
+alongside Soklet.
+
+##### Gradle build configuration
+
+```groovy
+plugins {
+  id 'java'
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'com.soklet:soklet:4.0.0'
+  annotationProcessor 'com.soklet:soklet:4.0.0'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.compilerArgs += ['-parameters']
+}
+```
+
+Gradle discovers processors through `annotationProcessor`, not `implementation`.
+If test sources declare annotated routes or endpoints, also configure
+`testAnnotationProcessor 'com.soklet:soklet:4.0.0'`.
+
+##### Packaging and static analysis
+
+Preserve generated classes and `META-INF/soklet` indexes when shading or
+repackaging either build.
+
+The class files retain compile-time annotation references. Static tools such as
+`jdeps` may need those annotation JARs on their analysis classpath, or
+`jdeps --ignore-missing-deps` after verifying that only those annotation types
+are missing. That option is not a `jlink` option; the automatic module name
+does not make the Soklet JAR directly linkable. See the
+[dependency audit](release/THIRD_PARTY_AUDIT.md) for the scope of this distinction.
 
 ### Building Real-World Apps
 
@@ -766,7 +784,7 @@ The development coordinate for this section is `4.0.0`.
 
 ##### Recommended MCP setup
 
-For the 4.0.0 release, Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile through a dedicated,
+Soklet supports exactly the MCP `2026-07-28` server profile through a dedicated,
 stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
 MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
@@ -1773,7 +1791,7 @@ SokletConfig config = SokletConfig.withHttpServer(
 ).build();
 ```
 
-For the 4.0 release, pair `com.soklet:soklet:4.0.0` with
+For the 4.0.0 release, pair `com.soklet:soklet:4.0.0` with
 `com.soklet:soklet-otel:2.0.0`. Versioned snapshot coordinates later in this
 section are retained as historical implementation-checkpoint provenance, not
 as current dependency guidance.

@@ -7,10 +7,12 @@ Pull requests and bug reports are welcomed.  For enhancement pull requests, plea
 #### Local Installation
 
 ```shell
-$ mvn install
+$ mvn -Dgpg.skip=true install
 ```
 
-This will build artifacts and install to your local system's Maven repository.
+This will test and build unsigned development artifacts and install them to your
+local Maven repository. Use `mvn -Dgpg.skip=true verify` to check the build without
+installing it. Signing and publication are separate, explicitly authorized steps.
 Both `mvn verify` and `mvn install` invoke repository verifier scripts through
 `node`. The reviewed toolchain uses Node.js 26.5.0; the official MCP
 conformance toolchain also pins npm 11.17.0 in

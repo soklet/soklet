@@ -1139,8 +1139,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 6751,
-    "candidateSha256": "6e98bd12f055e4939885d885bcebda4a4c99aa20ca58bc48ca47006351ae218e",
+    "candidateCount": 6754,
+    "candidateSha256": "2497dc48506608b81281edf32510d3c9786111860fd46fecac4f71eeb9e22369",
     "candidates": [
       {
         "kinds": [
@@ -1635,7 +1635,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 12,
-        "lineSha256": "b0fbe63ec684b87c652f9a72035585bdb0a268ac511451511231b24abab7af19",
+        "lineSha256": "195b9fab9c642c8b8255839938546225ea99ce43d2a0768f28b4b2c808c8c10d",
         "path": "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md"
       },
       {
@@ -1659,7 +1659,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 20,
-        "lineSha256": "7d2361030946d4dc18794b5aa1d0097fbec1ce47489b3b02865c526f6d55a545",
+        "lineSha256": "952d95cfda2cea92cd78725f04df5a9e58a35f8e9a7c59018454ae329aa3f431",
         "path": "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md"
       },
       {
@@ -1683,7 +1683,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 115,
-        "lineSha256": "a1a5ae2100e9b36e7ce088a7609534f565a9de295cd2dea8128bcb9301a63d5d",
+        "lineSha256": "2d7e7073c54dcf91832d7ef54b1ec8fba5fde9b3f011f5b3a2ba97474a6cb294",
         "path": "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md"
       },
       {
@@ -1691,7 +1691,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 116,
-        "lineSha256": "e65d4f25d8c72d0dc7ac12772bea23daf44be5ac334f8b31c3b556fe6fdd5805",
+        "lineSha256": "aceae5ee0096d3cee6582460a66b497ab438fa8ec9808ba5f15e9e440c2ff0f1",
         "path": "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md"
       },
       {
@@ -1707,7 +1707,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 131,
-        "lineSha256": "310ec5afa3115e97dd11946ac17eeb4e8fa7eb62e9b7e9f65e131bec062b1b1a",
+        "lineSha256": "92612efe94b4e00e3013cbdb414e1bd98230a90503ee64a4f88f33a2a98b0a97",
         "path": "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md"
       },
       {
@@ -3654,7 +3654,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 44,
-        "lineSha256": "c5b68e9c258b4f649866da3a68094b8e881b27e1fc76c91e5c36fd89820df986",
+        "lineSha256": "3b501cd89880f3055adea8ffb27614aeb326d6e3701a6e0e5c0364c67526a272",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3662,7 +3662,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 46,
-        "lineSha256": "8a4f0c4416bfe559e3e87379ebead49437a6b03067d0100f97c93f8bc9519d72",
+        "lineSha256": "57205fb19d6a8a921c9f3fa6b409802dc0f1abac6095df311ce8c1c91c293fb0",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3670,7 +3670,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 48,
-        "lineSha256": "b2e2e06aba8e7c6f17088e063270654a50c7ffebbf88632a9d9a063fb6684b7c",
+        "lineSha256": "ff55cef1523a276accdd401279204f005b225a036bcea4cccec4568d79c111b1",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3678,7 +3678,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 49,
-        "lineSha256": "fb7ca2ad53bfc3d694476465cf6444d9026661bb6eecb677f095d02a74542e0d",
+        "lineSha256": "c6214d0292f625bb2a315231ede876ea80760a5544f44bcdb9c389df1fcc1bc4",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3718,7 +3718,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 180,
-        "lineSha256": "19b40957786665d0923202f9771f9d32a1bc48b89e62422bf8673825d3eb98cf",
+        "lineSha256": "eff2d04ec6444728334257daeb039788774915e4b2bfe703cf9897bcb4332654",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3726,7 +3726,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 182,
-        "lineSha256": "1a062db983e2b58bc84d991feee4a404d69a5d2705ede57209333557d67e5f86",
+        "lineSha256": "c0f8b6ac3e76877c2dee0c30ccd70e62cbde1fd8d4859afb8ec427007a46a0c2",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -3734,7 +3734,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 184,
-        "lineSha256": "1a25e6f2c250fa673b49b2b0d78cff341183700b29661a2221b0fec1f0dc4159",
+        "lineSha256": "9621e060d8970fc8fb48c276d6c833a668868699c1a10bc64c83a7bdc5bddf51",
         "path": "conformance/roadmap-readiness-active-text-rules.json"
       },
       {
@@ -55084,7 +55084,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 150,
+        "line": 151,
         "lineSha256": "3d3e305b6b8d177876944be7be0299b409568d4b6b29d254b9ae17e58e062a77",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55092,16 +55092,8 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 153,
-        "lineSha256": "e9684ee999a9348b10e4bbd368a202a0ec78a0b39a7b2df958debcf0b59df82c",
-        "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
-      },
-      {
-        "kinds": [
-          "NAMED_TIMEOUT_CANDIDATE"
-        ],
         "line": 154,
-        "lineSha256": "822ecd2e9f4da9d45d515f01b1a0a33c37406420af42f5ac2cdc4132f0d80633",
+        "lineSha256": "e9684ee999a9348b10e4bbd368a202a0ec78a0b39a7b2df958debcf0b59df82c",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
       {
@@ -55109,6 +55101,14 @@
           "NAMED_TIMEOUT_CANDIDATE"
         ],
         "line": 155,
+        "lineSha256": "822ecd2e9f4da9d45d515f01b1a0a33c37406420af42f5ac2cdc4132f0d80633",
+        "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 156,
         "lineSha256": "82908ff2cc80874755bb2d4949bef087af16a66f3c3f56806e4ff70c003768d7",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55116,7 +55116,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 157,
+        "line": 158,
         "lineSha256": "164339012dcb6a1cced2f0301d4a0a8384aa3400ee41946eea933f58d57afd3d",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55124,7 +55124,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 170,
+        "line": 171,
         "lineSha256": "448cceaa3287d09415c3b29004069b559fd162035d7acb242231cce1908cde99",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55132,7 +55132,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 191,
+        "line": 192,
         "lineSha256": "756ab503b942617c9c29014c9876e572b034d0db4219dd3f77e8955921118452",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55140,7 +55140,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 225,
+        "line": 226,
         "lineSha256": "ee4cac6fddf43afdafe7c23d54ae487a16ed489f1e802cf7775ea3ee51e74a26",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55148,7 +55148,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 227,
+        "line": 228,
         "lineSha256": "e9684ee999a9348b10e4bbd368a202a0ec78a0b39a7b2df958debcf0b59df82c",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55156,7 +55156,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 228,
+        "line": 229,
         "lineSha256": "82908ff2cc80874755bb2d4949bef087af16a66f3c3f56806e4ff70c003768d7",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55164,7 +55164,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 229,
+        "line": 230,
         "lineSha256": "83d83dc1321483cf224809d488c41ecae82c21f0eabd46395bb9be7ebf12549f",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55172,7 +55172,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 249,
+        "line": 250,
         "lineSha256": "5fc23efcd8a4f8220cd9137827dd150c88fef2083093f560810b63ebd8ab5488",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55180,7 +55180,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 257,
+        "line": 258,
         "lineSha256": "ad2bdaef46829fa3f082f1e78d7b89d4bfe1caf34fe454a40c39b26d3548047b",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55188,7 +55188,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 271,
+        "line": 272,
         "lineSha256": "448cceaa3287d09415c3b29004069b559fd162035d7acb242231cce1908cde99",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55196,7 +55196,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 315,
+        "line": 316,
         "lineSha256": "756ab503b942617c9c29014c9876e572b034d0db4219dd3f77e8955921118452",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55204,7 +55204,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 335,
+        "line": 336,
         "lineSha256": "f2b249bba18daaf87ea300d90af60aea3effddafd14793cda857a519c8d042a1",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55212,7 +55212,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 336,
+        "line": 337,
         "lineSha256": "1b121b27390a2ab369ef62f8602b9b4f734e43ef7171ecca62a426171b24428e",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55221,7 +55221,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 337,
+        "line": 338,
         "lineSha256": "1c9b3f74d83de843bb3c03c44f7d5cab42df232527aaf0ad8a35fabc44c744d6",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55230,7 +55230,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 338,
+        "line": 339,
         "lineSha256": "981280319b7d39b2d32232cc935c04605a849a52a8781c743a04daa22383d043",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55239,7 +55239,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 339,
+        "line": 340,
         "lineSha256": "cb4b6369597737c7d86cc1557c99c4fd620a0d41b3c5a4f2e0d6dfd3718f45fa",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55248,7 +55248,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 340,
+        "line": 341,
         "lineSha256": "d272fb7032337f30fc97e7bfec41dda883ff9e32ebb10385ca077e92943e6ccc",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55256,7 +55256,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 346,
+        "line": 347,
         "lineSha256": "6d8d0b8f7e5ee7bed850d07ccd146ab84c837a0a12ad9235b3a5626c054457b0",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55264,7 +55264,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 358,
+        "line": 359,
         "lineSha256": "6bbafc8ebe6e5681c878045d681ebec6773ce118d353ff035dff8d80a177541d",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55272,7 +55272,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 360,
+        "line": 361,
         "lineSha256": "e9684ee999a9348b10e4bbd368a202a0ec78a0b39a7b2df958debcf0b59df82c",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55280,7 +55280,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 361,
+        "line": 362,
         "lineSha256": "82908ff2cc80874755bb2d4949bef087af16a66f3c3f56806e4ff70c003768d7",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55288,7 +55288,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 363,
+        "line": 364,
         "lineSha256": "87c9684a02dc80762f0fdd41919daf516b6648f0860f6aeb5465a5e4e5345372",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55296,7 +55296,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 370,
+        "line": 371,
         "lineSha256": "c6c0fd6f3cfe462f5659265b63975999a98ad5896dfd5db6b12656a9bc12901a",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55304,7 +55304,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 398,
+        "line": 399,
         "lineSha256": "ee4cac6fddf43afdafe7c23d54ae487a16ed489f1e802cf7775ea3ee51e74a26",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55312,7 +55312,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 400,
+        "line": 401,
         "lineSha256": "e9684ee999a9348b10e4bbd368a202a0ec78a0b39a7b2df958debcf0b59df82c",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55320,7 +55320,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 401,
+        "line": 402,
         "lineSha256": "83d83dc1321483cf224809d488c41ecae82c21f0eabd46395bb9be7ebf12549f",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55328,7 +55328,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 422,
+        "line": 423,
         "lineSha256": "5fc23efcd8a4f8220cd9137827dd150c88fef2083093f560810b63ebd8ab5488",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55336,7 +55336,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 430,
+        "line": 431,
         "lineSha256": "ad2bdaef46829fa3f082f1e78d7b89d4bfe1caf34fe454a40c39b26d3548047b",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55344,7 +55344,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 438,
+        "line": 439,
         "lineSha256": "448cceaa3287d09415c3b29004069b559fd162035d7acb242231cce1908cde99",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55352,7 +55352,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 599,
+        "line": 600,
         "lineSha256": "02fea8f67681192b797e45c14509de8cd746b6af0a5d33d758629ee53186d799",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55360,7 +55360,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 857,
+        "line": 858,
         "lineSha256": "878c3b223f3f57d839f6f4d8c6d5118462344dcbfc0e5ab0bf656884ecc446dc",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55368,7 +55368,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 879,
+        "line": 880,
         "lineSha256": "eeea1c6c0fcf564aab5bc6cf98afc4cbb806bcd7e8e3afd45e440b8fa54edeb6",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55376,7 +55376,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 881,
+        "line": 882,
         "lineSha256": "aa9ac64239ab7ab5e4dd8a42c1b4faea496f8c6b3dc79a31febd473ad0ac9f53",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55384,7 +55384,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 931,
+        "line": 932,
         "lineSha256": "0761e9afcd5131cb7b138da2fab82d5b7f7cfe2aaf660dd1d955e6b5329a8b7e",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55392,7 +55392,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 933,
+        "line": 934,
         "lineSha256": "420c2376b52abac35bf6f35cf42d16d38bf02ffb4a4e7d4635d27347de877a80",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55400,7 +55400,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1242,
+        "line": 1243,
         "lineSha256": "c68cc746aca43538ff23617e5fe90865ad557106d27e2e37b40f2ec858911f27",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55408,7 +55408,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1362,
+        "line": 1363,
         "lineSha256": "a48264ba3daf570816bdb84773492adbf70499a1a4092fc25ff741f901c4934e",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55416,7 +55416,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1786,
+        "line": 1805,
         "lineSha256": "b57dfbd5157daea1a13a61e58ab9b6f2ba965745b99b05598410d9a26ce9baa4",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55424,7 +55424,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1787,
+        "line": 1806,
         "lineSha256": "13d4e836c400d7904eaa6f375e20901cf164b103b381747ca0bebec8489a3755",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55432,7 +55432,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1862,
+        "line": 1881,
         "lineSha256": "f0e3b5722f4f33f8fe910ffd518c69b41f6fbdf9e4a1c1b3c7cd372c2a90fa23",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55440,7 +55440,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1865,
+        "line": 1884,
         "lineSha256": "8ab16a3d60f5e207715424950c2f98ec6d4bd2fa74727b74b9fc1c5cd7e3929c",
         "path": "verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
       },
@@ -55448,7 +55448,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 234,
+        "line": 238,
         "lineSha256": "9d406392d2bf5b30a0eefd8ea9cbce5b20421a6ad6781b73fe9005c49cb84526",
         "path": "verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
       },
@@ -55456,13 +55456,37 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 239,
+        "line": 243,
         "lineSha256": "ca80096acc77a4603c102020eaaa50e24962c8021d0c4382b034ba883b7d7d77",
+        "path": "verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 320,
+        "lineSha256": "889731853e47addcf0c6788d356ac19f7ffc7cf395c1f2c679d33e64fee24551",
+        "path": "verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 326,
+        "lineSha256": "94e7e8f320dce073ef6984d7042963e9330483ecc76ba925b6ad606d2cc2a680",
+        "path": "verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 379,
+        "lineSha256": "31ee13e944d8cb16e2bead2dffbc48a5bf8944a1fb280a32d5497e2845f4ec13",
         "path": "verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
       }
     ],
     "countsByKind": {
-      "FIXED_WAIT_CANDIDATE": 1619,
+      "FIXED_WAIT_CANDIDATE": 1622,
       "JUNIT_OUTER_GUARD": 317,
       "LIFECYCLE_SIGNAL": 3924,
       "NAMED_TIMEOUT_CANDIDATE": 1176,

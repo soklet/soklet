@@ -291,28 +291,60 @@ Neither application is uploaded to Maven Central. Record the exact public
 dependency hashes, tag objects, GitHub release URLs, smoke output, and any
 deployment receipt.
 
-## 9. Regenerate and deploy all four Javadoc sites
+## 9. Import and deploy all four packaged Javadoc sites
 
-Generate from the exact public source/tag and public dependency coordinates,
-never from an arbitrary working directory:
+After the accepted libraries and examples have been published and verified,
+import the exact accepted, publicly resolved Javadoc JAR for each library.
+Do not regenerate Javadocs from source during publication. The packaged JAR,
+not a separate generator run, defines the site payload:
 
-| Site | Source/tag | Published API identity |
+| Site | Source/tag provenance | Published Javadoc artifact |
 | --- | --- | --- |
-| `https://javadoc.soklet.com/` | `soklet` `v4.0.0` | `com.soklet:soklet:4.0.0` |
-| `https://javax.javadoc.soklet.com/` | `soklet-servlet-javax` `v2.0.0` | `com.soklet:soklet-servlet-javax:2.0.0` |
-| `https://jakarta.javadoc.soklet.com/` | `soklet-servlet-jakarta` `v2.0.0` | `com.soklet:soklet-servlet-jakarta:2.0.0` |
-| `https://otel.javadoc.soklet.com/` | `soklet-otel` `v2.0.0` | `com.soklet:soklet-otel:2.0.0` |
+| `https://javadoc.soklet.com/` | `soklet` `v4.0.0` | `com.soklet:soklet:4.0.0:javadoc` |
+| `https://javax.javadoc.soklet.com/` | `soklet-servlet-javax` `v2.0.0` | `com.soklet:soklet-servlet-javax:2.0.0:javadoc` |
+| `https://jakarta.javadoc.soklet.com/` | `soklet-servlet-jakarta` `v2.0.0` | `com.soklet:soklet-servlet-jakarta:2.0.0:javadoc` |
+| `https://otel.javadoc.soklet.com/` | `soklet-otel` `v2.0.0` | `com.soklet:soklet-otel:2.0.0:javadoc` |
 
-For each site, compare generated top-level inventories and representative
-class pages with the corresponding public Javadoc JAR. Run an offline link
-check first. Deploy to a versioned/atomic target, smoke the preview URL, then
-switch the public alias. Verify page title/version, package index, at least five
-representative type links, cross-site core links, and absence of development
-versions or local filesystem paths.
+For each site, follow its reviewed README and `scripts/import-javadoc.py`
+contract:
 
-Retain source tag/commit, public artifact hashes, generator command/toolchain,
-generated-tree hash, preview and production deployment IDs, link-check report,
-and rollback target for each site.
+1. Obtain the expected lowercase SHA-256 from the independently reviewed
+   accepted-artifact manifest or handoff, not from the import command itself.
+   Require the publicly resolved Javadoc JAR to match that recorded digest
+   and the JAR used for the owner-reviewed site import. A mismatch stops
+   deployment; do not replace the expected digest to accept different bytes.
+2. Run the site's importer self-tests, then use Python 3.11 or later to import
+   the verified JAR with `--jar`, `--sha256`, and `--output` into a new preview
+   directory beneath an existing nonsymlink parent. Retain the importer's JSON
+   receipt. The helper must not overwrite `dist` or any existing output.
+3. Verify the complete imported file-path set and every file's bytes against
+   the JAR, excluding only `META-INF/` metadata as the importer does. Compare
+   the complete deployable `dist` payload with that verified preview; there
+   must be no missing, extra, or altered files. Representative-page checks
+   alone do not establish payload parity. Do not merge old and new trees or
+   patch generated files. Preserve the previous `dist` in a fresh, explicit
+   backup path before any approved replacement, as documented in the README.
+4. Run an offline link check and inspect page title/version, package index,
+   expected public API pages and anchors, navigation, styles, and search.
+   Check at least five representative type links, cross-site core links, and
+   absence of development versions or local filesystem paths. A tracked
+   correction requires renewed preparation and acceptance, not an edit to the
+   accepted candidate during promotion.
+5. Verify actual hosting/deployment triggers before any push. Only under
+   separate G5 publication/deployment authorization, deploy the verified
+   payload to an approved versioned/atomic target, smoke its preview URL,
+   then switch the public alias. Repeat the page/version, package, type-link,
+   cross-site-link, navigation, styles, and search checks at the public URL.
+   Keep the previous deployment as the rollback target.
+
+Retain the site's reviewed commit, artifact source tag/commit and build
+provenance, accepted and public JAR SHA-256 evidence, importer command/toolchain
+and JSON receipt (including file count and imported-tree hash), full payload-
+parity report, offline and public link-check reports, local backup path,
+preview and production deployment IDs, and rollback target for each site.
+An import or successful preview is preparation, not release acceptance or
+publication authority. Publish all four Javadoc sites before `soklet.com`;
+their deployment does not add candidate gates or change the established order.
 
 ## 10. Deploy soklet.com
 

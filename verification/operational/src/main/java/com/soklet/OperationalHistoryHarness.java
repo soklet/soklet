@@ -65,6 +65,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -369,8 +370,8 @@ public final class OperationalHistoryHarness {
     httpMetrics.initialize(httpConfig);
     try (Soklet soklet = Soklet.fromConfig(httpConfig)) {
       soklet.start();
+      httpTelemetry.beginOperationalWindow(5, httpOutcomes);
       httpMetrics.beginOperationalWindow();
-      httpTelemetry.beginOperationalWindow();
       httpOperation(httpClient(), httpPort,
           "soklet-operational-canary-http-00001");
       httpMetrics.scanMetrics();
@@ -438,8 +439,8 @@ public final class OperationalHistoryHarness {
     try (Soklet soklet = Soklet.fromConfig(config)) {
       soklet.start();
       int mcpPort = mcpServer.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+      telemetry.beginOperationalWindow(5, outcomes);
       metrics.beginOperationalWindow();
-      telemetry.beginOperationalWindow();
       mcpOperation(httpClient(), mcpPort,
           "soklet-operational-canary-mcp-00001", 1,
           telemetry);
@@ -1611,6 +1612,16 @@ public final class OperationalHistoryHarness {
         byte[] traceKeyBytes,
         long firstExpectedTraceOrdinal,
         long expectedTraceRecordCount) {
+      this(expectedTraceKeyId, traceKeyBytes, firstExpectedTraceOrdinal,
+          expectedTraceRecordCount, Thread::new);
+    }
+
+    TelemetryAudit(
+        String expectedTraceKeyId,
+        byte[] traceKeyBytes,
+        long firstExpectedTraceOrdinal,
+        long expectedTraceRecordCount,
+        ThreadFactory consumerThreadFactory) {
       if (expectedTraceRecordCount < 0L)
         throw new IllegalArgumentException("Expected trace record count must be nonnegative");
       if (expectedTraceRecordCount > 0L
@@ -1644,8 +1655,16 @@ public final class OperationalHistoryHarness {
       this.operationalWindowStarted = new AtomicBoolean();
       this.consumerStarted = new AtomicBoolean();
       this.running = new AtomicBoolean(true);
-      this.consumer = new Thread(this::consume, "soklet-operational-log-drain");
+      this.consumer = consumerThreadFactory.newThread(this::consume);
+      this.consumer.setName("soklet-operational-log-drain");
       this.consumer.setDaemon(false);
+    }
+
+    void beginOperationalWindow(int maximumSeconds, List<String> outcomes) {
+      // Startup callbacks enqueue warmup records before the drain thread runs.
+      // Keep them outside the operational counters and latency measurements.
+      awaitDrained(maximumSeconds, outcomes);
+      beginOperationalWindow();
     }
 
     void beginOperationalWindow() {

@@ -75,7 +75,7 @@ release wording that was deliberately accepted, rejected, or narrowed.
 See the [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) for the exact
 division between Soklet-owned redacted diagnostics and built-in metrics,
 application callback values, simulator fixtures, and operator retention.
-The 4.0 release pairing is `com.soklet:soklet:4.0.0` with
+The 4.0.0 release pairing is `com.soklet:soklet:4.0.0` with
 `com.soklet:soklet-otel:2.0.0`. Older snapshot coordinates in the historical
 Phase 6 checkpoint narrative record provenance only and are not current
 dependency guidance.

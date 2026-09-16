@@ -9,7 +9,9 @@ approved K/L order and the existing 26-gate universe.
 
 Apply this checklist to `soklet`, `soklet-servlet-javax`,
 `soklet-servlet-jakarta`, `soklet-otel`, `barebones-app`, `toystore-app`, and
-`soklet.com`. From each intended repository root, inspect:
+`soklet.com`, plus the four generated sites `javadoc.soklet.com`,
+`javax.javadoc.soklet.com`, `jakarta.javadoc.soklet.com`, and
+`otel.javadoc.soklet.com`. From each intended repository root, inspect:
 
 ```sh
 git status --short --untracked-files=all
@@ -47,7 +49,7 @@ intended changes to be staged, no omitted required files, and no unrelated
 additions—not an empty pre-commit `git status`. Review binary provenance and
 hashes separately; a text diff cannot verify a vendored JAR.
 
-## Load-bearing new files in the September 13 handoff
+## Load-bearing new files in the September 13–14 handoff
 
 This explicit list prevents omission; it is not a substitute for the complete
 current status/diff. Check every listed path is present in the owner's index
@@ -103,6 +105,8 @@ Both 2.0.0 adapters require core 4.0.0; do not reinstate the superseded
 ### OTel integration
 
 - `soklet-otel/src/main/java/com/soklet/otel/ServerTypeAttribute.java`
+- `soklet-otel/scripts/verify-soklet-candidate.py`
+- `soklet-otel/scripts/test_verify_soklet_candidate.py`
 
 This package-private helper supplies the shared, explicit `http`/`sse`/`mcp`
 attribute vocabulary for both metrics and spans. Review it with both collectors,
@@ -112,10 +116,18 @@ an alias. Review its source and API snapshot changes with the migration guide,
 changelog, dependent integrations, and built-in Prometheus/OpenMetrics coverage
 for `server_type="HTTP"`. The explicit OTel attribute value remains `http`.
 
+The CI verifier and its tests must accompany the workflow change. Both the
+manual default and automatic fallback must select the same reviewed full core
+commit SHA. The verifier checks that identity and the declared core dependency
+before building; do not restore an arbitrary branch checkout or a version
+override that masks an incompatible baseline.
+
 ### Website
 
 - `soklet.com/scripts/verify-core-blob-links.mjs`
 - `soklet.com/scripts/verify-core-blob-links-self-test.mjs`
+- `soklet.com/scripts/verify-mcp-api-reference.mjs`
+- `soklet.com/scripts/verify-mcp-api-reference-self-test.mjs`
 
 Review these with the website's package scripts and README. Discovery includes
 all source links, including navigation, and checks the generated page/HTML
@@ -125,10 +137,31 @@ after generation. This offline working-tree preflight does not establish public
 availability; add `--core-ref FULL_40_CHARACTER_COMMIT_SHA` to check the intended
 owner-committed core tree instead.
 
+Also run the API-reference guard and its self-tests. Review the API-freeze
+counts, type/member links, provisional Tasks maturity, authored-schema wording,
+and regenerated full-text output together; source Java signatures being frozen
+does not make provisional protocol features final.
+
+### Generated Javadoc sites
+
+In each of the four site repositories, include `scripts/import-javadoc.py`,
+`scripts/test_import_javadoc.py`, `.gitignore`, the README, and the complete
+reviewed generated `dist` changes. Use the helper to import a packaged Javadoc
+JAR into a new preview directory with an independently verified expected
+SHA-256. Do not rebuild Javadocs independently from source during publication.
+
+Review exact artifact provenance, release version, API/deep links, and preview
+contents before replacing `dist`; preserve the old tree in a separate backup.
+Local generation is preparation only. Before deployment require the final
+accepted Javadoc JAR to match the reviewed import and verify hosting triggers.
+The Javadoc sites are still published after the accepted libraries and examples,
+before the main website; they are not additional candidate gates.
+
 ### ToyStore
 
 - `toystore-app/src/test/java/com/soklet/toystore/ConfigurationTests.java`
 - `toystore-app/src/test/java/com/soklet/toystore/mcp/ToyStoreMcpDockerSmokeTests.java`
+- `toystore-app/src/test/java/com/soklet/toystore/mcp/ToyStoreDockerSmokeConfigurationTests.java`
 - `toystore-app/scripts/VerifyDockerSmokeReport.java`
 
 Review these with the bind/allowlist configuration, application wiring, Docker
@@ -137,6 +170,9 @@ requires the documented exact opt-in and an available daemon; require its
 actual execution with zero skipped tests, not merely a successful Maven exit.
 Use the fresh-report-directory procedure and its report-verification helper;
 an old successful report must not satisfy a new skipped or unexecuted run.
+The optional HTTP smoke-port override is test-only and must remain restricted
+to a validated decimal port on `127.0.0.1`; it does not change MCP's bound-port
+and Host-authority checks. Run its configuration tests without the Docker opt-in.
 
 ## Verify the committed tree, not just the working copy
 

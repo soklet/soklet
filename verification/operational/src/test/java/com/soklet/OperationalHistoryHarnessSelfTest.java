@@ -24,6 +24,8 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /** Deterministic, short checks for the standalone operational child harness. */
@@ -123,6 +125,8 @@ public final class OperationalHistoryHarnessSelfTest {
     require(OperationalHistoryHarness.isRegisteredTraceLog(
         wrongWellFormedTraceLog, "operational-self-test"),
         "well-formed adversarial token must reach exact-token validation");
+
+    selfTestWarmupDrain(selfTestTraceKey, traceLog);
 
     OperationalHistoryHarness.TelemetryAudit duplicateMissingAudit =
         new OperationalHistoryHarness.TelemetryAudit(
@@ -294,7 +298,91 @@ public final class OperationalHistoryHarnessSelfTest {
 
     OperationalHistoryHarness.selfTestCandidateRuntime();
 
-    System.out.println("OperationalHistoryHarnessSelfTest PASS assertions=63");
+    System.out.println("OperationalHistoryHarnessSelfTest PASS assertions=77");
+  }
+
+  private static void selfTestWarmupDrain(byte[] traceKey, LogEvent traceLog)
+      throws Exception {
+    CountDownLatch consumerEntered = new CountDownLatch(1);
+    CountDownLatch allowConsumption = new CountDownLatch(1);
+    OperationalHistoryHarness.TelemetryAudit audit =
+        new OperationalHistoryHarness.TelemetryAudit(
+            "operational-self-test", traceKey, 1L, 1L,
+            gatedConsumerFactory(consumerEntered, allowConsumption));
+    ExecutorService windowStarter = Executors.newSingleThreadExecutor();
+    List<String> outcomes = new ArrayList<>();
+    try {
+      // Even a well-formed trace record received during startup is warmup,
+      // not an operational trace token or part of the measured drain latency.
+      audit.didReceiveLogEvent(traceLog);
+      Future<?> windowStarted = windowStarter.submit(() ->
+          audit.beginOperationalWindow(5, outcomes));
+      require(consumerEntered.await(1, TimeUnit.SECONDS),
+          "controlled warmup consumer did not start");
+      require(!windowStarted.isDone(),
+          "operational window did not await the controlled warmup drain");
+      expectStateFailure(() -> audit.startTraceOperation(1L, System.nanoTime()));
+      allowConsumption.countDown();
+      windowStarted.get(5, TimeUnit.SECONDS);
+      require(outcomes.isEmpty(), "warmup drain reported a failure: " + outcomes);
+      require(audit.logRecordsObserved() == 0L,
+          "warmup trace record was counted as operational");
+      require(audit.maximumOperationalDrainSeconds() == 0.0,
+          "warmup delay was counted in operational drain latency");
+      expectStateFailure(() -> audit.beginOperationalWindow(0, outcomes));
+      audit.startTraceOperation(1L, System.nanoTime());
+      audit.didReceiveLogEvent(traceLog);
+      audit.completeTraceOperation(1L, System.nanoTime());
+      audit.awaitDrained(1, outcomes);
+      audit.validateTraceDelivery(1L, outcomes);
+      audit.validateDrainMaximum(1, outcomes);
+      require(audit.logRecordsObserved() == 1L,
+          "operational trace was not counted exactly once after warmup");
+      require(audit.droppedLogRecords() == 0L,
+          "controlled warmup drain dropped log records");
+      require(outcomes.isEmpty(),
+          "warmup/operational separation failed the telemetry audit: " + outcomes);
+    } finally {
+      allowConsumption.countDown();
+      try {
+        require(OperationalHistoryHarness.cancelAndAwaitExecutorTermination(
+            windowStarter, 1L), "window starter did not terminate");
+      } finally {
+        audit.close();
+      }
+    }
+
+    CountDownLatch blockedConsumerEntered = new CountDownLatch(1);
+    CountDownLatch releaseBlockedConsumer = new CountDownLatch(1);
+    OperationalHistoryHarness.TelemetryAudit blockedAudit =
+        new OperationalHistoryHarness.TelemetryAudit(
+            "operational-self-test", traceKey, 1L, 1L,
+            gatedConsumerFactory(blockedConsumerEntered, releaseBlockedConsumer));
+    List<String> blockedOutcomes = new ArrayList<>();
+    try {
+      blockedAudit.didReceiveLogEvent(traceLog);
+      expectStateFailure(() -> blockedAudit.beginOperationalWindow(0, blockedOutcomes));
+      require(containsOutcome(blockedOutcomes, "Log queue did not drain within policy"),
+          "warmup drain timeout did not preserve the failure outcome");
+      expectStateFailure(() -> blockedAudit.startTraceOperation(1L, System.nanoTime()));
+    } finally {
+      releaseBlockedConsumer.countDown();
+      blockedAudit.close();
+    }
+  }
+
+  private static ThreadFactory gatedConsumerFactory(
+      CountDownLatch consumerEntered, CountDownLatch allowConsumption) {
+    return consumer -> new Thread(() -> {
+      consumerEntered.countDown();
+      try {
+        if (!allowConsumption.await(5, TimeUnit.SECONDS))
+          throw new AssertionError("Controlled log drain was not released");
+        consumer.run();
+      } catch (InterruptedException exception) {
+        Thread.currentThread().interrupt();
+      }
+    });
   }
 
   private static byte[] sequentialBytes(int first) {
@@ -319,6 +407,15 @@ public final class OperationalHistoryHarnessSelfTest {
       operation.run();
       throw new AssertionError("Expected operation to fail");
     } catch (IllegalArgumentException expected) {
+      // Expected.
+    }
+  }
+
+  private static void expectStateFailure(Runnable operation) {
+    try {
+      operation.run();
+      throw new AssertionError("Expected operation to fail");
+    } catch (IllegalStateException expected) {
       // Expected.
     }
   }
