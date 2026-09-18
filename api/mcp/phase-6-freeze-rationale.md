@@ -38,24 +38,25 @@ is the [Phase 6 owner inventory](phase-6.includes), the reviewed
 [signature snapshot](phase-6.signatures.jsonl), the
 [compatibility set](current-incompatibilities.jsonl), and the aggregate-gate
 contract in the [API inventory README](README.md#running-the-gates). The
-snapshot checked in here is byte-for-byte identical to a fresh extraction from
-the current full japicmp report.
+original snapshot described below was byte-for-byte identical to a fresh
+extraction from the then-current full japicmp report. Later dated amendments
+record the current file.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 648 canonical
+The reviewed current incompatibility set contains exactly 654 canonical
 symbols and has SHA-256
-`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+`9317f7a5782062e0bd1dbf9512d0744fb97bef9a27992ce2d4707a08ba8a398f`.
 The matching full japicmp report establishes an exact owner universe of:
 
-- 134 Phase 4 owners;
+- 136 Phase 4 owners;
 - 36 Phase 5 owners;
 - 64 Phase 6 owners;
 - 14 provisional Tasks owners; and
-- 248 MCP owners, plus 52 reviewed non-MCP owners for 300 current-side owners.
+- 250 MCP owners, plus 61 reviewed non-MCP owners for 311 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
-The Phase 4 owner inventory is 134, while its signature snapshot includes the
+The Phase 4 owner inventory is 136, while its signature snapshot includes the
 compatible `LogEventType.MCP_TRACE_CORRELATION` field and the restored
 `McpOperationType` classification. Among the reviewed Phase 4 host
 localization amendments, only `McpServer.getLocalizationControl()` added a
@@ -79,28 +80,30 @@ elimination amendment converts values in all three phases without changing the
 owner partition. The subsequent typed-request-state amendment removes three
 Phase 5 carrier owners and changes no Phase 6 descriptor.
 
-## Frozen Phase 6 snapshot
+## Original frozen Phase 6 snapshot
 
-`phase-6.signatures.jsonl` contains exactly 423 canonical records:
+At this historical checkpoint, `phase-6.signatures.jsonl` contained exactly
+423 canonical records:
 
 - 64 classes;
 - zero constructors;
 - 41 fields; and
 - 318 methods.
 
-The reviewed file's SHA-256 is
+The reviewed file's SHA-256 was
 `991ebeeacc476ef06a127db5127da421b79900dbd3d3c405d2886776ffa671f7`.
-The independent reflection contract freezes the Phase 6 JSpecify type-use
+The independent reflection contract froze the Phase 6 JSpecify type-use
 layout with SHA-256
 `73603f40a78921b772a8e2380372044274b4fcae7321e705eb181c138e9a50d0`.
-The 64-entry `phase-6.includes` inventory has SHA-256
+The 64-entry `phase-6.includes` inventory had SHA-256
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
 
-Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 423 records and was byte-for-
-byte identical to the reviewed candidate. The aggregate freeze gate now
-compares the Phase 4, Phase 5, and Phase 6 snapshots bidirectionally on every
-run, and `frozen-phases` lists the contiguous sorted prefix `4`, `5`, `6`.
+Immediately before that snapshot was checked in, a fresh extraction from the
+then-current full japicmp report produced the same 423 records and was byte-for-
+byte identical to the reviewed candidate. At that checkpoint, the aggregate
+freeze gate compared the Phase 4, Phase 5, and Phase 6 snapshots
+bidirectionally, and `frozen-phases` listed the contiguous sorted prefix `4`,
+`5`, `6`.
 
 ## Reviewed contract
 

@@ -518,7 +518,7 @@ public class McpSimulatorPublicRuntimeTests {
 		ServerFixture server = new ServerFixture(Duration.ofMillis(250),
 				() -> {
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-					.withEventPublisher(publisher, EnumSet.of(
+					.withEventPublisherAndNotificationTypes(publisher, EnumSet.of(
 							McpSubscriptionNotificationType
 									.RESOURCES_LIST_CHANGED))
 					.build();

@@ -52,6 +52,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpEndpointRegistry getEndpointRegistry();
 
 	/**
+	 * Returns the effective caller-aware tool and prompt catalog access policy.
+	 * When omitted during construction this is
+	 * {@link McpCatalogAccessPolicy#allowAllInstance()}.
+	 *
+	 * @return catalog access policy
+	 */
+	@NonNull
+	McpCatalogAccessPolicy getCatalogAccessPolicy();
+
+	/**
 	 * Returns the effective admission controller. When omitted during
 	 * construction this is {@link McpAdmissionController#acceptAllInstance()}
 	 * and Soklet emits a startup configuration diagnostic.
@@ -278,6 +288,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private McpAdmissionController admissionController;
 		private boolean admissionControllerExplicitlyConfigured;
 		@NonNull
+		private McpCatalogAccessPolicy catalogAccessPolicy;
+		private boolean catalogAccessPolicyExplicitlyConfigured;
+		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
 		@NonNull
 		private McpToolOutputSanitizer toolOutputSanitizer;
@@ -313,6 +326,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.admissionController =
 					McpAdmissionController.acceptAllInstance();
 			this.admissionControllerExplicitlyConfigured = false;
+			this.catalogAccessPolicy =
+					McpCatalogAccessPolicy.allowAllInstance();
+			this.catalogAccessPolicyExplicitlyConfigured = false;
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.maximumSubscriptionsPerPartition =
@@ -386,6 +402,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.admissionController = exactSource.admissionController;
 			this.admissionControllerExplicitlyConfigured =
 					exactSource.admissionControllerExplicitlyConfigured;
+			this.catalogAccessPolicy = exactSource.catalogAccessPolicy;
+			this.catalogAccessPolicyExplicitlyConfigured =
+					exactSource.catalogAccessPolicyExplicitlyConfigured;
 			this.handlerInterceptor = exactSource.handlerInterceptor;
 			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
 			this.taskManager = exactSource.taskManager;
@@ -917,6 +936,26 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Configures caller-aware tool and prompt availability for both discovery
+		 * and direct access. Soklet may invoke one policy concurrently for
+		 * independent requests.
+		 *
+		 * @param catalogAccessPolicy application-owned catalog access policy, or
+		 *                            null to restore allow-all behavior
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder catalogAccessPolicy(
+				@Nullable McpCatalogAccessPolicy catalogAccessPolicy) {
+			this.catalogAccessPolicy = catalogAccessPolicy == null
+					? McpCatalogAccessPolicy.allowAllInstance()
+					: catalogAccessPolicy;
+			this.catalogAccessPolicyExplicitlyConfigured =
+					catalogAccessPolicy != null;
+			return this;
+		}
+
+		/**
 		 * Configures the server-level application-handler interceptor. The default
 		 * invokes the downstream continuation without transforming its result. Soklet
 		 * may invoke one interceptor instance concurrently for independent handlers.
@@ -1265,6 +1304,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 					endpointRegistry,
 					this.admissionController,
 					this.admissionControllerExplicitlyConfigured,
+					this.catalogAccessPolicy,
+					this.catalogAccessPolicyExplicitlyConfigured,
 					this.handlerInterceptor,
 					this.toolOutputSanitizer, this.taskManager,
 					this.corsAuthorizer,

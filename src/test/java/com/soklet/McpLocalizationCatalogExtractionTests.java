@@ -130,6 +130,70 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	@Test
+	void resolvesFilteredCatalogSlotsByStableOwnerAndPromptArgumentIdentity() {
+		McpCanonicalLocalizationPlan plan =
+				DefaultMcpLocalizationCatalogExtractor.plan(
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint(false))), 100);
+		McpCanonicalLocalizationPlan.EndpointPlan endpointPlan =
+				plan.endpoints().get(0);
+		McpCanonicalLocalizationPlan.ResponsePlan tools = endpointPlan
+				.response(McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST)
+				.orElseThrow();
+		com.soklet.internal.mcp.protocol.McpJsonObject filteredTools = wireObject(
+				Map.of("tools", wireArray(List.of(wireObject(Map.of(
+						"name", wireString("catalog.output")))))));
+
+		List<McpCanonicalLocalizationPlan.Slot> resolvedTools =
+				tools.resolveSlots(filteredTools);
+
+		assertFalse(resolvedTools.isEmpty());
+		assertEquals(Set.of("catalog.output"), resolvedTools.stream()
+				.map(McpCanonicalLocalizationPlan.Slot::ownerId)
+				.collect(java.util.stream.Collectors.toSet()));
+		assertTrue(resolvedTools.stream().allMatch(slot -> slot.ownerType()
+				== McpTextOwnerType.TOOL));
+		assertTrue(resolvedTools.stream().anyMatch(slot -> slot.targetPointer()
+				.equals("/tools/0/outputSchema/properties/value/title")));
+		assertTrue(tools.resolveSlots(wireObject(Map.of("tools",
+				wireArray(List.of())))).isEmpty(),
+				"An authorized empty projection has no localization callbacks.");
+
+		McpCanonicalLocalizationPlan promptPlan =
+				DefaultMcpLocalizationCatalogExtractor.plan(
+						McpEndpointRegistry.fromEndpoints(List.of(
+								promptRemappingEndpoint())), 100);
+		McpCanonicalLocalizationPlan.ResponsePlan prompts = promptPlan.endpoints()
+				.get(0).response(
+						McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST)
+				.orElseThrow();
+		com.soklet.internal.mcp.protocol.McpJsonObject projectedPrompt = wireObject(
+				Map.of("name", wireString("visible.prompt"),
+						"arguments", wireArray(List.of(
+								wireObject(Map.of("name", wireString("second"))),
+								wireObject(Map.of("name", wireString("first")))))));
+		List<McpCanonicalLocalizationPlan.Slot> resolvedPrompts =
+				prompts.resolveSlots(wireObject(Map.of("prompts",
+						wireArray(List.of(projectedPrompt)))));
+
+		assertEquals(Set.of("visible.prompt"), resolvedPrompts.stream()
+				.map(McpCanonicalLocalizationPlan.Slot::ownerId)
+				.collect(java.util.stream.Collectors.toSet()));
+		assertEquals("/prompts/0/title", targetForText(resolvedPrompts,
+				"Visible prompt title"));
+		assertEquals("/prompts/0/arguments/1/title", targetForText(
+				resolvedPrompts, "First argument title"));
+		assertEquals("/prompts/0/arguments/0/description", targetForText(
+				resolvedPrompts, "Second argument description"));
+		assertEquals("first", resolvedPrompts.stream()
+				.filter(slot -> slot.text().getDefaultText()
+						.equals("First argument title"))
+				.map(McpCanonicalLocalizationPlan.Slot::structuralTarget)
+				.map(McpCanonicalLocalizationPlan.StructuralTarget
+						::promptArgumentName)
+				.findFirst().orElseThrow());
+	}
+
+	@Test
 	void customListOwnsExactDescriptorsButNotStaticTemplates() {
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
@@ -170,7 +234,7 @@ class McpLocalizationCatalogExtractionTests {
 	@Test
 	void subscriptionTerminalUsesActualResultMetadataPointerShape() {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(
+				.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						Set.of(
 								McpSubscriptionNotificationType
@@ -585,6 +649,54 @@ class McpLocalizationCatalogExtractionTests {
 						.description("Item contents")
 						.build())
 				.build();
+	}
+
+	private static McpEndpoint promptRemappingEndpoint() {
+		McpPromptHandler handler = (request, prompt, features) ->
+				McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages());
+		return McpEndpoint.withPath("/prompt-remapping", McpImplementation
+						.withNameAndVersion("prompt-remapping", "1").build())
+				.addPrompt(McpPromptRegistration.withName("hidden.prompt")
+						.handler(handler)
+						.title("Hidden prompt title")
+						.build())
+				.addPrompt(McpPromptRegistration.withName("visible.prompt")
+						.handler(handler)
+						.title("Visible prompt title")
+						.addArgument(McpPromptArgumentDeclaration.withName("first")
+								.title("First argument title")
+								.description("First argument description")
+								.build())
+						.addArgument(McpPromptArgumentDeclaration.withName("second")
+								.title("Second argument title")
+								.description("Second argument description")
+								.build())
+						.build())
+				.build();
+	}
+
+	private static String targetForText(
+			List<McpCanonicalLocalizationPlan.Slot> slots,
+			String defaultText) {
+		return slots.stream()
+				.filter(slot -> slot.text().getDefaultText().equals(defaultText))
+				.map(McpCanonicalLocalizationPlan.Slot::targetPointer)
+				.findFirst().orElseThrow();
+	}
+
+	private static com.soklet.internal.mcp.protocol.McpJsonObject wireObject(
+			Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> members) {
+		return new com.soklet.internal.mcp.protocol.McpJsonObject(members);
+	}
+
+	private static com.soklet.internal.mcp.protocol.McpJsonArray wireArray(
+			List<com.soklet.internal.mcp.protocol.McpJsonValue> values) {
+		return new com.soklet.internal.mcp.protocol.McpJsonArray(values);
+	}
+
+	private static com.soklet.internal.mcp.protocol.McpJsonString wireString(
+			String value) {
+		return new com.soklet.internal.mcp.protocol.McpJsonString(value);
 	}
 
 	private static void compileAnnotatedEndpoint(Path source, Path classes,

@@ -283,7 +283,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
 					endpointB, endpointA);
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-					.withEventPublisher(
+					.withEventPublisherAndNotificationTypes(
 							McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
 									McpSubscriptionNotificationType.RESOURCE_UPDATED))
 					.build();

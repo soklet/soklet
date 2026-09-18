@@ -28,6 +28,9 @@ import com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessAdapter;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessSession;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DiagnosticsState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HandlerEntryGuard;
@@ -155,6 +158,9 @@ final class DefaultMcpServer implements McpServer {
 	private final McpAdmissionController admissionController;
 	private final boolean admissionControllerExplicitlyConfigured;
 	@NonNull
+	private final McpCatalogAccessPolicy catalogAccessPolicy;
+	private final boolean catalogAccessPolicyExplicitlyConfigured;
+	@NonNull
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
 	private final McpToolOutputSanitizer toolOutputSanitizer;
@@ -224,6 +230,8 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpEndpointRegistry endpointRegistry,
 			@NonNull McpAdmissionController admissionController,
 			boolean admissionControllerExplicitlyConfigured,
+			@NonNull McpCatalogAccessPolicy catalogAccessPolicy,
+			boolean catalogAccessPolicyExplicitlyConfigured,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable McpTaskManager taskManager,
@@ -263,6 +271,9 @@ final class DefaultMcpServer implements McpServer {
 		this.admissionController = requireNonNull(admissionController);
 		this.admissionControllerExplicitlyConfigured =
 				admissionControllerExplicitlyConfigured;
+		this.catalogAccessPolicy = requireNonNull(catalogAccessPolicy);
+		this.catalogAccessPolicyExplicitlyConfigured =
+				catalogAccessPolicyExplicitlyConfigured;
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.taskManager = taskManager;
@@ -280,7 +291,8 @@ final class DefaultMcpServer implements McpServer {
 		this.localizationPlan = localizer == null ? null
 				: DefaultMcpLocalizationCatalogExtractor.plan(
 						endpointRegistry,
-						localizer.getMaximumLocalizableTextCountPerResponse());
+						localizer.getMaximumLocalizableTextCountPerResponse(),
+						catalogAccessPolicyExplicitlyConfigured);
 		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
 				traceCorrelationKey);
 		this.localizationControl = new DefaultMcpLocalizationControl(
@@ -539,7 +551,8 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private EndpointPlan toEndpointPlan(@NonNull McpEndpoint endpoint) {
-		requireEndpointCatalogsFitJsonNodeBudget(endpoint);
+		requireEndpointCatalogsFitJsonNodeBudget(endpoint,
+				!this.catalogAccessPolicyExplicitlyConfigured);
 		List<ToolPlan> toolPlans = endpoint.getTools().stream()
 				.map(tool -> toToolPlan(endpoint, tool))
 				.toList();
@@ -564,7 +577,156 @@ final class DefaultMcpServer implements McpServer {
 								invocation)));
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),
-				this.localizer != null, taskManagerAdapter(endpoint));
+				this.localizer != null, taskManagerAdapter(endpoint),
+				catalogAccessAdapter(endpoint));
+	}
+
+	/**
+	 * Creates the caller-aware access seam only for an explicitly configured
+	 * policy. Omitted or null configuration therefore retains the static catalog
+	 * fast path even though the effective public policy is allow-all.
+	 */
+	@NonNull
+	private Optional<@NonNull CatalogAccessAdapter> catalogAccessAdapter(
+			@NonNull McpEndpoint endpoint) {
+		if (!this.catalogAccessPolicyExplicitlyConfigured)
+			return Optional.empty();
+
+		Map<String, McpToolRegistration<?>> toolsByName = new LinkedHashMap<>();
+		for (McpToolRegistration<?> tool : requireNonNull(endpoint).getTools())
+			toolsByName.put(tool.getName(), tool);
+		Map<String, McpPromptRegistration> promptsByName = new LinkedHashMap<>();
+		for (McpPromptRegistration prompt : endpoint.getPrompts())
+			promptsByName.put(prompt.getName(), prompt);
+		Map<String, McpToolRegistration<?>> tools = Map.copyOf(toolsByName);
+		Map<String, McpPromptRegistration> prompts = Map.copyOf(promptsByName);
+
+		return Optional.of(input -> openCatalogAccessSession(input, tools,
+				prompts));
+	}
+
+	@NonNull
+	private CatalogAccessSession openCatalogAccessSession(
+			@NonNull CatalogAccessInput input,
+			@NonNull Map<@NonNull String,
+					@NonNull McpToolRegistration<?>> tools,
+			@NonNull Map<@NonNull String,
+					@NonNull McpPromptRegistration> prompts) {
+		CatalogAccessInput exactInput = requireNonNull(input);
+		McpRequestContext requestContext = exactInput.requestContext();
+		McpCatalogAccessPolicy policy = this.catalogAccessPolicy;
+
+		// A task-status read needs a session handle so a completed result can be
+		// reauthorized later, but WORKING, INPUT_REQUIRED, FAILED, and CANCELED
+		// snapshots must not invoke either the localization provider or the catalog
+		// policy.  Initialize the shared feature carrier only on the first actual
+		// policy/localization use, and memoize both success and failure.
+		class LazyCatalogAccess {
+			private boolean initialized;
+			private @Nullable Throwable failure;
+			private @Nullable McpInvocationFeatures invocationFeatures;
+			@NonNull
+			private Optional<@NonNull McpLocalizationContext> localizationContext =
+					Optional.empty();
+
+			@NonNull
+			synchronized McpInvocationFeatures invocationFeatures() {
+				initialize();
+				return requireNonNull(this.invocationFeatures);
+			}
+
+			@NonNull
+			synchronized Optional<@NonNull McpLocalizationContext>
+					localizationContext() {
+				initialize();
+				return this.localizationContext;
+			}
+
+			private void initialize() {
+				if (this.initialized) {
+					rethrowFailure();
+					return;
+				}
+				try {
+					this.localizationContext = applicationLocalizationContext(
+							requestContext, exactInput.cancelationToken(),
+							exactInput.pastDeadline(),
+							exactInput.continuationLocale(),
+							exactInput.selectedLocaleSlot(), Optional.empty());
+					Map<Class<?>, Object> features = new LinkedHashMap<>();
+					features.put(CancelationToken.class,
+							exactInput.cancelationToken());
+					this.localizationContext.ifPresent(context ->
+							features.put(McpLocalizationContext.class, context));
+					this.invocationFeatures =
+							McpInvocationFeatures.fromFeatures(features);
+				} catch (RuntimeException | Error throwable) {
+					this.failure = throwable;
+					throw throwable;
+				} finally {
+					this.initialized = true;
+				}
+			}
+
+			private void rethrowFailure() {
+				if (this.failure instanceof RuntimeException exception)
+					throw exception;
+				if (this.failure instanceof Error error)
+					throw error;
+			}
+		}
+		LazyCatalogAccess lazyCatalogAccess = new LazyCatalogAccess();
+
+		return new CatalogAccessSession() {
+			@Override
+			public boolean isToolAccessible(@NonNull String toolName)
+					throws Exception {
+				McpToolRegistration<?> tool = tools.get(requireNonNull(toolName));
+				if (tool == null)
+					return false;
+				requireCatalogAccessEvaluationActive(exactInput);
+				McpInvocationFeatures invocationFeatures =
+						lazyCatalogAccess.invocationFeatures();
+				requireCatalogAccessEvaluationActive(exactInput);
+				boolean accessible = policy.isToolAccessible(requestContext, tool,
+						invocationFeatures);
+				requireCatalogAccessEvaluationActive(exactInput);
+				return accessible;
+			}
+
+			@Override
+			public boolean isPromptAccessible(@NonNull String promptName)
+					throws Exception {
+				McpPromptRegistration prompt = prompts.get(
+						requireNonNull(promptName));
+				if (prompt == null)
+					return false;
+				requireCatalogAccessEvaluationActive(exactInput);
+				McpInvocationFeatures invocationFeatures =
+						lazyCatalogAccess.invocationFeatures();
+				requireCatalogAccessEvaluationActive(exactInput);
+				boolean accessible = policy.isPromptAccessible(requestContext,
+						prompt, invocationFeatures);
+				requireCatalogAccessEvaluationActive(exactInput);
+				return accessible;
+			}
+
+			@Override
+			@NonNull
+			public Optional<@NonNull McpLocalizationContext>
+					localizationContext() {
+				return lazyCatalogAccess.localizationContext();
+			}
+		};
+	}
+
+	private static void requireCatalogAccessEvaluationActive(
+			@NonNull CatalogAccessInput input) throws InterruptedException {
+		if (Thread.currentThread().isInterrupted()
+				|| input.cancelationToken().isCanceled()
+				|| input.pastDeadline().getAsBoolean())
+			throw new InterruptedException(
+					"MCP catalog access evaluation was canceled.");
 	}
 
 	@NonNull
@@ -585,7 +747,18 @@ final class DefaultMcpServer implements McpServer {
 			public Optional<@NonNull TaskSnapshot> findTask(
 					@NonNull McpRequestContext requestContext,
 					@NonNull String taskId) throws Exception {
-				return findTask(requestContext, taskId, true);
+				return findTask(requestContext, taskId, true, Optional.empty());
+			}
+
+			@Override
+			@NonNull
+			public Optional<@NonNull TaskSnapshot> findTask(
+					@NonNull McpRequestContext requestContext,
+					@NonNull String taskId,
+					@NonNull Optional<@NonNull CatalogAccessSession>
+							catalogAccessView) throws Exception {
+				return findTask(requestContext, taskId, true,
+						requireNonNull(catalogAccessView));
 			}
 
 			@Override
@@ -594,14 +767,16 @@ final class DefaultMcpServer implements McpServer {
 					findTaskForSubscriptionAuthorization(
 							@NonNull McpRequestContext requestContext,
 							@NonNull String taskId) throws Exception {
-				return findTask(requestContext, taskId, false);
+				return findTask(requestContext, taskId, false, Optional.empty());
 			}
 
 			@NonNull
 			private Optional<@NonNull TaskSnapshot> findTask(
 					@NonNull McpRequestContext requestContext,
 					@NonNull String taskId,
-					boolean includeDetailedResult) throws Exception {
+					boolean includeDetailedResult,
+					@NonNull Optional<@NonNull CatalogAccessSession>
+							catalogAccessView) throws Exception {
 				Optional<McpTask> task = requireNonNull(
 						configuredTaskManager.findTask(new McpTaskRequestContext(
 								requestContext, taskId)),
@@ -611,7 +786,7 @@ final class DefaultMcpServer implements McpServer {
 				McpTask snapshot = task.orElseThrow();
 				requireTaskIdMatches(taskId, snapshot);
 				return Optional.of(taskSnapshot(endpoint, requestContext, snapshot,
-						includeDetailedResult));
+						includeDetailedResult, catalogAccessView));
 			}
 
 			@Override
@@ -714,6 +889,23 @@ final class DefaultMcpServer implements McpServer {
 		if (responsePlan.isEmpty())
 			return McpRuntimeCatalogLocalizer.Outcome.canonical(
 					input.canonicalDocument());
+		List<McpCanonicalLocalizationPlan.Slot> resolvedSlots;
+		try {
+			resolvedSlots = responsePlan.orElseThrow()
+					.resolveSlots(input.canonicalDocument());
+		} catch (RuntimeException exception) {
+			return localizationFailure(configuredLocalizer, input);
+		}
+		// Filtering may remove every owner that carried localizable text. Such an
+		// exact caller projection is already complete and must not create an empty
+		// rendering plan or invoke application localization callbacks.
+		if (resolvedSlots.isEmpty())
+			return McpRuntimeCatalogLocalizer.Outcome.canonical(
+					input.canonicalDocument());
+		if (resolvedSlots.size()
+				> configuredLocalizer
+						.getMaximumLocalizableTextCountPerResponse())
+			return localizationFailure(configuredLocalizer, input);
 
 		// Terminal work before any provider call publishes canonically: no
 		// provider ran, so there is no localization failure to classify.
@@ -721,28 +913,32 @@ final class DefaultMcpServer implements McpServer {
 			return McpRuntimeCatalogLocalizer.Outcome.canonical(
 					input.canonicalDocument());
 
-		McpLocalizationRequest localizationRequest =
-				new DefaultMcpLocalizationRequest(input.requestContext(),
-						McpLocaleSupport.boundedLanguageRanges(
-								input.acceptLanguageValues()),
-						null,
-						input.resourceListCursor().isEmpty() ? null
-								: input.resourceListCursor().get(0),
-						configuredLocalizer.getFallbackLocale());
 		McpLocalizationContext context;
+		if (input.localizationContext().isPresent()) {
+			context = input.localizationContext().orElseThrow();
+		} else {
+			McpLocalizationRequest localizationRequest =
+					new DefaultMcpLocalizationRequest(input.requestContext(),
+							McpLocaleSupport.boundedLanguageRanges(
+									input.acceptLanguageValues()),
+							null,
+							input.resourceListCursor().isEmpty() ? null
+									: input.resourceListCursor().get(0),
+							configuredLocalizer.getFallbackLocale());
 
-		try {
-			context = requireNonNull(configuredLocalizer.getContextProvider()
-					.provideContext(localizationRequest),
-					"The MCP localization context provider returned null.");
-		} catch (Throwable exception) {
-			// The whole throwable - Errors and sneaky-thrown checked exceptions
-			// included - is untrusted localization data and is never forwarded to
-			// any framework-owned surface.
-			if (exception instanceof InterruptedException)
-				Thread.currentThread().interrupt();
+			try {
+				context = requireNonNull(configuredLocalizer.getContextProvider()
+						.provideContext(localizationRequest),
+						"The MCP localization context provider returned null.");
+			} catch (Throwable exception) {
+				// The whole throwable - Errors and sneaky-thrown checked exceptions
+				// included - is untrusted localization data and is never forwarded to
+				// any framework-owned surface.
+				if (exception instanceof InterruptedException)
+					Thread.currentThread().interrupt();
 
-			return localizationFailure(configuredLocalizer, input);
+				return localizationFailure(configuredLocalizer, input);
+			}
 		}
 
 		if (input.terminalBoundary().getAsBoolean())
@@ -752,7 +948,7 @@ final class DefaultMcpServer implements McpServer {
 				input.canonicalDocument(), input.canonicalEncodedBytes(),
 				input.envelopeBytes(), input.maximumResponseBytes(),
 				input.maximumReplacementCharacters(),
-				responsePlan.orElseThrow().slots(), context,
+				resolvedSlots, context,
 				configuredLocalizer.getFailurePolicy(),
 				() -> input.terminalBoundary().getAsBoolean(),
 				document -> input.encodedLength().applyAsLong(document));
@@ -1003,6 +1199,12 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	public McpEndpointRegistry getEndpointRegistry() {
 		return this.endpointRegistry;
+	}
+
+	@Override
+	@NonNull
+	public McpCatalogAccessPolicy getCatalogAccessPolicy() {
+		return this.catalogAccessPolicy;
 	}
 
 	@Override
@@ -1336,7 +1538,8 @@ final class DefaultMcpServer implements McpServer {
 				invocation.cancelationToken(), invocation.progressEmitter(),
 				invocation.pastDeadline(), invocation.continuationLocale(),
 				invocation.selectedLocaleSlot(), Optional.empty(),
-				taskControl.map(control -> (McpTaskControl) control));
+				taskControl.map(control -> (McpTaskControl) control),
+				invocation.localizationContext());
 		taskControl.ifPresent(control -> control.pinSelectedLocale(
 				invocation.selectedLocaleSlot().get()));
 		McpOperationResult result;
@@ -1394,7 +1597,8 @@ final class DefaultMcpServer implements McpServer {
 				throw new IllegalStateException(
 						"The created MCP task did not preserve its invocation origin.");
 			return ToolInvocationResult.taskCreated(taskSnapshot(
-					invocation.endpoint(), requestContext, snapshot, false));
+					invocation.endpoint(), requestContext, snapshot, false,
+					Optional.empty()));
 		}
 		if (result instanceof McpInputRequiredResult inputRequiredResult)
 			return ToolInvocationResult.inputRequired(inputRequiredResult);
@@ -1444,13 +1648,27 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private TaskSnapshot taskSnapshot(@NonNull McpEndpoint endpoint,
 			@NonNull McpRequestContext requestContext,
-			@NonNull McpTask task, boolean includeDetailedResult)
+			@NonNull McpTask task, boolean includeDetailedResult,
+			@NonNull Optional<@NonNull CatalogAccessSession>
+					catalogAccessView)
 			throws Exception {
 		TaskOriginResolution origin = resolveTaskOrigin(endpoint,
 				requireNonNull(task).getTaskOrigin());
 		requireTaskInputRequestsDeclared(task, origin);
 		if (task.getTaskStatus() != McpTaskStatus.COMPLETED
 				|| !includeDetailedResult)
+			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
+					false);
+
+		boolean currentlyRegistered = requireNonNull(endpoint).getTools().stream()
+				.anyMatch(tool -> tool.getName().equals(origin.toolName()));
+		if (!currentlyRegistered)
+			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
+					false);
+		Optional<CatalogAccessSession> accessView =
+				requireNonNull(catalogAccessView);
+		if (accessView.isPresent() && !accessView.orElseThrow()
+				.isToolAccessible(origin.toolName()))
 			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
 					false);
 
@@ -1654,7 +1872,8 @@ final class DefaultMcpServer implements McpServer {
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
 				invocation.cancelationToken(), invocation.progressEmitter(),
 				invocation.pastDeadline(), invocation.continuationLocale(),
-				invocation.selectedLocaleSlot());
+				invocation.selectedLocaleSlot(), Optional.empty(), Optional.empty(),
+				invocation.localizationContext());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -1873,7 +2092,7 @@ final class DefaultMcpServer implements McpServer {
 		return invocationFeatures(requestContext, endpoint, jsonRpcMethod,
 				cancelationToken, progressEmitter, pastDeadline,
 				continuationLocale, selectedLocaleSlot, resourceListCursor,
-				Optional.empty());
+				Optional.empty(), Optional.empty());
 	}
 
 	@NonNull
@@ -1887,6 +2106,25 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 			@NonNull Optional<@NonNull String> resourceListCursor,
 			@NonNull Optional<@NonNull McpTaskControl> taskControl) {
+		return invocationFeatures(requestContext, endpoint, jsonRpcMethod,
+				cancelationToken, progressEmitter, pastDeadline,
+				continuationLocale, selectedLocaleSlot, resourceListCursor,
+				taskControl, Optional.empty());
+	}
+
+	@NonNull
+	private McpInvocationFeatures invocationFeatures(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+			@NonNull BooleanSupplier pastDeadline,
+			@NonNull Optional<@NonNull String> continuationLocale,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull Optional<@NonNull String> resourceListCursor,
+			@NonNull Optional<@NonNull McpTaskControl> taskControl,
+			@NonNull Optional<@NonNull McpLocalizationContext>
+					localizationContext) {
 		requireNonNull(requestContext);
 		String endpointPath = requireNonNull(endpoint).getPath();
 		String boundedMethod = metricMethod(jsonRpcMethod);
@@ -1904,8 +2142,9 @@ final class DefaultMcpServer implements McpServer {
 				features.put(McpTaskControl.class, value));
 		// Created after queue admission and the handler slot, immediately before
 		// the interceptor, so rejected/dequeued work never calls the provider.
-		applicationLocalizationContext(requestContext, token, pastDeadline,
-				continuationLocale, selectedLocaleSlot, resourceListCursor)
+		requireNonNull(localizationContext).or(() ->
+				applicationLocalizationContext(requestContext, token, pastDeadline,
+						continuationLocale, selectedLocaleSlot, resourceListCursor))
 				.ifPresent(context ->
 						features.put(McpLocalizationContext.class, context));
 		return McpInvocationFeatures.fromFeatures(features);
@@ -2328,16 +2567,20 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private static void requireEndpointCatalogsFitJsonNodeBudget(
-			@NonNull McpEndpoint endpoint) {
+			@NonNull McpEndpoint endpoint,
+			boolean validateToolAndPromptCatalogs) {
 		requireNonNull(endpoint);
-		JsonNodeBudget toolBudget = new JsonNodeBudget("MCP tool catalog", 8L);
-		for (McpToolRegistration<?> tool : endpoint.getTools())
-			addToolCatalogNodes(toolBudget, tool);
+		if (validateToolAndPromptCatalogs) {
+			JsonNodeBudget toolBudget = new JsonNodeBudget(
+					"MCP tool catalog", 8L);
+			for (McpToolRegistration<?> tool : endpoint.getTools())
+				addToolCatalogNodes(toolBudget, tool);
 
-		JsonNodeBudget promptBudget = new JsonNodeBudget(
-				"MCP prompt catalog", 8L);
-		for (McpPromptRegistration prompt : endpoint.getPrompts())
-			addPromptCatalogNodes(promptBudget, prompt);
+			JsonNodeBudget promptBudget = new JsonNodeBudget(
+					"MCP prompt catalog", 8L);
+			for (McpPromptRegistration prompt : endpoint.getPrompts())
+				addPromptCatalogNodes(promptBudget, prompt);
+		}
 
 		JsonNodeBudget templateResourceBudget = new JsonNodeBudget(
 				"MCP resource-template catalog", 8L);

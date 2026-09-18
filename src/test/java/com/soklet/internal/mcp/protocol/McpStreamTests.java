@@ -102,7 +102,7 @@ public class McpStreamTests {
 				.addInputRequestDeclarations(roots)
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, Set.of(
+				.withEventPublisherAndNotificationTypes(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration

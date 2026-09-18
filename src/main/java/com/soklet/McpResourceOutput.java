@@ -22,8 +22,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -59,7 +57,7 @@ public final class McpResourceOutput implements McpCompletePayload {
 	@NonNull
 	public static Builder withContent(
 			@NonNull McpResourceContents resourceContents) {
-		return new Builder(resourceContents);
+		return withContents(List.of(requireNonNull(resourceContents)));
 	}
 
 	/**
@@ -75,9 +73,48 @@ public final class McpResourceOutput implements McpCompletePayload {
 		return withContent(resourceContents).build();
 	}
 
+	/**
+	 * Vends a builder containing an ordered snapshot of resource contents.
+	 *
+	 * @param resourceContents nonempty resource contents in response order
+	 * @return resource-output builder
+	 * @throws NullPointerException if the list or any item is null
+	 * @throws IllegalArgumentException if the list is empty
+	 */
+	@NonNull
+	public static Builder withContents(
+			@NonNull List<? extends @NonNull McpResourceContents> resourceContents) {
+		return new Builder(resourceContents);
+	}
+
+	/**
+	 * Creates output from an ordered snapshot of resource contents.
+	 *
+	 * @param resourceContents nonempty resource contents in response order
+	 * @return immutable resource output
+	 * @throws NullPointerException if the list or any item is null
+	 * @throws IllegalArgumentException if the list is empty
+	 */
+	@NonNull
+	public static McpResourceOutput fromContents(
+			@NonNull List<? extends @NonNull McpResourceContents> resourceContents) {
+		return withContents(resourceContents).build();
+	}
+
 	private McpResourceOutput(@NonNull Builder builder) {
-		this.contents = List.copyOf(builder.contents);
+		this.contents = requireContents(builder.contents);
 		this.cacheTimeToLiveOverride = builder.cacheTimeToLiveOverride;
+	}
+
+	@NonNull
+	private static List<@NonNull McpResourceContents> requireContents(
+			@NonNull List<? extends @NonNull McpResourceContents> resourceContents) {
+		List<McpResourceContents> copiedContents =
+				List.copyOf(requireNonNull(resourceContents));
+		if (copiedContents.isEmpty())
+			throw new IllegalArgumentException(
+					"At least one MCP resource-content value is required.");
+		return copiedContents;
 	}
 
 	/** @return immutable resource contents in insertion order */
@@ -138,40 +175,28 @@ public final class McpResourceOutput implements McpCompletePayload {
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
-		private final List<@NonNull McpResourceContents> contents =
-				new ArrayList<>();
+		private List<@NonNull McpResourceContents> contents;
 		@Nullable
 		private Duration cacheTimeToLiveOverride;
 
-		private Builder(@NonNull McpResourceContents resourceContents) {
-			this.contents.add(requireNonNull(resourceContents));
+		private Builder(
+				@NonNull List<? extends @NonNull McpResourceContents> resourceContents) {
+			this.contents = requireContents(resourceContents);
 		}
 
 		/**
-		 * Appends one resource-content value.
+		 * Replaces all resource contents with an ordered immutable snapshot.
+		 * A failed replacement leaves the previous contents unchanged.
 		 *
-		 * @param resourceContents resource contents
+		 * @param resourceContents nonempty resource contents in response order
 		 * @return this builder
+		 * @throws NullPointerException if the list or any item is null
+		 * @throws IllegalArgumentException if the list is empty
 		 */
 		@NonNull
-		public Builder addContent(
-				@NonNull McpResourceContents resourceContents) {
-			this.contents.add(requireNonNull(resourceContents));
-			return this;
-		}
-
-		/**
-		 * Appends resource contents in iteration order.
-		 *
-		 * @param resourceContents resource contents
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addContents(
-				@NonNull Collection<? extends @NonNull McpResourceContents>
-						resourceContents) {
-			requireNonNull(resourceContents);
-			resourceContents.forEach(this::addContent);
+		public Builder contents(
+				@NonNull List<? extends @NonNull McpResourceContents> resourceContents) {
+			this.contents = requireContents(resourceContents);
 			return this;
 		}
 

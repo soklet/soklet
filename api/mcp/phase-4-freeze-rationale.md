@@ -42,6 +42,8 @@ Pre-release naming amendment reviewed: 2026-09-11
 
 Unparsed-request observation and response amendment reviewed: 2026-09-11
 
+Catalog-policy foundation and required-collection amendment reviewed: 2026-09-17
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -92,21 +94,22 @@ annotation corrections changed Phase 4 ownership before the typed-operation
 restoration added its current owner. The dated sections below record those
 transitions without compatibility aliases.
 
-## Frozen Phase 4 snapshot
+## Original frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,135 canonical records:
+At this historical checkpoint, `phase-4.signatures.jsonl` contained exactly
+1,135 canonical records:
 
 - 134 classes;
 - one constructor;
 - 96 fields; and
 - 904 methods.
 
-The reviewed file's SHA-256 is
+The reviewed file's SHA-256 was
 `648c5167a2366cf1c5b762b77cb7729eaad2824b9bfe06dbc1f726d449fdc643`.
-The independent reflection contract freezes the Phase 4 JSpecify type-use
+The independent reflection contract froze the Phase 4 JSpecify type-use
 layout with SHA-256
 `4ae05a45303bda3f3bcfd2d8d1aec52cd96c27d1e30e2feae3a4931e5e9cd51a`.
-The 134-entry `phase-4.includes` inventory has SHA-256
+The 134-entry `phase-4.includes` inventory had SHA-256
 `88cc085a516837e99e21290559bca5b6232f4ed88bdae8fd5f82fbb382046fb5`.
 
 ### Post-freeze wrapper correction
@@ -1223,3 +1226,54 @@ from a multi-selector equality cascade to the remaining closed-vocabulary
 matcher. Its generated inventory, the roadmap policy, and the 22-rule active
 documentation audit reflect the explicit non-support contract. Historical
 openness classifications and earlier verification counts remain historical.
+
+## 2026-09-17 catalog-policy foundation and required-collection amendment
+
+The owner approved the upcoming MCP plan and authorized implementation. This
+first slice adds `McpCatalogAccessPolicy` and its nested `ToolAccessEvaluator`
+and `PromptAccessEvaluator`, with the agreed factory names, nonnull boxed
+returns, checked exceptions, canonical-registration parameters, reference
+identity, and redacted diagnostics. `McpServer.getCatalogAccessPolicy()` and
+the nullable `McpServer.Builder.catalogAccessPolicy(...)` opt into runtime
+enforcement; the default and an explicit null preserve allow-all behavior while
+only a nonnull setter value marks the policy as explicitly configured.
+
+The completed P1 runtime filters tool and prompt lists in stable registration
+order, applies the same boundary to direct access, and reauthorizes a completed
+task's current origin tool before sanitizing its saved result. It reuses the
+admitted request and applicable localization context across policy and handler
+work, runs callbacks on the bounded application dispatcher, and bypasses shared
+framework-response and serialized-document caches for explicit-policy catalog
+projections. Missing or hidden task origins produce the existing status-only
+success shape; nulls and failures use the fixed redacted internal-error path.
+Caller-aware catalog-change subscriptions remain a separate P1b runtime slice.
+
+The runtime owns policy deadlines across dispatcher and HTTP layers: queued
+ownership returns correlated HTTP 503/JSON-RPC `-32603`, while active ownership
+returns correlated HTTP 504/`-32603`. Deadline or hard stop prevents entry into
+a later evaluator; hard stop fixes `SERVER_STOPPING` and signals queued/active
+policy work before application cancelation callbacks can delay dispatcher
+shutdown. Explicit-policy tool/prompt aggregate node and localization bounds
+are applied fail-atomically to the exact filtered projection, while resource
+catalog startup bounds remain strict.
+
+`McpResourceOutput` adds `withContents(List)`, `fromContents(List)`, and the
+builder's replacing `contents(List)`, all accepting nonnull subtype elements.
+The single-content conveniences remain. The two additive builder methods are
+removed without aliases. Factories, setters, and construction preserve the
+nonempty invariant; setters validate an immutable snapshot before assignment,
+preserve order/duplicates, and leave previous state intact on failure.
+
+The reviewed Phase 4 snapshot changes by exactly 13 additions and two removals,
+with no modified existing signature. It contains 1,130 signatures across 136
+owners, SHA-256
+`97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23`.
+Its reflection/nullability SHA-256 is
+`3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539`.
+The owner universe now contains 250 MCP and 61 non-MCP owners. The new policy
+belongs to Phase 4; the provisional inventory remains specifically the Tasks
+maturity bucket, not an exemption for incomplete runtime work. Phase 6,
+provisional Tasks, and all historical candidate receipts remain unchanged. The
+released-3.5.1 incompatibility ledger now has 654 records because the abstract
+server getter is source-incompatible for third-party interface implementations.
+The related Phase 5 collection amendment is recorded in its own rationale.

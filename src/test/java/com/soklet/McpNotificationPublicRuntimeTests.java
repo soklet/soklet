@@ -212,7 +212,7 @@ public class McpNotificationPublicRuntimeTests {
 				})
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, EnumSet.of(
+				.withEventPublisherAndNotificationTypes(publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(

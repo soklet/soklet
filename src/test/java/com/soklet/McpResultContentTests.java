@@ -305,6 +305,50 @@ class McpResultContentTests {
 	}
 
 	@Test
+	void resourceContentsReplacementPreservesRequiredSnapshotAndOrdering() {
+		McpResourceContents first = McpTextResourceContents.withUriAndText(
+				URI.create("test://contents/first"), "first").build();
+		McpResourceContents second = McpBlobResourceContents.withUriAndData(
+				URI.create("test://contents/second"), new byte[] {1, 2}).build();
+		List<McpResourceContents> supplied = new ArrayList<>(List.of(first, second));
+		McpResourceOutput.Builder builder = McpResourceOutput.withContents(supplied);
+		supplied.clear();
+		McpResourceOutput initial = builder.build();
+		assertEquals(List.of(first, second), initial.getContents());
+		assertThrows(UnsupportedOperationException.class, () -> initial.getContents().clear());
+		assertEquals(initial, McpResourceOutput.fromContents(List.of(first, second)));
+		assertEquals(McpResourceOutput.fromContent(first),
+				McpResourceOutput.fromContents(List.of(first)));
+
+		List<McpResourceContents> replacement = new ArrayList<>(List.of(second, first, second));
+		assertSame(builder, builder.contents(replacement));
+		replacement.clear();
+		assertEquals(List.of(second, first, second), builder.build().getContents());
+		assertEquals(List.of(first, second), initial.getContents());
+		builder.contents(List.of(first));
+		assertEquals(List.of(first), builder.build().getContents());
+	}
+
+	@Test
+	void resourceContentsRejectInvalidReplacementsAtomically() {
+		McpResourceContents contents = McpTextResourceContents.withUriAndText(
+				URI.create("test://contents/required"), "required").build();
+		List<McpResourceContents> invalid = new ArrayList<>(List.of(contents));
+		invalid.add(null);
+		assertThrows(NullPointerException.class, () -> McpResourceOutput.withContents(null));
+		assertThrows(IllegalArgumentException.class, () -> McpResourceOutput.withContents(List.of()));
+		assertThrows(NullPointerException.class, () -> McpResourceOutput.fromContents(invalid));
+		assertThrows(IllegalArgumentException.class, () -> McpResourceOutput.fromContents(List.of()));
+		McpResourceOutput.Builder builder = McpResourceOutput.withContent(contents)
+				.cacheTimeToLiveOverride(Duration.ZERO);
+		assertThrows(NullPointerException.class, () -> builder.contents(null));
+		assertThrows(IllegalArgumentException.class, () -> builder.contents(List.of()));
+		assertThrows(NullPointerException.class, () -> builder.contents(invalid));
+		assertEquals(List.of(contents), builder.build().getContents());
+		assertEquals(Duration.ZERO, builder.build().getCacheTimeToLiveOverride().orElseThrow());
+	}
+
+	@Test
 	void resourceValuesRejectRelativeOrUnnormalizedUrisAndBlankScalars() {
 		assertThrows(IllegalArgumentException.class, () ->
 				McpTextResourceContents.withUriAndText(

@@ -1175,7 +1175,7 @@ public class McpShutdownObservabilityTests {
 	private static McpEndpoint subscriptionEndpoint(@NonNull String path,
 			@NonNull McpSubscriptionEventPublisher publisher) {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(requireNonNull(publisher), Set.of(
+				.withEventPublisherAndNotificationTypes(requireNonNull(publisher), Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(

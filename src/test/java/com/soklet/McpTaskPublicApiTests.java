@@ -345,16 +345,16 @@ public class McpTaskPublicApiTests {
 	public void completeResultsCompareNestedResourceContentsStructurally() {
 		URI textUri = URI.create("test://tasks/text");
 		URI blobUri = URI.create("test://tasks/blob");
-		McpResourceOutput first = McpResourceOutput.withContent(
-				McpTextResourceContents.withUriAndText(textUri, "text").build())
-				.addContent(McpBlobResourceContents
-						.withUriAndData(blobUri, new byte[] { 1, 2, 3 }).build())
+		McpResourceOutput first = McpResourceOutput.withContents(List.of(
+				McpTextResourceContents.withUriAndText(textUri, "text").build(),
+				McpBlobResourceContents
+						.withUriAndData(blobUri, new byte[] { 1, 2, 3 }).build()))
 				.cacheTimeToLiveOverride(Duration.ofSeconds(5))
 				.build();
-		McpResourceOutput equal = McpResourceOutput.withContent(
-				McpTextResourceContents.withUriAndText(textUri, "text").build())
-				.addContent(McpBlobResourceContents
-						.withUriAndData(blobUri, new byte[] { 1, 2, 3 }).build())
+		McpResourceOutput equal = McpResourceOutput.withContents(List.of(
+				McpTextResourceContents.withUriAndText(textUri, "text").build(),
+				McpBlobResourceContents
+						.withUriAndData(blobUri, new byte[] { 1, 2, 3 }).build()))
 				.cacheTimeToLiveOverride(Duration.ofSeconds(5))
 				.build();
 		McpResourceOutput different = McpResourceOutput.withContent(

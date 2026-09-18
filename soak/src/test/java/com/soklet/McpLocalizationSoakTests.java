@@ -281,7 +281,7 @@ class McpLocalizationSoakTests {
 				.addTool(tool)
 				.addResource(resource)
 				.subscriptionConfig(McpSubscriptionConfig
-						.withEventPublisher(
+						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								Set.of(McpSubscriptionNotificationType
 										.RESOURCES_LIST_CHANGED))

@@ -37,7 +37,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,6 +47,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
@@ -843,10 +846,13 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 	}
 
 	boolean cancel(@NonNull StreamTerminationReason reason) {
-		if (!fixReason(reason))
-			return false;
-		releaseCallbacks();
-		return true;
+		boolean fixed = fixReason(reason);
+		// A stop reservation may fix the reason before dispatcher interruption so
+		// arbitrary callbacks cannot delay signaling other tickets. The eventual
+		// request cleanup still owns releasing those callbacks exactly once.
+		if (fixed || isCancellationRequested())
+			releaseCallbacks();
+		return fixed;
 	}
 
 	boolean fixReason(@NonNull StreamTerminationReason reason) {
@@ -948,6 +954,9 @@ final class McpApplicationInvocation {
 	private final Optional<@NonNull McpFrameworkRequestStateContinuation>
 			frameworkRequestStateContinuation;
 	@NonNull
+	private final Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+			catalogAccessView;
+	@NonNull
 	private final McpApplicationCancellation cancellation;
 	@NonNull
 	private final McpApplicationNotificationWriter notificationWriter;
@@ -956,8 +965,7 @@ final class McpApplicationInvocation {
 	@NonNull
 	private final BooleanSupplier pastDeadline;
 	@NonNull
-	private final AtomicReference<@Nullable String> selectedLocale =
-			new AtomicReference<>();
+	private final AtomicReference<@Nullable String> selectedLocale;
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			@Nullable McpRequestContext publicRequestContext,
@@ -969,8 +977,8 @@ final class McpApplicationInvocation {
 			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard) {
 		this(sokletRequest, publicRequestContext, request, protocolProfile,
 				admissionIdentity,
-				Optional.empty(), cancellation, notificationWriter,
-				handlerEntryGuard, () -> false);
+				Optional.empty(), Optional.empty(), cancellation, notificationWriter,
+				handlerEntryGuard, () -> false, new AtomicReference<>());
 	}
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
@@ -980,10 +988,13 @@ final class McpApplicationInvocation {
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 					frameworkRequestStateContinuation,
+			@NonNull Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+					catalogAccessView,
 			@NonNull McpApplicationCancellation cancellation,
 			@NonNull McpApplicationNotificationWriter notificationWriter,
 			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard,
-			@NonNull BooleanSupplier pastDeadline) {
+			@NonNull BooleanSupplier pastDeadline,
+			@NonNull AtomicReference<@Nullable String> selectedLocale) {
 		this.sokletRequest = sokletRequest;
 		this.publicRequestContext = publicRequestContext;
 		this.request = requireNonNull(request);
@@ -991,10 +1002,12 @@ final class McpApplicationInvocation {
 		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.frameworkRequestStateContinuation = requireNonNull(
 				frameworkRequestStateContinuation);
+		this.catalogAccessView = requireNonNull(catalogAccessView);
 		this.cancellation = requireNonNull(cancellation);
 		this.notificationWriter = requireNonNull(notificationWriter);
 		this.handlerEntryGuard = requireNonNull(handlerEntryGuard);
 		this.pastDeadline = requireNonNull(pastDeadline);
+		this.selectedLocale = requireNonNull(selectedLocale);
 	}
 
 	/** @return whether the request's absolute deadline has already passed */
@@ -1042,6 +1055,12 @@ final class McpApplicationInvocation {
 	Optional<@NonNull McpFrameworkRequestStateContinuation>
 	frameworkRequestStateContinuation() {
 		return frameworkRequestStateContinuation;
+	}
+
+	@NonNull
+	Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+			catalogAccessView() {
+		return catalogAccessView;
 	}
 
 	boolean isCancellationRequested() {
@@ -1276,6 +1295,42 @@ record McpApplicationExecutionSnapshot(int configuredHandlerConcurrency,
 		boolean accepting, boolean terminated) {
 }
 
+/** Internal control signal for bounded application-policy capacity. */
+@NotThreadSafe
+final class McpApplicationPolicyCapacityException extends Exception {
+	private static final long serialVersionUID = 1L;
+
+	McpApplicationPolicyCapacityException() {
+		super(null, null, false, false);
+	}
+}
+
+/** Internal control signal for a bounded application-policy deadline. */
+@NotThreadSafe
+final class McpApplicationPolicyDeadlineException extends Exception {
+	private static final long serialVersionUID = 1L;
+	private final boolean queued;
+
+	McpApplicationPolicyDeadlineException(boolean queued) {
+		super(null, null, false, false);
+		this.queued = queued;
+	}
+
+	boolean queued() {
+		return queued;
+	}
+}
+
+/** Internal control signal for dispatcher-owned work canceled by stop. */
+@NotThreadSafe
+final class McpApplicationExecutionStoppedException extends Exception {
+	private static final long serialVersionUID = 1L;
+
+	McpApplicationExecutionStoppedException() {
+		super(null, null, false, false);
+	}
+}
+
 /**
  * One listener-generation's application execution state. Protocol parsing is
  * deliberately outside this type; handler admission returns immediately and
@@ -1301,6 +1356,13 @@ final class McpApplicationExecution {
 		OPEN,
 		RESPONSE_OFFERED,
 		ABANDONED
+	}
+
+	private enum BoundedPolicyState {
+		WAITING_TO_ENTER,
+		ACTIVE,
+		SUPPRESSED_BEFORE_ENTRY,
+		EXPIRED_BEFORE_ENTRY
 	}
 
 	@NonNull
@@ -1407,7 +1469,7 @@ final class McpApplicationExecution {
 				"The application handler executor factory returned null.");
 		this.dispatcher = new McpApplicationHandlerDispatcher(
 				configuration.handlerConcurrency(), configuration.handlerQueueCapacity(),
-				handlerExecutor, observer);
+				handlerExecutor, observer, this::signalDeadlineTimer);
 		this.executionBoundaryLock = new Object();
 		this.requestsByIdentity = Collections.synchronizedMap(new IdentityHashMap<>());
 		this.retainedExchanges = new ConcurrentHashMap<>();
@@ -1574,6 +1636,32 @@ final class McpApplicationExecution {
 				responseWriter, terminalCleanup);
 	}
 
+	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
+			@NonNull Request sokletRequest,
+			@NonNull McpRequestContext publicRequestContext,
+			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
+			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
+					frameworkRequestStateContinuation,
+			@NonNull Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+					catalogAccessView,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull McpApplicationRequestHandler handler,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationEntryGate applicationEntryGate,
+			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
+			@NonNull Runnable terminalCleanup) {
+		dispatchInternalWithCatalogAccess(transportRequest,
+				requireNonNull(sokletRequest), request, protocolProfile,
+				admissionIdentity, frameworkRequestStateContinuation,
+				requireNonNull(catalogAccessView),
+				requireNonNull(selectedLocaleSlot), handler,
+				requireNonNull(publicRequestContext), requestInterceptor,
+				requireNonNull(applicationEntryGate), deadlineNanos,
+				responseWriter, terminalCleanup);
+	}
+
 	private void dispatchInternal(@NonNull MicrohttpRequest transportRequest,
 			@Nullable Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
@@ -1587,11 +1675,37 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationEntryGate applicationEntryGate,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
+		dispatchInternalWithCatalogAccess(transportRequest, sokletRequest, request,
+				protocolProfile, admissionIdentity, frameworkRequestStateContinuation,
+				Optional.empty(), new AtomicReference<>(), handler,
+				publicRequestContext, requestInterceptor,
+				applicationEntryGate, deadlineNanos, responseWriter, terminalCleanup);
+	}
+
+	private void dispatchInternalWithCatalogAccess(
+			@NonNull MicrohttpRequest transportRequest,
+			@Nullable Request sokletRequest,
+			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
+			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
+					frameworkRequestStateContinuation,
+			@NonNull Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+					catalogAccessView,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull McpApplicationRequestHandler handler,
+			@Nullable McpRequestContext publicRequestContext,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationEntryGate applicationEntryGate,
+			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
+			@NonNull Runnable terminalCleanup) {
 		requireNonNull(transportRequest);
 		requireNonNull(request);
 		requireNonNull(protocolProfile);
 		requireNonNull(admissionIdentity);
 		requireNonNull(frameworkRequestStateContinuation);
+		requireNonNull(catalogAccessView);
+		requireNonNull(selectedLocaleSlot);
 		requireNonNull(handler);
 		requireNonNull(requestInterceptor);
 		requireNonNull(applicationEntryGate);
@@ -1607,7 +1721,9 @@ final class McpApplicationExecution {
 		Exchange exchange = new Exchange(exchangeId, transportRequest, sokletRequest,
 				request, protocolProfile,
 				publicRequestContext, admissionIdentity,
-				frameworkRequestStateContinuation, handler, requestInterceptor,
+				frameworkRequestStateContinuation, catalogAccessView,
+				selectedLocaleSlot, handler,
+				requestInterceptor,
 				applicationEntryGate, deadlineNanos, responseWriter,
 				terminalCleanup);
 
@@ -1696,6 +1812,122 @@ final class McpApplicationExecution {
 		}
 	}
 
+	/**
+	 * Runs a policy/localization projection on the same bounded application
+	 * dispatcher used by handlers. The protocol worker waits only for this
+	 * bounded callback so framework-owned catalogs can retain their exact
+	 * transport rendering and header path.
+	 */
+	@NonNull
+	<T extends @NonNull Object> T invokeBoundedPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos)
+			throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos, ignored -> {});
+	}
+
+	/**
+	 * Runs bounded policy work and reserves a winning deadline or application-stop
+	 * reason before dispatcher interruption can be swallowed by application code.
+	 */
+	@NonNull
+	<T extends @NonNull Object> T invokeBoundedPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull Consumer<@NonNull StreamTerminationReason>
+					cancellationReservationObserver)
+			throws Exception {
+		requireNonNull(callback);
+		requireNonNull(cancellationReservationObserver);
+		if (deadlineNanos - clock.nanoTime() <= 0L)
+			throw new McpApplicationPolicyDeadlineException(true);
+		AtomicReference<T> result = new AtomicReference<>();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		AtomicReference<BoundedPolicyState> state = new AtomicReference<>(
+				BoundedPolicyState.WAITING_TO_ENTER);
+		CountDownLatch completed = new CountDownLatch(1);
+		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(() -> {
+			try {
+				if (deadlineNanos - clock.nanoTime() <= 0L) {
+					state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
+							BoundedPolicyState.EXPIRED_BEFORE_ENTRY);
+					failure.compareAndSet(null,
+							new McpApplicationPolicyDeadlineException(false));
+					return;
+				}
+				if (!state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
+						BoundedPolicyState.ACTIVE))
+					return;
+				result.set(requireNonNull(callback.call(),
+						"The bounded MCP policy callback returned null."));
+			} catch (Throwable throwable) {
+				failure.compareAndSet(null, throwable);
+			} finally {
+				completed.countDown();
+			}
+		}, throwable -> {
+			failure.compareAndSet(null, throwable);
+			completed.countDown();
+		}, throwable -> {
+			try {
+					cancellationReservationObserver.accept(stoppingReason());
+			} finally {
+				state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
+						BoundedPolicyState.SUPPRESSED_BEFORE_ENTRY);
+				failure.compareAndSet(null, throwable);
+				completed.countDown();
+			}
+		});
+		McpApplicationHandlerDispatcher.Admission admission = dispatcher.admit(ticket);
+		if (admission == McpApplicationHandlerDispatcher.Admission.REJECTED
+				|| admission == McpApplicationHandlerDispatcher.Admission.CLOSED
+				|| admission == McpApplicationHandlerDispatcher.Admission.CANCELED)
+			throw new McpApplicationPolicyCapacityException();
+		long remainingNanos = deadlineNanos - clock.nanoTime();
+		boolean finished;
+		try {
+			finished = remainingNanos > 0L
+					&& completed.await(remainingNanos, TimeUnit.NANOSECONDS);
+		} catch (InterruptedException exception) {
+			state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
+					BoundedPolicyState.SUPPRESSED_BEFORE_ENTRY);
+			if (!dispatcher.cancelBeforeDispatch(ticket))
+				ticket.requestInterrupt();
+			throw exception;
+		}
+		if (!finished) {
+			boolean canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket);
+			state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
+					BoundedPolicyState.SUPPRESSED_BEFORE_ENTRY);
+			if (!canceledBeforeDispatch) {
+				try {
+					if (state.get() == BoundedPolicyState.ACTIVE)
+						cancellationReservationObserver.accept(
+								StreamTerminationReason.RESPONSE_TIMEOUT);
+				} finally {
+					ticket.requestInterrupt();
+				}
+			}
+			throw new McpApplicationPolicyDeadlineException(
+					canceledBeforeDispatch);
+		}
+		// Completion of the latch is not itself proof that the callback finished
+		// before the absolute boundary. A callback may cross the deadline and count
+		// down before the waiting protocol worker is rescheduled. As with an ordinary
+		// active handler response, the deadline wins when the completed result cannot
+		// be accepted until the boundary has passed.
+		if (deadlineNanos - clock.nanoTime() <= 0L)
+			throw new McpApplicationPolicyDeadlineException(false);
+		Throwable throwable = failure.get();
+		if (throwable instanceof Exception exception)
+			throw exception;
+		if (throwable instanceof Error error)
+			throw error;
+		if (throwable != null)
+			throw new IllegalStateException(
+					"The MCP policy callback failed.", throwable);
+		return requireNonNull(result.get(),
+				"The bounded MCP policy callback produced no result.");
+	}
+
 	@NonNull
 	McpApplicationExecutionSnapshot snapshot() {
 		return snapshot(0);
@@ -1752,14 +1984,22 @@ final class McpApplicationExecution {
 			stopped.set(true);
 		}
 
-		dispatcher.stopAccepting();
-		for (Exchange exchange : List.copyOf(retainedExchanges.values())) {
-			exchange.cancel(reason, null);
-			// A terminal response may have won before shutdown while its handler is
-			// still unwinding. It remains application work and receives the same
-			// cooperative interruption signal.
-			exchange.requestInterrupt();
+		Runnable dispatcherCancellation =
+				dispatcher.stopAcceptingAndReserveCancellation(
+						new McpApplicationExecutionStoppedException());
+		List<Runnable> exchangeCancellations = new ArrayList<>();
+		try {
+			for (Exchange exchange : List.copyOf(retainedExchanges.values()))
+				exchangeCancellations.add(
+						exchange.reserveCancellation(reason, null));
+		} finally {
+			// Every Exchange reason is fixed before dispatcher interruption, but
+			// application onCancel callbacks run only after dispatcher-owned policy
+			// waiters have been woken and every active ticket has been interrupted.
+			dispatcherCancellation.run();
 		}
+		for (Runnable exchangeCancellation : exchangeCancellations)
+			exchangeCancellation.run();
 		// All dispatched tickets have been signaled explicitly. Graceful executor
 		// shutdown is essential here: shutdownNow may discard a dispatcher-owned
 		// runnable promoted while its current worker is still returning, leaving
@@ -1840,7 +2080,7 @@ final class McpApplicationExecution {
 	}
 
 	@NonNull
-	private StreamTerminationReason stoppingReason() {
+	StreamTerminationReason stoppingReason() {
 		return requireNonNull(stoppingReason.get(),
 				"A stopped application execution must have a stopping reason.");
 	}
@@ -1858,6 +2098,11 @@ final class McpApplicationExecution {
 		@NonNull
 		private final Optional<@NonNull McpFrameworkRequestStateContinuation>
 				frameworkRequestStateContinuation;
+		@NonNull
+		private final Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+				catalogAccessView;
+		@NonNull
+		private final AtomicReference<@Nullable String> selectedLocaleSlot;
 		@NonNull
 		private final McpApplicationRequestHandler handler;
 		@NonNull
@@ -1889,6 +2134,9 @@ final class McpApplicationExecution {
 				@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 				@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 						frameworkRequestStateContinuation,
+				@NonNull Optional<McpServerRuntimeBridge.@NonNull CatalogAccessSession>
+						catalogAccessView,
+				@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 				@NonNull McpApplicationRequestHandler handler,
 				@NonNull McpApplicationRequestInterceptor requestInterceptor,
 				@NonNull McpApplicationEntryGate applicationEntryGate,
@@ -1903,6 +2151,8 @@ final class McpApplicationExecution {
 			this.admissionIdentity = admissionIdentity;
 			this.frameworkRequestStateContinuation = requireNonNull(
 					frameworkRequestStateContinuation);
+			this.catalogAccessView = requireNonNull(catalogAccessView);
+			this.selectedLocaleSlot = requireNonNull(selectedLocaleSlot);
 			this.handler = handler;
 			this.requestInterceptor = requireNonNull(requestInterceptor);
 			this.applicationEntryGate = requireNonNull(applicationEntryGate);
@@ -1938,9 +2188,11 @@ final class McpApplicationExecution {
 				McpApplicationInvocation invocation = new McpApplicationInvocation(
 						sokletRequest, publicRequestContext, request, protocolProfile,
 						admissionIdentity, frameworkRequestStateContinuation,
+						catalogAccessView,
 						cancellation,
 						this::writeNotification, this::requirePublicHandlerEntry,
-						() -> clock.nanoTime() - deadlineNanos >= 0);
+						() -> clock.nanoTime() - deadlineNanos >= 0,
+						selectedLocaleSlot);
 				AtomicBoolean handlerInvoked = new AtomicBoolean();
 				AtomicBoolean interceptorActive = new AtomicBoolean(true);
 				Thread interceptorThread = Thread.currentThread();

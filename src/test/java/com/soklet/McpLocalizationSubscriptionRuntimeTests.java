@@ -231,7 +231,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 												.build()))
 						.build())
 				.subscriptionConfig(McpSubscriptionConfig
-						.withEventPublisher(
+						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								EnumSet.of(
 										McpSubscriptionNotificationType

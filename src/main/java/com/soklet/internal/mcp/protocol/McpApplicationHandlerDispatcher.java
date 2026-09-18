@@ -22,9 +22,13 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
@@ -72,6 +76,8 @@ final class McpApplicationHandlerDispatcher {
 		@NonNull
 		private final Consumer<@NonNull Throwable> failureObserver;
 		@NonNull
+		private final Consumer<@NonNull Throwable> cancellationObserver;
+		@NonNull
 		private final Object interruptLock;
 		private volatile @Nullable Thread handlerThread;
 		private boolean interruptRequested;
@@ -79,9 +85,11 @@ final class McpApplicationHandlerDispatcher {
 		private volatile TicketState state;
 
 		private Ticket(@NonNull Work work,
-				@NonNull Consumer<@NonNull Throwable> failureObserver) {
+				@NonNull Consumer<@NonNull Throwable> failureObserver,
+				@NonNull Consumer<@NonNull Throwable> cancellationObserver) {
 			this.work = requireNonNull(work);
 			this.failureObserver = requireNonNull(failureObserver);
+			this.cancellationObserver = requireNonNull(cancellationObserver);
 			this.interruptLock = new Object();
 			this.state = TicketState.NEW;
 		}
@@ -126,7 +134,11 @@ final class McpApplicationHandlerDispatcher {
 	@NonNull
 	private final McpApplicationExecutionObserver observer;
 	@NonNull
+	private final Runnable slotReleaseObserver;
+	@NonNull
 	private final Queue<@NonNull Ticket> queue;
+	@NonNull
+	private final Set<@NonNull Ticket> activeTickets;
 	private int activeSlots;
 	private int maximumObservedActiveSlots;
 	private int maximumObservedQueueDepth;
@@ -142,6 +154,13 @@ final class McpApplicationHandlerDispatcher {
 	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
 			@NonNull ExecutorService executorService,
 			@NonNull McpApplicationExecutionObserver observer) {
+		this(concurrency, queueCapacity, executorService, observer, () -> {});
+	}
+
+	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
+			@NonNull ExecutorService executorService,
+			@NonNull McpApplicationExecutionObserver observer,
+			@NonNull Runnable slotReleaseObserver) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be positive.");
 
@@ -153,7 +172,9 @@ final class McpApplicationHandlerDispatcher {
 		this.queueCapacity = queueCapacity;
 		this.executorService = requireNonNull(executorService);
 		this.observer = requireNonNull(observer);
+		this.slotReleaseObserver = requireNonNull(slotReleaseObserver);
 		this.queue = new ArrayDeque<>(queueCapacity);
+		this.activeTickets = Collections.newSetFromMap(new IdentityHashMap<>());
 		this.accepting = true;
 		this.draining = false;
 	}
@@ -161,7 +182,15 @@ final class McpApplicationHandlerDispatcher {
 	@NonNull
 	Ticket newTicket(@NonNull Work work,
 			@NonNull Consumer<@NonNull Throwable> failureObserver) {
-		return new Ticket(requireNonNull(work), requireNonNull(failureObserver));
+		return newTicket(work, failureObserver, ignored -> {});
+	}
+
+	@NonNull
+	Ticket newTicket(@NonNull Work work,
+			@NonNull Consumer<@NonNull Throwable> failureObserver,
+			@NonNull Consumer<@NonNull Throwable> cancellationObserver) {
+		return new Ticket(requireNonNull(work), requireNonNull(failureObserver),
+				requireNonNull(cancellationObserver));
 	}
 
 	void beginObserverDeferral() {
@@ -190,6 +219,7 @@ final class McpApplicationHandlerDispatcher {
 				admission = Admission.CLOSED;
 			} else if (activeSlots < concurrency) {
 				ticket.state = TicketState.DISPATCHED;
+				activeTickets.add(ticket);
 				activeSlots++;
 				recordHandlerExecutionStarted();
 				maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots,
@@ -268,6 +298,50 @@ final class McpApplicationHandlerDispatcher {
 		if (!canceledTickets.isEmpty())
 			drainObserver();
 		return List.copyOf(canceledTickets);
+	}
+
+	/**
+	 * Closes admission and reserves cancellation delivery for every accepted
+	 * ticket. The returned action invokes observers and interrupts active work
+	 * outside the dispatcher lock. Callers may therefore establish their own
+	 * cancellation state first, which prevents dispatcher shutdown from racing
+	 * an application exchange into an ordinary failure response.
+	 */
+	@NonNull
+	Runnable stopAcceptingAndReserveCancellation(
+			@NonNull Throwable cancellationCause) {
+		requireNonNull(cancellationCause);
+		List<Ticket> canceledTickets;
+		List<Ticket> dispatchedTickets;
+
+		synchronized (lock) {
+			accepting = false;
+			draining = false;
+			canceledTickets = new ArrayList<>(queue);
+			queue.clear();
+
+			for (Ticket ticket : canceledTickets) {
+				ticket.state = TicketState.CANCELED;
+				recordHandlerDequeued();
+			}
+			dispatchedTickets = new ArrayList<>(activeTickets);
+		}
+
+		if (!canceledTickets.isEmpty())
+			drainObserver();
+		List<Ticket> immutableCanceled = List.copyOf(canceledTickets);
+		List<Ticket> immutableDispatched = List.copyOf(dispatchedTickets);
+		AtomicBoolean delivered = new AtomicBoolean();
+		return () -> {
+			if (!delivered.compareAndSet(false, true))
+				return;
+			for (Ticket ticket : immutableCanceled)
+				notifyCancellation(ticket, cancellationCause);
+			for (Ticket ticket : immutableDispatched) {
+				notifyCancellation(ticket, cancellationCause);
+				ticket.requestInterrupt();
+			}
+		};
 	}
 
 	/**
@@ -358,11 +432,15 @@ final class McpApplicationHandlerDispatcher {
 						"A handler exited without owning a dispatcher slot.");
 
 			ticket.state = TicketState.EXITED;
+			if (!activeTickets.remove(ticket))
+				throw new IllegalStateException(
+						"An exiting handler is absent from the active ticket set.");
 			activeSlots--;
 			recordHandlerExecutionFinished();
 			next = promoteNextLocked();
 		}
 
+		notifySlotReleased();
 		drainObserver();
 		if (next != null)
 			dispatch(next);
@@ -376,10 +454,14 @@ final class McpApplicationHandlerDispatcher {
 						"A submission failed without owning a dispatcher slot.");
 
 			ticket.state = TicketState.REJECTED;
+			if (!activeTickets.remove(ticket))
+				throw new IllegalStateException(
+						"A rejected handler is absent from the active ticket set.");
 			activeSlots--;
 			recordHandlerExecutionFinished();
 			next = promoteNextLocked();
 		}
+		notifySlotReleased();
 		drainObserver();
 		return next;
 	}
@@ -390,6 +472,7 @@ final class McpApplicationHandlerDispatcher {
 
 		Ticket next = queue.remove();
 		next.state = TicketState.DISPATCHED;
+		activeTickets.add(next);
 		recordHandlerDequeued();
 		activeSlots++;
 		recordHandlerExecutionStarted();
@@ -445,11 +528,28 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
+	private void notifySlotReleased() {
+		try {
+			this.slotReleaseObserver.run();
+		} catch (Throwable ignored) {
+			// Slot-release signaling must not corrupt accounting or promotion.
+		}
+	}
+
 	private void notifyFailure(@NonNull Ticket ticket, @NonNull Throwable throwable) {
 		try {
 			ticket.failureObserver.accept(throwable);
 		} catch (Throwable ignored) {
 			// Failure reporting must not corrupt dispatcher accounting or promotion.
+		}
+	}
+
+	private void notifyCancellation(@NonNull Ticket ticket,
+			@NonNull Throwable throwable) {
+		try {
+			ticket.cancellationObserver.accept(throwable);
+		} catch (Throwable ignored) {
+			// Cancellation reporting must not corrupt dispatcher shutdown.
 		}
 	}
 

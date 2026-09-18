@@ -349,7 +349,7 @@ public final class McpConformanceFixture {
 				.resourceListCachePolicy(CACHE_POLICY)
 				.resourceTemplateListCachePolicy(CACHE_POLICY);
 		if ("server-stateless".equals(scenario))
-			builder.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(
+			builder.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 					McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
 							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 							McpSubscriptionNotificationType.RESOURCE_UPDATED))

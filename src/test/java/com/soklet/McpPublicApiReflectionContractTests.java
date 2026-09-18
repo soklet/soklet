@@ -83,15 +83,15 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 133;
+	private static final int PHASE_FOUR_TYPE_COUNT = 136;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 64;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 247;
+	private static final int CURRENT_MCP_TYPE_COUNT = 250;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"b7c2c5340cb8b1105c1fdbe8f6d43306572df0717086b9c4d238f8ba5017a0de";
+			"3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"5313e39d3809ae81b4d664838bb6690a5d677d1e388547422b2d52ec88f2230c";
+			"b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -390,6 +390,7 @@ public class McpPublicApiReflectionContractTests {
 		Map<Class<?>, Set<String>> expectedNullableBuilderMethods = Map.of(
 				McpServer.Builder.class, Set.of(
 						"absentOriginPolicy", "admissionController", "allowedHosts",
+						"catalogAccessPolicy",
 						"concurrentConnectionLimit", "connectionQueueCapacity",
 						"corsAuthorizer", "endpointRegistry", "handlerInterceptor",
 						"host", "keepAliveInterval",
@@ -467,6 +468,27 @@ public class McpPublicApiReflectionContractTests {
 
 		Method server = McpServer.class.getMethod("withPort", Integer.class);
 		assertRequiredFactory(server, McpServer.Builder.class, "port");
+		Method catalogAccessPolicy = assertInstanceMethod(McpServer.Builder.class,
+				"catalogAccessPolicy", McpServer.Builder.class,
+				MethodShape.CONCRETE, false, McpCatalogAccessPolicy.class);
+		Method catalogAccessPolicyGetter = assertInstanceMethod(McpServer.class,
+				"getCatalogAccessPolicy", McpCatalogAccessPolicy.class,
+				MethodShape.ABSTRACT, false);
+		assertErasedGenericSignature(catalogAccessPolicy);
+		assertErasedGenericSignature(catalogAccessPolicyGetter);
+		assertParameterNames(catalogAccessPolicy, "catalogAccessPolicy");
+		assertRequiredFactory(McpCatalogAccessPolicy.class.getMethod("allowAllInstance"),
+				McpCatalogAccessPolicy.class);
+		assertRequiredFactory(McpCatalogAccessPolicy.class.getMethod("fromEvaluators",
+				McpCatalogAccessPolicy.ToolAccessEvaluator.class,
+				McpCatalogAccessPolicy.PromptAccessEvaluator.class),
+				McpCatalogAccessPolicy.class, "toolAccessEvaluator", "promptAccessEvaluator");
+		assertParameterNames(McpCatalogAccessPolicy.ToolAccessEvaluator.class.getMethod(
+				"isToolAccessible", McpRequestContext.class, McpToolRegistration.class,
+				McpInvocationFeatures.class), "requestContext", "toolRegistration", "invocationFeatures");
+		assertParameterNames(McpCatalogAccessPolicy.PromptAccessEvaluator.class.getMethod(
+				"isPromptAccessible", McpRequestContext.class, McpPromptRegistration.class,
+				McpInvocationFeatures.class), "requestContext", "promptRegistration", "invocationFeatures");
 		Method endpoint = McpEndpoint.class.getMethod("withPath", String.class,
 				McpImplementation.class);
 		assertRequiredFactory(endpoint, McpEndpoint.Builder.class,
@@ -479,6 +501,14 @@ public class McpPublicApiReflectionContractTests {
 				McpResourceContents.class);
 		assertRequiredFactory(resource, McpResourceOutput.class,
 				"resourceContents");
+		assertRequiredFactory(McpResourceOutput.class.getMethod("withContents", List.class),
+				McpResourceOutput.Builder.class, "resourceContents");
+		assertRequiredFactory(McpResourceOutput.class.getMethod("fromContents", List.class),
+				McpResourceOutput.class, "resourceContents");
+		assertParameterNames(McpResourceOutput.Builder.class.getMethod("contents", List.class),
+				"resourceContents");
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				McpResourceOutput.Builder.class.getMethod("addContent", McpResourceContents.class));
 		Method inputRequest = McpInputRequiredResult.class.getMethod(
 				"withInputRequest", String.class, McpInputRequest.class);
 		assertRequiredFactory(inputRequest, McpInputRequiredResult.Builder.class,
@@ -505,10 +535,13 @@ public class McpPublicApiReflectionContractTests {
 				McpLocalizationContext.Builder.class, "locale",
 				"localizationLookup");
 		Method subscription = McpSubscriptionConfig.class.getMethod(
-				"withEventPublisher", McpSubscriptionEventPublisher.class,
+				"withEventPublisherAndNotificationTypes", McpSubscriptionEventPublisher.class,
 				Set.class);
 		assertRequiredFactory(subscription, McpSubscriptionConfig.Builder.class,
-				"subscriptionEventPublisher", "notificationTypes");
+				"subscriptionEventPublisher", "subscriptionNotificationTypes");
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				McpSubscriptionConfig.Builder.class.getMethod("addNotificationType",
+						McpSubscriptionNotificationType.class));
 		Method registryFromClasses = McpEndpointRegistry.class.getMethod(
 				"fromClasses", Class[].class);
 		assertRequiredFactory(registryFromClasses, McpEndpointRegistry.class,

@@ -1346,7 +1346,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		EnumSet<McpSubscriptionNotificationType> notificationTypes =
 				EnumSet.of(first, remaining);
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, notificationTypes)
+				.withEventPublisherAndNotificationTypes(publisher, notificationTypes)
 				.build();
 		McpEndpoint.Builder builder = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"subscription-public-runtime-test",

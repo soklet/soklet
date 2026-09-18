@@ -1581,7 +1581,7 @@ public class SokletSimulatorIsolationTests {
 						"4.0.0").build())
 				.resourceListHandler((request, resourceList, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())

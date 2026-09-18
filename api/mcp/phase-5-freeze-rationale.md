@@ -22,6 +22,8 @@ Public-value amendment reviewed: 2026-09-10
 
 Pre-release naming amendment reviewed: 2026-09-11
 
+Subscription required-collection amendment reviewed: 2026-09-17
+
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -32,8 +34,8 @@ The durable repository-owned evidence is the
 [signature snapshot](phase-5.signatures.jsonl), the
 [compatibility set](current-incompatibilities.jsonl), and the aggregate-gate
 contract in the [API inventory README](README.md#running-the-gates). The
-snapshot checked in here is byte-for-byte identical to the candidate approved
-by the review summarized below.
+original snapshot described below was byte-for-byte identical to the candidate
+approved at that review. Later dated amendments record the current file.
 
 ## Compatibility and ownership model
 
@@ -49,9 +51,9 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 134 Phase 4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks
-owners, for 248 MCP owners; the 52-owner non-MCP allowlist brings current-side
-coverage to 300.
+partition is 136 Phase 4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks
+owners, for 250 MCP owners; the 61-owner non-MCP allowlist brings current-side
+coverage to 311.
 
 The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
@@ -70,30 +72,32 @@ The 2026-08-18 public-record elimination amendment retained the owner partition
 and advanced that checkpoint to 565 records. Typed request state then removed
 three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections left
 Phase 5 byte-identical at that checkpoint. The current released-3.5.1
-comparison contains 648 records with SHA-256
-`d5771cd57b9d2d34734e8be362d01e9d3762c35b209956fd013812a2b70f8369`.
+comparison contains 654 records with SHA-256
+`9317f7a5782062e0bd1dbf9512d0744fb97bef9a27992ce2d4707a08ba8a398f`.
 
-## Frozen Phase 5 snapshot
+## Original frozen Phase 5 snapshot
 
-`phase-5.signatures.jsonl` contains exactly 189 canonical records:
+At this historical checkpoint, `phase-5.signatures.jsonl` contained exactly
+189 canonical records:
 
 - 36 classes;
 - zero constructors;
 - 19 fields; and
 - 134 methods.
 
-The reviewed file's SHA-256 is
+The reviewed file's SHA-256 was
 `0e3e2b7f9a644f28bed2215c652f2c25e2eaff9a171983ed058ee90fc0e617ed`.
-The independent reflection contract freezes the Phase 5 JSpecify type-use
+The independent reflection contract froze the Phase 5 JSpecify type-use
 layout with SHA-256
 `bd85a0317b9225b5f193a91af91de6870975b80ee7f2d49c18e0b5bade1af03b`.
-The 36-entry `phase-5.includes` inventory has SHA-256
+The 36-entry `phase-5.includes` inventory had SHA-256
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`.
 
-Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 189 records and was byte-for-
-byte identical to the reviewed candidate. The aggregate freeze gate compares
-the Phase 4, Phase 5, and now Phase 6 snapshots bidirectionally on every run.
+Immediately before that snapshot was checked in, a fresh extraction from the
+then-current full japicmp report produced the same 189 records and was byte-for-
+byte identical to the reviewed candidate. At that checkpoint, the aggregate
+freeze gate compared the Phase 4, Phase 5, and Phase 6 snapshots
+bidirectionally.
 
 ## 2026-08-17 greenfield cohesion naming amendment
 
@@ -489,3 +493,24 @@ The shared compatibility ledger now contains 648 records with SHA-256
 the two added records are the separately reviewed non-MCP
 `CorsPreflight.with(...)` removals. The historical D1p preview seal is not
 rewritten.
+
+## 2026-09-17 subscription required-collection amendment
+
+The owner-approved upcoming MCP plan renames
+`McpSubscriptionConfig.withEventPublisher(...)` to
+`withEventPublisherAndNotificationTypes(...)`, with parameter names
+`subscriptionEventPublisher` and `subscriptionNotificationTypes`. The initial
+notification set remains required and nonempty. The builder's
+`notificationTypes(...)` now atomically replaces an immutable nonempty snapshot;
+null, null elements, or an empty set are rejected before mutating builder state.
+`addNotificationType(...)` is removed without an alias. No subscription runtime
+authorization or reconciliation API is implemented by this collection change.
+
+The reviewed snapshot has exactly one added and two removed signatures, with
+no other modified signature: 194 records across the unchanged 36 owners,
+SHA-256 `c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9`.
+Its reflection/nullability SHA-256 is
+`b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed`.
+Current examples and the public conformance fixture use the renamed factory.
+Historical freezes, candidate receipts, and the released-3.5.1 incompatibility
+ledger are not rewritten.

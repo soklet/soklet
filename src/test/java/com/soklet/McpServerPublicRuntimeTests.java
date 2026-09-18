@@ -665,7 +665,7 @@ public class McpServerPublicRuntimeTests {
 					}
 				};
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, Set.of(
+				.withEventPublisherAndNotificationTypes(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();

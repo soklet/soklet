@@ -17,6 +17,9 @@ com.soklet.McpBlobResourceContents
 com.soklet.McpBlobResourceContents$Builder
 com.soklet.McpCachePolicy
 com.soklet.McpCacheScope
+com.soklet.McpCatalogAccessPolicy
+com.soklet.McpCatalogAccessPolicy$PromptAccessEvaluator
+com.soklet.McpCatalogAccessPolicy$ToolAccessEvaluator
 com.soklet.McpClientCapabilities
 com.soklet.McpClientCapability
 com.soklet.McpCompletePayload

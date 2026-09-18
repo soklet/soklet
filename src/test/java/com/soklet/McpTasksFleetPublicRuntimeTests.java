@@ -68,7 +68,7 @@ class McpTasksFleetPublicRuntimeTests {
 
 	@Test
 	@Timeout(180)
-	void completedTasksMoveAcrossNodesAndSurviveOriginNodeReplacement()
+	void completedTaskStatusSurvivesReplacementWithoutItsOriginRegistration()
 			throws Exception {
 		DurableFleetTaskManager taskManager = new DurableFleetTaskManager();
 		McpServer firstServer = server("node-a", taskManager,
@@ -111,9 +111,9 @@ class McpTasksFleetPublicRuntimeTests {
 					taskManager);
 			replacement = managedSoklet(replacementServer);
 			replacement.start();
-			assertTaskResult(taskRequest(boundPort(replacementServer), MAIN_PATH,
+			assertTaskStatusOnly(taskRequest(boundPort(replacementServer), MAIN_PATH,
 					"tasks/get", "after-node-replacement", "task-from-a",
-					TENANT_ALPHA), "nodeAValue", "node-a");
+					TENANT_ALPHA), "task-from-a", "nodeAValue", "node-a");
 			Assertions.assertEquals(0, taskManager.updateInvocations.get());
 			Assertions.assertEquals(0, taskManager.cancelInvocations.get());
 		} finally {
@@ -521,6 +521,20 @@ class McpTasksFleetPublicRuntimeTests {
 				"\"status\":\"completed\""), response.body());
 		Assertions.assertTrue(response.body().contains("\"structuredContent\":{\""
 				+ member + "\":\"" + value + "\"}"), response.body());
+	}
+
+	private static void assertTaskStatusOnly(
+			@NonNull HttpResponse<String> response, @NonNull String taskId,
+			@NonNull String member, @NonNull String value) {
+		assertNoStore(response, 200);
+		Assertions.assertTrue(response.body().contains(
+				"\"taskId\":\"" + taskId + "\""), response.body());
+		Assertions.assertTrue(response.body().contains(
+				"\"status\":\"completed\""), response.body());
+		Assertions.assertFalse(response.body().contains("\"structuredContent\""),
+				response.body());
+		Assertions.assertFalse(response.body().contains(member), response.body());
+		Assertions.assertFalse(response.body().contains(value), response.body());
 	}
 
 	private static void assertRootsInputRequired(

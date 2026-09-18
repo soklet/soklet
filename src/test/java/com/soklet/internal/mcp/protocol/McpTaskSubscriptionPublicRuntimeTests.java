@@ -1167,7 +1167,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			@NonNull ScriptedTaskManager taskManager,
 			@NonNull AtomicInteger admissions) {
 		McpSubscriptionConfig subscriptionConfig = McpSubscriptionConfig
-				.withEventPublisher(
+				.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))

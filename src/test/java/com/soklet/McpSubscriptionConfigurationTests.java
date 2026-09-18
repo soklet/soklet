@@ -73,7 +73,7 @@ public class McpSubscriptionConfigurationTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 
 		McpSubscriptionConfig configuration = McpSubscriptionConfig
-				.withEventPublisher(publisher, mutableTypes)
+				.withEventPublisherAndNotificationTypes(publisher, mutableTypes)
 				.build();
 		mutableTypes.clear();
 
@@ -89,13 +89,13 @@ public class McpSubscriptionConfigurationTests {
 	@Test
 	public void configurationValidatesPublisherAndNotificationTypesAtomically() {
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpSubscriptionConfig.withEventPublisher(null, Set.of(
+				() -> McpSubscriptionConfig.withEventPublisherAndNotificationTypes(null, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpSubscriptionConfig.withEventPublisher(
+				() -> McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(), null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpSubscriptionConfig.withEventPublisher(
+				() -> McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of()));
 		Set<McpSubscriptionNotificationType> invalidInitialTypes =
 				new HashSet<>();
@@ -103,16 +103,14 @@ public class McpSubscriptionConfigurationTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		invalidInitialTypes.add(null);
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpSubscriptionConfig.withEventPublisher(
+				() -> McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						invalidInitialTypes));
 		McpSubscriptionConfig.Builder builder = McpSubscriptionConfig
-				.withEventPublisher(
+				.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
 								McpSubscriptionNotificationType
 										.RESOURCES_LIST_CHANGED));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> builder.addNotificationType(null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> builder.notificationTypes(null));
 
@@ -124,8 +122,20 @@ public class McpSubscriptionConfigurationTests {
 		Assertions.assertEquals(Set.of(
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED),
 				builder.build().getNotificationTypes());
-		builder.notificationTypes(Set.of());
-		Assertions.assertThrows(IllegalStateException.class, builder::build);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> builder.notificationTypes(Set.of()));
+		Assertions.assertEquals(Set.of(
+				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED),
+				builder.build().getNotificationTypes());
+		EnumSet<McpSubscriptionNotificationType> replacement = EnumSet.of(
+				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		McpSubscriptionConfig initial = builder.build();
+		builder.notificationTypes(replacement);
+		replacement.clear();
+		Assertions.assertEquals(Set.of(McpSubscriptionNotificationType.RESOURCE_UPDATED),
+				builder.build().getNotificationTypes());
+		Assertions.assertEquals(Set.of(McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED),
+				initial.getNotificationTypes());
 	}
 
 	@Test
@@ -481,7 +491,7 @@ public class McpSubscriptionConfigurationTests {
 
 	private static McpSubscriptionConfig configuration(
 			McpSubscriptionNotificationType type) {
-		return McpSubscriptionConfig.withEventPublisher(
+		return McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 				McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(type))
 				.build();
 	}

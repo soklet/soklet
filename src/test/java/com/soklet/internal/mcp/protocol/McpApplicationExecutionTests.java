@@ -300,6 +300,638 @@ public class McpApplicationExecutionTests {
 	}
 
 	@Test
+	public void bounded_policy_expired_before_admission_never_reaches_dispatcher()
+			throws Exception {
+		AtomicLong now = new AtomicLong(100L);
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		AtomicInteger callbackInvocations = new AtomicInteger();
+
+		try {
+			execution.start();
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertThrows(
+							McpApplicationPolicyDeadlineException.class,
+							() -> execution.invokeBoundedPolicy(() -> {
+								callbackInvocations.incrementAndGet();
+								return "must-not-run";
+							}, 100L));
+
+			Assertions.assertTrue(exception.queued(),
+					"Pre-admission expiration retains queued 503 semantics.");
+			Assertions.assertEquals(0, callbackInvocations.get());
+			Assertions.assertNull(executor.command());
+			Assertions.assertEquals(0, execution.snapshot().activeHandlerSlots());
+			Assertions.assertEquals(0, execution.snapshot().queuedRequests());
+		} finally {
+			execution.stop();
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void bounded_policy_expired_after_dispatch_but_before_entry_is_active()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		AtomicInteger callbackInvocations = new AtomicInteger();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		long deadline = TimeUnit.SECONDS.toNanos(30);
+		Thread caller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					callbackInvocations.incrementAndGet();
+					return "must-not-run";
+				}, deadline);
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, "mcp-bounded-policy-active-deadline-test");
+
+		try {
+			execution.start();
+			caller.start();
+			awaitCondition(() -> executor.command() != null);
+			now.set(deadline);
+			executor.takeCommand().run();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+
+			Assertions.assertFalse(caller.isAlive());
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							failure.get());
+			Assertions.assertFalse(exception.queued(),
+					"A ticket that owned a slot retains active 504 semantics.");
+			Assertions.assertEquals(0, callbackInvocations.get());
+		} finally {
+			execution.stop();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void bounded_policy_deadline_reserves_reason_before_interrupt()
+			throws Exception {
+		long deadline = TimeUnit.SECONDS.toNanos(30);
+		CountDownLatch callbackEntered = new CountDownLatch(1);
+		CountDownLatch callbackInterrupted = new CountDownLatch(1);
+		ActivePolicyDeadlineClock clock = new ActivePolicyDeadlineClock(
+				deadline, callbackEntered);
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				clock, ignored -> executor);
+		AtomicReference<StreamTerminationReason> reservedReason =
+				new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> reasonObservedAtInterrupt =
+				new AtomicReference<>();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		Thread caller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					callbackEntered.countDown();
+					try {
+						new CountDownLatch(1).await();
+					} catch (InterruptedException ignored) {
+						reasonObservedAtInterrupt.set(reservedReason.get());
+						callbackInterrupted.countDown();
+					}
+					return "interrupted";
+				}, deadline, reason -> reservedReason.compareAndSet(null, reason));
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, "mcp-bounded-policy-token-order-test");
+		Thread worker = null;
+
+		try {
+			execution.start();
+			caller.start();
+			awaitCondition(() -> executor.command() != null);
+			worker = new Thread(executor.takeCommand(),
+					"mcp-bounded-policy-token-order-worker");
+			worker.start();
+
+			Assertions.assertTrue(callbackInterrupted.await(5, TimeUnit.SECONDS),
+					"The active policy callback was not interrupted.");
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			worker.join(TimeUnit.SECONDS.toMillis(5));
+
+			Assertions.assertFalse(caller.isAlive());
+			Assertions.assertFalse(worker.isAlive());
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							failure.get());
+			Assertions.assertFalse(exception.queued());
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
+					reasonObservedAtInterrupt.get(),
+					"The public reason must be fixed before interruption is visible.");
+			awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 0);
+		} finally {
+			execution.stop();
+			caller.interrupt();
+			if (worker != null)
+				worker.interrupt();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			if (worker != null)
+				worker.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void bounded_policy_completion_after_deadline_is_not_accepted()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		AtomicInteger callbackInvocations = new AtomicInteger();
+		AtomicReference<String> result = new AtomicReference<>();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		long deadline = TimeUnit.SECONDS.toNanos(30);
+		Thread caller = new Thread(() -> {
+			try {
+				result.set(execution.invokeBoundedPolicy(() -> {
+					callbackInvocations.incrementAndGet();
+					now.set(deadline);
+					return "late-result";
+				}, deadline));
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, "mcp-bounded-policy-late-completion-test");
+
+		try {
+			execution.start();
+			caller.start();
+			awaitCondition(() -> executor.command() != null);
+			executor.takeCommand().run();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+
+			Assertions.assertFalse(caller.isAlive());
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							failure.get());
+			Assertions.assertFalse(exception.queued(),
+					"A callback that entered retains active 504 semantics.");
+			Assertions.assertNull(result.get());
+			Assertions.assertEquals(1, callbackInvocations.get());
+			Assertions.assertEquals(0, execution.snapshot().activeHandlerSlots());
+		} finally {
+			execution.stop();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void graceful_drain_wakes_day_long_timer_after_bounded_policy_slot_exits()
+			throws Exception {
+		AtomicInteger timerCycles = new AtomicInteger();
+		AtomicReference<Thread> timerThread = new AtomicReference<>();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production(), nowNanos -> {
+					timerThread.compareAndSet(null, Thread.currentThread());
+					timerCycles.incrementAndGet();
+				});
+		CountDownLatch callbackEntered = new CountDownLatch(1);
+		CountDownLatch releaseCallback = new CountDownLatch(1);
+		AtomicReference<String> result = new AtomicReference<>();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		Thread caller = new Thread(() -> {
+			try {
+				result.set(execution.invokeBoundedPolicy(() -> {
+					callbackEntered.countDown();
+					releaseCallback.await();
+					return "drained";
+				}, deadline));
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, "mcp-bounded-policy-graceful-drain-test");
+
+		try {
+			execution.start();
+			awaitCondition(() -> timerCycles.get() > 0);
+			caller.start();
+			Assertions.assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+			int cyclesBeforeDrain = timerCycles.get();
+
+			execution.beginGracefulDrain();
+			awaitCondition(() -> timerCycles.get() > cyclesBeforeDrain);
+			awaitCondition(() -> timerThread.get() != null
+					&& timerThread.get().getState() == Thread.State.TIMED_WAITING);
+			Assertions.assertFalse(execution.isTerminated(),
+					"Graceful drain must retain the active policy slot.");
+
+			releaseCallback.countDown();
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)),
+					"The released slot must wake a timer parked at a day-long resolution.");
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(caller.isAlive());
+			Assertions.assertNull(failure.get());
+			Assertions.assertEquals("drained", result.get());
+			Assertions.assertEquals(0, execution.snapshot().activeHandlerSlots());
+		} finally {
+			releaseCallback.countDown();
+			execution.stop();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void bounded_policy_queued_ticket_times_out_while_still_queued()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		AtomicInteger activeInvocations = new AtomicInteger();
+		AtomicInteger queuedInvocations = new AtomicInteger();
+		AtomicReference<String> activeResult = new AtomicReference<>();
+		AtomicReference<Throwable> activeFailure = new AtomicReference<>();
+		AtomicReference<Throwable> queuedFailure = new AtomicReference<>();
+		long queuedDeadline = TimeUnit.SECONDS.toNanos(1);
+		long activeDeadline = TimeUnit.SECONDS.toNanos(60);
+		Thread activeCaller = new Thread(() -> {
+			try {
+				activeResult.set(execution.invokeBoundedPolicy(() -> {
+					activeInvocations.incrementAndGet();
+					return "active";
+				}, activeDeadline));
+			} catch (Throwable throwable) {
+				activeFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-active-caller-test");
+		Thread queuedCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					queuedInvocations.incrementAndGet();
+					return "must-not-run";
+				}, queuedDeadline);
+			} catch (Throwable throwable) {
+				queuedFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-queued-caller-test");
+
+		try {
+			execution.start();
+			activeCaller.start();
+			awaitCondition(() -> executor.command() != null);
+			queuedCaller.start();
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+			queuedCaller.join(TimeUnit.SECONDS.toMillis(5));
+
+			Assertions.assertFalse(queuedCaller.isAlive());
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							queuedFailure.get());
+			Assertions.assertTrue(exception.queued(),
+					"Only successful removal from the queue has 503 semantics.");
+			Assertions.assertEquals(0, queuedInvocations.get());
+			Assertions.assertEquals(0, execution.snapshot().queuedRequests());
+
+			executor.takeCommand().run();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(activeCaller.isAlive());
+			Assertions.assertNull(activeFailure.get());
+			Assertions.assertEquals("active", activeResult.get());
+			Assertions.assertEquals(1, activeInvocations.get());
+		} finally {
+			execution.stop();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			queuedCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void bounded_policy_promoted_before_entry_uses_active_deadline_semantics()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		AtomicInteger queuedInvocations = new AtomicInteger();
+		AtomicReference<Throwable> activeFailure = new AtomicReference<>();
+		AtomicReference<Throwable> promotedFailure = new AtomicReference<>();
+		long promotedDeadline = TimeUnit.SECONDS.toNanos(30);
+		long activeDeadline = TimeUnit.SECONDS.toNanos(60);
+		Thread activeCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> "active", activeDeadline);
+			} catch (Throwable throwable) {
+				activeFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-promotion-owner-test");
+		Thread promotedCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					queuedInvocations.incrementAndGet();
+					return "must-not-run";
+				}, promotedDeadline);
+			} catch (Throwable throwable) {
+				promotedFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-promoted-caller-test");
+
+		try {
+			execution.start();
+			activeCaller.start();
+			awaitCondition(() -> executor.command() != null);
+			promotedCaller.start();
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+
+			now.set(promotedDeadline);
+			executor.takeCommand().run();
+			awaitCondition(() -> executor.command() != null);
+			executor.takeCommand().run();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			promotedCaller.join(TimeUnit.SECONDS.toMillis(5));
+
+			Assertions.assertFalse(activeCaller.isAlive());
+			Assertions.assertFalse(promotedCaller.isAlive());
+			Assertions.assertNull(activeFailure.get());
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							promotedFailure.get());
+			Assertions.assertFalse(exception.queued(),
+					"Promotion ends queued state and therefore maps to active 504 semantics.");
+			Assertions.assertEquals(0, queuedInvocations.get());
+		} finally {
+			execution.stop();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			promotedCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void stop_wakes_queued_bounded_policy_callers_without_invocation()
+			throws Exception {
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM, ignored -> executor);
+		AtomicInteger activeInvocations = new AtomicInteger();
+		AtomicInteger queuedInvocations = new AtomicInteger();
+		AtomicReference<Throwable> activeFailure = new AtomicReference<>();
+		AtomicReference<Throwable> queuedFailure = new AtomicReference<>();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		Thread activeCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					activeInvocations.incrementAndGet();
+					return "must-not-run";
+				}, deadline);
+			} catch (Throwable throwable) {
+				activeFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-stop-owner-test");
+		Thread queuedCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					queuedInvocations.incrementAndGet();
+					return "must-not-run";
+				}, deadline);
+			} catch (Throwable throwable) {
+				queuedFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-queued-stop-test");
+
+		try {
+			execution.start();
+			activeCaller.start();
+			awaitCondition(() -> executor.command() != null);
+			queuedCaller.start();
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+
+			execution.stop();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			queuedCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(activeCaller.isAlive());
+			Assertions.assertFalse(queuedCaller.isAlive());
+			Assertions.assertInstanceOf(
+					McpApplicationExecutionStoppedException.class,
+					activeFailure.get());
+			Assertions.assertInstanceOf(
+					McpApplicationExecutionStoppedException.class,
+					queuedFailure.get());
+			Assertions.assertEquals(0, activeInvocations.get());
+			Assertions.assertEquals(0, queuedInvocations.get());
+			Assertions.assertEquals(0, execution.snapshot().queuedRequests());
+
+			Runnable dispatched = executor.takeCommand();
+			Assertions.assertNotNull(dispatched);
+			dispatched.run();
+			Assertions.assertEquals(0, execution.snapshot().activeHandlerSlots());
+		} finally {
+			Runnable pending = executor.takeCommand();
+			if (pending != null)
+				pending.run();
+			execution.stop();
+			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
+			queuedCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void stop_interrupts_active_bounded_policy_work_and_wakes_its_caller()
+			throws Exception {
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM);
+		CountDownLatch callbackEntered = new CountDownLatch(1);
+		CountDownLatch callbackExited = new CountDownLatch(1);
+		AtomicBoolean callbackInterrupted = new AtomicBoolean();
+		AtomicReference<Throwable> callerFailure = new AtomicReference<>();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		Thread caller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					callbackEntered.countDown();
+					try {
+						new CountDownLatch(1).await();
+						return "must-not-complete";
+					} catch (InterruptedException exception) {
+						callbackInterrupted.set(true);
+						throw exception;
+					} finally {
+						callbackExited.countDown();
+					}
+				}, deadline);
+			} catch (Throwable throwable) {
+				callerFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-active-stop-test");
+
+		try {
+			execution.start();
+			caller.start();
+			Assertions.assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+
+			execution.stop();
+			Assertions.assertTrue(callbackExited.await(5, TimeUnit.SECONDS));
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(caller.isAlive());
+			Assertions.assertTrue(callbackInterrupted.get());
+			Assertions.assertInstanceOf(
+					McpApplicationExecutionStoppedException.class,
+					callerFailure.get());
+		} finally {
+			execution.stop();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void blocking_exchange_cancel_callback_does_not_delay_policy_stop_signals()
+			throws Exception {
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						2, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM);
+		CountDownLatch exchangeHandlerEntered = new CountDownLatch(1);
+		CountDownLatch exchangeCancelEntered = new CountDownLatch(1);
+		CountDownLatch releaseExchangeCancel = new CountDownLatch(1);
+		CountDownLatch releaseExchangeHandler = new CountDownLatch(1);
+		CountDownLatch activePolicyEntered = new CountDownLatch(1);
+		CountDownLatch activePolicyInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseActivePolicy = new CountDownLatch(1);
+		AtomicReference<Throwable> activePolicyFailure = new AtomicReference<>();
+		AtomicReference<Throwable> queuedPolicyFailure = new AtomicReference<>();
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		AtomicInteger queuedPolicyInvocations = new AtomicInteger();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		Thread activePolicyCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					activePolicyEntered.countDown();
+					try {
+						releaseActivePolicy.await();
+						return "must-not-complete";
+					} catch (InterruptedException exception) {
+						activePolicyInterrupted.countDown();
+						throw exception;
+					}
+				}, deadline);
+			} catch (Throwable throwable) {
+				activePolicyFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-blocking-cancel-active-test");
+		Thread queuedPolicyCaller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					queuedPolicyInvocations.incrementAndGet();
+					return "must-not-run";
+				}, deadline);
+			} catch (Throwable throwable) {
+				queuedPolicyFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-blocking-cancel-queued-test");
+		Thread stopThread = new Thread(() -> {
+			try {
+				execution.stop();
+			} catch (Throwable throwable) {
+				stopFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-blocking-cancel-stop-test");
+
+		try {
+			execution.start();
+			execution.dispatch(transportRequest(), request("blocking-cancel-exchange"),
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
+						invocation.cancelationToken().onCancel(() -> {
+							exchangeCancelEntered.countDown();
+							try {
+								releaseExchangeCancel.await();
+							} catch (InterruptedException exception) {
+								Thread.currentThread().interrupt();
+								throw new AssertionError(
+										"The blocking cancellation callback was interrupted.",
+										exception);
+							}
+						});
+						exchangeHandlerEntered.countDown();
+						releaseExchangeHandler.await();
+						return McpWireResult.complete(McpJsonObject.empty());
+					}, deadline, ignored -> true, () -> {});
+			Assertions.assertTrue(exchangeHandlerEntered.await(5, TimeUnit.SECONDS));
+
+			activePolicyCaller.start();
+			Assertions.assertTrue(activePolicyEntered.await(5, TimeUnit.SECONDS));
+			queuedPolicyCaller.start();
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+
+			stopThread.start();
+			Assertions.assertTrue(exchangeCancelEntered.await(5, TimeUnit.SECONDS),
+					"Stop did not reach the blocking Exchange cancellation callback.");
+			Assertions.assertEquals(1L, releaseExchangeCancel.getCount(),
+					"The Exchange cancellation callback must remain blocked for the probe.");
+			Assertions.assertTrue(stopThread.isAlive(),
+					"Stop must still be inside the blocking application callback.");
+
+			Assertions.assertTrue(activePolicyInterrupted.await(5, TimeUnit.SECONDS),
+					"Active policy interruption was delayed behind an application callback.");
+			activePolicyCaller.join(TimeUnit.SECONDS.toMillis(5));
+			queuedPolicyCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(activePolicyCaller.isAlive());
+			Assertions.assertFalse(queuedPolicyCaller.isAlive());
+			Assertions.assertInstanceOf(McpApplicationExecutionStoppedException.class,
+					activePolicyFailure.get());
+			Assertions.assertInstanceOf(McpApplicationExecutionStoppedException.class,
+					queuedPolicyFailure.get());
+			Assertions.assertEquals(0, queuedPolicyInvocations.get());
+			Assertions.assertEquals(1L, releaseExchangeCancel.getCount(),
+					"Policy stop signals must arrive before the callback is released.");
+
+			releaseExchangeCancel.countDown();
+			stopThread.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(stopThread.isAlive());
+			Assertions.assertNull(stopFailure.get());
+		} finally {
+			releaseExchangeCancel.countDown();
+			releaseExchangeHandler.countDown();
+			releaseActivePolicy.countDown();
+			execution.stop();
+			stopThread.join(TimeUnit.SECONDS.toMillis(5));
+			activePolicyCaller.join(TimeUnit.SECONDS.toMillis(5));
+			queuedPolicyCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
 	public void progress_notifications_do_not_extend_the_absolute_request_deadline()
 			throws Exception {
 		AtomicLong now = new AtomicLong();
@@ -668,6 +1300,41 @@ public class McpApplicationExecutionTests {
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError("Test coordination was interrupted.", exception);
+		}
+	}
+
+	private static final class ActivePolicyDeadlineClock
+			implements McpApplicationClock {
+		private final long deadlineNanos;
+		private final CountDownLatch callbackEntered;
+		private final ThreadLocal<Integer> policyReads;
+
+		private ActivePolicyDeadlineClock(long deadlineNanos,
+				CountDownLatch callbackEntered) {
+			this.deadlineNanos = deadlineNanos;
+			this.callbackEntered = callbackEntered;
+			this.policyReads = ThreadLocal.withInitial(() -> 0);
+		}
+
+		@Override
+		public long nanoTime() {
+			if (!insideBoundedPolicyWait())
+				return 0L;
+			int read = this.policyReads.get() + 1;
+			this.policyReads.set(read);
+			if (read == 1)
+				return 0L;
+			awaitLatch(this.callbackEntered);
+			return this.deadlineNanos;
+		}
+
+		private boolean insideBoundedPolicyWait() {
+			for (StackTraceElement frame : Thread.currentThread().getStackTrace())
+				if (McpApplicationExecution.class.getName().equals(
+						frame.getClassName())
+						&& "invokeBoundedPolicy".equals(frame.getMethodName()))
+					return true;
+			return false;
 		}
 	}
 

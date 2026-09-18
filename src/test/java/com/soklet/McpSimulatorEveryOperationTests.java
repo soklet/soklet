@@ -610,7 +610,7 @@ public class McpSimulatorEveryOperationTests {
 					return completeText(read.getUri(), "matrix template complete");
 				}).build();
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(this.publisher, EnumSet.of(
+				.withEventPublisherAndNotificationTypes(this.publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(

@@ -430,6 +430,10 @@ class SimulatorConfigDerivationTests {
 		McpEndpointRegistry endpointRegistry = endpointRegistry("/complete-snapshot");
 		McpAdmissionController admissionController = context ->
 				McpAdmissionDecision.accepted();
+		McpCatalogAccessPolicy catalogAccessPolicy =
+				McpCatalogAccessPolicy.fromEvaluators(
+						(context, registration, features) -> true,
+						(context, registration, features) -> true);
 		McpHandlerInterceptor handlerInterceptor =
 				(context, features, continuation) -> continuation.proceed();
 		McpToolOutputSanitizer sanitizer =
@@ -478,6 +482,7 @@ class SimulatorConfigDerivationTests {
 				.requestHandlerExecutorServiceSupplier(executorSupplier)
 				.endpointRegistry(endpointRegistry)
 				.admissionController(admissionController)
+				.catalogAccessPolicy(catalogAccessPolicy)
 				.handlerInterceptor(handlerInterceptor)
 				.toolOutputSanitizer(sanitizer)
 				.taskManager(taskManager)
@@ -502,6 +507,8 @@ class SimulatorConfigDerivationTests {
 				.fromSokletConfig(sourceConfig).simulatedMcpServer();
 
 		Assertions.assertNotNull(derivedMcpServer);
+		Assertions.assertSame(catalogAccessPolicy,
+				derivedMcpServer.getCatalogAccessPolicy());
 		assertCompleteMcpBuilderFieldInventory();
 		assertMcpConstructionTemplatesMatch(sourceMcpServer, derivedMcpServer);
 		Assertions.assertNotSame(sourceMcpServer.getProtectionControl(),
@@ -727,6 +734,7 @@ class SimulatorConfigDerivationTests {
 					"writeTimeout",
 				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
 				"admissionController", "admissionControllerExplicitlyConfigured",
+				"catalogAccessPolicy", "catalogAccessPolicyExplicitlyConfigured",
 				"handlerInterceptor",
 				"toolOutputSanitizer", "taskManager", "corsAuthorizer",
 				"requestRateLimiter",

@@ -253,7 +253,7 @@ final class SokletDirectMcpLifecycleTests {
 				implementation("direct-cleanup-evidence"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();
@@ -314,7 +314,7 @@ final class SokletDirectMcpLifecycleTests {
 				implementation("direct-frozen-mcp-primary"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();
@@ -627,7 +627,7 @@ final class SokletDirectMcpLifecycleTests {
 				implementation("direct-blocked-publisher"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();

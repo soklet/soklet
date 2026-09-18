@@ -635,7 +635,7 @@ class McpLifecycleB3Tests {
 				implementation("b3-pre-ready-self-join"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -709,7 +709,7 @@ class McpLifecycleB3Tests {
 				implementation("b3-startup-primary-election"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -795,7 +795,7 @@ class McpLifecycleB3Tests {
 				implementation("b3-synchronous-startup-election"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -880,7 +880,7 @@ class McpLifecycleB3Tests {
 				implementation("b3-registration-close-self-join"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -1643,7 +1643,7 @@ class McpLifecycleB3Tests {
 				implementation("b3-post-bind-failure"))
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisher(publisher,
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -2041,7 +2041,7 @@ class McpLifecycleB3Tests {
 			}
 		};
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, Set.of(
+				.withEventPublisherAndNotificationTypes(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,

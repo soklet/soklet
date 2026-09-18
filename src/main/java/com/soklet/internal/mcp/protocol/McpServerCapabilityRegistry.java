@@ -44,6 +44,13 @@ final class McpServerCapabilityRegistry {
 	@NonNull
 	private final List<@NonNull String> prompts;
 	@NonNull
+	private final List<@NonNull McpNormalizedOperation> toolOperations;
+	@NonNull
+	private final List<@NonNull McpNormalizedOperation> promptOperations;
+	@NonNull
+	private final Optional<@NonNull McpImplementationMetadata>
+			serverInformation;
+	@NonNull
 	private final Map<@NonNull String, @NonNull McpNormalizedPromptDescriptor> promptDescriptors;
 	@NonNull
 	private final List<@NonNull String> exactResourceUris;
@@ -116,8 +123,10 @@ final class McpServerCapabilityRegistry {
 		requireNonNull(localizedResponseKinds);
 		requireNonNull(endpoint);
 		requireNonNull(protocolProfiles);
-		this.tools = namesOf(endpoint.tools());
-		this.prompts = namesOf(endpoint.prompts());
+		this.toolOperations = List.copyOf(endpoint.tools());
+		this.promptOperations = List.copyOf(endpoint.prompts());
+		this.tools = namesOf(toolOperations);
+		this.prompts = namesOf(promptOperations);
 		this.promptDescriptors = promptDescriptors(endpoint.prompts());
 		this.exactResourceDescriptors = endpoint.exactResources().stream()
 				.map(operation -> operation.resourceDescriptor().orElseThrow())
@@ -136,14 +145,14 @@ final class McpServerCapabilityRegistry {
 		this.inputRequestPlans = inputRequestPlans(endpoint);
 		this.toolMirroredHeaderPlans = toolMirroredHeaderPlans(endpoint);
 		this.customMirroredHeaderNames = customMirroredHeaderNames(endpoint);
-		Optional<McpImplementationMetadata> serverInformation =
+		this.serverInformation =
 				endpoint.serverInformationIncluded()
 						? Optional.of(endpoint.serverInformation())
 						: Optional.empty();
 		this.toolsListResult = McpWireResult.withServerInformation(
-				toolsListResult(endpoint.tools()), serverInformation);
+				toolsListResult(toolOperations), serverInformation);
 		this.promptsListResult = McpWireResult.withServerInformation(
-				promptsListResult(endpoint.prompts()), serverInformation);
+				promptsListResult(promptOperations), serverInformation);
 		this.resourcesListResult = McpWireResult.withServerInformation(
 				resourcesListResult(exactResourceDescriptors,
 						endpoint.resourceListCachePolicy()), serverInformation);
@@ -290,8 +299,30 @@ final class McpServerCapabilityRegistry {
 	}
 
 	@NonNull
+	McpWireResult toolsListResult(
+			@NonNull Set<@NonNull String> accessibleToolNames) {
+		requireNonNull(accessibleToolNames);
+		List<McpNormalizedOperation> visible = toolOperations.stream()
+				.filter(tool -> accessibleToolNames.contains(tool.name()))
+				.toList();
+		return McpWireResult.withServerInformation(
+				toolsListResult(visible), serverInformation);
+	}
+
+	@NonNull
 	McpWireResult promptsListResult() {
 		return promptsListResult;
+	}
+
+	@NonNull
+	McpWireResult promptsListResult(
+			@NonNull Set<@NonNull String> accessiblePromptNames) {
+		requireNonNull(accessiblePromptNames);
+		List<McpNormalizedOperation> visible = promptOperations.stream()
+				.filter(prompt -> accessiblePromptNames.contains(prompt.name()))
+				.toList();
+		return McpWireResult.withServerInformation(
+				promptsListResult(visible), serverInformation);
 	}
 
 	@NonNull

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpLocalizationContext;
 import com.soklet.McpRequestContext;
 import org.jspecify.annotations.NonNull;
 
@@ -105,6 +106,8 @@ public interface McpRuntimeCatalogLocalizer {
 	 *        exact wire encounter order
 	 * @param resourceListCursor validated opaque custom resource-list cursor
 	 * @param terminalBoundary whether the request has already become terminal
+	 * @param localizationContext request-scoped context already created for a
+	 *        caller-aware catalog policy, if present
 	 */
 	@ThreadSafe
 	record Input(@NonNull String endpointPath, @NonNull ResponseKind responseKind,
@@ -115,7 +118,28 @@ public interface McpRuntimeCatalogLocalizer {
 			@NonNull ToLongFunction<@NonNull McpJsonObject> encodedLength,
 			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull List<@NonNull String> resourceListCursor,
-			@NonNull BooleanSupplier terminalBoundary) {
+			@NonNull BooleanSupplier terminalBoundary,
+			@NonNull Optional<@NonNull McpLocalizationContext>
+					localizationContext) {
+		/** Creates input without a pre-created localization context. */
+		public Input(@NonNull String endpointPath,
+				@NonNull ResponseKind responseKind,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpJsonObject canonicalDocument,
+				long canonicalEncodedBytes, long envelopeBytes,
+				long maximumResponseBytes,
+				long maximumReplacementCharacters,
+				@NonNull ToLongFunction<@NonNull McpJsonObject> encodedLength,
+				@NonNull List<@NonNull String> acceptLanguageValues,
+				@NonNull List<@NonNull String> resourceListCursor,
+				@NonNull BooleanSupplier terminalBoundary) {
+			this(endpointPath, responseKind, requestContext, canonicalDocument,
+					canonicalEncodedBytes, envelopeBytes, maximumResponseBytes,
+					maximumReplacementCharacters, encodedLength,
+					acceptLanguageValues, resourceListCursor, terminalBoundary,
+					Optional.empty());
+		}
+
 		public Input {
 			requireNonNull(endpointPath, "endpointPath");
 			requireNonNull(responseKind, "responseKind");
@@ -132,6 +156,7 @@ public interface McpRuntimeCatalogLocalizer {
 			resourceListCursor = List.copyOf(
 					requireNonNull(resourceListCursor, "resourceListCursor"));
 			requireNonNull(terminalBoundary, "terminalBoundary");
+			requireNonNull(localizationContext, "localizationContext");
 		}
 
 		/** @return redacted rendering; header values and cursor are private data */

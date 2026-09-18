@@ -196,11 +196,11 @@ class McpPublicValueSemanticsAuditTests {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher,
+				.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
 		McpSubscriptionConfig equalLookingSubscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher,
+				.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
 		assertNotEquals(subscriptions, equalLookingSubscriptions);
@@ -273,6 +273,7 @@ class McpPublicValueSemanticsAuditTests {
 		}
 
 		for (Class<?> identityType : List.of(
+				McpCatalogAccessPolicy.class,
 				McpSubscriptionConfig.class,
 				McpTaskRequestContext.class,
 				McpTaskUpdateContext.class,

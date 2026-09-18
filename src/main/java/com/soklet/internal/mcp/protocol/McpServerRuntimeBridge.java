@@ -34,6 +34,7 @@ import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
+import com.soklet.McpLocalizationContext;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
@@ -1073,6 +1074,8 @@ public final class McpServerRuntimeBridge {
 		if (endpointPlan.tasksSupported())
 			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+		endpointPlan.catalogAccessAdapter()
+				.ifPresent(endpointBuilder::catalogAccessAdapter);
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
 		Set<McpResourceNotificationType> notificationTypes =
 				EnumSet.noneOf(McpResourceNotificationType.class);
@@ -1299,9 +1302,12 @@ public final class McpServerRuntimeBridge {
 
 		Map<String, McpApplicationRequestHandler> frameworkHandlers =
 				new LinkedHashMap<>();
+		Optional<CatalogAccessAdapter> catalogAccessAdapter =
+				endpointPlan.catalogAccessAdapter();
 		endpointPlan.taskManagerAdapter().ifPresent(adapter -> {
 			frameworkHandlers.put("tasks/get",
-					invocation -> invokeTaskGet(adapter, invocation));
+					invocation -> invokeTaskGet(adapter, catalogAccessAdapter,
+							invocation));
 			frameworkHandlers.put("tasks/update",
 					invocation -> invokeTaskUpdate(adapter, invocation));
 			frameworkHandlers.put("tasks/cancel",
@@ -1767,7 +1773,9 @@ public final class McpServerRuntimeBridge {
 			@NonNull ResourceListPlan resourceListPlan,
 			@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
 			boolean localizationEnabled,
-			@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter) {
+			@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter,
+			@NonNull Optional<@NonNull CatalogAccessAdapter>
+					catalogAccessAdapter) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1777,6 +1785,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(resourceListPlan);
 			requireNonNull(catalogLocalizer);
 			requireNonNull(taskManagerAdapter);
+			requireNonNull(catalogAccessAdapter);
 		}
 
 		/** @return whether this endpoint has the Tasks protocol extension */
@@ -1791,8 +1800,80 @@ public final class McpServerRuntimeBridge {
 				@NonNull List<@NonNull ResourcePlan> resourcePlans,
 				@NonNull ResourceListPlan resourceListPlan) {
 			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
-					Optional.empty(), false, Optional.empty());
+					Optional.empty(), false, Optional.empty(), Optional.empty());
 		}
+
+		/**
+		 * Compatibility constructor for endpoint plans created before caller-aware
+		 * catalog access was available.
+		 */
+		public EndpointPlan(@NonNull McpEndpoint endpoint,
+				@NonNull List<@NonNull ToolPlan> toolPlans,
+				@NonNull List<@NonNull PromptPlan> promptPlans,
+				@NonNull List<@NonNull ResourcePlan> resourcePlans,
+				@NonNull ResourceListPlan resourceListPlan,
+				@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
+				boolean localizationEnabled,
+				@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter) {
+			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
+					catalogLocalizer, localizationEnabled, taskManagerAdapter,
+					Optional.empty());
+		}
+	}
+
+	/**
+	 * Opens one request-scoped caller-aware catalog evaluator after admission.
+	 * The returned session is reused for every candidate and the selected direct
+	 * handler so localization negotiation occurs at most once.
+	 */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface CatalogAccessAdapter {
+		/** @return one non-null request-scoped evaluator session */
+		@NonNull
+		CatalogAccessSession open(@NonNull CatalogAccessInput input)
+				throws Exception;
+	}
+
+	/**
+	 * Inputs needed to construct policy invocation features without exposing
+	 * protocol-package implementation types to the public server layer.
+	 */
+	@ThreadSafe
+	public record CatalogAccessInput(
+			@NonNull McpRequestContext requestContext,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull BooleanSupplier pastDeadline,
+			@NonNull Optional<@NonNull String> continuationLocale,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
+		/** Validates one request-scoped access input. */
+		public CatalogAccessInput {
+			requireNonNull(requestContext);
+			requireNonNull(cancelationToken);
+			requireNonNull(pastDeadline);
+			requireNonNull(continuationLocale);
+			requireNonNull(selectedLocaleSlot);
+		}
+	}
+
+	/**
+	 * Request-scoped caller-aware catalog decisions over stable registration
+	 * names. Implementations retain the exact canonical registration objects.
+	 */
+	@ThreadSafe
+	public interface CatalogAccessSession {
+		/** @return whether the named canonical tool is available */
+		boolean isToolAccessible(@NonNull String toolName) throws Exception;
+
+		/** @return whether the named canonical prompt is available */
+		boolean isPromptAccessible(@NonNull String promptName) throws Exception;
+
+		/**
+		 * @return the localization context already exposed to policy invocation
+		 * features, if localization applies
+		 */
+		@NonNull
+		Optional<@NonNull McpLocalizationContext> localizationContext();
 	}
 
 	/**
@@ -1813,6 +1894,21 @@ public final class McpServerRuntimeBridge {
 		Optional<@NonNull TaskSnapshot> findTask(
 				@NonNull McpRequestContext requestContext,
 				@NonNull String taskId) throws Exception;
+
+		/**
+		 * Finds a task with access to the current request's already-created catalog
+		 * policy session. The compatibility default preserves adapters that do not
+		 * need caller-aware completed-result revocation.
+		 */
+		@NonNull
+		default Optional<@NonNull TaskSnapshot> findTask(
+				@NonNull McpRequestContext requestContext,
+				@NonNull String taskId,
+				@NonNull Optional<@NonNull CatalogAccessSession>
+						catalogAccessView) throws Exception {
+			requireNonNull(catalogAccessView);
+			return findTask(requestContext, taskId);
+		}
 
 		/**
 		 * Finds the authorized task state needed to decide whether a subscription
@@ -2558,7 +2654,39 @@ public final class McpServerRuntimeBridge {
 			@NonNull HandlerEntryGuard handlerEntryGuard,
 			@NonNull BooleanSupplier pastDeadline,
 			@NonNull Optional<@NonNull String> continuationLocale,
-			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull Optional<@NonNull McpLocalizationContext>
+					localizationContext) {
+		/**
+		 * Creates an invocation without a catalog-policy-created localization
+		 * context.
+		 */
+		public ToolInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpRequestId requestId,
+				@NonNull String protocolVersion,
+				@NonNull String operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull McpJsonObject rawArguments,
+				@NonNull CancelationToken cancelationToken,
+				@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+				@NonNull HandlerEntryGuard handlerEntryGuard,
+				@NonNull BooleanSupplier pastDeadline,
+				@NonNull Optional<@NonNull String> continuationLocale,
+				@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, operationName,
+					clientInformation, clientCapabilitiesJson, requestMetadata,
+					admissionIdentity, rawArguments, cancelationToken, progressEmitter,
+					handlerEntryGuard, pastDeadline, continuationLocale,
+					selectedLocaleSlot, Optional.empty());
+		}
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -2580,7 +2708,7 @@ public final class McpServerRuntimeBridge {
 					clientInformation, clientCapabilitiesJson, requestMetadata,
 					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
 					Optional.empty(), handlerEntryGuard, () -> false,
-					Optional.empty(), new AtomicReference<>());
+					Optional.empty(), new AtomicReference<>(), Optional.empty());
 		}
 
 		public ToolInvocation {
@@ -2607,6 +2735,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(pastDeadline);
 			requireNonNull(continuationLocale);
 			requireNonNull(selectedLocaleSlot);
+			requireNonNull(localizationContext);
 		}
 
 		@Override
@@ -2644,7 +2773,39 @@ public final class McpServerRuntimeBridge {
 			@NonNull HandlerEntryGuard handlerEntryGuard,
 			@NonNull BooleanSupplier pastDeadline,
 			@NonNull Optional<@NonNull String> continuationLocale,
-			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull Optional<@NonNull McpLocalizationContext>
+					localizationContext) {
+		/**
+		 * Creates an invocation without a catalog-policy-created localization
+		 * context.
+		 */
+		public PromptInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpRequestId requestId,
+				@NonNull String protocolVersion,
+				@NonNull String operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull McpJsonObject rawArguments,
+				@NonNull CancelationToken cancelationToken,
+				@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+				@NonNull HandlerEntryGuard handlerEntryGuard,
+				@NonNull BooleanSupplier pastDeadline,
+				@NonNull Optional<@NonNull String> continuationLocale,
+				@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, operationName,
+					clientInformation, clientCapabilitiesJson, requestMetadata,
+					admissionIdentity, rawArguments, cancelationToken, progressEmitter,
+					handlerEntryGuard, pastDeadline, continuationLocale,
+					selectedLocaleSlot, Optional.empty());
+		}
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -2666,7 +2827,7 @@ public final class McpServerRuntimeBridge {
 					clientInformation, clientCapabilitiesJson, requestMetadata,
 					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
 					Optional.empty(), handlerEntryGuard, () -> false,
-					Optional.empty(), new AtomicReference<>());
+					Optional.empty(), new AtomicReference<>(), Optional.empty());
 		}
 
 		public PromptInvocation {
@@ -2693,6 +2854,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(pastDeadline);
 			requireNonNull(continuationLocale);
 			requireNonNull(selectedLocaleSlot);
+			requireNonNull(localizationContext);
 		}
 
 		@Override
@@ -3618,7 +3780,9 @@ public final class McpServerRuntimeBridge {
 				invocation.frameworkRequestStateContinuation().flatMap(
 						continuation -> Optional.ofNullable(
 								continuation.selectedLocale())),
-				invocation.selectedLocale());
+				invocation.selectedLocale(),
+				invocation.catalogAccessView().flatMap(
+						CatalogAccessSession::localizationContext));
 		ToolInvocationResult result = requireNonNull(
 				toolPlan.invoker().invoke(toolInvocation),
 				"The MCP tool invoker returned null.");
@@ -3681,11 +3845,26 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static McpWireResult invokeTaskGet(
 			@NonNull TaskManagerAdapter taskManagerAdapter,
+			@NonNull Optional<@NonNull CatalogAccessAdapter> catalogAccessAdapter,
 			@NonNull McpApplicationInvocation invocation) throws Exception {
 		String taskId = taskId(invocation.request());
+		Optional<CatalogAccessSession> catalogAccessView;
+		if (requireNonNull(catalogAccessAdapter).isEmpty()) {
+			catalogAccessView = Optional.empty();
+		} else {
+			Optional<String> continuationLocale = invocation
+					.frameworkRequestStateContinuation().flatMap(continuation ->
+							Optional.ofNullable(continuation.selectedLocale()));
+			catalogAccessView = Optional.of(requireNonNull(
+					catalogAccessAdapter.orElseThrow().open(new CatalogAccessInput(
+							requirePublicRequestContext(invocation),
+							invocation.cancelationToken(), invocation.pastDeadline(),
+							continuationLocale, invocation.selectedLocale())),
+					"The MCP catalog access adapter returned null."));
+		}
 		Optional<TaskSnapshot> taskSnapshot = requireNonNull(
 				taskManagerAdapter.findTask(requirePublicRequestContext(invocation),
-						taskId),
+						taskId, catalogAccessView),
 				"The MCP task manager adapter returned null.");
 		if (taskSnapshot.isEmpty())
 			throw new McpInvalidApplicationInputException();
@@ -3881,9 +4060,15 @@ public final class McpServerRuntimeBridge {
 			}
 			case INPUT_REQUIRED -> fields.put("inputRequests",
 					inputRequests(task.getInputRequests()));
-			case COMPLETED -> fields.put("result",
-					completedTaskResult(snapshot,
+			case COMPLETED -> {
+				// A task whose origin registration disappeared or is no longer
+				// accessible is intentionally projected as status-only.  The task
+				// itself remains visible, but its saved operation output must not be
+				// rendered through a registration that the current caller cannot use.
+				if (snapshot.completedResultFields().isPresent())
+					fields.put("result", completedTaskResult(snapshot,
 							includeStructuredContentTextMirror));
+			}
 			case FAILED -> fields.put("error", taskFailure(
 					task.getFailure().orElseThrow()));
 		}
@@ -4027,7 +4212,9 @@ public final class McpServerRuntimeBridge {
 				invocation.frameworkRequestStateContinuation().flatMap(
 						continuation -> Optional.ofNullable(
 								continuation.selectedLocale())),
-				invocation.selectedLocale());
+				invocation.selectedLocale(),
+				invocation.catalogAccessView().flatMap(
+						CatalogAccessSession::localizationContext));
 		PromptInvocationResult result = requireNonNull(
 				promptPlan.invoker().invoke(promptInvocation),
 				"The MCP prompt invoker returned null.");

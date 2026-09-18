@@ -815,13 +815,11 @@ public class McpResourcePublicRuntimeTests {
 				.withUriAndData(oversizedUri, new byte[786_433])
 				.mimeType("application/octet-stream")
 					.build();
-		McpResourceOutput.Builder aggregateOutput = McpResourceOutput.withContent(
-				McpBlobResourceContents.withUriAndData(
-						aggregateUri, new byte[700_000]).build());
-		for (int index = 1; index < 5; ++index)
-			aggregateOutput.addContent(McpBlobResourceContents.withUriAndData(
+		List<McpResourceContents> aggregateOutput = new ArrayList<>();
+		for (int index = 0; index < 5; ++index)
+			aggregateOutput.add(McpBlobResourceContents.withUriAndData(
 					aggregateUri, new byte[700_000]).build());
-		McpResourceOutput aggregateContents = aggregateOutput.build();
+		McpResourceOutput aggregateContents = McpResourceOutput.fromContents(aggregateOutput);
 		McpEndpoint endpoint = endpointBuilder()
 					.addResource(McpResourceRegistration
 						.withUriAndName(boundaryUri, "Boundary blob")

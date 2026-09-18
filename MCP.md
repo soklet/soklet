@@ -194,9 +194,10 @@ terminate TLS.
 MCP construction entrypoints include every unconditional required value. In
 addition to the server and endpoint factories above, the primary forms are:
 
-- `McpResourceOutput.withContent(resourceContents)` for one or more resource
-  values, or `McpResourceOutput.fromContent(resourceContents)` for the common
-  single-value result;
+- `McpResourceOutput.withContents(resourceContents)` or
+  `McpResourceOutput.fromContents(resourceContents)` for a nonempty resource
+  list; `withContent(resourceContents)` and `fromContent(resourceContents)`
+  remain convenient single-value forms;
 - `McpInputRequiredResult.withInputRequest(key, inputRequest)`,
   `withFrameworkRequestState(frameworkRequestState)`, or
   `withApplicationRequestState(applicationRequestState)`, according to which
@@ -204,8 +205,13 @@ addition to the server and endpoint factories above, the primary forms are:
 - `McpLocalizer.withFallbackLocale(fallbackLocale,
   localizationContextProvider)` and `McpLocalizationContext.withLocale(locale,
   localizationLookup)`; and
-- `McpSubscriptionConfig.withEventPublisher(subscriptionEventPublisher,
-  notificationTypes)`, where the initial notification-type set is nonempty.
+- `McpSubscriptionConfig.withEventPublisherAndNotificationTypes(subscriptionEventPublisher,
+  subscriptionNotificationTypes)`, where the initial notification-type set is nonempty.
+
+Resource-output `contents(...)` and subscription `notificationTypes(...)`
+replace the entire nonempty collection with an immutable snapshot. Invalid
+replacement attempts leave the builder unchanged. Construct the list or set in
+application code; these two builders do not expose additive collection methods.
 
 Collection methods use one grammar throughout MCP: `addX(...)` and
 `addXs(...)` append, while a retained plural property setter such as
@@ -438,25 +444,81 @@ inputs to a neutral failure that reveals no protected value. The
 compile-checks one deployment-specific allowlist and canary policy; it is not a
 universal injection detector.
 
-The immutable prompt catalog follows registration order and is returned as one
-page. A present cursor is invalid because Soklet does not expose dynamic
-prompt-list pagination or a prompt list-change publisher.
+The prompt catalog follows registration order and is returned as one page. A
+present cursor is invalid because Soklet does not expose prompt-list
+pagination.
 
-Static tool and prompt catalogs are caller-neutral. Once a request passes
-admission, `tools/list` and `prompts/list` return the same registration-order
-descriptors for every admitted identity and every client-capability set. They
-are not authorization-filtered. Admission still precedes framework catalog
-rendering, so a rejected caller receives no catalog. These list results always
-carry a zero TTL and private scope, and their HTTP responses remain
-`Cache-Control: no-store`. That conservative output is not a promise that a
-future release will make static catalogs shareable.
+Tool and prompt catalogs are caller-neutral unless the server configures an
+`McpCatalogAccessPolicy`. With a policy, Soklet evaluates canonical,
+untranslated registrations in registration order after admission and the
+request limiter, on bounded application execution. `tools/list` and
+`prompts/list` return only the admitted caller's permitted descriptors while
+preserving canonical relative order; filtering every registration produces a
+successful empty catalog. Policy callbacks receive the admitted
+`McpRequestContext`, a cancellation feature, and the same applicable
+`McpLocalizationContext` later used for rendering or handler dispatch.
 
-An operation's descriptor is discoverable even when the operation declares a
-required client capability. For example, a tool that declares required form
-elicitation remains in `tools/list`; a `tools/call` without that capability
-receives the standard `-32021` error before admission, while a call with the
-capability proceeds through admission and the normal application pipeline.
-This list/call distinction must not be used as an authorization boundary.
+Policy evaluation uses the endpoint's bounded application dispatcher and the
+request's original absolute deadline. A deadline that wins while the policy is
+queued returns correlated HTTP 503/JSON-RPC `-32603`; one that wins during
+active policy work returns correlated HTTP 504/`-32603`. No later evaluator is
+entered after deadline or stop wins. Forced stop fixes `SERVER_STOPPING`, wakes
+queued policy callers, and cooperatively interrupts active policy work before
+application cancelation callbacks can delay dispatcher signaling. The policy
+cancellation feature reports the winning reason exactly once and exposes no
+framework-internal throwable as its cause.
+
+The same policy guards `tools/call` and `prompts/get`. When authorization-context
+creation and policy evaluation complete normally, an unknown name and a
+registered but hidden name return the same neutral invalid-parameters response,
+consume the same request-limiter state, and stop before a tool-specific limiter,
+interceptor, or handler. Contract failures in the context provider or policy use
+the fixed redacted internal-error path instead of being treated as a denial. For
+an accessible tool, the order is admission,
+request limiter, neutral name resolution, authorization-context preparation,
+catalog policy, tool limiter, registration-specific validation, interceptor,
+and handler; prompts omit the tool limiter. Authorization-context preparation
+is a narrow prerequisite for a structurally valid framework-protected retry:
+it selects the route's state mode, authenticates and decodes the continuation,
+establishes the admitted lifecycle/request context, and creates the one pinned
+localization context that policy and handler share. A custom state protector or
+localization provider can therefore run before the catalog evaluator. No
+schema, argument, input, task, progress, interceptor, handler, sanitizer, or
+registration-specific diagnostic work runs in that phase. Protected-state
+failures discovered during preparation remain latent until policy permits the
+target, preserving the hidden/unknown response and limiter boundary. A
+localization-context creation failure instead uses the fixed redacted internal-
+error path because no evaluator can receive its required context. A detailed
+completed-task read rechecks the current origin-tool registration before
+sanitizing its result. A missing or newly hidden origin still returns the
+successful task status but omits the result and its metadata. Null or throwing
+policy decisions likewise fail through the fixed redacted internal-error path.
+This reauthorization runs inside the active `tasks/get` application Exchange
+with that Exchange's cancellation token and absolute deadline. Soklet checks
+cancellation and deadline state again after the evaluator returns, so a callback
+that absorbs interruption and returns allow after timeout or stop still cannot
+enter the sanitizer.
+
+Caller-specific tool and prompt projections always carry zero TTL and private
+scope, and HTTP responses remain `Cache-Control: no-store`. Configuring a policy
+bypasses shared pre-rendered catalog objects and encoded-length memoization;
+Soklet does not retain a per-caller catalog cache. Omitting the policy, or
+passing null to `McpServer.Builder.catalogAccessPolicy`, restores the shared
+allow-all policy and the caller-neutral fast path.
+
+For an explicit policy, aggregate tool/prompt startup bounds that depend on the
+unfiltered catalog are enforced on each exact caller-visible projection after
+filtering. Localization-slot and JSON-node overflow then fail atomically before
+a response is exposed. Resource and resource-template catalogs remain subject
+to their existing startup-strict bounds.
+
+An accessible operation's descriptor remains discoverable even when the
+operation declares a required client capability. For example, a tool that
+declares required form elicitation remains in `tools/list`; a `tools/call`
+without that capability receives the standard `-32021` error. When a catalog
+policy is configured, capability and other registration-specific checks occur
+only after that policy permits the target. This list/call distinction must not
+be used as an authorization boundary.
 
 ## Resources and pagination
 
@@ -747,6 +809,17 @@ state response before lifecycle observation, interception, or handler entry.
 Development-ephemeral protection is intentionally not portable. A custom
 protector may provide fleet portability, but it must preserve the same binding
 and associated-data contract.
+
+The lifecycle-order statement above applies to the caller-neutral path. An
+explicit `McpCatalogAccessPolicy` requires the same admitted request and pinned
+localization context for authorization and handler execution. On that path,
+Soklet opens a structurally valid continuation before the catalog evaluator and
+starts lifecycle observation to obtain that admitted context. A protected-state
+failure remains deferred while policy runs; lifecycle observes no recovered
+framework state, and an allowed target then receives the same fixed invalid-
+state response before interception or handler entry. A denied hidden target
+retains the ordinary unavailable-target response, so protected-state validity
+cannot become a caller-visible catalog oracle.
 
 Soklet checks request-state wire shape and size before capability checks or
 admission, but does not cryptographically open structurally valid state until
@@ -1285,7 +1358,7 @@ McpSubscriptionEventPublisher publisher =
     McpSubscriptionEventPublisher.fromInMemoryDefaults();
 
 McpSubscriptionConfig subscriptions =
-    McpSubscriptionConfig.withEventPublisher(publisher, Set.of(
+    McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher, Set.of(
             McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
             McpSubscriptionNotificationType.RESOURCE_UPDATED))
         .build();
@@ -3000,11 +3073,11 @@ Their SHA-256 values are
 and `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`.
 The dated development checkpoints below retain their original hashes.
 
-The current MCP API universe is 247 owners: 133 Phase 4, 36 Phase 5, and all 64
+The current MCP API universe is 250 owners: 136 Phase 4, 36 Phase 5, and all 64
 Phase 6 owners are frozen. The 14 Tasks owners retain their provisional
 maturity classification, but their 4.0.0 signatures are also frozen through
 the dedicated `provisional.signatures.jsonl` gate. Sixty-one non-MCP owners
-bring current-side coverage to 308. The
+bring current-side coverage to 311. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed

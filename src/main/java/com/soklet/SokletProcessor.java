@@ -3051,21 +3051,6 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@NonNull
-	private List<@NonNull String> annotationEnumConstantNames(
-			@NonNull AnnotationMirror annotation, @NonNull String member) {
-		Object rawValues = annotationMemberWithDefaults(annotation, member);
-		if (!(rawValues instanceof List<?> values))
-			return List.of();
-		List<String> names = new ArrayList<>(values.size());
-		for (Object value : values)
-			if (value instanceof AnnotationValue annotationValue
-					&& annotationValue.getValue()
-					instanceof VariableElement constant)
-				names.add(constant.getSimpleName().toString());
-		return List.copyOf(names);
-	}
-
-	@NonNull
 	private String annotationString(@NonNull AnnotationMirror annotation,
 			@NonNull String member) {
 		Object value = annotationMemberWithDefaults(annotation, member);

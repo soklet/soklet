@@ -184,7 +184,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		String runtimeSource = Files.readString(Path.of("src", "main", "java",
 				"com", "soklet", "internal", "mcp", "protocol",
 				"McpHttpServerRuntime.java"), StandardCharsets.UTF_8);
-		Assertions.assertEquals(5, occurrences(runtimeSource,
+		Assertions.assertEquals(6, occurrences(runtimeSource,
 				"return catalogResponse("));
 		Assertions.assertEquals(2, occurrences(runtimeSource,
 				"McpWireResult.withPrecomputedJsonObject("));
@@ -610,7 +610,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, Set.of(
+				.withEventPublisherAndNotificationTypes(publisher, Set.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
@@ -633,7 +633,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.serverInfoIncluded(true)
 				.addResource(resource)
 				.subscriptionConfig(McpSubscriptionConfig
-						.withEventPublisher(
+						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								Set.of(
 								McpSubscriptionNotificationType

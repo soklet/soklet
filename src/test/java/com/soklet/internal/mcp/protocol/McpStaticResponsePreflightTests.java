@@ -17,10 +17,16 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpLocalizationContext;
+import com.soklet.McpRequestContext;
+import com.soklet.McpRequestOutcome;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.lang.reflect.Proxy;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,6 +98,60 @@ public class McpStaticResponsePreflightTests {
 		});
 	}
 
+	@Test
+	public void explicit_catalog_access_bypasses_unfiltered_preflight_and_serves_visible_entries()
+			throws Exception {
+		String largeDescription = "x".repeat(TEST_OUTPUT_LIMIT * 2);
+		McpJsonObject descriptorFields = new McpJsonObject(Map.of(
+				"description", new McpJsonString(largeDescription)));
+		McpJsonObject objectSchema = new McpJsonObject(Map.of(
+				"type", new McpJsonString("object")));
+		McpNormalizedToolDescriptor hiddenTool = new McpNormalizedToolDescriptor(
+				"hidden-tool", objectSchema, Optional.empty(), descriptorFields,
+				McpJsonObject.empty());
+		McpNormalizedPromptDescriptor hiddenPrompt =
+				new McpNormalizedPromptDescriptor("hidden-prompt", List.of(),
+						descriptorFields, McpJsonObject.empty());
+		McpNormalizedEndpoint endpoint = endpointBuilder()
+				.tool(McpNormalizedOperation.named("visible-tool"))
+				.tool(McpNormalizedOperation.tool(hiddenTool,
+						McpMirroredHeaderPlan.empty()))
+				.prompt(McpNormalizedOperation.named("visible-prompt"))
+				.prompt(hiddenPrompt)
+				.catalogAccessAdapter(ignored ->
+						new McpServerRuntimeBridge.CatalogAccessSession() {
+							@Override
+							public boolean isToolAccessible(@NonNull String toolName) {
+								return "visible-tool".equals(toolName);
+							}
+
+							@Override
+							public boolean isPromptAccessible(
+									@NonNull String promptName) {
+								return "visible-prompt".equals(promptName);
+							}
+
+							@Override
+							@NonNull
+							public Optional<@NonNull McpLocalizationContext>
+									localizationContext() {
+								return Optional.empty();
+							}
+						})
+				.build();
+
+		try (McpHttpServerRuntime runtime = runtime(endpoint)) {
+			int port = runtime.start().getPort();
+			String tools = listResponse(port, "tools-list", "tools/list");
+			Assertions.assertTrue(tools.contains("visible-tool"), tools);
+			Assertions.assertFalse(tools.contains("hidden-tool"), tools);
+
+			String prompts = listResponse(port, "prompts-list", "prompts/list");
+			Assertions.assertTrue(prompts.contains("visible-prompt"), prompts);
+			Assertions.assertFalse(prompts.contains("hidden-prompt"), prompts);
+		}
+	}
+
 	private static void assertPreflightFailure(McpNormalizedEndpoint endpoint,
 			String method) {
 		IllegalArgumentException exception = Assertions.assertThrows(
@@ -108,6 +168,17 @@ public class McpStaticResponsePreflightTests {
 						"static-preflight-test", "4.0.0"));
 	}
 
+	private static String listResponse(int port, String id, String method)
+			throws Exception {
+		try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcp(
+				port, "\"" + id + "\"", method)) {
+			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+			String body = client.readFixedBody(head);
+			Assertions.assertEquals(200, head.status(), body);
+			return body;
+		}
+	}
+
 	private static McpHttpServerRuntime runtime(McpNormalizedEndpoint endpoint) {
 		McpJsonLimits production = McpJsonLimits.productionDefaults();
 		McpJsonLimits limits = new McpJsonLimits(production.maximumInputBytes(),
@@ -117,13 +188,48 @@ public class McpStaticResponsePreflightTests {
 				production.maximumNumberLengthInCharacters(),
 				production.maximumExponentMagnitude(), production.maximumNodeCount(),
 				TEST_OUTPUT_LIMIT);
+		McpHttpEndpointPolicy endpointPolicy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				ignored -> McpAdmissionDecision.acceptedAnonymous());
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(endpointPolicy,
+				endpoint, McpApplicationRequestRouter.empty(),
+				observationWithPublicContext());
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
-				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
-						ignored -> McpAdmissionDecision.acceptedAnonymous()),
-				endpoint, limits, McpApplicationRequestRouter.empty(),
+				List.of(binding), limits,
 				McpApplicationExecutionConfiguration.productionDefaults(),
 				McpApplicationClock.SYSTEM,
-				McpApplicationHandlerExecutorFactory.production());
+				McpApplicationHandlerExecutorFactory.production(), ignored -> {},
+				ignored -> {});
+	}
+
+	private static McpRuntimeObservationSink observationWithPublicContext() {
+		McpRequestContext context = (McpRequestContext) Proxy.newProxyInstance(
+				McpRequestContext.class.getClassLoader(),
+				new Class<?>[]{McpRequestContext.class},
+				(proxy, method, arguments) -> {
+					if (method.getReturnType() == Optional.class)
+						return Optional.empty();
+					if (method.getReturnType() == Map.class)
+						return Map.of();
+					if (method.getReturnType() == String.class)
+						return "static-preflight-test";
+					if (method.getReturnType() == boolean.class)
+						return false;
+					return null;
+				});
+		return ignored -> new McpRuntimeRequestObservation() {
+			@Override
+			@NonNull
+			public Optional<@NonNull McpRequestContext> publicContext() {
+				return Optional.of(context);
+			}
+
+			@Override
+			public void didFinish(@NonNull McpRequestOutcome outcome,
+					McpJsonRpcError error, @NonNull Duration duration,
+					@NonNull List<@NonNull Throwable> throwables) {
+			}
+		};
 	}
 }

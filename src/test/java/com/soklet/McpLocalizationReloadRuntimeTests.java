@@ -494,7 +494,7 @@ class McpLocalizationReloadRuntimeTests {
 	void mixedLocalizedEndpointsShareOnePublisherAndFanOutToEveryEndpoint() {
 		CountingPublisher publisher = new CountingPublisher();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-				.withEventPublisher(publisher, EnumSet.of(
+				.withEventPublisherAndNotificationTypes(publisher, EnumSet.of(
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		List<McpEndpoint> endpoints = List.of(
@@ -753,7 +753,7 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static McpSubscriptionConfig subscriptions() {
 		return McpSubscriptionConfig
-				.withEventPublisher(
+				.withEventPublisherAndNotificationTypes(
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						EnumSet.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))

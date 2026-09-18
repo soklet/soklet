@@ -66,6 +66,9 @@ final class McpNormalizedEndpoint {
 	private final int maximumCursorSizeInBytes;
 	@NonNull
 	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig;
+	@NonNull
+	private final Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter>
+			catalogAccessAdapter;
 
 	@NonNull
 	static Builder withServerInformation(@NonNull McpImplementationMetadata serverInformation) {
@@ -100,6 +103,7 @@ final class McpNormalizedEndpoint {
 		this.resourceTemplateListCachePolicy = builder.resourceTemplateListCachePolicy;
 		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
 		this.subscriptionConfig = builder.subscriptionConfig;
+		this.catalogAccessAdapter = builder.catalogAccessAdapter;
 
 		if (this.subscriptionConfig
 				.map(configuration -> !configuration.notificationTypes().isEmpty())
@@ -178,6 +182,12 @@ final class McpNormalizedEndpoint {
 	@NonNull
 	Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig() {
 		return subscriptionConfig;
+	}
+
+	@NonNull
+	Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter>
+			catalogAccessAdapter() {
+		return catalogAccessAdapter;
 	}
 
 	boolean hasResourceSurface() {
@@ -320,6 +330,9 @@ final class McpNormalizedEndpoint {
 		private int maximumCursorSizeInBytes;
 		@NonNull
 		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptionConfig;
+		@NonNull
+		private Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter>
+				catalogAccessAdapter;
 
 		private Builder(@NonNull McpImplementationMetadata serverInformation) {
 			this.serverInformation = requireNonNull(serverInformation);
@@ -338,6 +351,7 @@ final class McpNormalizedEndpoint {
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.subscriptionConfig = Optional.empty();
+			this.catalogAccessAdapter = Optional.empty();
 		}
 
 		@NonNull
@@ -483,6 +497,15 @@ final class McpNormalizedEndpoint {
 		Builder subscriptionConfig(
 				@NonNull McpNormalizedSubscriptionConfiguration subscriptionConfig) {
 			this.subscriptionConfig = Optional.of(requireNonNull(subscriptionConfig));
+			return this;
+		}
+
+		@NonNull
+		Builder catalogAccessAdapter(
+				McpServerRuntimeBridge.@NonNull CatalogAccessAdapter
+						catalogAccessAdapter) {
+			this.catalogAccessAdapter = Optional.of(
+					requireNonNull(catalogAccessAdapter));
 			return this;
 		}
 

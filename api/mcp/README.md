@@ -32,8 +32,8 @@ compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 653 records and has SHA-256
-`65dadff569a4ebc708ba35b5ccc9fad5b8f2d370d740077c72a578f81ed96d65`.
+4.0.0 source tree. It currently contains 654 records and has SHA-256
+`9317f7a5782062e0bd1dbf9512d0744fb97bef9a27992ce2d4707a08ba8a398f`.
 The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
@@ -59,13 +59,33 @@ whose containing public type remains part of Soklet.
 
 ## 4.0 catalog compatibility boundary
 
-After admission, static `tools/list` and `prompts/list` catalogs are immutable
-and caller-neutral; Soklet does not authorization-filter their descriptors. A
-registered tool remains listed when it declares a required client capability,
-but the matching call can receive `-32021` before admission when that capability
-is absent. These list responses retain private, zero-TTL protocol cache hints
-and HTTP `Cache-Control: no-store`; this list/call distinction is not an
-authorization boundary or a promise of ETag-based dynamic catalogs.
+Without an explicitly configured `McpCatalogAccessPolicy`, static `tools/list`
+and `prompts/list` catalogs remain immutable and caller-neutral. With one,
+Soklet evaluates the registered superset for each admitted request, filters
+lists in registration order, and applies the same visibility boundary to
+direct tool and prompt access. Caller-specific projections bypass shared
+framework-response and serialized-document caches, retain private zero-TTL
+protocol hints, and use HTTP `Cache-Control: no-store`. Hidden and unknown
+direct names remain indistinguishable at the response and limiter boundary.
+For framework-protected retries, authenticated continuation and localization-
+context preparation precede the evaluator so policy and handler can share the
+same verified, pinned context. A protected-state preparation failure remains
+latent until the policy permits the target. A localization-context creation
+failure uses the fixed redacted internal-error path; tool limiters and
+registration-specific validation still occur only after a successful policy
+decision. Policy callbacks use bounded application execution and the request's
+absolute deadline: queued ownership maps to correlated HTTP 503/JSON-RPC
+`-32603`, active ownership maps to correlated HTTP 504/`-32603`, and deadline or
+forced stop prevents entry into any later evaluator. Forced stop fixes
+`SERVER_STOPPING` and signals queued/active policy work before application
+cancelation callbacks can delay dispatcher shutdown. Explicit-policy
+tool/prompt aggregate limits are enforced fail-atomically on the exact filtered
+projection; resource catalog startup limits remain unchanged.
+
+Completed-task result reauthorization runs inside the active `tasks/get`
+application Exchange with that Exchange's cancelation token and absolute
+deadline. A post-evaluator active-state fence prevents sanitizer entry after
+deadline or stop even if a callback absorbs interruption and returns allow.
 
 ## Reviewed ownership
 
@@ -74,20 +94,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
+| `phase-4.includes` | 136 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 64 | frozen Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
 | `non-mcp-public-api.allowlist` | 61 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, and value-converter owners |
 
-The 247-entry MCP union plus the 61-entry non-MCP allowlist owns exactly 308 current types.
+The 250-entry MCP union plus the 61-entry non-MCP allowlist owns exactly 311 current types.
 Ownership alone does not freeze a type. The three phase snapshots freeze their
 phase inventories, and the separate `provisional.signatures.jsonl` snapshot
 now freezes the 14 Tasks owners while retaining their explicit provisional
 maturity classification.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`5078bbafc91268306b8a6f032e648a02db0e35c1efc3e5a4ba8dc1c662323979`,
+`239076145534dae18826ec6184414fb016fd89394f59c213161c305da98bdecd`,
 `0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`,
 and
 `29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
@@ -100,18 +120,17 @@ compatibility inventory.
 
 ## Current local evidence
 
-The [2026-09-16 Roots and Sampling removal amendment](phase-4-freeze-rationale.md#2026-09-16-roots-and-sampling-removal-amendment)
-records the owner's explicit removal decision for nine public members while
-retaining form/URL Elicitation and shared request-state machinery. The current
-Phase 4/5/6 and provisional signature counts are 1,119/195/425/98. The owner
-partition remains 133/36/64/14 plus 61 non-MCP owners (308 total), and the
-released-artifact incompatibility ledger remains at 653 records. Phase 4 and
-Phase 5 signature SHA-256 values are
-`ed4a7c16caa71602558e83964946b4403e856e939d7f0d3b92da74fccdaea97a` and
-`5173902c25e8610b2daa38f6aaa3c2d3cf4b244e20fe5f63061845b859716f3a`.
+The [2026-09-17 catalog-policy foundation and required-collection amendment](phase-4-freeze-rationale.md#2026-09-17-catalog-policy-foundation-and-required-collection-amendment)
+and [subscription required-collection amendment](phase-5-freeze-rationale.md#2026-09-17-subscription-required-collection-amendment)
+record the latest reviewed snapshots. The current Phase 4/5/6 and provisional
+signature counts are 1,130/194/425/98. The owner partition is 136/36/64/14 plus
+61 non-MCP owners (311 total), and the released-artifact incompatibility ledger
+contains 654 records. Phase 4 and Phase 5 signature SHA-256 values are
+`97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23` and
+`c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9`.
 Their reflection/nullability SHA-256 values are respectively
-`b7c2c5340cb8b1105c1fdbe8f6d43306572df0717086b9c4d238f8ba5017a0de` and
-`5313e39d3809ae81b4d664838bb6690a5d677d1e388547422b2d52ec88f2230c`.
+`3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539` and
+`b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed`.
 Fresh local JAR/japicmp reports match all four signature snapshots and the
 complete owner inventory. The public-evolution gate retains 17 lifecycle
 entries, including 11 explicit removals, and tests each removed member against
@@ -423,13 +442,13 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl`
-freezes 1,135 canonical records across all 134 selected owners: 134 classes,
-one constructor, 96 fields, and 904 methods. Its SHA-256 is
-`648c5167a2366cf1c5b762b77cb7729eaad2824b9bfe06dbc1f726d449fdc643`.
-`phase-5.signatures.jsonl` freezes 200 canonical records across all 36
-selected owners: 36 classes, zero constructors, 19 fields, and 145 methods.
+freezes 1,130 canonical records across all 136 selected owners: 136 classes,
+one constructor, 84 fields, and 909 methods. Its SHA-256 is
+`97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23`.
+`phase-5.signatures.jsonl` freezes 194 canonical records across all 36
+selected owners: 36 classes, zero constructors, 17 fields, and 141 methods.
 Its SHA-256 is
-`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`.
+`c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9`.
 `phase-6.signatures.jsonl` freezes 425 canonical records across all 64
 selected owners: 64 classes, zero constructors, 41 fields, and 320 methods.
 Its SHA-256 is
@@ -439,8 +458,8 @@ the 14 Tasks owners: 14 classes, one constructor, five fields, and 78 methods.
 Its SHA-256 is
 `70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743`.
 The Phase 4/5/6 reflection/nullability digests are respectively
-`4ae05a45303bda3f3bcfd2d8d1aec52cd96c27d1e30e2feae3a4931e5e9cd51a`,
-`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`,
+`3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539`,
+`b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed`,
 and
 `10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926`.
 
@@ -1614,18 +1633,18 @@ reviewed file.
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-648 reviewed incompatibilities across 307 owners: 248 MCP and 59 non-MCP.
+654 reviewed incompatibilities across 311 owners: 250 MCP and 61 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories
-contain 1,135 Phase 4, 200 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
-134 classes, one constructor, 96 fields, and 904 methods, with SHA-256
-`b698f2b5c00fb191271981f4e15f8543fe098e4ba25ea78644f9ba3dd968f935`
+contain 1,130 Phase 4, 194 Phase 5, and 425 Phase 6 signatures. Phase 4 contains
+136 classes, one constructor, 84 fields, and 909 methods, with SHA-256
+`97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23`
 and exact nullability digest
-`001ede5a669005234e61b5104c5ac55bfcd1d673912f058e30d3b2aed0fb8e88`.
-Phase 5 contains 36 classes, zero constructors, 19 fields, and 145 methods,
+`3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539`.
+Phase 5 contains 36 classes, zero constructors, 17 fields, and 141 methods,
 with SHA-256
-`950f74970a85fe8e6031bed329d291a381a4c6d29adfba5241a817cb835f6729`
+`c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9`
 and exact nullability digest
-`79d372fb5fafa50274bad0a2561a81cf282a379618d47317b518d1073e85367d`.
+`b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed`.
 Phase 6 contains 64 classes, zero constructors, 41 fields, and 320 methods,
 with SHA-256
 `06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f`
@@ -2683,3 +2702,28 @@ now contains 60 owners with SHA-256
 the exact current-side union contains 308 owners. The Phase 4/5/6 and provisional
 Tasks signature snapshots are unchanged. The immutable Phase 0 ledger and
 historical D1p evidence retain their original symbols and seals.
+
+### 2026-09-17 upcoming MCP catalog-policy implementation slice
+
+The owner-authorized catalog-policy slice adds three Phase 4 owners:
+`McpCatalogAccessPolicy` and its nested evaluator interfaces, plus the
+`McpServer` getter and nullable builder setter that opt into caller-aware
+dispatch. The runtime filters tool and prompt lists, protects direct access,
+rechecks completed-task origins before output sanitization, carries one request
+and localization context through policy and handlers, and executes policy work
+on the bounded application dispatcher. Completed-task reauthorization uses the
+active application Exchange's cancelation token and deadline and is fenced
+again after evaluator return before sanitization. The same slice implements the
+approved nonempty resource-output list factories/replacement setter and removes
+its additive methods, renames the subscription-config factory to
+`withEventPublisherAndNotificationTypes`, and removes `addNotificationType`.
+
+The exact amendments are recorded in the Phase 4/5 freeze rationales. Current
+snapshots contain 1,130 Phase 4 and 194 Phase 5 signatures; Phase 6 (425) and
+provisional Tasks (98) remain unchanged. The reviewed owner universe is now
+250 MCP plus 61 non-MCP owners. The released-3.5.1 incompatibility ledger is
+now 654 records because the getter is an added interface method. Historical
+freezes and candidate receipts are not rewritten. Caller-aware catalog-change
+notifications and reauthorization, Completion, Apps, Skills, and remaining
+approved cleanup still require their own implementation and fresh qualification
+evidence.

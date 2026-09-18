@@ -92,6 +92,42 @@ class McpLocalizationMrtrRuntimeTests {
 	}
 
 	@Test
+	void explicitCatalogPolicyUsesTheVerifiedContinuationContext() {
+		Capture initial = call(localizer(new CopyOnWriteArrayList<>(),
+				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
+				request("policy-mint", ""));
+		String state = extractRequestState(initial.body());
+
+		List<Optional<Locale>> observed = new CopyOnWriteArrayList<>();
+		AtomicInteger policyInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicReference<Locale> policyLocale = new AtomicReference<>();
+		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
+				(context, registration, features) -> {
+					policyInvocations.incrementAndGet();
+					policyLocale.set(features.find(McpLocalizationContext.class)
+							.orElseThrow().getLocale());
+					return true;
+				}, (context, registration, features) -> true);
+
+		Capture retry = call(localizer(observed,
+				continuation -> continuation.orElseThrow()), handlerInvocations,
+				request("policy-retry", ",\"requestState\":\"" + state + "\""),
+				policy);
+
+		assertEquals(200, retry.statusCode(), retry.body());
+		assertTrue(retry.body().contains("\"resultType\":\"complete\""),
+				retry.body());
+		assertTrue(retry.body().contains("locale:fr-CA"), retry.body());
+		assertEquals(List.of(Optional.of(Locale.CANADA_FRENCH)), observed,
+				"The provider must see the locale from verified request state.");
+		assertEquals(Locale.CANADA_FRENCH, policyLocale.get(),
+				"Policy must receive the pinned localization context.");
+		assertEquals(1, policyInvocations.get());
+		assertEquals(1, handlerInvocations.get());
+	}
+
+	@Test
 	void aContextReportingADifferentLocaleFailsBeforeHandlerEntry() {
 		Capture initial = call(localizer(new CopyOnWriteArrayList<>(),
 				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
@@ -224,6 +260,12 @@ class McpLocalizationMrtrRuntimeTests {
 
 	private static Capture call(McpLocalizer localizer,
 			AtomicInteger handlerInvocations, Request request) {
+		return call(localizer, handlerInvocations, request, null);
+	}
+
+	private static Capture call(McpLocalizer localizer,
+			AtomicInteger handlerInvocations, Request request,
+			McpCatalogAccessPolicy catalogAccessPolicy) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 		McpEndpoint endpoint = endpoint(handlerInvocations);
 
@@ -234,6 +276,8 @@ class McpLocalizationMrtrRuntimeTests {
 							McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 							.admissionController(
 									McpAdmissionController.acceptAllInstance());
+					if (catalogAccessPolicy != null)
+						builder.catalogAccessPolicy(catalogAccessPolicy);
 					configureServer(builder, localizer);
 				})
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
