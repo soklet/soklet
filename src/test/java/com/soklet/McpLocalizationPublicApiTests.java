@@ -100,7 +100,7 @@ public class McpLocalizationPublicApiTests {
 						"fromEndpointRegistry(com.soklet.McpEndpointRegistry)",
 						"getTexts()",
 						"hashCode()")),
-				Map.entry(McpLocalizationControl.class, Set.of(
+				Map.entry(McpLocalizationCatalogInvalidator.class, Set.of(
 						"invalidateCatalogs()", "isEnabled()")),
 				Map.entry(McpLocalizableText.class, Set.of(
 						"equals(java.lang.Object)",
@@ -170,7 +170,7 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationResult.Failure.class,
 				McpLocalizationRevision.class,
 				McpLocalizationCatalog.class,
-				McpLocalizationControl.class,
+				McpLocalizationCatalogInvalidator.class,
 				McpLocalizableText.class,
 				McpTextCoordinate.class);
 
@@ -460,10 +460,10 @@ public class McpLocalizationPublicApiTests {
 				() -> McpLocalizationCatalog.fromEndpointRegistry(null));
 
 		McpServer disabled = serverBuilder(registry).build();
-		McpLocalizationControl disabledControl =
-				disabled.getLocalizationControl();
+		McpLocalizationCatalogInvalidator disabledControl =
+				disabled.getLocalizationCatalogInvalidator();
 		Assertions.assertSame(disabledControl,
-				disabled.getLocalizationControl());
+				disabled.getLocalizationCatalogInvalidator());
 		Assertions.assertFalse(disabledControl.isEnabled());
 		Assertions.assertTrue(((DefaultMcpServer) disabled).localizer().isEmpty());
 		Assertions.assertThrows(IllegalStateException.class,
@@ -472,10 +472,13 @@ public class McpLocalizationPublicApiTests {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
 				request -> context(Locale.ENGLISH))
 				.build();
-		McpServer enabled = serverBuilder(registry).localizer(localizer).build();
+		McpServer enabled = serverBuilder(registry).localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
+				.build();
 		Soklet enabledSoklet = managedSoklet(enabled);
-		McpLocalizationControl enabledControl = enabled.getLocalizationControl();
-		Assertions.assertSame(enabledControl, enabled.getLocalizationControl());
+		McpLocalizationCatalogInvalidator enabledControl = enabled.getLocalizationCatalogInvalidator();
+		Assertions.assertSame(enabledControl, enabled.getLocalizationCatalogInvalidator());
 		Assertions.assertNotSame(disabledControl, enabledControl);
 		Assertions.assertTrue(enabledControl.isEnabled());
 		Assertions.assertSame(localizer,
@@ -487,16 +490,19 @@ public class McpLocalizationPublicApiTests {
 				enabledControl::invalidateCatalogs);
 
 		McpServer anotherEnabled = serverBuilder(registry)
-				.localizer(localizer).build();
+				.localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
+				.build();
 		Assertions.assertNotSame(enabledControl,
-				anotherEnabled.getLocalizationControl());
-		Assertions.assertTrue(anotherEnabled.getLocalizationControl().isEnabled());
+				anotherEnabled.getLocalizationCatalogInvalidator());
+		Assertions.assertTrue(anotherEnabled.getLocalizationCatalogInvalidator().isEnabled());
 
 		McpServer cleared = serverBuilder(registry)
 				.localizer(localizer)
 				.localizer(null)
 				.build();
-		Assertions.assertFalse(cleared.getLocalizationControl().isEnabled());
+		Assertions.assertFalse(cleared.getLocalizationCatalogInvalidator().isEnabled());
 		Assertions.assertTrue(((DefaultMcpServer) cleared).localizer().isEmpty());
 	}
 

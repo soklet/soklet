@@ -514,3 +514,19 @@ Its reflection/nullability SHA-256 is
 Current examples and the public conformance fixture use the renamed factory.
 Historical freezes, candidate receipts, and the released-3.5.1 incompatibility
 ledger are not rewritten.
+
+## 2026-09-18 P1b current-source foundation; no refreeze
+
+The P1b authorization, reconciliation, notification-event, and configuration
+value surface is now present in current source. Phase 5 owns 45 current-source
+types; `phase-5.includes` has SHA-256
+`bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
+and the focused current-source reflection/nullability SHA-256 is
+`99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0`.
+
+This is deliberately not a Phase 5 refreeze. `phase-5.signatures.jsonl` and
+`current-incompatibilities.jsonl` retain their last reviewed pre-P1b bytes
+until P0-C is dispositioned and MCP-G2 authorizes regeneration and review.
+Current-source ownership and evolution evidence does not replace those frozen
+ledgers. The reconciler is still a no-op, authorization callbacks and their
+timeouts are not invoked, and tool/prompt events are not routed.

@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "c269ded8a3f57cf5aa4bd4690199fa374eceb634b7d5213c02b835f745f20712"
+      "sha256": "043c09e97139ae3d11189ef18118e4bedf23cbb5ed753b187080904963b71645"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -59,7 +59,7 @@
     },
     "nodePin": {
       "path": "conformance/official/upstream-pins.json",
-      "sha256": "0bc9322e48adbf8bbd58ce6ffb47a260f0577d55a35a78e6c31bc21a937369a3"
+      "sha256": "2af12649ecac962ac797ada04733eb24f573335a0e9cfd0f8828d2f33f7c01e8"
     },
     "releaseSoakTimeoutSeconds": 3600,
     "toystoreJava": {

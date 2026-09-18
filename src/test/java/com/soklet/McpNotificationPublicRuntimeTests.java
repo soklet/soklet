@@ -347,6 +347,8 @@ public class McpNotificationPublicRuntimeTests {
 	private static McpServer.Builder baseServerBuilder(
 			McpServer.@NonNull Builder builder) {
 		return builder.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

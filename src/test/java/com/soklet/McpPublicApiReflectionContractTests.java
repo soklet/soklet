@@ -84,16 +84,16 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 136;
-	private static final int PHASE_FIVE_TYPE_COUNT = 36;
-	private static final int PHASE_SIX_TYPE_COUNT = 64;
+	private static final int PHASE_FIVE_TYPE_COUNT = 45;
+	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 250;
+	private static final int CURRENT_MCP_TYPE_COUNT = 262;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539";
+			"2ccce8e3de9c7f3860bdeec071727eb27875b1996d4f410c4edaf9299a1525ee";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed";
+			"99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"10bf7fdcdad57c06a81020dab7cd8f3a1310389e239b2af9de7827281782a926";
+			"e22c399269061efd7fc48e52559699610adcb555ad43f58d05bfc914a5b97da9";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -160,9 +160,14 @@ public class McpPublicApiReflectionContractTests {
 							List.of("IGNORE", "REJECT_REQUESTS")));
 	private static final Map<String, Set<String>> PHASE_FIVE_PERMITTED_TYPES =
 			Map.of(
+					"com.soklet.McpSubscriptionAuthorization", Set.of(
+							"com.soklet.McpSubscriptionAuthorization$Allowed",
+							"com.soklet.McpSubscriptionAuthorization$Denied"),
 					"com.soklet.McpSubscriptionEvent", Set.of(
+							"com.soklet.McpSubscriptionEvent$PromptsListChanged",
 							"com.soklet.McpSubscriptionEvent$ResourceUpdated",
-							"com.soklet.McpSubscriptionEvent$ResourcesListChanged"));
+							"com.soklet.McpSubscriptionEvent$ResourcesListChanged",
+							"com.soklet.McpSubscriptionEvent$ToolsListChanged"));
 	private static final Set<String> PHASE_FIVE_NON_SEALED_TYPES = Set.of();
 	private static final Map<String, List<String>> PHASE_FIVE_MCP_ENUM_VALUES =
 			Map.ofEntries(
@@ -178,7 +183,8 @@ public class McpPublicApiReflectionContractTests {
 					Map.entry("com.soklet.McpRequestStateProtectionException$Reason",
 							List.of("INVALID_STATE", "PROTECTOR_UNAVAILABLE")),
 					Map.entry("com.soklet.McpSubscriptionNotificationType",
-							List.of("RESOURCES_LIST_CHANGED", "RESOURCE_UPDATED")));
+							List.of("RESOURCES_LIST_CHANGED", "RESOURCE_UPDATED",
+									"TOOLS_LIST_CHANGED", "PROMPTS_LIST_CHANGED")));
 	private static final Map<String, Object> PHASE_FIVE_SCALAR_CONSTANTS =
 			Map.of(
 					"com.soklet.McpProtectionKeyringFingerprint#PROFILE",
@@ -212,6 +218,7 @@ public class McpPublicApiReflectionContractTests {
 							"com.soklet.McpMetricsEvent$ServerStarted",
 							"com.soklet.McpMetricsEvent$ServerStopped",
 							"com.soklet.McpMetricsEvent$SubscriptionClosed",
+							"com.soklet.McpMetricsEvent$SubscriptionMaintenance",
 							"com.soklet.McpMetricsEvent$SubscriptionOpened",
 							"com.soklet.McpMetricsEvent$TransportFailure",
 							"com.soklet.McpMetricsEvent$UnknownMirroredHeader"));
@@ -227,8 +234,12 @@ public class McpPublicApiReflectionContractTests {
 			McpRateLimitDecision.Denied.class,
 			McpInputRequest.class,
 			McpInputRequestDeclaration.class,
+			McpSubscriptionAuthorization.Allowed.class,
+			McpSubscriptionAuthorization.Denied.class,
+			McpSubscriptionEvent.PromptsListChanged.class,
 			McpSubscriptionEvent.ResourceUpdated.class,
 			McpSubscriptionEvent.ResourcesListChanged.class,
+			McpSubscriptionEvent.ToolsListChanged.class,
 			McpLocalizationResult.Failure.class,
 			McpLocalizationResult.Localized.class,
 			McpLocalizationResult.UseDefaultText.class,
@@ -252,6 +263,7 @@ public class McpPublicApiReflectionContractTests {
 			McpMetricsEvent.ServerStarted.class,
 			McpMetricsEvent.ServerStopped.class,
 			McpMetricsEvent.SubscriptionClosed.class,
+			McpMetricsEvent.SubscriptionMaintenance.class,
 			McpMetricsEvent.SubscriptionOpened.class,
 			McpMetricsEvent.TransportFailure.class,
 			McpMetricsEvent.UnknownMirroredHeader.class,
@@ -280,10 +292,10 @@ public class McpPublicApiReflectionContractTests {
 		List<String> expectedPhaseSixTypes = List.of(
 				"com.soklet.McpLocalizableText",
 				"com.soklet.McpLocalizationCatalog",
+				"com.soklet.McpLocalizationCatalogInvalidator",
 				"com.soklet.McpLocalizationContext",
 				"com.soklet.McpLocalizationContext$Builder",
 				"com.soklet.McpLocalizationContextProvider",
-				"com.soklet.McpLocalizationControl",
 				"com.soklet.McpLocalizationFailurePolicy",
 				"com.soklet.McpLocalizationLookup",
 				"com.soklet.McpLocalizationRequest",
@@ -315,6 +327,9 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpMetricsEvent$ServerStarted",
 				"com.soklet.McpMetricsEvent$ServerStopped",
 				"com.soklet.McpMetricsEvent$SubscriptionClosed",
+				"com.soklet.McpMetricsEvent$SubscriptionMaintenance",
+				"com.soklet.McpMetricsEvent$SubscriptionMaintenance$Outcome",
+				"com.soklet.McpMetricsEvent$SubscriptionMaintenance$Work",
 				"com.soklet.McpMetricsEvent$SubscriptionOpened",
 				"com.soklet.McpMetricsEvent$TransportFailure",
 				"com.soklet.McpMetricsEvent$UnknownMirroredHeader",
@@ -370,11 +385,19 @@ public class McpPublicApiReflectionContractTests {
 		Method localizer = assertInstanceMethod(McpServer.Builder.class,
 				"localizer", McpServer.Builder.class, MethodShape.CONCRETE,
 				false, McpLocalizer.class);
-		Method localizationControl = assertInstanceMethod(McpServer.class,
-				"getLocalizationControl", McpLocalizationControl.class,
+		Method localizationCatalogInvalidator = assertInstanceMethod(McpServer.class,
+				"getLocalizationCatalogInvalidator", McpLocalizationCatalogInvalidator.class,
+				MethodShape.ABSTRACT, false);
+		Method subscriptionAuthorizer = assertInstanceMethod(McpServer.class,
+				"getSubscriptionAuthorizer", McpSubscriptionAuthorizer.class,
+				MethodShape.ABSTRACT, false);
+		Method subscriptionReconciler = assertInstanceMethod(McpServer.class,
+				"getSubscriptionReconciler", McpSubscriptionReconciler.class,
 				MethodShape.ABSTRACT, false);
 		assertErasedGenericSignature(localizer);
-		assertErasedGenericSignature(localizationControl);
+		assertErasedGenericSignature(localizationCatalogInvalidator);
+		assertErasedGenericSignature(subscriptionAuthorizer);
+		assertErasedGenericSignature(subscriptionReconciler);
 		assertParameterNames(localizer, "localizer");
 	}
 
@@ -387,7 +410,8 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void revisionTwoConstructionAndBuilderNullabilityRemainExact()
 			throws Exception {
-		Map<Class<?>, Set<String>> expectedNullableBuilderMethods = Map.of(
+		Map<Class<?>, Set<String>> expectedNullableBuilderMethods =
+				new java.util.LinkedHashMap<>(Map.of(
 				McpServer.Builder.class, Set.of(
 						"absentOriginPolicy", "admissionController", "allowedHosts",
 						"catalogAccessPolicy",
@@ -398,6 +422,7 @@ public class McpPublicApiReflectionContractTests {
 						"maximumCursorSizeInBytes", "maximumHeaderCount",
 						"maximumHeadersSizeInBytes", "maximumRequestSizeInBytes",
 						"maximumRequestTargetLengthInBytes",
+						"maximumSubscriptionAuthorizationDuration",
 						"maximumSubscriptionDuration",
 						"maximumSubscriptionsPerPartition", "protectionConfig",
 						"rateLimiterRegistry", "requestHandlerConcurrency",
@@ -405,7 +430,9 @@ public class McpPublicApiReflectionContractTests {
 						"requestHandlerQueueCapacity", "requestRateLimiter",
 						"requestBodyTimeout", "requestHeaderTimeout",
 						"requestReadBufferSizeInBytes", "requestTimeout",
-						"streamQueueCapacity",
+						"streamQueueCapacity", "subscriptionAuthorizationTimeout",
+						"subscriptionAuthorizer",
+						"subscriptionCatalogProjectionTimeout",
 						"taskManager", "toolOutputSanitizer", "toolRateLimiter",
 						"traceCorrelationKey", "unknownMirroredHeaderNameDiagnostics",
 						"unknownMirroredHeaderPolicy", "writeTimeout"),
@@ -435,7 +462,10 @@ public class McpPublicApiReflectionContractTests {
 				McpLocalizer.Builder.class, Set.of("failurePolicy",
 						"maximumLocalizableTextCountPerResponse"),
 				McpTokenBucketConfig.Builder.class, Set.of(
-						"refillInterval", "refillTokens"));
+						"refillInterval", "refillTokens")));
+		expectedNullableBuilderMethods.put(
+				McpSubscriptionAuthorization.Allowed.Builder.class,
+				Set.of("applicationContext"));
 		Set<Class<?>> actualNullableBuilderTypes = publicMcpTypes().stream()
 				.filter(type -> type.getSimpleName().endsWith("Builder"))
 				.filter(type -> Arrays.stream(type.getDeclaredMethods())
@@ -683,6 +713,18 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterNames(McpServer.Builder.class.getMethod(
 				"logRawValidatedTraceIds", Boolean.class),
 				"logRawValidatedTraceIds");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"subscriptionAuthorizer", McpSubscriptionAuthorizer.class),
+				"subscriptionAuthorizer");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"subscriptionCatalogProjectionTimeout", Duration.class),
+				"subscriptionCatalogProjectionTimeout");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"subscriptionAuthorizationTimeout", Duration.class),
+				"subscriptionAuthorizationTimeout");
+		assertParameterNames(McpServer.Builder.class.getMethod(
+				"maximumSubscriptionAuthorizationDuration", Duration.class),
+				"maximumSubscriptionAuthorizationDuration");
 		for (Class<?> builderType : List.of(
 				McpToolRegistration.OperationBuilder.class,
 				McpToolRegistration.CompleteBuilder.class)) {
@@ -907,6 +949,10 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void phaseFiveExtensionPointParameterNamesRetainTheirDocumentedOrder()
 			throws Exception {
+		assertParameterNames(McpSubscriptionAuthorizer.class.getMethod(
+				"authorize", McpSubscriptionAuthorizationContext.class,
+				McpInvocationFeatures.class),
+				"subscriptionAuthorizationContext", "invocationFeatures");
 		assertParameterNames(McpProgressReporter.class.getMethod("report",
 				McpProgressUpdate.class), "update");
 		assertParameterNames(McpProtectionControl.class.getMethod(
@@ -932,6 +978,10 @@ public class McpPublicApiReflectionContractTests {
 				"publish", McpSubscriptionEvent.class), "event");
 		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
 				"publishResourceUpdated", java.net.URI.class), "resourceUri");
+		assertParameterNames(
+				McpSubscriptionAuthorization.Allowed.Builder.class.getMethod(
+						"applicationContext", Object.class),
+				"applicationContext");
 	}
 
 	@Test
@@ -953,7 +1003,7 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void publicMcpValueCarriersRemainEncapsulatedFinalClasses()
 			throws Exception {
-		Assertions.assertEquals(43, FORMER_PUBLIC_RECORD_TYPES.size(),
+		Assertions.assertEquals(48, FORMER_PUBLIC_RECORD_TYPES.size(),
 				"The reviewed surviving former-record carrier inventory changed");
 		Assertions.assertEquals(FORMER_PUBLIC_RECORD_TYPES.size(),
 				Set.copyOf(FORMER_PUBLIC_RECORD_TYPES).size(),
@@ -1087,12 +1137,29 @@ public class McpPublicApiReflectionContractTests {
 				List.of("endpointPath", "protocolVersion", "jsonRpcMethod",
 						"associatedData"),
 				String.class, String.class, String.class, byte[].class);
+		assertFactory(McpSubscriptionAuthorization.class, "deniedInstance",
+				McpSubscriptionAuthorization.Denied.class, List.of());
+		assertFactory(McpSubscriptionAuthorization.Allowed.class,
+				"fromValidUntil", McpSubscriptionAuthorization.Allowed.class,
+				List.of("validUntil"), java.time.Instant.class);
+		assertFactory(McpSubscriptionAuthorization.Allowed.class,
+				"withValidUntil",
+				McpSubscriptionAuthorization.Allowed.Builder.class,
+				List.of("validUntil"), java.time.Instant.class);
+		assertGetter(McpSubscriptionAuthorization.Allowed.class,
+				"getValidUntil", java.time.Instant.class);
+		assertGetter(McpSubscriptionAuthorization.Allowed.class,
+				"getApplicationContext", Optional.class);
 
 		assertFactory(McpSubscriptionEvent.class, "resourcesListChanged",
 				McpSubscriptionEvent.ResourcesListChanged.class, List.of());
 		assertFactory(McpSubscriptionEvent.class, "resourceUpdated",
 				McpSubscriptionEvent.ResourceUpdated.class, List.of("resourceUri"),
 				java.net.URI.class);
+		assertFactory(McpSubscriptionEvent.class, "toolsListChanged",
+				McpSubscriptionEvent.ToolsListChanged.class, List.of());
+		assertFactory(McpSubscriptionEvent.class, "promptsListChanged",
+				McpSubscriptionEvent.PromptsListChanged.class, List.of());
 		assertGetter(McpSubscriptionEvent.ResourceUpdated.class,
 				"getResourceUri", java.net.URI.class);
 	}
@@ -1294,6 +1361,19 @@ public class McpPublicApiReflectionContractTests {
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"maximumSubscriptionDuration", McpServer.Builder.class,
 				MethodShape.CONCRETE, false, Duration.class));
+		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
+				"subscriptionCatalogProjectionTimeout", McpServer.Builder.class,
+				MethodShape.CONCRETE, false, Duration.class));
+		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
+				"subscriptionAuthorizationTimeout", McpServer.Builder.class,
+				MethodShape.CONCRETE, false, Duration.class));
+		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
+				"maximumSubscriptionAuthorizationDuration", McpServer.Builder.class,
+				MethodShape.CONCRETE, false, Duration.class));
+		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
+				"subscriptionAuthorizer", McpServer.Builder.class,
+				MethodShape.CONCRETE, false,
+				McpSubscriptionAuthorizer.class));
 	}
 
 	private static void assertRegistrationDescriptors() throws Exception {
@@ -1456,6 +1536,11 @@ public class McpPublicApiReflectionContractTests {
 				McpMetricsEvent.SubscriptionClosed.class,
 				List.of("endpointPath", "reason", "duration"), String.class,
 				McpStreamTerminationReason.class, Duration.class);
+		assertFactory(McpMetricsEvent.class, "subscriptionMaintenance",
+				McpMetricsEvent.SubscriptionMaintenance.class,
+				List.of("endpointPath", "work", "outcome"), String.class,
+				McpMetricsEvent.SubscriptionMaintenance.Work.class,
+				McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
 		assertFactory(McpMetricsEvent.class, "cancelationSignaled",
 				McpMetricsEvent.CancelationSignaled.class,
 				List.of("endpointPath", "jsonRpcMethod"), String.class,
@@ -1510,6 +1595,12 @@ public class McpPublicApiReflectionContractTests {
 				McpStreamTerminationReason.class);
 		assertGetter(McpMetricsEvent.SubscriptionClosed.class, "getDuration",
 				Duration.class);
+		assertGetter(McpMetricsEvent.SubscriptionMaintenance.class,
+				"getEndpointPath", String.class);
+		assertGetter(McpMetricsEvent.SubscriptionMaintenance.class, "getWork",
+				McpMetricsEvent.SubscriptionMaintenance.Work.class);
+		assertGetter(McpMetricsEvent.SubscriptionMaintenance.class, "getOutcome",
+				McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
 		assertRoutedMetricsGetters(McpMetricsEvent.CancelationSignaled.class);
 		assertRoutedMetricsGetters(McpMetricsEvent.ProgressEmitted.class);
 		assertGetter(McpMetricsEvent.ProtocolError.class, "getCode",

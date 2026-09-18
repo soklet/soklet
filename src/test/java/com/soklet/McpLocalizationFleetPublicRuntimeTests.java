@@ -522,7 +522,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private void invalidateCatalogs() {
-			this.server.getLocalizationControl().invalidateCatalogs();
+			this.server.getLocalizationCatalogInvalidator().invalidateCatalogs();
 			this.invalidations.incrementAndGet();
 		}
 
@@ -638,6 +638,8 @@ class McpLocalizationFleetPublicRuntimeTests {
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.maximumSubscriptionDuration(Duration.ofSeconds(30))
+					.subscriptionAuthorizer(
+							McpSubscriptionAuthorizer.denyAllInstance())
 					.localizer(localizer)
 					.build();
 		}

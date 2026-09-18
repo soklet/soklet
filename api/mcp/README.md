@@ -30,11 +30,14 @@ below records the subsequent non-MCP enum correction. The
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
-`current-incompatibilities.jsonl` is the canonical set of incompatibilities
-between the released `com.soklet:soklet:3.5.1` artifact and the current
-4.0.0 source tree. It currently contains 654 records and has SHA-256
+`current-incompatibilities.jsonl` is the last reviewed pre-P1b compatibility
+snapshot between the released `com.soklet:soklet:3.5.1` artifact and the
+4.0.0 development tree. It contains 654 records and has SHA-256
 `9317f7a5782062e0bd1dbf9512d0744fb97bef9a27992ce2d4707a08ba8a398f`.
-The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
+It is intentionally unchanged while the 2026-09-18 P1b current-source
+foundation awaits the P0-C disposition and MCP-G2 refreeze. At refreeze, the
+API-diff gate will regenerate the set and compare it in both directions, so an
+unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
 It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
@@ -94,23 +97,23 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 136 | frozen Phase 4 types and shared hosts |
-| `phase-5.includes` | 36 | frozen Phase 5 types |
-| `phase-6.includes` | 64 | frozen Phase 6 types |
-| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity but signature-frozen for 4.0.0 |
+| `phase-4.includes` | 136 | current-source Phase 4 types and shared hosts |
+| `phase-5.includes` | 45 | current-source Phase 5 types |
+| `phase-6.includes` | 67 | current-source Phase 6 types |
+| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
 | `non-mcp-public-api.allowlist` | 61 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, and value-converter owners |
 
-The 250-entry MCP union plus the 61-entry non-MCP allowlist owns exactly 311 current types.
-Ownership alone does not freeze a type. The three phase snapshots freeze their
-phase inventories, and the separate `provisional.signatures.jsonl` snapshot
-now freezes the 14 Tasks owners while retaining their explicit provisional
-maturity classification.
+The 262-entry current-source MCP union plus the 61-entry non-MCP allowlist owns
+exactly 323 current types. Ownership alone does not freeze a type. The phase
+and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
+the updated include inventories establish current-source ownership without
+claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `239076145534dae18826ec6184414fb016fd89394f59c213161c305da98bdecd`,
-`0ac8338321ad8d28e40e63e8b49963fd2be0a18e6d4b7e130b75071ebf756bf6`,
+`bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
 and
-`29428cf561632aec4400785ae7a1f73d980c85e1d368e9d3a1cb1e520aa9ae01`.
+`be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`.
 The provisional MCP Tasks include inventory has SHA-256
 `11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
@@ -120,22 +123,52 @@ compatibility inventory.
 
 ## Current local evidence
 
+### 2026-09-18 P1b current-source foundation (not a refreeze)
+
+The P1b public/value surface and its ownership and evolution foundation are
+implemented in the local source tree. The current-source owner partition is
+136/45/67/14, or 262 MCP owners, plus 61 non-MCP owners for 323 total. The
+include hashes are the Phase 4/5/6 and provisional values recorded above. The
+focused Phase 4/5/6 reflection/nullability SHA-256 values are respectively
+`2ccce8e3de9c7f3860bdeec071727eb27875b1996d4f410c4edaf9299a1525ee`,
+`99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0`,
+and
+`e22c399269061efd7fc48e52559699610adcb555ad43f58d05bfc914a5b97da9`.
+The localization control owner is renamed one-for-one from
+`McpLocalizationControl` to `McpLocalizationCatalogInvalidator`; no
+compatibility alias is retained.
+
+This checkpoint establishes API shape, values, configuration defaults,
+current-source ownership/evolution, finite-bound/privacy classifications, and
+the downstream bounded OpenTelemetry mapping. It does **not** establish P1b
+runtime support. The reconciler remains a per-server no-op, subscription
+authorization callbacks and their configured timeouts are not invoked,
+tool/prompt subscription events are not routed, and localization invalidation
+still uses the existing direct-broadcast path.
+
+The Phase 4/5/6 and provisional signature ledgers and
+`current-incompatibilities.jsonl` deliberately remain at their last reviewed
+pre-P1b bytes. P0-C and MCP-G2 block their regeneration and review; the
+current-source include, evolution, reflection, and policy inventories are not
+a substitute for that future refreeze.
+
 The [2026-09-17 catalog-policy foundation and required-collection amendment](phase-4-freeze-rationale.md#2026-09-17-catalog-policy-foundation-and-required-collection-amendment)
 and [subscription required-collection amendment](phase-5-freeze-rationale.md#2026-09-17-subscription-required-collection-amendment)
-record the latest reviewed snapshots. The current Phase 4/5/6 and provisional
-signature counts are 1,130/194/425/98. The owner partition is 136/36/64/14 plus
-61 non-MCP owners (311 total), and the released-artifact incompatibility ledger
-contains 654 records. Phase 4 and Phase 5 signature SHA-256 values are
+record the last frozen pre-P1b snapshots. At that checkpoint, the Phase 4/5/6
+and provisional signature counts were 1,130/194/425/98. The owner partition
+was 136/36/64/14 plus 61 non-MCP owners (311 total), and the released-artifact
+incompatibility ledger contained 654 records. Phase 4 and Phase 5 signature
+SHA-256 values were
 `97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23` and
 `c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9`.
-Their reflection/nullability SHA-256 values are respectively
+Their reflection/nullability SHA-256 values were respectively
 `3a25a3d886d7ad25a1a595393de3707e8db8fed6204afa5d7087f0ba9759c539` and
 `b4069581157f1127145427abd4f402d18350e97ec3162fbc075e3f2955bff2ed`.
-Fresh local JAR/japicmp reports match all four signature snapshots and the
-complete owner inventory. The public-evolution gate retains 17 lifecycle
-entries, including 11 explicit removals, and tests each removed member against
-reintroduction. These are development-artifact checks, not a captured release
-candidate or publication approval.
+At that checkpoint, fresh local JAR/japicmp reports matched all four signature
+snapshots and the complete owner inventory. The public-evolution gate then
+retained 17 lifecycle entries, including 11 explicit removals, and tested each
+removed member against reintroduction. These were development-artifact checks,
+not a captured release candidate or publication approval.
 
 The current development fixtures exercise retained Elicitation rather than
 the removed input methods. Their current manifest SHA-256 values are

@@ -24,14 +24,14 @@ import javax.annotation.concurrent.ThreadSafe;
  * Thread-safe server-owned control plane for localized MCP catalog
  * invalidation.
  * <p>
- * The control is local to one server. Applications distribute and install
- * immutable translation snapshots themselves, then call this control on every
+ * The invalidator is local to one server. Applications distribute and install
+ * immutable translation snapshots themselves, then invoke it on every
  * applicable instance.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpLocalizationControl {
+public interface McpLocalizationCatalogInvalidator {
 	/** @return whether localization was enabled when the server was built */
 	@NonNull
 	Boolean isEnabled();

@@ -647,6 +647,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.build();
 		Soklet soklet = managedSoklet(server);
 

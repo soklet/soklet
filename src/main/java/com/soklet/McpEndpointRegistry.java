@@ -133,7 +133,7 @@ public final class McpEndpointRegistry {
 
 	/**
 	 * Returns a registry whose generated endpoint for the supplied annotated
-	 * class carries the given resource-subscription configuration.
+	 * class carries the given subscription-change configuration.
 	 * <p>
 	 * Soklet selects the already-generated endpoint by the exact loaded
 	 * {@link Class} identity retained during generated-descriptor discovery. It
@@ -143,7 +143,7 @@ public final class McpEndpointRegistry {
 	 *
 	 * @param annotatedEndpointClass annotated endpoint class whose generated
 	 *                               endpoint is selected
-	 * @param subscriptionConfig resource-subscription configuration
+	 * @param subscriptionConfig subscription-change configuration
 	 * @return a new immutable registry
 	 * @throws IllegalArgumentException if this registry did not load a generated
 	 *                                  endpoint for the exact supplied class

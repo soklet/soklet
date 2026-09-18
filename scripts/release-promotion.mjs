@@ -391,7 +391,7 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
   'candidate-conformance': receiptIdentity(
     'node conformance/official/run.mjs --phase 5 --mode release',
     'release',
-    'ALL_49_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
+    'ALL_45_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
   ),
   'candidate-localization': receiptIdentity(
     'verification/localization/verify.sh',

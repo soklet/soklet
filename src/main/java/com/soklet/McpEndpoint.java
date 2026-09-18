@@ -292,7 +292,7 @@ public final class McpEndpoint {
 	}
 
 	/**
-	 * Returns this endpoint's resource-subscription configuration.
+	 * Returns this endpoint's subscription-change configuration.
 	 *
 	 * @return subscription configuration, or the empty optional if none was
 	 * configured
@@ -607,12 +607,12 @@ public final class McpEndpoint {
 		}
 
 		/**
-		 * Sets the endpoint's resource-subscription configuration.
+		 * Sets the endpoint's subscription-change configuration.
 		 * <p>
 		 * Sequential calls are last-call-wins. The immutable configuration and its
 		 * application-owned publisher are retained by reference.
 		 *
-		 * @param subscriptionConfig resource-subscription configuration, or null to
+		 * @param subscriptionConfig subscription-change configuration, or null to
 		 *                           disable subscriptions
 		 * @return this builder
 		 */

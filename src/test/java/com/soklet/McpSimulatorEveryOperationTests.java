@@ -639,6 +639,8 @@ public class McpSimulatorEveryOperationTests {
 					.configureMcpServer(mcpServerBuilder -> mcpServerBuilder
 						.port(0)
 						.endpointRegistry(endpointRegistry)
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
 						.admissionController(admissionController)
 						.host(LOOPBACK)
 						.requestRateLimiter(context ->

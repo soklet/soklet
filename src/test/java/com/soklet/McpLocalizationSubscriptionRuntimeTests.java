@@ -250,6 +250,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 					.maximumSubscriptionsPerPartition(
 							maximumSubscriptionsPerPartition)
 					.maximumSubscriptionDuration(Duration.ofMillis(300))
+					.subscriptionAuthorizer(
+							McpSubscriptionAuthorizer.denyAllInstance())
 					.localizer(localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

@@ -128,6 +128,7 @@ public class McpPublicJavadocTests {
 			"com.soklet.McpProtectionConfig$Builder",
 			"com.soklet.McpProtectionKeyring$Builder",
 			"com.soklet.McpRequestStateProtectionException",
+			"com.soklet.McpSubscriptionAuthorization$Allowed$Builder",
 			"com.soklet.McpSubscriptionConfig$Builder"
 	);
 

@@ -150,6 +150,8 @@ public class McpTasksPublicRuntimeTests {
 				})
 				.localizer(localizer)
 				.taskManager(taskManager)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

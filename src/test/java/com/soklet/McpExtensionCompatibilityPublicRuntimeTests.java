@@ -342,6 +342,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.taskManager(taskManager)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -622,6 +624,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(handlerInterceptor)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

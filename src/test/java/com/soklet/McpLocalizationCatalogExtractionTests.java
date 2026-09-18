@@ -317,7 +317,10 @@ class McpLocalizationCatalogExtractionTests {
 				.build();
 
 		IllegalStateException exception = assertThrows(IllegalStateException.class,
-				() -> wireServerBuilder(registry).localizer(bounded).build());
+				() -> wireServerBuilder(registry).localizer(bounded)
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
+						.build());
 		assertTrue(exception.getMessage().contains("callback limit"));
 
 		McpLocalizer sufficient = McpLocalizer
@@ -326,7 +329,10 @@ class McpLocalizationCatalogExtractionTests {
 				.maximumLocalizableTextCountPerResponse(3)
 				.build();
 		DefaultMcpServer server = (DefaultMcpServer) wireServerBuilder(registry)
-				.localizer(sufficient).build();
+				.localizer(sufficient)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
+				.build();
 		McpCanonicalLocalizationPlan plan = server.localizationPlan()
 				.orElseThrow();
 		assertEquals(McpLocalizationCatalog.fromEndpointRegistry(registry).getTexts(),
@@ -387,13 +393,15 @@ class McpLocalizationCatalogExtractionTests {
 				wireEndpoint()));
 		McpServer baseline = wireServerBuilder(registry).build();
 		McpServer localized = wireServerBuilder(registry).localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.build();
 		int discoverySlotCount = ((DefaultMcpServer) localized).localizationPlan()
 				.orElseThrow().endpoints().get(0)
 				.response(McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY)
 				.orElseThrow().slots().size();
-		assertFalse(baseline.getLocalizationControl().isEnabled());
-		assertTrue(localized.getLocalizationControl().isEnabled());
+		assertFalse(baseline.getLocalizationCatalogInvalidator().isEnabled());
+		assertTrue(localized.getLocalizationCatalogInvalidator().isEnabled());
 		assertEquals(0, contextInvocations.get());
 		assertEquals(0, localizationInvocations.get());
 
@@ -428,7 +436,7 @@ class McpLocalizationCatalogExtractionTests {
 						+ "unconfigured baseline.");
 		assertEquals(discoverySlotCount, localizationInvocations.get(),
 				"Every planned slot must be offered exactly once per response.");
-		assertTrue(localized.getLocalizationControl().isEnabled());
+		assertTrue(localized.getLocalizationCatalogInvalidator().isEnabled());
 	}
 
 	private static McpLocalizationContext localizationContext(
@@ -482,8 +490,11 @@ class McpLocalizationCatalogExtractionTests {
 			builder.endpointRegistry(registry).admissionController(
 					McpAdmissionController.acceptAllInstance());
 			McpServer.Builder configuredBuilder = wireServerBuilder(builder);
-			if (localizer != null)
+			if (localizer != null) {
 				configuredBuilder.localizer(localizer);
+				configuredBuilder.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance());
+			}
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)

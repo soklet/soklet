@@ -437,6 +437,8 @@ public class McpTaskCancelationLifecycleTests {
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.taskManager(taskManager)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.host(HOST)
 				.requestTimeout(requestTimeout)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())

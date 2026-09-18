@@ -23,20 +23,23 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 
 /**
- * Immutable application event that identifies a coarse MCP resource change.
+ * Immutable application event that identifies a coarse MCP subscription-visible
+ * change.
  * <p>
  * Events do not identify an endpoint, authorization partition, or connected
- * client. Soklet applies endpoint configuration and each accepted URI filter
- * before wire emission. The authorization partition stored when a subscription
- * is admitted scopes registration and quota accounting; it is not an event
- * target and does not authorize a URI semantically.
+ * client. Soklet applies endpoint configuration and accepted subscription
+ * filters before wire emission. The authorization partition stored when a
+ * subscription is admitted scopes registration and quota accounting; it is not
+ * an event target and does not authorize catalog or resource access.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public sealed interface McpSubscriptionEvent
 		permits McpSubscriptionEvent.ResourcesListChanged,
-		McpSubscriptionEvent.ResourceUpdated {
+		McpSubscriptionEvent.ResourceUpdated,
+		McpSubscriptionEvent.ToolsListChanged,
+		McpSubscriptionEvent.PromptsListChanged {
 	/**
 	 * Creates a resource-list-changed event.
 	 *
@@ -59,6 +62,26 @@ public sealed interface McpSubscriptionEvent
 	@NonNull
 	static ResourceUpdated resourceUpdated(@NonNull URI resourceUri) {
 		return new ResourceUpdated(resourceUri);
+	}
+
+	/**
+	 * Creates a tool-list-changed event.
+	 *
+	 * @return tool-list-changed event
+	 */
+	@NonNull
+	static ToolsListChanged toolsListChanged() {
+		return ToolsListChanged.INSTANCE;
+	}
+
+	/**
+	 * Creates a prompt-list-changed event.
+	 *
+	 * @return prompt-list-changed event
+	 */
+	@NonNull
+	static PromptsListChanged promptsListChanged() {
+		return PromptsListChanged.INSTANCE;
 	}
 
 	/**
@@ -146,6 +169,77 @@ public sealed interface McpSubscriptionEvent
 		@NonNull
 		public final String toString() {
 			return "ResourceUpdated{resourceUri=<redacted>}";
+		}
+	}
+
+	/**
+	 * Requests reevaluation of the caller-visible {@code tools/list} catalog for
+	 * interested subscriptions. Publication alone does not assert that the
+	 * visible catalog changed.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public final class ToolsListChanged implements McpSubscriptionEvent {
+		@NonNull
+		private static final ToolsListChanged INSTANCE = new ToolsListChanged();
+
+		private ToolsListChanged() {
+		}
+
+		/** @return whether the other value is also a tool-list-changed event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof ToolsListChanged;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ToolsListChanged{}";
+		}
+	}
+
+	/**
+	 * Requests reevaluation of the caller-visible {@code prompts/list} catalog for
+	 * interested subscriptions. Publication alone does not assert that the
+	 * visible catalog changed.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public final class PromptsListChanged implements McpSubscriptionEvent {
+		@NonNull
+		private static final PromptsListChanged INSTANCE =
+				new PromptsListChanged();
+
+		private PromptsListChanged() {
+		}
+
+		/** @return whether the other value is also a prompt-list-changed event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof PromptsListChanged;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "PromptsListChanged{}";
 		}
 	}
 }

@@ -1602,6 +1602,8 @@ public class SokletSimulatorIsolationTests {
 			McpServer.@NonNull Builder builder) {
 		return builder
 				.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())

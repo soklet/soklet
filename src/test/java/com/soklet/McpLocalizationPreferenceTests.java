@@ -136,6 +136,8 @@ class McpLocalizationPreferenceTests {
 				.host(LOOPBACK)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.localizer(localizer)
 				.build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)

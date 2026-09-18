@@ -306,8 +306,11 @@ class McpLocalizationHttpBoundaryTests {
 					.corsAuthorizer(corsAuthorizer)
 					.allowedHosts(Set.of(LOOPBACK));
 
-			if (localizer != null)
+			if (localizer != null) {
 				builder.localizer(localizer);
+				builder.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance());
+			}
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

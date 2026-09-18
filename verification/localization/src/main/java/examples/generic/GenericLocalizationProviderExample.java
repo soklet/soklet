@@ -69,7 +69,7 @@ public final class GenericLocalizationProviderExample
 
 	/**
 	 * Atomically installs a validated replacement catalog. The application
-	 * calls {@code McpServer.getLocalizationControl().invalidateCatalogs()} on
+	 * calls {@code McpServer.getLocalizationCatalogInvalidator().invalidateCatalogs()} on
 	 * every applicable instance afterward.
 	 */
 	public void installCatalogs(Map<Locale, Map<String, String>> replacement) {

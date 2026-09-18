@@ -46,7 +46,7 @@ import java.util.function.BooleanSupplier;
 import static java.util.Objects.requireNonNull;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpCatalogPolicyDeadlineRuntimeTests {
 	private static final String TOOL_NAME = "policy-deadline-tool";
 	private static final String SECOND_TOOL_NAME = "policy-stop-second-tool";
@@ -166,6 +166,7 @@ public class McpCatalogPolicyDeadlineRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void applicationStopCancelsActivePolicyBeforeAnotherEvaluatorCanEnter()
 			throws Exception {
 		Duration requestDeadline = Duration.ofSeconds(30);

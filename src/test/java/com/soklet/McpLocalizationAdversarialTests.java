@@ -200,7 +200,7 @@ class McpLocalizationAdversarialTests {
 								Set.of(index % 2 == 0 ? "fr-CA" : "de-DE"))));
 
 			// Races the in-flight selections; must neither corrupt nor block.
-			serverReference.get().getLocalizationControl().invalidateCatalogs();
+			serverReference.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 			for (McpSimulation simulation : simulations)
 				bodies.add(awaitStartedBody(simulation));
@@ -259,6 +259,8 @@ class McpLocalizationAdversarialTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 							contexts.incrementAndGet();
 							Locale locale = selector == null ? Locale.CANADA_FRENCH

@@ -95,7 +95,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertTrue(acknowledgment.contains("\"resourcesListChanged\":true"),
 					acknowledgment);
 
-			scopedServer.get().getLocalizationControl().invalidateCatalogs();
+			scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 			for (int index = 0; index < 3; ++index)
 				frames.add(nextFrame(simulation));
@@ -142,7 +142,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertFalse(acknowledgment.contains("resourcesListChanged"),
 					acknowledgment);
 
-			scopedServer.get().getLocalizationControl().invalidateCatalogs();
+			scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 			String frame = nextFrame(simulation);
 			assertTrue(frame.contains("notifications/prompts/list_changed"),
@@ -195,7 +195,7 @@ class McpLocalizationReloadRuntimeTests {
 			// The invalidation clears the pre-rendered localized terminal, so
 			// the close that follows publishes canonical text instead of
 			// retaining the obsolete translation graph.
-			scopedServer.get().getLocalizationControl().invalidateCatalogs();
+			scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 			nextFrame(simulation);
 
 			try {
@@ -243,7 +243,7 @@ class McpLocalizationReloadRuntimeTests {
 			try {
 				await(contextCaptured);
 				snapshot.set("NEW:");
-				scopedServer.get().getLocalizationControl().invalidateCatalogs();
+				scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 			} finally {
 				releaseContext.countDown();
 			}
@@ -446,12 +446,12 @@ class McpLocalizationReloadRuntimeTests {
 				text -> McpLocalizationResult.useDefaultText()));
 
 		// No active listener or simulator generation: accepted as a no-op.
-		localized.getLocalizationControl().invalidateCatalogs();
+		localized.getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 		McpServer unlocalized = server(true, null);
-		assertFalse(unlocalized.getLocalizationControl().isEnabled());
+		assertFalse(unlocalized.getLocalizationCatalogInvalidator().isEnabled());
 		assertThrows(IllegalStateException.class,
-				() -> unlocalized.getLocalizationControl().invalidateCatalogs());
+				() -> unlocalized.getLocalizationCatalogInvalidator().invalidateCatalogs());
 	}
 
 	@Test
@@ -476,14 +476,14 @@ class McpLocalizationReloadRuntimeTests {
 
 				// The control is a local-server operation: each node's call
 				// reaches only its own streams.
-				first.get().getLocalizationControl().invalidateCatalogs();
+				first.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 				assertTrue(nextFrame(firstSubscription)
 						.contains("notifications/tools/list_changed"));
 				assertTrue(pollFrame(secondSubscription,
 						Duration.ofMillis(150)).isEmpty(),
 						"Node one's invalidation must not reach node two.");
 
-				second.get().getLocalizationControl().invalidateCatalogs();
+				second.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 				assertTrue(nextFrame(secondSubscription)
 						.contains("notifications/tools/list_changed"));
 			});
@@ -743,7 +743,9 @@ class McpLocalizationReloadRuntimeTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
-				.maximumSubscriptionDuration(Duration.ofMillis(400));
+				.maximumSubscriptionDuration(Duration.ofMillis(400))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance());
 
 		if (localizer != null)
 			builder.localizer(localizer);

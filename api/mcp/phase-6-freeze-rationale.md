@@ -647,3 +647,21 @@ released-3.5.1 compatibility ledger to 648 records with SHA-256
 The complete current-side owner union is 300 owners after adding
 `CorsPreflight` to the 52-owner non-MCP allowlist. The historical D1p preview
 seal remains immutable.
+
+## 2026-09-18 P1b current-source foundation; no refreeze
+
+The P1b bounded subscription-maintenance metric surface is now present in
+current source. The same foundation renames the localization control owner
+one-for-one from `McpLocalizationControl` to
+`McpLocalizationCatalogInvalidator`, without retaining an alias. Phase 6 owns
+67 current-source types; `phase-6.includes` has SHA-256
+`be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`,
+and the focused current-source reflection/nullability SHA-256 is
+`e22c399269061efd7fc48e52559699610adcb555ad43f58d05bfc914a5b97da9`.
+
+This is deliberately not a Phase 6 refreeze. `phase-6.signatures.jsonl` and
+`current-incompatibilities.jsonl` retain their last reviewed pre-P1b bytes
+until P0-C is dispositioned and MCP-G2 authorizes regeneration and review.
+Current-source ownership and evolution evidence does not replace those frozen
+ledgers. The downstream bounded OpenTelemetry mapping is implemented, but
+core runtime maintenance emission and the new reconciliation path are not.

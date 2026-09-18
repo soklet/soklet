@@ -81,6 +81,14 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 							.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 					McpStreamTerminationReason
 							.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
+					McpStreamTerminationReason
+							.SUBSCRIPTION_AUTHORIZATION_DENIED,
+					McpStreamTerminationReason
+							.SUBSCRIPTION_AUTHORIZATION_EXPIRED,
+					McpStreamTerminationReason
+							.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED,
+					McpStreamTerminationReason
+							.SUBSCRIPTION_RECONCILIATION_FAILED,
 					McpStreamTerminationReason.INTERNAL_ERROR);
 
 	@Test
@@ -274,7 +282,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 			expectedSamples.add(new SampleProjection(
 					SUBSCRIPTION_DURATIONS_METRIC_NAME + "_sum", labels));
 		}
-		Assertions.assertEquals(21, expectedSamples.size());
+		Assertions.assertEquals(29, expectedSamples.size());
 		Assertions.assertEquals(expectedSamples, observedSamples);
 		assertMetricType(selected, ACTIVE_SUBSCRIPTIONS_METRIC_NAME,
 				ACTIVE_SUBSCRIPTIONS_HELP, "gauge");

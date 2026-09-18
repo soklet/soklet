@@ -280,8 +280,11 @@ class McpLocalizationHandlerRuntimeTests {
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK));
 
-			if (localizer != null)
+			if (localizer != null) {
 				builder.localizer(localizer);
+				builder.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance());
+			}
 			if (interceptor != null)
 				builder.handlerInterceptor(interceptor);
 		}).resourceMethodResolver(

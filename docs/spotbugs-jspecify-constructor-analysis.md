@@ -10,7 +10,24 @@ Historical sealed inventories, filter bytes, exception approvals, and their
 provenance remain unchanged. That scoped decision is not candidate acceptance or
 approval of other release-policy changes.
 
-## Review outcome
+## September 18 descriptor-retarget reassessment
+
+The `McpApplicationExecution$Exchange` constructor subsequently gained
+`catalogAccessView` and `selectedLocaleSlot` parameters. Because each exclusion
+is intentionally bound to the full descriptor, the two `Exchange` selectors
+stopped resolving rather than silently widening.
+
+A clean empty-filter JDK 21 scan with the same pinned SpotBugs plugin and engine
+reproduced both previously classified Exchange findings with zero analyzer
+errors. After unrelated genuine current-source findings were fixed without
+suppressions, a normal baseline-filter scan with the stale selectors reported
+exactly those two findings and no others: local `?` (displayed `$L3`) and local
+`request`, with the same exact bug pattern. The owner approved only the
+corresponding full-signature retarget in the
+[September 18 amendment](../release/SCAN_FALSE_POSITIVE_APPROVAL_AMENDMENT_2026-09-18.md).
+No broader rule or new false-positive classification was authorized.
+
+## September 16 review outcome
 
 The fresh upgrade scan reported 66 findings. Checked local variables now make
 nullable immutable-record accessor proofs explicit. Two internal implementation
@@ -20,7 +37,8 @@ preserved using `Optional.ofNullable`, `Objects.requireNonNullElse`, or existing
 failure-safe catch boundaries. Only impossible checks on internally constructed,
 non-null values were removed.
 
-Four diagnostics remain without the new exact exceptions. All four stem from the
+At that review, four diagnostics remained without the new exact exceptions. All
+four stem from the
 same reproducible analyzer defect: constructor type-use annotation indexes are
 interpreted without accounting for compiler-inserted constructor parameters.
 Correct JSpecify annotations and nullable behavior have not been changed to satisfy

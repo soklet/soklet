@@ -33,9 +33,9 @@ import javax.annotation.concurrent.ThreadSafe;
 @FunctionalInterface
 public interface McpSubscriptionEventListener {
 	/**
-	 * Receives one coarse resource-change event.
+	 * Receives one coarse subscription-change event.
 	 *
-	 * @param event resource-change event
+	 * @param event subscription-change event
 	 */
 	void onEvent(@NonNull McpSubscriptionEvent event);
 }

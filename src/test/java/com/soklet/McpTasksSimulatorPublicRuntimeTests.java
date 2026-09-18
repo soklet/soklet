@@ -521,6 +521,8 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.taskManager(this.taskManager)
+					.subscriptionAuthorizer(
+							McpSubscriptionAuthorizer.denyAllInstance())
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.build();

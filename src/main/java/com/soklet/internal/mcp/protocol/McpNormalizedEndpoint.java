@@ -106,7 +106,10 @@ final class McpNormalizedEndpoint {
 		this.catalogAccessAdapter = builder.catalogAccessAdapter;
 
 		if (this.subscriptionConfig
-				.map(configuration -> !configuration.notificationTypes().isEmpty())
+				.map(configuration -> configuration.notificationTypes().contains(
+						McpResourceNotificationType.RESOURCES_LIST_CHANGED)
+						|| configuration.notificationTypes().contains(
+						McpResourceNotificationType.RESOURCE_UPDATED))
 				.orElse(false) && !hasResourceSurface())
 			throw new IllegalStateException(
 					"Resource subscription configuration requires an exact resource, template, or custom list handler.");
@@ -706,7 +709,9 @@ enum McpCacheScope {
 @ThreadSafe
 enum McpResourceNotificationType {
 	RESOURCES_LIST_CHANGED,
-	RESOURCE_UPDATED
+	RESOURCE_UPDATED,
+	TOOLS_LIST_CHANGED,
+	PROMPTS_LIST_CHANGED
 }
 
 /**

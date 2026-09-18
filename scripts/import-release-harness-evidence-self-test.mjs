@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   ReleaseHarnessEvidenceImportError,
   canonicalJson,
@@ -755,11 +755,13 @@ function materializeBundleRoles(root, prefix, contract, bundle) {
   return realpathSync(evidenceRoot);
 }
 
-function verifierInvocation(gate) {
+function verifierInvocation(gate, candidateRoot) {
   if (gate === 'mcp-benchmarks')
     return [join(SCRIPT_DIRECTORY, 'verify-release-benchmarks.mjs')];
   if (gate === 'release-scans')
-    return [join(SCRIPT_DIRECTORY, 'verify-release-scans.mjs')];
+    return [candidateRoot === undefined
+      ? join(SCRIPT_DIRECTORY, 'verify-release-scans.mjs')
+      : join(candidateRoot, 'scripts', 'verify-release-scans.mjs')];
   const modeByGate = {
     'fuzz-nightly-history': 'fuzz-nightly',
     'operational-history': 'operational',
@@ -768,8 +770,9 @@ function verifierInvocation(gate) {
   return [join(SCRIPT_DIRECTORY, 'verify-release-history.mjs'), modeByGate[gate]];
 }
 
-function runVerifier(gate, evidenceRoot, extraArguments = []) {
-  const [scriptPath, ...argumentsForScript] = verifierInvocation(gate);
+function runVerifier(gate, evidenceRoot, extraArguments = [], candidateRoot) {
+  const [scriptPath, ...argumentsForScript] = verifierInvocation(
+    gate, candidateRoot);
   return spawnSync(process.execPath, [scriptPath, ...argumentsForScript, ...extraArguments], {
     cwd: evidenceRoot,
     encoding: 'utf8',
@@ -864,6 +867,20 @@ function run() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'soklet-release-harness-self-test-')));
   try {
     writeScanApprovalRegistry(root, []);
+    const isolatedScriptsRoot = join(root, 'scripts');
+    mkdirSync(isolatedScriptsRoot);
+    writeFileSync(
+      join(isolatedScriptsRoot, 'verify-release-scans.mjs'),
+      readFileSync(join(SCRIPT_DIRECTORY, 'verify-release-scans.mjs')),
+    );
+    writeFileSync(
+      join(isolatedScriptsRoot, 'import-release-harness-evidence.mjs'),
+      `export * from ${JSON.stringify(pathToFileURL(join(
+        SCRIPT_DIRECTORY,
+        'import-release-harness-evidence.mjs',
+      )).href)};\n`,
+      'utf8',
+    );
     writeFileSync(
       join(root, 'CHANGELOG.md'),
       '# Changelog\n\n## 4.0.0\n\n- Document the accepted JSON benchmark regression.\n\n## 3.5.1\n\n- Baseline fixture.\n',
@@ -963,7 +980,7 @@ function run() {
         receiptPath: outputPath,
         registryPath: configuration.registryPath,
       }), receipt);
-      const cli = runVerifier(gate, evidenceRoot);
+      const cli = runVerifier(gate, evidenceRoot, [], root);
       assert.equal(cli.status, 0, cli.stderr || cli.stdout);
       assert.match(cli.stdout, /verification PASS/);
       validPathFixtures.set(gate, {

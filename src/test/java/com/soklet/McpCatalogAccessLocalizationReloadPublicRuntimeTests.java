@@ -105,6 +105,8 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 								.build()))
 				.catalogAccessPolicy(policy)
 				.localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -151,7 +153,7 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 					fallbackPrompts);
 
 			mode.set(TranslationMode.RELOADED);
-			server.getLocalizationControl().invalidateCatalogs();
+			server.getLocalizationCatalogInvalidator().invalidateCatalogs();
 			String reloadedTools = body(send(server, "reloaded-tools",
 					"tools/list"));
 			String reloadedPrompts = body(send(server, "reloaded-prompts",

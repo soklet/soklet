@@ -188,8 +188,28 @@ public class McpObservabilityPublicApiTests {
 				McpStreamTerminationReason.SERVER_STOPPING,
 				McpStreamTerminationReason.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 				McpStreamTerminationReason.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
+				McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED,
+				McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED,
+				McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED,
+				McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED,
 				McpStreamTerminationReason.INTERNAL_ERROR
 		}, McpStreamTerminationReason.values());
+		Assertions.assertArrayEquals(
+				new McpMetricsEvent.SubscriptionMaintenance.Work[]{
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+						McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION
+				}, McpMetricsEvent.SubscriptionMaintenance.Work.values());
+		Assertions.assertArrayEquals(
+				new McpMetricsEvent.SubscriptionMaintenance.Outcome[]{
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.STALE_RESULT_DISCARDED
+				}, McpMetricsEvent.SubscriptionMaintenance.Outcome.values());
 		Assertions.assertSame(
 				LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
 				LogEventType.valueOf(
@@ -239,6 +259,12 @@ public class McpObservabilityPublicApiTests {
 								component("reason",
 										McpStreamTerminationReason.class),
 								component("duration", Duration.class))),
+						Map.entry(McpMetricsEvent.SubscriptionMaintenance.class, List.of(
+								component("endpointPath", String.class),
+								component("work",
+										McpMetricsEvent.SubscriptionMaintenance.Work.class),
+								component("outcome",
+										McpMetricsEvent.SubscriptionMaintenance.Outcome.class))),
 						Map.entry(McpMetricsEvent.CancelationSignaled.class, List.of(
 								component("endpointPath", String.class),
 								component("jsonRpcMethod", String.class))),
@@ -268,7 +294,7 @@ public class McpObservabilityPublicApiTests {
 
 		Set<Class<?>> permittedTypes = Set.copyOf(Arrays.asList(
 				McpMetricsEvent.class.getPermittedSubclasses()));
-		Assertions.assertEquals(23, permittedTypes.size());
+		Assertions.assertEquals(24, permittedTypes.size());
 		Assertions.assertEquals(expectedComponents.keySet(), permittedTypes);
 		for (Map.Entry<Class<?>, List<Map.Entry<String, Class<?>>>> entry
 				: expectedComponents.entrySet()) {
@@ -456,8 +482,11 @@ public class McpObservabilityPublicApiTests {
 
 		DefaultMetricsCollector defaultCollector =
 				DefaultMetricsCollector.defaultInstance();
-		List<McpMetricsEvent> nonAggregatedEvents = List.of();
-		Assertions.assertEquals(0, nonAggregatedEvents.size());
+		List<McpMetricsEvent> nonAggregatedEvents = List.of(
+				McpMetricsEvent.subscriptionMaintenance("/mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
+		Assertions.assertEquals(1, nonAggregatedEvents.size());
 		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
@@ -495,6 +524,9 @@ public class McpObservabilityPublicApiTests {
 				McpMetricsEvent.subscriptionOpened(endpointPath),
 				McpMetricsEvent.subscriptionClosed(endpointPath,
 						McpStreamTerminationReason.CLIENT_DISCONNECTED, duration),
+				McpMetricsEvent.subscriptionMaintenance(endpointPath,
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED),
 				McpMetricsEvent.cancelationSignaled(endpointPath, method),
 				McpMetricsEvent.progressEmitted(endpointPath, method),
 				McpMetricsEvent.keepAliveEmitted(),
@@ -527,6 +559,75 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertEquals(McpRequestOutcome.COMPLETE,
 				finished.getOutcome());
 		Assertions.assertEquals(duration, finished.getDuration());
+	}
+
+	@Test
+	public void subscriptionMaintenanceHasExactBoundedValueContract()
+			throws NoSuchMethodException {
+		Method factory = McpMetricsEvent.class.getMethod(
+				"subscriptionMaintenance", String.class,
+				McpMetricsEvent.SubscriptionMaintenance.Work.class,
+				McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
+		Assertions.assertTrue(Modifier.isStatic(factory.getModifiers()));
+		Assertions.assertEquals(McpMetricsEvent.SubscriptionMaintenance.class,
+				factory.getReturnType());
+		Assertions.assertTrue(factory.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+		for (AnnotatedType parameter : factory.getAnnotatedParameterTypes())
+			Assertions.assertTrue(parameter.isAnnotationPresent(NonNull.class));
+
+		McpMetricsEvent.SubscriptionMaintenance event =
+				McpMetricsEvent.subscriptionMaintenance("/private-mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED);
+		McpMetricsEvent.SubscriptionMaintenance equal =
+				McpMetricsEvent.subscriptionMaintenance("/private-mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED);
+		Assertions.assertEquals("/private-mcp", event.getEndpointPath());
+		Assertions.assertEquals(
+				McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+				event.getWork());
+		Assertions.assertEquals(
+				McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED,
+				event.getOutcome());
+		Assertions.assertEquals(event, equal);
+		Assertions.assertEquals(event.hashCode(), equal.hashCode());
+		Assertions.assertNotEquals(event,
+				McpMetricsEvent.subscriptionMaintenance("/other",
+						McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED));
+		Assertions.assertNotEquals(event,
+				McpMetricsEvent.subscriptionMaintenance("/private-mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED));
+		Assertions.assertNotEquals(event,
+				McpMetricsEvent.subscriptionMaintenance("/private-mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED));
+		Assertions.assertEquals(
+				"SubscriptionMaintenance{endpointPath=<redacted>, "
+						+ "work=CATALOG_PROJECTION, outcome=COALESCED}",
+				event.toString());
+		Assertions.assertFalse(event.toString().contains("/private-mcp"));
+		Assertions.assertEquals(0,
+				McpMetricsEvent.SubscriptionMaintenance.class.getConstructors().length);
+
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpMetricsEvent.subscriptionMaintenance(null,
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpMetricsEvent.subscriptionMaintenance("",
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpMetricsEvent.subscriptionMaintenance("/mcp", null,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpMetricsEvent.subscriptionMaintenance("/mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						null));
 	}
 
 	@Test

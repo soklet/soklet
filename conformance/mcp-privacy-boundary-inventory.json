@@ -180,9 +180,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-002:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invocationFeatures(McpRequestContext,McpEndpoint,String,CancelationToken,Optional<ProgressEmitter>,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,Optional<McpTaskControl>)->McpMetricsEvent.cancelationSignaled@1",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invocationFeatures(McpRequestContext,McpEndpoint,String,CancelationToken,Optional<ProgressEmitter>,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,Optional<McpTaskControl>,Optional<McpLocalizationContext>)->McpMetricsEvent.cancelationSignaled@1",
           "matcherRuleId": "PRIV-MATCH-002",
-          "member": "invocationFeatures(McpRequestContext,McpEndpoint,String,CancelationToken,Optional<ProgressEmitter>,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,Optional<McpTaskControl>)",
+          "member": "invocationFeatures(McpRequestContext,McpEndpoint,String,CancelationToken,Optional<ProgressEmitter>,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,Optional<McpTaskControl>,Optional<McpLocalizationContext>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "McpMetricsEvent.cancelationSignaled"
@@ -321,6 +321,60 @@
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer.DefaultMcpProgressReporter",
           "sink": "McpMetricsEvent.progressEmitted"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent#subscriptionMaintenance(String,SubscriptionMaintenance.Work,SubscriptionMaintenance.Outcome)->McpMetricsSurface.subscriptionMaintenance@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "subscriptionMaintenance(String,SubscriptionMaintenance.Work,SubscriptionMaintenance.Outcome)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent",
+          "sink": "McpMetricsSurface.subscriptionMaintenance"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#equals(Object)->McpMetricsSurface.equals@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "equals(Object)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.equals"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#getEndpointPath()->McpMetricsSurface.getEndpointPath@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "getEndpointPath()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.getEndpointPath"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#getOutcome()->McpMetricsSurface.getOutcome@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "getOutcome()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.getOutcome"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#getWork()->McpMetricsSurface.getWork@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "getWork()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.getWork"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#hashCode()->McpMetricsSurface.hashCode@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "hashCode()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.hashCode"
         }
       ]
     },
@@ -2376,9 +2430,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#findTask(McpRequestContext,String,Optional<CatalogAccessSession>)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "findTask(McpRequestContext,String,Optional<CatalogAccessSession>)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#findTaskForSubscriptionAuthorization(McpRequestContext,String)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "findTaskForSubscriptionAuthorization(McpRequestContext,String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#localizationContext()->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "localizationContext()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "ApplicationRequestCarrier.declaration"
@@ -4121,6 +4193,24 @@
           "sink": "RequestOrThrowable.declaration"
         },
         {
+          "file": "src/main/java/com/soklet/McpCatalogAccessPolicy.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpCatalogAccessPolicy.java#com.soklet.McpCatalogAccessPolicy.PromptAccessEvaluator#isPromptAccessible(McpRequestContext,McpPromptRegistration,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isPromptAccessible(McpRequestContext,McpPromptRegistration,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCatalogAccessPolicy.PromptAccessEvaluator",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCatalogAccessPolicy.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpCatalogAccessPolicy.java#com.soklet.McpCatalogAccessPolicy.ToolAccessEvaluator#isToolAccessible(McpRequestContext,McpToolRegistration<?>,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isToolAccessible(McpRequestContext,McpToolRegistration<?>,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCatalogAccessPolicy.ToolAccessEvaluator",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
           "file": "src/main/java/com/soklet/McpCompleteToolHandler.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpCompleteToolHandler.java#com.soklet.McpCompleteToolHandler#handle(McpRequestContext,McpToolArguments<A>,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
@@ -5055,6 +5145,105 @@
           "occurrence": 1,
           "owner": "com.soklet.McpSimulationCompletion",
           "sink": "RequestOrThrowable.getThrowables"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getApplicationContext()->ApplicationRequestCarrier.surface.getApplicationContext@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getApplicationContext()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getApplicationContext"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getDeadline()->ApplicationRequestCarrier.surface.getDeadline@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getDeadline()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getDeadline"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getInitialRequestContext()->ApplicationRequestCarrier.surface.getInitialRequestContext@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getInitialRequestContext()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getInitialRequestContext"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getPreviousValidUntil()->ApplicationRequestCarrier.surface.getPreviousValidUntil@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getPreviousValidUntil()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getPreviousValidUntil"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getResourceSubscriptionUris()->ApplicationRequestCarrier.surface.getResourceSubscriptionUris@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getResourceSubscriptionUris()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getResourceSubscriptionUris"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#getTaskIds()->ApplicationRequestCarrier.surface.getTaskIds@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getTaskIds()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.getTaskIds"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#isPromptsListChangedIncluded()->ApplicationRequestCarrier.surface.isPromptsListChangedIncluded@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isPromptsListChangedIncluded()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.isPromptsListChangedIncluded"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#isResourcesListChangedIncluded()->ApplicationRequestCarrier.surface.isResourcesListChangedIncluded@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isResourcesListChangedIncluded()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.isResourcesListChangedIncluded"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizationContext.java#com.soklet.McpSubscriptionAuthorizationContext#isToolsListChangedIncluded()->ApplicationRequestCarrier.surface.isToolsListChangedIncluded@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isToolsListChangedIncluded()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizationContext",
+          "sink": "ApplicationRequestCarrier.surface.isToolsListChangedIncluded"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizer.java#com.soklet.DenyAllMcpSubscriptionAuthorizer#authorize(McpSubscriptionAuthorizationContext,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "authorize(McpSubscriptionAuthorizationContext,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.DenyAllMcpSubscriptionAuthorizer",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorizer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSubscriptionAuthorizer.java#com.soklet.McpSubscriptionAuthorizer#authorize(McpSubscriptionAuthorizationContext,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "authorize(McpSubscriptionAuthorizationContext,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorizer",
+          "sink": "ApplicationRequestCarrier.declaration"
         },
         {
           "file": "src/main/java/com/soklet/McpTaskControl.java",
@@ -8829,6 +9018,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#getCancelationCause()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getCancelationCause()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#streamTerminated(StreamTerminationReason,McpStreamTerminationReason,Throwable)->RequestOrThrowable.throwables@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "streamTerminated(StreamTerminationReason,McpStreamTerminationReason,Throwable)",
@@ -9036,12 +9234,30 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java#com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input#Input(String,ResponseKind,McpRequestContext,McpJsonObject,long,long,long,long,ToLongFunction<McpJsonObject>,List<String>,List<String>,BooleanSupplier)->RequestOrThrowable.recordConstructor@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java#com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input#Input(String,ResponseKind,McpRequestContext,McpJsonObject,long,long,long,long,ToLongFunction<McpJsonObject>,List<String>,List<String>,BooleanSupplier)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "Input(String,ResponseKind,McpRequestContext,McpJsonObject,long,long,long,long,ToLongFunction<McpJsonObject>,List<String>,List<String>,BooleanSupplier)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java#com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input#Input(String,ResponseKind,McpRequestContext,McpJsonObject,long,long,long,long,ToLongFunction<McpJsonObject>,List<String>,List<String>,BooleanSupplier,Optional<McpLocalizationContext>)->RequestOrThrowable.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "Input(String,ResponseKind,McpRequestContext,McpJsonObject,long,long,long,long,ToLongFunction<McpJsonObject>,List<String>,List<String>,BooleanSupplier,Optional<McpLocalizationContext>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input",
           "sink": "RequestOrThrowable.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java#com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input#localizationContext()->RequestOrThrowable.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "localizationContext()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer.Input",
+          "sink": "RequestOrThrowable.recordAccessor"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRuntimeCatalogLocalizer.java",
@@ -9306,9 +9522,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeTaskGet(TaskManagerAdapter,McpApplicationInvocation)->RequestOrThrowable.request@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeTaskGet(TaskManagerAdapter,Optional<CatalogAccessAdapter>,McpApplicationInvocation)->RequestOrThrowable.request@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "invokeTaskGet(TaskManagerAdapter,McpApplicationInvocation)",
+          "member": "invokeTaskGet(TaskManagerAdapter,Optional<CatalogAccessAdapter>,McpApplicationInvocation)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
           "sink": "RequestOrThrowable.request"
@@ -9423,6 +9639,42 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#CatalogAccessInput(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>)->RequestOrThrowable.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "CatalogAccessInput(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "RequestOrThrowable.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#requestContext()->RequestOrThrowable.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "requestContext()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "RequestOrThrowable.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#toString()->RequestOrThrowable.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "RequestOrThrowable.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessSession#localizationContext()->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "localizationContext()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessSession",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DisabledLifecycleGeneration#signalTerminationFailure(Throwable)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "signalTerminationFailure(Throwable)",
@@ -9441,9 +9693,27 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->RequestOrThrowable.recordConstructor@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<McpLocalizationContext>)->RequestOrThrowable.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "PromptInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<McpLocalizationContext>)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation",
           "sink": "RequestOrThrowable.recordConstructor"
@@ -9471,6 +9741,15 @@
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#admissionIdentity()->RequestOrThrowable.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "admissionIdentity()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation",
+          "sink": "RequestOrThrowable.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation#localizationContext()->RequestOrThrowable.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "localizationContext()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation",
           "sink": "RequestOrThrowable.recordAccessor"
@@ -9801,6 +10080,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter#findTask(McpRequestContext,String,Optional<CatalogAccessSession>)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "findTask(McpRequestContext,String,Optional<CatalogAccessSession>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter#findTaskForSubscriptionAuthorization(McpRequestContext,String)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "findTaskForSubscriptionAuthorization(McpRequestContext,String)",
@@ -9828,9 +10116,27 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->RequestOrThrowable.recordConstructor@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<McpLocalizationContext>)->RequestOrThrowable.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "ToolInvocation(Request,McpRequestContext,McpEndpoint,Map<String, String>,String,McpRequestId,String,String,Optional<McpImplementation>,McpJsonObject,McpJsonObject,McpAdmissionIdentity,McpJsonObject,CancelationToken,Optional<ProgressEmitter>,HandlerEntryGuard,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<McpLocalizationContext>)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation",
           "sink": "RequestOrThrowable.recordConstructor"
@@ -9858,6 +10164,15 @@
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#admissionIdentity()->RequestOrThrowable.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "admissionIdentity()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation",
+          "sink": "RequestOrThrowable.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation#localizationContext()->RequestOrThrowable.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "localizationContext()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation",
           "sink": "RequestOrThrowable.recordAccessor"
@@ -11603,6 +11918,15 @@
       "name": "Redacted request, MCP, and terminal diagnostic renderers",
       "sourcePaths": [
         {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#toString()->McpMetricsSurface.toString@1",
+          "matcherRuleId": "PRIV-MATCH-002",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "McpMetricsSurface.toString"
+        },
+        {
           "file": "src/main/java/com/soklet/DefaultMcpLocalizationRequest.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultMcpLocalizationRequest.java#com.soklet.DefaultMcpLocalizationRequest#toString()->Diagnostic.toString@1",
           "matcherRuleId": "PRIV-MATCH-008",
@@ -11636,6 +11960,15 @@
           "member": "toString()",
           "occurrence": 1,
           "owner": "com.soklet.McpAdmissionDecision.Rejected",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCatalogAccessPolicy.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCatalogAccessPolicy.java#com.soklet.McpCatalogAccessPolicy#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCatalogAccessPolicy",
           "sink": "Diagnostic.toString"
         },
         {
@@ -11711,6 +12044,15 @@
           "sink": "Diagnostic.toString"
         },
         {
+          "file": "src/main/java/com/soklet/McpMetricsEvent.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent.SubscriptionMaintenance#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpMetricsEvent.SubscriptionMaintenance",
+          "sink": "Diagnostic.toString"
+        },
+        {
           "file": "src/main/java/com/soklet/McpPromptMessage.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpPromptMessage.java#com.soklet.McpPromptMessage#toString()->Diagnostic.toString@1",
           "matcherRuleId": "PRIV-MATCH-008",
@@ -11744,6 +12086,15 @@
           "member": "toString()",
           "occurrence": 1,
           "owner": "com.soklet.McpRequestPropagation",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorization.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSubscriptionAuthorization.java#com.soklet.McpSubscriptionAuthorization.Allowed#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorization.Allowed",
           "sink": "Diagnostic.toString"
         },
         {
@@ -13113,6 +13464,51 @@
         },
         {
           "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#ProjectionIndex(String,Map<String, Integer>,Map<String, Map<String, Integer>>)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "ProjectionIndex(String,Map<String, Integer>,Map<String, Map<String, Integer>>)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#argumentIndexes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "argumentIndexes()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#collectionMember()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "collectionMember()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#ownerIndexes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "ownerIndexes()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ResponsePlan#ResponsePlan(ResponseKind,List<Slot>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "ResponsePlan(ResponseKind,List<Slot>)",
@@ -13149,12 +13545,39 @@
         },
         {
           "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#Slot(McpLocalizableText,String)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#Slot(McpLocalizableText,McpTextOwnerType,String,StructuralTarget,String)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "Slot(McpLocalizableText,String)",
+          "member": "Slot(McpLocalizableText,McpTextOwnerType,String,StructuralTarget,String)",
           "occurrence": 1,
           "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
           "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#ownerId()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "ownerId()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#ownerType()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "ownerType()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#structuralTarget()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "structuralTarget()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Diagnostic.recordAccessor"
         },
         {
           "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
@@ -13181,6 +13604,51 @@
           "member": "toString()",
           "occurrence": 1,
           "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#StructuralTarget(StructuralTargetKind,String,String)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "StructuralTarget(StructuralTargetKind,String,String)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#kind()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "kind()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#memberPointer()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "memberPointer()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#promptArgumentName()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "promptArgumentName()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
           "sink": "Diagnostic.recordRenderer"
         },
         {
@@ -17541,6 +18009,60 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#CatalogAccessProjection(CatalogAccessSession,Set<String>,Set<String>,boolean)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "CatalogAccessProjection(CatalogAccessSession,Set<String>,Set<String>,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#accessiblePromptNames()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "accessiblePromptNames()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#accessibleToolNames()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "accessibleToolNames()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#directAccessible()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "directAccessible()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#session()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "session()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CatalogAccessProjection",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.CorsAuthorization#CorsAuthorization(Optional<CorsResponse>,Optional<MicrohttpResponse>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "CorsAuthorization(Optional<CorsResponse>,Optional<MicrohttpResponse>)",
@@ -17694,9 +18216,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.ProfileFrameworkResponses#ProfileFrameworkResponses(McpWireResult,McpWireResult,McpWireResult,McpWireResult,McpWireResult)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.ProfileFrameworkResponses#ProfileFrameworkResponses(McpWireResult,Optional<McpWireResult>,Optional<McpWireResult>,McpWireResult,McpWireResult)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "ProfileFrameworkResponses(McpWireResult,McpWireResult,McpWireResult,McpWireResult,McpWireResult)",
+          "member": "ProfileFrameworkResponses(McpWireResult,Optional<McpWireResult>,Optional<McpWireResult>,McpWireResult,McpWireResult)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.ProfileFrameworkResponses",
           "sink": "Diagnostic.recordConstructor"
@@ -21366,6 +21888,42 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#cancelationToken()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "cancelationToken()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#continuationLocale()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "continuationLocale()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#pastDeadline()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "pastDeadline()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput#selectedLocaleSlot()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "selectedLocaleSlot()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DiagnosticsState#DiagnosticsState(boolean,boolean,Optional<InetSocketAddress>,boolean,int,int,int,int,int,int)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "DiagnosticsState(boolean,boolean,Optional<InetSocketAddress>,boolean,int,int,int,int,int,int)",
@@ -21474,12 +22032,21 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>)",
+          "member": "EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan",
           "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#catalogAccessAdapter()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "catalogAccessAdapter()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan",
+          "sink": "Diagnostic.recordAccessor"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
@@ -27652,6 +28219,33 @@
           "sink": "Diagnostic.recordAccessor"
         },
         {
+          "file": "src/main/java/com/soklet/McpSubscriptionAuthorization.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSubscriptionAuthorization.java#com.soklet.McpSubscriptionAuthorization.Denied#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionAuthorization.Denied",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionEvent.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSubscriptionEvent.java#com.soklet.McpSubscriptionEvent.PromptsListChanged#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionEvent.PromptsListChanged",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSubscriptionEvent.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSubscriptionEvent.java#com.soklet.McpSubscriptionEvent.ToolsListChanged#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSubscriptionEvent.ToolsListChanged",
+          "sink": "Diagnostic.toString"
+        },
+        {
           "file": "src/main/java/com/soklet/SokletApplicationFinalization.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletApplicationFinalization.java#com.soklet.SokletApplicationCoreDiagnostics#SokletApplicationCoreDiagnostics(LifecycleTransitionSnapshot,Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>,InternalLifecyclePolicy,long)->Diagnostic.structuredSurface.SokletApplicationCoreDiagnostics@1",
           "matcherRuleId": "PRIV-MATCH-008",
@@ -28944,6 +29538,24 @@
           "key": "PRIV-MATCH-009:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#methodNotFound(McpProtocolProfile,McpJsonRpcMessage.Request,List<Header>)->McpJsonRpcError.constructor@1",
           "matcherRuleId": "PRIV-MATCH-009",
           "member": "methodNotFound(McpProtocolProfile,McpJsonRpcMessage.Request,List<Header>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "sink": "McpJsonRpcError.constructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#observedPolicyCapacityRejected(RequestControl,McpJsonRpcId,List<Header>)->McpJsonRpcError.constructor@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "observedPolicyCapacityRejected(RequestControl,McpJsonRpcId,List<Header>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "sink": "McpJsonRpcError.constructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#observedPolicyDeadline(RequestControl,McpJsonRpcId,List<Header>,boolean)->McpJsonRpcError.constructor@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "observedPolicyDeadline(RequestControl,McpJsonRpcId,List<Header>,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "McpJsonRpcError.constructor"
@@ -31596,18 +32208,18 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java#com.soklet.DefaultMcpLocalizationCatalogExtractor#addResponse(List<McpCanonicalLocalizationPlan.ResponsePlan>,McpCanonicalLocalizationPlan.ResponseKind,List<McpCanonicalLocalizationPlan.Slot>,int)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java#com.soklet.DefaultMcpLocalizationCatalogExtractor#addResponse(List<McpCanonicalLocalizationPlan.ResponsePlan>,McpCanonicalLocalizationPlan.ResponseKind,List<McpCanonicalLocalizationPlan.Slot>,int,boolean)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "addResponse(List<McpCanonicalLocalizationPlan.ResponsePlan>,McpCanonicalLocalizationPlan.ResponseKind,List<McpCanonicalLocalizationPlan.Slot>,int)",
+          "member": "addResponse(List<McpCanonicalLocalizationPlan.ResponsePlan>,McpCanonicalLocalizationPlan.ResponseKind,List<McpCanonicalLocalizationPlan.Slot>,int,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpLocalizationCatalogExtractor",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java#com.soklet.DefaultMcpLocalizationCatalogExtractor#plan(McpEndpointRegistry,int)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java#com.soklet.DefaultMcpLocalizationCatalogExtractor#plan(McpEndpointRegistry,int,boolean)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "plan(McpEndpointRegistry,int)",
+          "member": "plan(McpEndpointRegistry,int,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpLocalizationCatalogExtractor",
           "sink": "Throwable.IllegalArgumentException"
@@ -31640,12 +32252,12 @@
           "sink": "Throwable.IllegalStateException"
         },
         {
-          "file": "src/main/java/com/soklet/DefaultMcpLocalizationControl.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationControl.java#com.soklet.DefaultMcpLocalizationControl#invalidateCatalogs()->Throwable.IllegalStateException@1",
+          "file": "src/main/java/com/soklet/DefaultMcpLocalizationCatalogInvalidator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpLocalizationCatalogInvalidator.java#com.soklet.DefaultMcpLocalizationCatalogInvalidator#invalidateCatalogs()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "invalidateCatalogs()",
           "occurrence": 1,
-          "owner": "com.soklet.DefaultMcpLocalizationControl",
+          "owner": "com.soklet.DefaultMcpLocalizationCatalogInvalidator",
           "sink": "Throwable.IllegalStateException"
         },
         {
@@ -32298,6 +32910,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#requireCatalogAccessEvaluationActive(CatalogAccessInput)->Throwable.InterruptedException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "requireCatalogAccessEvaluationActive(CatalogAccessInput)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.InterruptedException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#requireTaskIdMatches(String,McpTask)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "requireTaskIdMatches(String,McpTask)",
@@ -32370,27 +32991,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)",
+          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)->Throwable.IllegalArgumentException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)",
+          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)->Throwable.IllegalArgumentException@3",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)->Throwable.IllegalArgumentException@3",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean)",
+          "member": "taskSnapshot(McpEndpoint,McpRequestContext,McpTask,boolean,Optional<CatalogAccessSession>)",
           "occurrence": 3,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalArgumentException"
@@ -32409,6 +33030,15 @@
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#validateRequestStateProtection(List<EndpointPlan>,McpProtectionConfig)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "validateRequestStateProtection(List<EndpointPlan>,McpProtectionConfig)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#validateSubscriptionAuthorizerConfiguration(List<EndpointPlan>,McpTaskEventPublisher,boolean)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateSubscriptionAuthorizerConfiguration(List<EndpointPlan>,McpTaskEventPublisher,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalStateException"
@@ -34890,6 +35520,24 @@
         },
         {
           "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#duplicateIdentity(String)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "duplicateIdentity(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex#malformedProjection(String)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "malformedProjection(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.ProjectionIndex",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.ResponsePlan#ResponsePlan()->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "ResponsePlan()",
@@ -34905,6 +35553,69 @@
           "occurrence": 1,
           "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
           "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#Slot()->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "Slot()",
+          "occurrence": 2,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.Slot#Slot()->Throwable.IllegalArgumentException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "Slot()",
+          "occurrence": 3,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.Slot",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#StructuralTarget()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StructuralTarget()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#StructuralTarget()->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StructuralTarget()",
+          "occurrence": 2,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#StructuralTarget()->Throwable.IllegalArgumentException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StructuralTarget()",
+          "occurrence": 3,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#resolve(McpTextOwnerType,String,ProjectionIndex)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "resolve(McpTextOwnerType,String,ProjectionIndex)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpCanonicalLocalizationPlan.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpCanonicalLocalizationPlan.java#com.soklet.McpCanonicalLocalizationPlan.StructuralTarget#resolve(McpTextOwnerType,String,ProjectionIndex)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "resolve(McpTextOwnerType,String,ProjectionIndex)",
+          "occurrence": 2,
+          "owner": "com.soklet.McpCanonicalLocalizationPlan.StructuralTarget",
+          "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/McpContentAnnotations.java",
@@ -35771,6 +36482,15 @@
           "sink": "Throwable.IllegalArgumentException"
         },
         {
+          "file": "src/main/java/com/soklet/McpResourceOutput.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpResourceOutput.java#com.soklet.McpResourceOutput#requireContents(List<? extends McpResourceContents>)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "requireContents(List<? extends McpResourceContents>)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpResourceOutput",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
           "file": "src/main/java/com/soklet/McpResourceRegistration.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpResourceRegistration.java#com.soklet.McpResourceRegistration#invalidUriTemplate()->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
@@ -36024,11 +36744,11 @@
         },
         {
           "file": "src/main/java/com/soklet/McpSubscriptionConfig.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSubscriptionConfig.java#com.soklet.McpSubscriptionConfig.Builder#Builder(McpSubscriptionEventPublisher,Set<McpSubscriptionNotificationType>)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSubscriptionConfig.java#com.soklet.McpSubscriptionConfig#requireNotificationTypes(Set<McpSubscriptionNotificationType>)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "Builder(McpSubscriptionEventPublisher,Set<McpSubscriptionNotificationType>)",
+          "member": "requireNotificationTypes(Set<McpSubscriptionNotificationType>)",
           "occurrence": 1,
-          "owner": "com.soklet.McpSubscriptionConfig.Builder",
+          "owner": "com.soklet.McpSubscriptionConfig",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
@@ -38796,18 +39516,18 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver,Runnable)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver)",
+          "member": "McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver,Runnable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver)->Throwable.IllegalArgumentException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver,Runnable)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver)",
+          "member": "McpApplicationHandlerDispatcher(int,int,ExecutorService,McpApplicationExecutionObserver,Runnable)",
           "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
           "sink": "Throwable.IllegalArgumentException"
@@ -38841,10 +39561,28 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#onHandlerExited(Ticket)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onHandlerExited(Ticket)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#onSubmissionFailure(Ticket)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "onSubmissionFailure(Ticket)",
           "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#onSubmissionFailure(Ticket)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onSubmissionFailure(Ticket)",
+          "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
           "sink": "Throwable.IllegalStateException"
         },
@@ -38922,12 +39660,75 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.McpApplicationPolicyCapacityException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationPolicyCapacityException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.McpApplicationPolicyDeadlineException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationPolicyDeadlineException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.McpApplicationPolicyDeadlineException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationPolicyDeadlineException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.McpApplicationPolicyDeadlineException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationPolicyDeadlineException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)->Throwable.McpApplicationPolicyDeadlineException@4",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeBoundedPolicy(Callable<T>,long,Consumer<StreamTerminationReason>)",
+          "occurrence": 4,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationPolicyDeadlineException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#start()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "start()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#stop(StreamTerminationReason)->Throwable.McpApplicationExecutionStoppedException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "stop(StreamTerminationReason)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "sink": "Throwable.McpApplicationExecutionStoppedException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
@@ -39876,9 +40677,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#profileFrameworkResponses(McpServerCapabilityRegistry)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#profileFrameworkResponses(McpServerCapabilityRegistry,boolean)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "profileFrameworkResponses(McpServerCapabilityRegistry)",
+          "member": "profileFrameworkResponses(McpServerCapabilityRegistry,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
           "sink": "Throwable.IllegalStateException"
@@ -42324,9 +43125,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeTaskGet(TaskManagerAdapter,McpApplicationInvocation)->Throwable.McpInvalidApplicationInputException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeTaskGet(TaskManagerAdapter,Optional<CatalogAccessAdapter>,McpApplicationInvocation)->Throwable.McpInvalidApplicationInputException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeTaskGet(TaskManagerAdapter,McpApplicationInvocation)",
+          "member": "invokeTaskGet(TaskManagerAdapter,Optional<CatalogAccessAdapter>,McpApplicationInvocation)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
           "sink": "Throwable.McpInvalidApplicationInputException"
@@ -50451,27 +51252,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.disabledInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.disabledInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolOutputSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.disabledInstance"

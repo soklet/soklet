@@ -4978,22 +4978,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if ("tools/call".equals(mappedRequest.method())) {
 				McpApplicationToolRoute resolvedRoute = toolRoute.orElse(null);
 				if (resolvedRoute != null) {
-					McpRateLimitDecision decision;
+					Optional<McpRateLimitDecision> decision;
 					try {
-						decision = resolvedRoute.rateLimiter().acquire(
+						decision = Optional.ofNullable(resolvedRoute.rateLimiter().acquire(
 								new McpRateLimitContext(sokletRequest, endpoint,
 										effectiveIdentity, McpRateLimitTarget.TOOL,
-										mappedRequest.method(), operationName));
+										mappedRequest.method(), operationName)));
 					} catch (Throwable throwable) {
 						return observedPolicyHookInternalError(requestControl,
 								mappedRequest.id(), corsHeaders, throwable);
 					}
 					if (!requestControl.protocolProcessingAllowed())
 						return null;
-					if (decision == null)
+					if (decision.isEmpty())
 						return observedPolicyHookInternalError(requestControl,
 								mappedRequest.id(), corsHeaders, null);
-					if (decision instanceof McpRateLimitDecision.Denied denied)
+					if (decision.orElseThrow()
+							instanceof McpRateLimitDecision.Denied denied)
 						return observedRateLimited(requestControl, mappedRequest.id(),
 								denied.retryAfter(), corsHeaders);
 				}

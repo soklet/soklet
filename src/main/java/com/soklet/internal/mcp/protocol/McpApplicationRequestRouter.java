@@ -2613,10 +2613,6 @@ final class McpApplicationExecution {
 			releaseResponseOwnership();
 		}
 
-		private void requestInterrupt() {
-			ticket().requestInterrupt();
-		}
-
 		private void releaseResponseOwnership() {
 			TransportLease lease = transportLease.getAndSet(null);
 			if (lease == null)

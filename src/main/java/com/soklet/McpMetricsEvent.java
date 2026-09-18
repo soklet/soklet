@@ -53,6 +53,7 @@ public sealed interface McpMetricsEvent permits
 		McpMetricsEvent.RequestStreamClosed,
 		McpMetricsEvent.SubscriptionOpened,
 		McpMetricsEvent.SubscriptionClosed,
+		McpMetricsEvent.SubscriptionMaintenance,
 		McpMetricsEvent.CancelationSignaled,
 		McpMetricsEvent.ProgressEmitted,
 		McpMetricsEvent.KeepAliveEmitted,
@@ -187,6 +188,22 @@ public sealed interface McpMetricsEvent permits
 			@NonNull McpStreamTerminationReason reason,
 			@NonNull Duration duration) {
 		return new SubscriptionClosed(endpointPath, reason, duration);
+	}
+
+	/**
+	 * Creates an event describing one bounded subscription-maintenance outcome.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param work fixed maintenance work family
+	 * @param outcome fixed maintenance outcome
+	 * @return subscription-maintenance event
+	 */
+	@NonNull
+	static SubscriptionMaintenance subscriptionMaintenance(
+			@NonNull String endpointPath,
+			SubscriptionMaintenance.@NonNull Work work,
+			SubscriptionMaintenance.@NonNull Outcome outcome) {
+		return new SubscriptionMaintenance(endpointPath, work, outcome);
 	}
 
 	/**
@@ -870,6 +887,113 @@ public sealed interface McpMetricsEvent permits
 		public String toString() {
 			return "SubscriptionClosed{endpointPath=<redacted>, reason="
 					+ this.reason + ", duration=" + this.duration + "}";
+		}
+	}
+
+	/**
+	 * One bounded subscription-authorization, catalog-projection, or
+	 * reconciliation maintenance outcome.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public final class SubscriptionMaintenance implements McpMetricsEvent {
+		/**
+		 * Fixed subscription-maintenance work families.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		public enum Work {
+			/** A subscription authorization check. */
+			AUTHORIZATION,
+			/** A caller-visible catalog projection. */
+			CATALOG_PROJECTION,
+			/** Explicit subscription reconciliation. */
+			RECONCILIATION
+		}
+
+		/**
+		 * Fixed subscription-maintenance outcomes.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		public enum Outcome {
+			/** The maintenance work completed successfully. */
+			SUCCEEDED,
+			/** Authorization was denied. */
+			DENIED,
+			/** The queue-inclusive maintenance deadline elapsed. */
+			TIMED_OUT,
+			/** Bounded execution capacity rejected the work. */
+			CAPACITY_REJECTED,
+			/** The maintenance work failed. */
+			FAILED,
+			/** An equivalent pending generation already represented the work. */
+			COALESCED,
+			/** A superseded maintenance result was discarded. */
+			STALE_RESULT_DISCARDED
+		}
+
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final Work work;
+		@NonNull
+		private final Outcome outcome;
+
+		private SubscriptionMaintenance(@NonNull String endpointPath,
+				@NonNull Work work, @NonNull Outcome outcome) {
+			requireEndpointPath(endpointPath);
+			this.endpointPath = endpointPath;
+			this.work = requireNonNull(work);
+			this.outcome = requireNonNull(outcome);
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return fixed maintenance work family */
+		@NonNull
+		public Work getWork() {
+			return this.work;
+		}
+
+		/** @return fixed maintenance outcome */
+		@NonNull
+		public Outcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether this object contains the same event values */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			SubscriptionMaintenance that = (SubscriptionMaintenance) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.work.equals(that.work)
+					&& this.outcome.equals(that.outcome);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			int result = this.endpointPath.hashCode();
+			result = 31 * result + this.work.hashCode();
+			return 31 * result + this.outcome.hashCode();
+		}
+
+		/** @return diagnostic rendering with the endpoint path redacted */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SubscriptionMaintenance{endpointPath=<redacted>, work="
+					+ this.work + ", outcome=" + this.outcome + "}";
 		}
 	}
 

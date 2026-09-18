@@ -40,6 +40,14 @@ public enum McpStreamTerminationReason {
 	SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 	/** The simulator's cumulative captured-byte capacity was exhausted. */
 	SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
+	/** The subscription authorizer denied continued access. */
+	SUBSCRIPTION_AUTHORIZATION_DENIED,
+	/** The subscription authorization lease expired. */
+	SUBSCRIPTION_AUTHORIZATION_EXPIRED,
+	/** A required subscription authorization check failed. */
+	SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED,
+	/** Subscription reconciliation could not establish fresh authorization. */
+	SUBSCRIPTION_RECONCILIATION_FAILED,
 	/** Soklet contained an unexpected stream failure. */
 	INTERNAL_ERROR
 }

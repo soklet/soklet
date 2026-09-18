@@ -252,8 +252,11 @@ class McpLocalizationMrtrRuntimeTests {
 								.build())
 						.build());
 
-		if (localizer != null)
+		if (localizer != null) {
 			builder.localizer(localizer);
+			builder.subscriptionAuthorizer(
+					McpSubscriptionAuthorizer.denyAllInstance());
+		}
 	}
 
 	private record Capture(int statusCode, String body) {}

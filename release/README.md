@@ -15,6 +15,7 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [security-claims audit](SECURITY_CLAIMS_AUDIT.md)
 - [current Gitleaks history-scan triage (not an approval)](GITLEAKS_TRIAGE_2026-09-16.md)
 - [owner-approved scanner false-positive dispositions](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md)
+- [September 18 amendment retargeting two exact `Exchange` selectors](SCAN_FALSE_POSITIVE_APPROVAL_AMENDMENT_2026-09-18.md)
 - [G5 promotion runbook](G5_RELEASE_RUNBOOK.md)—checked in but never executed
   without explicit G5 approval
 - [no-rebuild Central promotion mechanics](PROMOTION.md)
@@ -89,9 +90,12 @@ bug-pattern exclusions for the reproduced SpotBugs 4.10.4 synthetic-constructor
 annotation-indexing false positives. Their [bytecode proof and review boundary](../docs/spotbugs-jspecify-constructor-analysis.md)
 remain separate from historical approval. The producer extracts this filter
 from the exact candidate commit and checks its current registry digest; it no
-longer substitutes a historical filter. The owner has now approved those four
-exact exclusions in the [scoped decision](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md).
-That does not establish a candidate PASS or satisfy unrelated policy reviews.
+longer substitutes a historical filter. The owner approved the original four
+exact exclusions in the [scoped decision](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md);
+the two `Exchange` selectors' current constructor signatures are separately
+authorized by the [September 18 amendment](SCAN_FALSE_POSITIVE_APPROVAL_AMENDMENT_2026-09-18.md).
+Neither decision establishes a candidate PASS or satisfies unrelated policy
+reviews.
 
 Three longer-running producers remain available as advisory post-release
 monitoring and are deliberately outside the manifest, candidate validator,

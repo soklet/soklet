@@ -49,6 +49,7 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpResourcePage;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
@@ -1026,6 +1027,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

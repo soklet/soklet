@@ -33,6 +33,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -264,6 +265,15 @@ public class McpFiniteBoundInventoryTests {
 				application.timerResolution().toNanos());
 		put(values, "subscription.maximum-duration-nanos",
 				subscription.maximumSubscriptionDuration().toNanos());
+		put(values, "subscription.authorization.maximum-duration-nanos",
+				((Duration) fieldValue(publicBuilder,
+						"maximumSubscriptionAuthorizationDuration")).toNanos());
+		put(values, "subscription.authorization.timeout-nanos",
+				((Duration) fieldValue(publicBuilder,
+						"subscriptionAuthorizationTimeout")).toNanos());
+		put(values, "subscription.catalog-projection.timeout-nanos",
+				((Duration) fieldValue(publicBuilder,
+						"subscriptionCatalogProjectionTimeout")).toNanos());
 
 		McpJsonLimits json = McpJsonLimits.productionDefaults();
 		McpJsonLimits jsonHard = McpJsonLimits.maximumSupported();

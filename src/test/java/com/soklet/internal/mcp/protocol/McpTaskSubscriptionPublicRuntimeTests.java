@@ -35,6 +35,7 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpResourcePage;
 import com.soklet.McpServer;
 import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionEventRegistration;
@@ -1114,6 +1115,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			@NonNull AtomicInteger admissions) {
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.admissionController(context -> {
 					admissions.incrementAndGet();
 					String tenant = context.getRequest()

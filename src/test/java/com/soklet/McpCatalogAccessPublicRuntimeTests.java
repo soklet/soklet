@@ -177,6 +177,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void catalogListStopsBeforeNextEvaluatorAfterDeadline()
 			throws Exception {
 		AtomicInteger firstInvocations = new AtomicInteger();
@@ -412,6 +413,69 @@ public class McpCatalogAccessPublicRuntimeTests {
 					"interceptor-before:prompts/get",
 					"handler:prompts/get",
 					"interceptor-after:prompts/get"), stages);
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
+	public void callerAwareDirectToolFailsClosedWhenToolLimiterReturnsNull()
+			throws Exception {
+		AtomicInteger policyInvocations = new AtomicInteger();
+		AtomicInteger limiterInvocations = new AtomicInteger();
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("null-limiter.tool")
+				.jsonObjectArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("must-not-run");
+				})
+				.build();
+		McpEndpoint endpoint = endpointBuilder(
+				"catalog-access-null-tool-limiter-runtime-test")
+				.addTool(tool)
+				.build();
+		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
+				(context, registration, features) -> {
+					Assertions.assertEquals(TENANT_A, caller(context));
+					Assertions.assertSame(tool, registration);
+					policyInvocations.incrementAndGet();
+					return true;
+				}, (context, registration, features) -> true);
+		McpServer server = serverBuilder(endpoint, policy)
+				.admissionController(
+						McpCatalogAccessPublicRuntimeTests::admitCaller)
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> {
+					limiterInvocations.incrementAndGet();
+					return null;
+				})
+				.handlerInterceptor((context, features, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return continuation.proceed();
+				})
+				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				})
+				.build();
+		Soklet owner = managedSoklet(server);
+
+		try {
+			owner.start();
+			HttpResponse<String> response = send(server, "null-tool-limiter",
+					"tools/call", tool.getName(), TENANT_A,
+					",\"name\":\"" + tool.getName()
+							+ "\",\"arguments\":{}");
+			assertInternalError(response, "null-tool-limiter");
+			Assertions.assertEquals(1, policyInvocations.get());
+			Assertions.assertEquals(1, limiterInvocations.get());
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
 			owner.close();
 		}
@@ -850,6 +914,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.catalogAccessPolicy(policy)
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

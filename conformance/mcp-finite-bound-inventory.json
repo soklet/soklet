@@ -2227,6 +2227,78 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDurationsRejectNonpositiveAndUnrepresentableValues"
+      ],
+      "category": "TIME",
+      "deterministicFailure": {
+        "contract": "Nonpositive or nanosecond-unrepresentable subscription-maintenance durations fail builder configuration; these settings remain behaviorally neutral until P1b runtime wiring lands.",
+        "stage": "CONFIGURATION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "member": "requirePositiveDuration",
+          "owner": "com.soklet.McpServer.Builder"
+        }
+      ],
+      "id": "FINITE-TIME-002",
+      "name": "Subscription-maintenance configuration time bounds",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDefaultsAndNullResetsAreRetained"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumSubscriptionAuthorizationDuration(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSubscriptionAuthorizationDuration(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#subscriptionAuthorizationTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "subscriptionAuthorizationTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#subscriptionCatalogProjectionTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "subscriptionCatalogProjectionTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "maximum configured duration of one successful subscription-authorization grant",
+          "key": "subscription.authorization.maximum-duration-nanos",
+          "unit": "NANOSECONDS",
+          "value": "60000000000"
+        },
+        {
+          "accounting": "configured queue-inclusive deadline for one subscription-authorization check",
+          "key": "subscription.authorization.timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "5000000000"
+        },
+        {
+          "accounting": "configured queue-inclusive deadline for one subscription catalog projection",
+          "key": "subscription.catalog-projection.timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "5000000000"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
         "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReaderTests.java#classFileReadAcceptsExactByteBoundaryAndRejectsOneOver",
         "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReaderTests.java#enforcesConstantAndNameLimitsWithoutInitializingEnum",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java#bindingLimitsHaveExactNodeDepthAndContainerBoundaries",

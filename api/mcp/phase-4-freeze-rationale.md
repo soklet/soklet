@@ -1277,3 +1277,21 @@ provisional Tasks, and all historical candidate receipts remain unchanged. The
 released-3.5.1 incompatibility ledger now has 654 records because the abstract
 server getter is source-incompatible for third-party interface implementations.
 The related Phase 5 collection amendment is recorded in its own rationale.
+
+## 2026-09-18 P1b current-source foundation; no refreeze
+
+The P1b API/value foundation is now present in current source, including the
+server configuration surface and the one-for-one rename from
+`McpLocalizationControl` to `McpLocalizationCatalogInvalidator`. Phase 4 still
+owns 136 current-source types and shared hosts; `phase-4.includes` remains
+SHA-256
+`239076145534dae18826ec6184414fb016fd89394f59c213161c305da98bdecd`,
+and the focused current-source reflection/nullability SHA-256 is
+`2ccce8e3de9c7f3860bdeec071727eb27875b1996d4f410c4edaf9299a1525ee`.
+
+This is deliberately not a Phase 4 refreeze. `phase-4.signatures.jsonl` and
+`current-incompatibilities.jsonl` retain their last reviewed pre-P1b bytes
+until P0-C is dispositioned and MCP-G2 authorizes regeneration and review.
+Current-source ownership and evolution evidence does not replace those frozen
+ledgers. Subscription runtime wiring also remains out of scope for this
+checkpoint.

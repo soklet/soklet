@@ -1211,6 +1211,8 @@ public class McpServerPublicRuntimeTests {
 			boolean configureCorsAuthorizer) {
 		McpServer.Builder builder = McpServer.withPort(port)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.admissionController(admissionController);
 		if (configureCorsAuthorizer)
 			builder.corsAuthorizer(CorsAuthorizer.rejectAllInstance());

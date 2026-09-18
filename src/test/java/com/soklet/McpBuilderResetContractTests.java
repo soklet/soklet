@@ -146,6 +146,15 @@ public class McpBuilderResetContractTests {
 				.maximumSubscriptionsPerPartition(null)
 				.maximumSubscriptionDuration(Duration.ofHours(2))
 				.maximumSubscriptionDuration(null)
+				.subscriptionCatalogProjectionTimeout(Duration.ofSeconds(2))
+				.subscriptionCatalogProjectionTimeout(null)
+				.subscriptionAuthorizationTimeout(Duration.ofSeconds(3))
+				.subscriptionAuthorizationTimeout(null)
+				.maximumSubscriptionAuthorizationDuration(Duration.ofMinutes(2))
+				.maximumSubscriptionAuthorizationDuration(null)
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.deniedInstance())
+				.subscriptionAuthorizer(null)
 				.requestTimeout(Duration.ofSeconds(2))
 				.requestTimeout(null)
 				.requestHandlerConcurrency(3)
@@ -244,6 +253,15 @@ public class McpBuilderResetContractTests {
 				reset.maximumSubscriptionsPerPartition());
 		Assertions.assertEquals(defaults.maximumSubscriptionDuration(),
 				reset.maximumSubscriptionDuration());
+		Assertions.assertEquals(defaults.subscriptionCatalogProjectionTimeout(),
+				reset.subscriptionCatalogProjectionTimeout());
+		Assertions.assertEquals(defaults.subscriptionAuthorizationTimeout(),
+				reset.subscriptionAuthorizationTimeout());
+		Assertions.assertEquals(
+				defaults.maximumSubscriptionAuthorizationDuration(),
+				reset.maximumSubscriptionAuthorizationDuration());
+		Assertions.assertSame(McpSubscriptionAuthorizer.denyAllInstance(),
+				reset.getSubscriptionAuthorizer());
 		Assertions.assertEquals(defaults.logRawValidatedTraceIds(),
 				reset.logRawValidatedTraceIds());
 		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),

@@ -89,6 +89,8 @@ public class McpTaskInputUpdateRuntimeTests {
 		McpServer server = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.taskManager(taskManager)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.admissionController(context ->
 						McpAdmissionDecision.accepted(identity))
 				.host(LOOPBACK)

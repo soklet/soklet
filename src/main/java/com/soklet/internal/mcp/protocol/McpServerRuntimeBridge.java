@@ -1088,6 +1088,10 @@ public final class McpServerRuntimeBridge {
 										McpResourceNotificationType.RESOURCES_LIST_CHANGED;
 								case RESOURCE_UPDATED ->
 										McpResourceNotificationType.RESOURCE_UPDATED;
+								case TOOLS_LIST_CHANGED ->
+										McpResourceNotificationType.TOOLS_LIST_CHANGED;
+								case PROMPTS_LIST_CHANGED ->
+										McpResourceNotificationType.PROMPTS_LIST_CHANGED;
 							});
 					return toInternal(configuration);
 				});

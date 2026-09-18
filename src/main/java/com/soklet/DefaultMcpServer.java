@@ -146,6 +146,12 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final Duration maximumSubscriptionDuration;
 	@NonNull
+	private final Duration subscriptionCatalogProjectionTimeout;
+	@NonNull
+	private final Duration subscriptionAuthorizationTimeout;
+	@NonNull
+	private final Duration maximumSubscriptionAuthorizationDuration;
+	@NonNull
 	private final Duration writeTimeout;
 	@NonNull
 	private final Duration requestHeaderTimeout;
@@ -160,6 +166,8 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final McpCatalogAccessPolicy catalogAccessPolicy;
 	private final boolean catalogAccessPolicyExplicitlyConfigured;
+	@NonNull
+	private final McpSubscriptionAuthorizer subscriptionAuthorizer;
 	@NonNull
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
@@ -185,7 +193,9 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final DefaultMcpSecurityControls securityControls;
 	@NonNull
-	private final McpLocalizationControl localizationControl;
+	private final McpLocalizationCatalogInvalidator localizationCatalogInvalidator;
+	@NonNull
+	private final McpSubscriptionReconciler subscriptionReconciler;
 	@NonNull
 	private final McpMetricEventDelivery mcpMetricEventDelivery;
 	@NonNull
@@ -227,11 +237,16 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Duration keepAliveInterval,
 			int maximumSubscriptionsPerPartition,
 			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull Duration subscriptionCatalogProjectionTimeout,
+			@NonNull Duration subscriptionAuthorizationTimeout,
+			@NonNull Duration maximumSubscriptionAuthorizationDuration,
 			@NonNull McpEndpointRegistry endpointRegistry,
 			@NonNull McpAdmissionController admissionController,
 			boolean admissionControllerExplicitlyConfigured,
 			@NonNull McpCatalogAccessPolicy catalogAccessPolicy,
 			boolean catalogAccessPolicyExplicitlyConfigured,
+			@NonNull McpSubscriptionAuthorizer subscriptionAuthorizer,
+			boolean subscriptionAuthorizerExplicitlyConfigured,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable McpTaskManager taskManager,
@@ -263,6 +278,12 @@ final class DefaultMcpServer implements McpServer {
 		this.keepAliveInterval = requireNonNull(keepAliveInterval);
 		this.maximumSubscriptionDuration = requireNonNull(
 				maximumSubscriptionDuration);
+		this.subscriptionCatalogProjectionTimeout = requireNonNull(
+				subscriptionCatalogProjectionTimeout);
+		this.subscriptionAuthorizationTimeout = requireNonNull(
+				subscriptionAuthorizationTimeout);
+		this.maximumSubscriptionAuthorizationDuration = requireNonNull(
+				maximumSubscriptionAuthorizationDuration);
 		this.writeTimeout = requireNonNull(writeTimeout);
 		this.requestHeaderTimeout = requireNonNull(requestHeaderTimeout);
 		this.requestBodyTimeout = requireNonNull(requestBodyTimeout);
@@ -274,6 +295,7 @@ final class DefaultMcpServer implements McpServer {
 		this.catalogAccessPolicy = requireNonNull(catalogAccessPolicy);
 		this.catalogAccessPolicyExplicitlyConfigured =
 				catalogAccessPolicyExplicitlyConfigured;
+		this.subscriptionAuthorizer = requireNonNull(subscriptionAuthorizer);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.taskManager = taskManager;
@@ -295,8 +317,14 @@ final class DefaultMcpServer implements McpServer {
 						catalogAccessPolicyExplicitlyConfigured);
 		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
 				traceCorrelationKey);
-		this.localizationControl = new DefaultMcpLocalizationControl(
+		this.localizationCatalogInvalidator =
+				new DefaultMcpLocalizationCatalogInvalidator(
 				localizer != null, this::publishLocalizationCatalogInvalidation);
+		this.subscriptionReconciler = new McpSubscriptionReconciler() {
+			@Override
+			public void reconcileSubscriptions() {
+			}
+		};
 		this.mcpMetricEventDelivery = new McpMetricEventDelivery();
 		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
@@ -314,6 +342,9 @@ final class DefaultMcpServer implements McpServer {
 		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
+		validateSubscriptionAuthorizerConfiguration(endpointPlans,
+				this.taskEventPublisher,
+				subscriptionAuthorizerExplicitlyConfigured);
 		validateTaskRequiredTools(endpointPlans, taskManager);
 		validateRequestStateProtection(endpointPlans, protectionConfig);
 		Optional<RequestStateProtectionPlan> requestStateProtectionPlan =
@@ -547,6 +578,21 @@ final class DefaultMcpServer implements McpServer {
 		if (frameworkProtectionRequired && protectionConfig == null)
 			throw new IllegalStateException(
 					"Framework-protected MCP request state requires protection configuration.");
+	}
+
+	private static void validateSubscriptionAuthorizerConfiguration(
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@Nullable McpTaskEventPublisher taskEventPublisher,
+			boolean subscriptionAuthorizerExplicitlyConfigured) {
+		if (subscriptionAuthorizerExplicitlyConfigured)
+			return;
+		boolean endpointSubscriptions = requireNonNull(endpointPlans).stream()
+				.anyMatch(endpointPlan -> endpointPlan.endpoint()
+						.getSubscriptionConfig().isPresent()
+						|| endpointPlan.catalogLocalizer().isPresent());
+		if (endpointSubscriptions || taskEventPublisher != null)
+			throw new IllegalStateException(
+					"An MCP subscription authorizer must be explicitly configured when subscription support is enabled.");
 	}
 
 	@NonNull
@@ -826,7 +872,9 @@ final class DefaultMcpServer implements McpServer {
 								.equals(endpoint.getPath()))
 						.findFirst();
 
-		return endpointPlan.map(resolved -> new McpRuntimeCatalogLocalizer() {
+		return endpointPlan
+				.filter(resolved -> !resolved.responses().isEmpty())
+				.map(resolved -> new McpRuntimeCatalogLocalizer() {
 			@Override
 			public McpRuntimeCatalogLocalizer.@NonNull Outcome localizeCatalog(
 					McpRuntimeCatalogLocalizer.@NonNull Input input) {
@@ -1209,6 +1257,12 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
+	public McpSubscriptionAuthorizer getSubscriptionAuthorizer() {
+		return this.subscriptionAuthorizer;
+	}
+
+	@Override
+	@NonNull
 	public McpAdmissionController getAdmissionController() {
 		return this.admissionController;
 	}
@@ -1275,8 +1329,14 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
-	public McpLocalizationControl getLocalizationControl() {
-		return this.localizationControl;
+	public McpLocalizationCatalogInvalidator getLocalizationCatalogInvalidator() {
+		return this.localizationCatalogInvalidator;
+	}
+
+	@Override
+	@NonNull
+	public McpSubscriptionReconciler getSubscriptionReconciler() {
+		return this.subscriptionReconciler;
 	}
 
 	@NonNull
@@ -1349,6 +1409,21 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	Duration maximumSubscriptionDuration() {
 		return this.maximumSubscriptionDuration;
+	}
+
+	@NonNull
+	Duration subscriptionCatalogProjectionTimeout() {
+		return this.subscriptionCatalogProjectionTimeout;
+	}
+
+	@NonNull
+	Duration subscriptionAuthorizationTimeout() {
+		return this.subscriptionAuthorizationTimeout;
+	}
+
+	@NonNull
+	Duration maximumSubscriptionAuthorizationDuration() {
+		return this.maximumSubscriptionAuthorizationDuration;
 	}
 
 	boolean logRawValidatedTraceIds() {
@@ -2093,23 +2168,6 @@ final class DefaultMcpServer implements McpServer {
 				cancelationToken, progressEmitter, pastDeadline,
 				continuationLocale, selectedLocaleSlot, resourceListCursor,
 				Optional.empty(), Optional.empty());
-	}
-
-	@NonNull
-	private McpInvocationFeatures invocationFeatures(
-			@NonNull McpRequestContext requestContext,
-			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
-			@NonNull CancelationToken cancelationToken,
-			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
-			@NonNull BooleanSupplier pastDeadline,
-			@NonNull Optional<@NonNull String> continuationLocale,
-			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
-			@NonNull Optional<@NonNull String> resourceListCursor,
-			@NonNull Optional<@NonNull McpTaskControl> taskControl) {
-		return invocationFeatures(requestContext, endpoint, jsonRpcMethod,
-				cancelationToken, progressEmitter, pastDeadline,
-				continuationLocale, selectedLocaleSlot, resourceListCursor,
-				taskControl, Optional.empty());
 	}
 
 	@NonNull

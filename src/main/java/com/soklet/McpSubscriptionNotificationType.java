@@ -17,7 +17,7 @@
 package com.soklet;
 
 /**
- * Resource-notification families an MCP endpoint may support through
+ * Notification families an MCP endpoint may support through
  * {@code subscriptions/listen}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -26,5 +26,9 @@ public enum McpSubscriptionNotificationType {
 	/** The endpoint's discoverable resource list changed. */
 	RESOURCES_LIST_CHANGED,
 	/** The representation at a subscribed resource URI changed. */
-	RESOURCE_UPDATED
+	RESOURCE_UPDATED,
+	/** The endpoint's caller-visible tool list changed. */
+	TOOLS_LIST_CHANGED,
+	/** The endpoint's caller-visible prompt list changed. */
+	PROMPTS_LIST_CHANGED
 }

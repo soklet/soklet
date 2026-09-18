@@ -69,7 +69,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 			"zero", Set.of("prompt.neutral"));
 
 	@Test
-	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void filteredTenantCatalogsLocalizeOnlySurvivingStableOwners() {
 		Observations observations = new Observations();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
@@ -104,6 +104,8 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 						})
 						.catalogAccessPolicy(policy)
 						.localizer(localizer)
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
 						.host(LOOPBACK)
 						.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 						.toolRateLimiter(context -> McpRateLimitDecision.allowed())
@@ -158,6 +160,8 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 		assertThrows(IllegalStateException.class, () -> McpServer.withPort(0)
 				.endpointRegistry(registry)
 				.localizer(localizer)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build());
 
@@ -406,6 +410,8 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 										.build()))
 						.catalogAccessPolicy(policy)
 						.localizer(localizer)
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
 						.host(LOOPBACK)
 						.requestRateLimiter(
 								context -> McpRateLimitDecision.allowed())

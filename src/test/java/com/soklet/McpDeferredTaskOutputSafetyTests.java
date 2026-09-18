@@ -299,6 +299,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void completedTaskReauthorizationDeadlineCancelsItsPolicyToken()
 			throws Exception {
 		AtomicReference<SanitizerMode> sanitizerMode =
@@ -391,6 +392,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void completedTaskIsStatusOnlyWhenItsOriginToolIsNoLongerRegistered()
 			throws Exception {
 		AtomicReference<SanitizerMode> sanitizerMode =
@@ -453,6 +455,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void nonCompletedTaskReadsDoNotInitializePolicyOrLocalization()
 			throws Exception {
 		for (McpTaskStatus status : List.of(McpTaskStatus.WORKING,
@@ -684,6 +687,8 @@ public class McpDeferredTaskOutputSafetyTests {
 				.catalogAccessPolicy(catalogAccessPolicy)
 				.localizer(localizer)
 				.taskManager(taskManager)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(interceptor)

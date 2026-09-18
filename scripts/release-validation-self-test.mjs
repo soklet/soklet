@@ -1560,9 +1560,9 @@ run_barebones
     releaseHarnessRegistryPath,
     fixturePath('release/release-harness-contracts.json'),
   );
-  copyFileSync(
-    resolve(projectRoot, 'release/release-scan-exceptions.json'),
+  writeFileSync(
     fixturePath('release/release-scan-exceptions.json'),
+    canonicalJson({ exceptions: [], formatVersion: 1 }),
   );
   copyFileSync(promotionHelperPath, fixturePath('scripts/release-promotion.mjs'));
   copyFileSync(promotionWrapperPath, fixturePath('scripts/promote-release-candidate.sh'));

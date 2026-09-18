@@ -33,7 +33,7 @@ const APPROVED_REGISTRY_SHA256 =
 // the owner-requested scanner refresh and exact current filter. Keep the U7 approval identity
 // separate: refreshing these pins is not a new scan result or release approval.
 const CURRENT_REGISTRY_SHA256 =
-  '098d8b4ad86fc8d845e813ad328586c2d38298d993d40c78f223c18899f92bd6';
+  '7b01562857fb6d02885997bbe075a08c87c0c2a9fff153e3717ac597ad1baec3';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',

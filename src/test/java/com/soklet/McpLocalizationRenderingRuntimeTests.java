@@ -487,8 +487,11 @@ class McpLocalizationRenderingRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 
-		if (localizer != null)
+		if (localizer != null) {
 			builder.localizer(localizer);
+			builder.subscriptionAuthorizer(
+					McpSubscriptionAuthorizer.denyAllInstance());
+		}
 	}
 
 	private static McpEndpoint richEndpoint() {
@@ -619,6 +622,8 @@ class McpLocalizationRenderingRuntimeTests {
 						.host(LOOPBACK)
 						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 						.allowedHosts(Set.of(LOOPBACK))
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
 						.localizer(localizer))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))

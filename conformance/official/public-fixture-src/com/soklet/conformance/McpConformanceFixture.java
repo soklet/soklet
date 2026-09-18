@@ -42,6 +42,7 @@ import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpOfficialSchemaConformanceTool;
 import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
@@ -311,6 +312,8 @@ public final class McpConformanceFixture {
 				McpRateLimitDecision.allowed();
 		McpServer.Builder configured = mcpServerBuilder
 				.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.requestRateLimiter(allowLimiter)
 				.toolRateLimiter(allowLimiter)
 				.protectionConfig(REQUEST_STATE_PROTECTION)

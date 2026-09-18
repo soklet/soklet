@@ -46,6 +46,7 @@ import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationResponse;
 import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -704,6 +705,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 								McpRateLimitDecision.allowed())
 						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 						.allowedHosts(Set.of(LOOPBACK))
+						.subscriptionAuthorizer(
+								McpSubscriptionAuthorizer.denyAllInstance())
 						.localizer(localizer))
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))

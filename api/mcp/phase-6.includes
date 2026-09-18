@@ -1,9 +1,9 @@
 com.soklet.McpLocalizableText
 com.soklet.McpLocalizationCatalog
+com.soklet.McpLocalizationCatalogInvalidator
 com.soklet.McpLocalizationContext
 com.soklet.McpLocalizationContext$Builder
 com.soklet.McpLocalizationContextProvider
-com.soklet.McpLocalizationControl
 com.soklet.McpLocalizationFailurePolicy
 com.soklet.McpLocalizationLookup
 com.soklet.McpLocalizationRequest
@@ -35,6 +35,9 @@ com.soklet.McpMetricsEvent$RequestStreamOpened
 com.soklet.McpMetricsEvent$ServerStarted
 com.soklet.McpMetricsEvent$ServerStopped
 com.soklet.McpMetricsEvent$SubscriptionClosed
+com.soklet.McpMetricsEvent$SubscriptionMaintenance
+com.soklet.McpMetricsEvent$SubscriptionMaintenance$Outcome
+com.soklet.McpMetricsEvent$SubscriptionMaintenance$Work
 com.soklet.McpMetricsEvent$SubscriptionOpened
 com.soklet.McpMetricsEvent$TransportFailure
 com.soklet.McpMetricsEvent$UnknownMirroredHeader

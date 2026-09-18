@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable endpoint-scoped MCP subscription configuration.
  * <p>
- * The configured notification types are the resource-change families the
+ * The configured notification types are the subscription-change families the
  * endpoint may support. The publisher is application-owned and may provide
  * either process-local or distributed broadcast delivery. This value does not
  * transfer publisher lifecycle ownership to Soklet.
@@ -97,7 +97,7 @@ public final class McpSubscriptionConfig {
 	}
 
 	/**
-	 * Returns the endpoint's supported resource-notification families.
+	 * Returns the endpoint's supported subscription-notification families.
 	 *
 	 * @return immutable nonempty notification-type set in enum declaration order
 	 */
@@ -130,7 +130,7 @@ public final class McpSubscriptionConfig {
 		}
 
 		/**
-		 * Replaces the supported resource-notification families.
+		 * Replaces the supported subscription-notification families.
 		 * A failed replacement leaves the previous families unchanged.
 		 *
 		 * @param subscriptionNotificationTypes nonempty notification families

@@ -1242,6 +1242,8 @@ public class McpSimulatorPublicRuntimeTests {
 			McpServer.@NonNull Builder mcpServerBuilder) {
 		mcpServerBuilder
 				.host(LOOPBACK)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())

@@ -315,6 +315,8 @@ class SimulatorConfigDerivationTests {
 		DefaultMcpServer sourceMcpServer = (DefaultMcpServer) McpServer
 				.withPort(41821)
 				.endpointRegistry(endpointRegistry)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.admissionController(sourceAdmission)
 				.handlerInterceptor(handlerInterceptor)
 				.toolOutputSanitizer(sanitizer)
@@ -413,8 +415,8 @@ class SimulatorConfigDerivationTests {
 				derivedMcpServer.getProtectionControl());
 		Assertions.assertNotSame(sourceMcpServer.getTraceCorrelationControl(),
 				derivedMcpServer.getTraceCorrelationControl());
-		Assertions.assertNotSame(sourceMcpServer.getLocalizationControl(),
-				derivedMcpServer.getLocalizationControl());
+		Assertions.assertNotSame(sourceMcpServer.getLocalizationCatalogInvalidator(),
+				derivedMcpServer.getLocalizationCatalogInvalidator());
 
 		SokletSimulator.run(simulatorConfig, simulator -> Assertions.assertSame(
 				derivedMcpServer, simulator.getMcpServer().orElseThrow()));
@@ -462,6 +464,8 @@ class SimulatorConfigDerivationTests {
 		DefaultMcpServer sourceMcpServer = (DefaultMcpServer) McpServer
 				.withPort(41822)
 				.host("0.0.0.0")
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.maximumCursorSizeInBytes(2001)
 				.maximumSubscriptionsPerPartition(9)
 					.requestHandlerConcurrency(4)
@@ -521,8 +525,8 @@ class SimulatorConfigDerivationTests {
 		Assertions.assertEquals(
 				sourceMcpServer.getDiagnostics().getTraceCorrelationFingerprint(),
 				derivedMcpServer.getDiagnostics().getTraceCorrelationFingerprint());
-		Assertions.assertNotSame(sourceMcpServer.getLocalizationControl(),
-				derivedMcpServer.getLocalizationControl());
+		Assertions.assertNotSame(sourceMcpServer.getLocalizationCatalogInvalidator(),
+				derivedMcpServer.getLocalizationCatalogInvalidator());
 		Assertions.assertSame(localizer,
 				derivedMcpServer.localizer().orElseThrow());
 		Assertions.assertSame(taskManager,
@@ -730,11 +734,16 @@ class SimulatorConfigDerivationTests {
 					"maximumRequestTargetLengthInBytes",
 					"requestReadBufferSizeInBytes", "concurrentConnectionLimit", "host",
 					"keepAliveInterval", "maximumSubscriptionDuration",
+					"subscriptionCatalogProjectionTimeout",
+					"subscriptionAuthorizationTimeout",
+					"maximumSubscriptionAuthorizationDuration",
 					"requestTimeout", "requestHeaderTimeout", "requestBodyTimeout",
 					"writeTimeout",
 				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
 				"admissionController", "admissionControllerExplicitlyConfigured",
 				"catalogAccessPolicy", "catalogAccessPolicyExplicitlyConfigured",
+				"subscriptionAuthorizer",
+				"subscriptionAuthorizerExplicitlyConfigured",
 				"handlerInterceptor",
 				"toolOutputSanitizer", "taskManager", "corsAuthorizer",
 				"requestRateLimiter",

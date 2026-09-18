@@ -36,6 +36,7 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
 import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
@@ -1324,6 +1325,8 @@ public class McpSubscriptionPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
 			McpAdmissionController admissionController) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(admissionController)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.host(LOOPBACK)
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())

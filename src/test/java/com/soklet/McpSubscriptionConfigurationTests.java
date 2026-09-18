@@ -139,6 +139,29 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	@Test
+	public void toolAndPromptOnlyConfigurationBuildsWithoutAResourceSurface() {
+		McpSubscriptionConfig configuration = McpSubscriptionConfig
+				.withEventPublisherAndNotificationTypes(
+						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+						Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED,
+								McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED))
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(
+					"/catalog-subscriptions", serverInformation())
+				.subscriptionConfig(configuration)
+				.build();
+
+		Assertions.assertEquals(List.of(
+				McpSubscriptionNotificationType.TOOLS_LIST_CHANGED,
+				McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED),
+				List.copyOf(configuration.getNotificationTypes()));
+		Assertions.assertDoesNotThrow(() -> McpServer.withPort(0)
+				.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.build());
+	}
+
+	@Test
 	public void localPublisherBroadcastsAndSubscriptionsCloseIdempotently() {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
@@ -161,6 +184,41 @@ public class McpSubscriptionConfigurationTests {
 				McpSubscriptionEvent.resourcesListChanged(),
 				McpSubscriptionEvent.resourceUpdated(resourceUri)), secondEvents);
 		second.close();
+	}
+
+	@Test
+	public void toolAndPromptPublisherDefaultsDeliverSingletonValues()
+			throws Exception {
+		McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
+		List<McpSubscriptionEvent> events = new ArrayList<>();
+		McpSubscriptionEventRegistration registration = publisher.subscribe(
+				events::add);
+
+		publisher.publishToolsListChanged();
+		publisher.publishPromptsListChanged();
+
+		McpSubscriptionEvent.ToolsListChanged toolsListChanged =
+				McpSubscriptionEvent.toolsListChanged();
+		McpSubscriptionEvent.PromptsListChanged promptsListChanged =
+				McpSubscriptionEvent.promptsListChanged();
+		Assertions.assertEquals(List.of(toolsListChanged, promptsListChanged),
+				events);
+		Assertions.assertSame(toolsListChanged,
+				McpSubscriptionEvent.toolsListChanged());
+		Assertions.assertSame(promptsListChanged,
+				McpSubscriptionEvent.promptsListChanged());
+		Assertions.assertNotEquals(toolsListChanged, promptsListChanged);
+		Assertions.assertEquals(0, toolsListChanged.hashCode());
+		Assertions.assertEquals(0, promptsListChanged.hashCode());
+		Assertions.assertEquals("ToolsListChanged{}", toolsListChanged.toString());
+		Assertions.assertEquals("PromptsListChanged{}",
+				promptsListChanged.toString());
+		Assertions.assertTrue(McpSubscriptionEventPublisher.class.getMethod(
+				"publishToolsListChanged").isDefault());
+		Assertions.assertTrue(McpSubscriptionEventPublisher.class.getMethod(
+				"publishPromptsListChanged").isDefault());
+		registration.close();
 	}
 
 	@Test
@@ -276,20 +334,26 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	@Test
-	public void publicPublisherSurfaceContainsOnlyResourceEventFamilies() {
+	public void publicPublisherSurfaceContainsExactCatalogAndResourceFamilies() {
 		Assertions.assertArrayEquals(new McpSubscriptionNotificationType[]{
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
-				McpSubscriptionNotificationType.RESOURCE_UPDATED
+				McpSubscriptionNotificationType.RESOURCE_UPDATED,
+				McpSubscriptionNotificationType.TOOLS_LIST_CHANGED,
+				McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED
 		}, McpSubscriptionNotificationType.values());
 		Assertions.assertEquals(Set.of(
 				McpSubscriptionEvent.ResourcesListChanged.class,
-				McpSubscriptionEvent.ResourceUpdated.class),
+				McpSubscriptionEvent.ResourceUpdated.class,
+				McpSubscriptionEvent.ToolsListChanged.class,
+				McpSubscriptionEvent.PromptsListChanged.class),
 				Set.of(McpSubscriptionEvent.class.getPermittedSubclasses()));
 		Assertions.assertEquals(Set.of(
 				"fromInMemoryDefaults()",
 				"publish(McpSubscriptionEvent)",
+				"publishPromptsListChanged()",
 				"publishResourceUpdated(URI)",
 				"publishResourcesListChanged()",
+				"publishToolsListChanged()",
 				"subscribe(McpSubscriptionEventListener)"),
 				Arrays.stream(McpSubscriptionEventPublisher.class
 						.getDeclaredMethods())

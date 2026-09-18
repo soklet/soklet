@@ -24,7 +24,7 @@ import java.net.URI;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Thread-safe broadcast publisher for application-owned MCP resource-change
+ * Thread-safe broadcast publisher for application-owned MCP subscription-change
  * events.
  * <p>
  * Every event must be made available to every current listener; a
@@ -34,13 +34,14 @@ import static java.util.Objects.requireNonNull;
  * returned by {@link #subscribe(McpSubscriptionEventListener)} and never closes
  * the publisher itself.
  * <p>
- * This SPI distributes application change events only. Soklet owns all MCP
+ * This SPI distributes application change events only. Publication requests
+ * local reevaluation for the configured notification family; it is not by
+ * itself a wire notification or an authorization grant. Soklet owns all MCP
  * stream-delivery mechanics: per-stream queues, duplicate-event coalescing,
- * backpressure, matching against each accepted URI filter, and MCP wire
- * serialization. Publisher events carry no endpoint, client, principal, or
- * authorization-partition target. Applications must authorize confidential or
- * capability-bearing subscription URIs when admitting the original request;
- * publisher implementations must not attempt to perform these functions.
+ * backpressure, accepted-filter matching, caller-visible catalog comparison,
+ * and MCP wire serialization. Publisher events carry no endpoint, client,
+ * principal, or authorization-partition target. Publisher implementations must
+ * not attempt to perform authorization or stream-delivery functions.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -74,9 +75,9 @@ public interface McpSubscriptionEventPublisher {
 			@NonNull McpSubscriptionEventListener listener);
 
 	/**
-	 * Broadcasts a coarse resource-change event.
+	 * Broadcasts a coarse subscription-change event.
 	 *
-	 * @param event resource-change event
+	 * @param event subscription-change event
 	 */
 	void publish(@NonNull McpSubscriptionEvent event);
 
@@ -97,5 +98,15 @@ public interface McpSubscriptionEventPublisher {
 	default void publishResourceUpdated(@NonNull URI resourceUri) {
 		publish(McpSubscriptionEvent.resourceUpdated(
 				requireNonNull(resourceUri)));
+	}
+
+	/** Broadcasts a tool-list-changed event. */
+	default void publishToolsListChanged() {
+		publish(McpSubscriptionEvent.toolsListChanged());
+	}
+
+	/** Broadcasts a prompt-list-changed event. */
+	default void publishPromptsListChanged() {
+		publish(McpSubscriptionEvent.promptsListChanged());
 	}
 }

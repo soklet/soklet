@@ -1166,6 +1166,8 @@ public class McpShutdownObservabilityTests {
 		McpServer.Builder builder = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.copyOf(requireNonNull(endpoints))))
 				.host(HOST)
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
 		return builder.build();

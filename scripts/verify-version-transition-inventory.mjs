@@ -31,6 +31,7 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'release/scripts/install-pinned-gradle-linux-x64.sh',
   'scripts/verify-consumer-ci-self-test.mjs',
   'src/test/java/com/soklet/HeaderLocaleTests.java',
+  'src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java',
   'src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java',
   'verification/consumer-build/README.md',
   'verification/consumer-build/build.gradle',
@@ -138,7 +139,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'1a21824647d1ba9cd72bf8df25aaf21a6d1c8e9bbeeda4cf86530793a24d3d63';
+	'2e2ef4bbae30848f66f904e0461e1fc06c9f8a39dee5ee31df0e1c879e2afeb7';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

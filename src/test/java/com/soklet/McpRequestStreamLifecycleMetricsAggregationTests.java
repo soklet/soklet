@@ -274,7 +274,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 			expectedSamples.add(new SampleProjection(
 					STREAM_DURATIONS_METRIC_NAME + "_sum", labels));
 		}
-		Assertions.assertEquals(21, expectedSamples.size());
+		Assertions.assertEquals(29, expectedSamples.size());
 		Assertions.assertEquals(expectedSamples, observedSamples);
 		assertMetricType(selected, ACTIVE_STREAMS_METRIC_NAME,
 				ACTIVE_STREAMS_HELP, "gauge");

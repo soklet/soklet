@@ -62,6 +62,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpCatalogAccessPolicy getCatalogAccessPolicy();
 
 	/**
+	 * Returns the effective subscription authorizer. When omitted during
+	 * construction this is {@link McpSubscriptionAuthorizer#denyAllInstance()}.
+	 * Subscription-capable servers nevertheless require an explicitly selected
+	 * authorizer so enabling a subscription mechanism cannot silently inherit the
+	 * default.
+	 *
+	 * @return subscription authorizer
+	 */
+	@NonNull
+	McpSubscriptionAuthorizer getSubscriptionAuthorizer();
+
+	/**
 	 * Returns the effective admission controller. When omitted during
 	 * construction this is {@link McpAdmissionController#acceptAllInstance()}
 	 * and Soklet emits a startup configuration diagnostic.
@@ -175,17 +187,27 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpTraceCorrelationControl getTraceCorrelationControl();
 
 	/**
-	 * Returns this server's localization control plane.
+	 * Returns this server's localization catalog invalidator.
 	 * <p>
 	 * The handle reports disabled state when no localizer was supplied.
 	 * Catalog-change signaling is local to this server instance; distributed
 	 * applications invoke it on every applicable instance after atomically
 	 * installing a new immutable translation snapshot.
 	 *
-	 * @return this server's localization control plane
+	 * @return this server's localization catalog invalidator
 	 */
 	@NonNull
-	McpLocalizationControl getLocalizationControl();
+	McpLocalizationCatalogInvalidator getLocalizationCatalogInvalidator();
+
+	/**
+	 * Returns this server's subscription reconciliation control plane.
+	 * <p>
+	 * The handle is server-owned and remains valid across listener generations.
+	 *
+	 * @return subscription reconciler
+	 */
+	@NonNull
+	McpSubscriptionReconciler getSubscriptionReconciler();
 
 	/**
 	 * Captures immutable point-in-time server diagnostics.
@@ -245,6 +267,15 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private static final Duration DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION =
 				Duration.ofHours(24);
 		@NonNull
+		private static final Duration DEFAULT_SUBSCRIPTION_CATALOG_PROJECTION_TIMEOUT =
+				Duration.ofSeconds(5);
+		@NonNull
+		private static final Duration DEFAULT_SUBSCRIPTION_AUTHORIZATION_TIMEOUT =
+				Duration.ofSeconds(5);
+		@NonNull
+		private static final Duration DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION =
+				Duration.ofMinutes(1);
+		@NonNull
 		private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		@NonNull
 		private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT =
@@ -273,6 +304,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private Duration maximumSubscriptionDuration;
 		@NonNull
+		private Duration subscriptionCatalogProjectionTimeout;
+		@NonNull
+		private Duration subscriptionAuthorizationTimeout;
+		@NonNull
+		private Duration maximumSubscriptionAuthorizationDuration;
+		@NonNull
 		private Duration requestTimeout;
 		@NonNull
 		private Duration requestHeaderTimeout;
@@ -290,6 +327,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private McpCatalogAccessPolicy catalogAccessPolicy;
 		private boolean catalogAccessPolicyExplicitlyConfigured;
+		@NonNull
+		private McpSubscriptionAuthorizer subscriptionAuthorizer;
+		private boolean subscriptionAuthorizerExplicitlyConfigured;
 		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
 		@NonNull
@@ -329,6 +369,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.catalogAccessPolicy =
 					McpCatalogAccessPolicy.allowAllInstance();
 			this.catalogAccessPolicyExplicitlyConfigured = false;
+			this.subscriptionAuthorizer =
+					McpSubscriptionAuthorizer.denyAllInstance();
+			this.subscriptionAuthorizerExplicitlyConfigured = false;
 			this.maximumCursorSizeInBytes =
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.maximumSubscriptionsPerPartition =
@@ -352,6 +395,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.keepAliveInterval = DEFAULT_KEEP_ALIVE_INTERVAL;
 			this.maximumSubscriptionDuration =
 					DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION;
+			this.subscriptionCatalogProjectionTimeout =
+					DEFAULT_SUBSCRIPTION_CATALOG_PROJECTION_TIMEOUT;
+			this.subscriptionAuthorizationTimeout =
+					DEFAULT_SUBSCRIPTION_AUTHORIZATION_TIMEOUT;
+			this.maximumSubscriptionAuthorizationDuration =
+					DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION;
 			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
 			this.requestHeaderTimeout = DEFAULT_REQUEST_HEADER_TIMEOUT;
 			this.requestBodyTimeout = DEFAULT_REQUEST_BODY_TIMEOUT;
@@ -392,6 +441,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.keepAliveInterval = exactSource.keepAliveInterval;
 			this.maximumSubscriptionDuration =
 					exactSource.maximumSubscriptionDuration;
+			this.subscriptionCatalogProjectionTimeout =
+					exactSource.subscriptionCatalogProjectionTimeout;
+			this.subscriptionAuthorizationTimeout =
+					exactSource.subscriptionAuthorizationTimeout;
+			this.maximumSubscriptionAuthorizationDuration =
+					exactSource.maximumSubscriptionAuthorizationDuration;
 			this.requestTimeout = exactSource.requestTimeout;
 			this.requestHeaderTimeout = exactSource.requestHeaderTimeout;
 			this.requestBodyTimeout = exactSource.requestBodyTimeout;
@@ -405,6 +460,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.catalogAccessPolicy = exactSource.catalogAccessPolicy;
 			this.catalogAccessPolicyExplicitlyConfigured =
 					exactSource.catalogAccessPolicyExplicitlyConfigured;
+			this.subscriptionAuthorizer = exactSource.subscriptionAuthorizer;
+			this.subscriptionAuthorizerExplicitlyConfigured =
+					exactSource.subscriptionAuthorizerExplicitlyConfigured;
 			this.handlerInterceptor = exactSource.handlerInterceptor;
 			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
 			this.taskManager = exactSource.taskManager;
@@ -738,6 +796,77 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Sets the queue-inclusive deadline for computing a current visible tool or
+		 * prompt catalog during subscription maintenance. The default is five
+		 * seconds.
+		 *
+		 * @param subscriptionCatalogProjectionTimeout positive finite projection
+		 *                                             timeout, or null to restore the
+		 *                                             default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the timeout is not positive or is not
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder subscriptionCatalogProjectionTimeout(
+				@Nullable Duration subscriptionCatalogProjectionTimeout) {
+			this.subscriptionCatalogProjectionTimeout =
+					subscriptionCatalogProjectionTimeout == null
+							? DEFAULT_SUBSCRIPTION_CATALOG_PROJECTION_TIMEOUT
+							: requirePositiveDuration(
+									subscriptionCatalogProjectionTimeout,
+									"MCP subscription catalog-projection timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the queue-inclusive deadline for one subscription-authorization
+		 * callback. The default is five seconds.
+		 *
+		 * @param subscriptionAuthorizationTimeout positive finite authorization
+		 *                                         timeout, or null to restore the
+		 *                                         default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the timeout is not positive or is not
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder subscriptionAuthorizationTimeout(
+				@Nullable Duration subscriptionAuthorizationTimeout) {
+			this.subscriptionAuthorizationTimeout =
+					subscriptionAuthorizationTimeout == null
+							? DEFAULT_SUBSCRIPTION_AUTHORIZATION_TIMEOUT
+							: requirePositiveDuration(
+									subscriptionAuthorizationTimeout,
+									"MCP subscription authorization timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the maximum duration of a successful subscription-authorization
+		 * lease. The default is one minute. A shorter application-supplied expiry or
+		 * the remaining total subscription lifetime remains authoritative.
+		 *
+		 * @param maximumSubscriptionAuthorizationDuration positive finite lease
+		 *                                                 duration, or null to
+		 *                                                 restore the default
+		 * @return this builder
+		 * @throws IllegalArgumentException if the duration is not positive or is not
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder maximumSubscriptionAuthorizationDuration(
+				@Nullable Duration maximumSubscriptionAuthorizationDuration) {
+			this.maximumSubscriptionAuthorizationDuration =
+					maximumSubscriptionAuthorizationDuration == null
+							? DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION
+							: requirePositiveDuration(
+									maximumSubscriptionAuthorizationDuration,
+									"MCP maximum subscription authorization duration");
+			return this;
+		}
+
+		/**
 		 * Sets the absolute client-visible request deadline. The deadline does not
 		 * forcibly terminate application code that ignores interruption.
 		 * The default is 60 seconds.
@@ -952,6 +1081,28 @@ public sealed interface McpServer permits DefaultMcpServer {
 					: catalogAccessPolicy;
 			this.catalogAccessPolicyExplicitlyConfigured =
 					catalogAccessPolicy != null;
+			return this;
+		}
+
+		/**
+		 * Configures whole-subscription authorization. Soklet invokes the authorizer
+		 * on bounded application execution after initial request admission and before
+		 * subscription acknowledgement, then again during maintenance. A
+		 * subscription-capable server must select an authorizer explicitly; passing
+		 * null restores deny-all behavior and clears that explicit selection.
+		 *
+		 * @param subscriptionAuthorizer application-owned authorizer, or null to
+		 *                               restore the deny-all default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder subscriptionAuthorizer(
+				@Nullable McpSubscriptionAuthorizer subscriptionAuthorizer) {
+			this.subscriptionAuthorizer = subscriptionAuthorizer == null
+					? McpSubscriptionAuthorizer.denyAllInstance()
+					: subscriptionAuthorizer;
+			this.subscriptionAuthorizerExplicitlyConfigured =
+					subscriptionAuthorizer != null;
 			return this;
 		}
 
@@ -1252,6 +1403,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               timeout; a configured limiter name is unknown;
 		 *                               tools exist without a fallback tool limiter; a
 		 *                               task-required tool exists without a task manager;
+		 *                               subscription support is enabled without an
+		 *                               explicitly selected subscription authorizer;
 		 *                               or a configured localization response exceeds its
 		 *                               provider-lookup limit
 		 * @throws IllegalArgumentException if a configured allowed host is invalid or
@@ -1301,11 +1454,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.keepAliveInterval,
 					this.maximumSubscriptionsPerPartition,
 					this.maximumSubscriptionDuration,
+					this.subscriptionCatalogProjectionTimeout,
+					this.subscriptionAuthorizationTimeout,
+					this.maximumSubscriptionAuthorizationDuration,
 					endpointRegistry,
 					this.admissionController,
 					this.admissionControllerExplicitlyConfigured,
 					this.catalogAccessPolicy,
 					this.catalogAccessPolicyExplicitlyConfigured,
+					this.subscriptionAuthorizer,
+					this.subscriptionAuthorizerExplicitlyConfigured,
 					this.handlerInterceptor,
 					this.toolOutputSanitizer, this.taskManager,
 					this.corsAuthorizer,

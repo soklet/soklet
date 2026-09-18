@@ -21,18 +21,19 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Server-owned localization control: enabled state plus coarse catalog
+ * Server-owned localization catalog invalidator: enabled state plus coarse
  * invalidation publication to the active runtime generation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultMcpLocalizationControl implements McpLocalizationControl {
+final class DefaultMcpLocalizationCatalogInvalidator
+		implements McpLocalizationCatalogInvalidator {
 	private final boolean enabled;
 	@NonNull
 	private final Runnable invalidationPublisher;
 
-	DefaultMcpLocalizationControl(boolean enabled,
+	DefaultMcpLocalizationCatalogInvalidator(boolean enabled,
 			@NonNull Runnable invalidationPublisher) {
 		this.enabled = enabled;
 		this.invalidationPublisher = invalidationPublisher;

@@ -185,7 +185,7 @@ class McpLocalizationSoakTests {
 			for (int wave = 0; wave < revisionWaves; wave++) {
 				String revision = "%s-r%04d".formatted(runId, wave + 1);
 				state.installRevision(revision);
-				server.getLocalizationControl().invalidateCatalogs();
+				server.getLocalizationCatalogInvalidator().invalidateCatalogs();
 				state.invalidationsRequested.incrementAndGet();
 				String invalidation = awaitItem(subscription);
 				assertContains(invalidation,
@@ -307,6 +307,8 @@ class McpLocalizationSoakTests {
 						PROFILE.maximumSubscriptionsPerPartition())
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
+				.subscriptionAuthorizer(
+						McpSubscriptionAuthorizer.denyAllInstance())
 				.localizer(state.localizer())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
