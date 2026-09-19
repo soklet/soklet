@@ -41,6 +41,7 @@ import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -2236,8 +2237,9 @@ class McpLifecycleB3Tests {
 		requireNonNull(shutdownTimeout);
 		return McpServer.withPort(port).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(HOST)
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))

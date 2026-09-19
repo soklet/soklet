@@ -69,7 +69,15 @@ public interface McpRuntimeCatalogLocalizer {
 	@ThreadSafe
 	record Outcome(@NonNull Disposition disposition,
 			@NonNull McpJsonObject document,
-			@NonNull Optional<@NonNull String> contentLanguage) {
+			@NonNull Optional<@NonNull String> contentLanguage,
+			boolean localizationFailure) {
+		/** Creates a successful localization outcome. */
+		public Outcome(@NonNull Disposition disposition,
+				@NonNull McpJsonObject document,
+				@NonNull Optional<@NonNull String> contentLanguage) {
+			this(disposition, document, contentLanguage, false);
+		}
+
 		public Outcome {
 			requireNonNull(disposition, "disposition");
 			requireNonNull(document, "document");
@@ -78,7 +86,8 @@ public interface McpRuntimeCatalogLocalizer {
 
 		@NonNull
 		public static Outcome canonical(@NonNull McpJsonObject document) {
-			return new Outcome(Disposition.CANONICAL, document, Optional.empty());
+			return new Outcome(Disposition.CANONICAL, document, Optional.empty(),
+					false);
 		}
 
 		/** @return redacted rendering; the document may hold localized text */

@@ -22,6 +22,7 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.OptionsBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -100,6 +101,139 @@ public class McpTransportContainmentSpikeTests {
 
 		Assertions.assertFalse(tests.isEmpty(), "The platform-thread containment matrix must always run");
 		return tests;
+	}
+
+	@Test
+	public void initial_deadlines_remain_ordered_across_signed_nano_time_wrap()
+			throws Exception {
+		Duration keepAliveInterval = Duration.ofSeconds(4);
+		int undersizedKeepAliveCapacity = ": keepalive\n\n"
+				.getBytes(StandardCharsets.UTF_8).length - 1;
+		ManualClock clock = new ManualClock(Long.MAX_VALUE
+				- Duration.ofSeconds(2).toNanos());
+		AtomicReference<McpTransportRuntime.Invocation> invocation =
+				new AtomicReference<>();
+		CountDownLatch subscriptionReady = new CountDownLatch(1);
+		McpTransportRuntime runtime = new McpTransportRuntime(
+				wraparoundConfiguration(keepAliveInterval,
+						undersizedKeepAliveCapacity), value -> {
+					invocation.set(value);
+					value.becomeSubscription();
+					subscriptionReady.countDown();
+				}, clock);
+
+		try {
+			runtime.start();
+			try (RawHttpClient client = RawHttpClient.post(
+					runtime.port(), "/subscription", "initial-wrap")) {
+				await(subscriptionReady, "wraparound subscription handler did not run");
+				assertStreamingHead(client.readHead());
+				awaitSnapshot(runtime,
+						value -> value.subscriptions() == 1,
+						"wraparound subscription was not established");
+
+				clock.advance(Duration.ofSeconds(3));
+				runtime.runTimerCycle();
+				client.assertNoChunkWithin(Duration.ofMillis(200),
+						"keep-alive fired before its wrapped deadline");
+				Assertions.assertFalse(invocation.get().isCanceled(),
+						"a request or keep-alive deadline expired at the signed nanoTime boundary");
+				client.closeWithReset();
+			}
+		} finally {
+			shutdown(runtime);
+		}
+	}
+
+	@Test
+	public void unarmed_keep_alive_sentinel_cannot_fire_across_nano_time_wrap()
+			throws Exception {
+		Duration keepAliveInterval = Duration.ofSeconds(4);
+		ManualClock clock = new ManualClock(Long.MAX_VALUE
+				- Duration.ofSeconds(2).toNanos());
+		CountDownLatch subscriptionRequested = new CountDownLatch(1);
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		McpTransportRuntime runtime = new McpTransportRuntime(
+				wraparoundConfiguration(keepAliveInterval), value -> {
+					value.becomeSubscription();
+					subscriptionRequested.countDown();
+					releaseHandler.await();
+				}, clock);
+
+		try {
+			runtime.start();
+			try (RawHttpClient client = RawHttpClient.post(
+					runtime.port(), "/subscription", "unarmed-wrap")) {
+				await(subscriptionRequested,
+						"wraparound subscription was not requested");
+				assertStreamingHead(client.readHead());
+
+				clock.advance(Duration.ofSeconds(5));
+				runtime.runTimerCycle();
+				client.assertNoChunkWithin(Duration.ofMillis(200),
+						"unarmed keep-alive sentinel fired across nanoTime wrap");
+
+				releaseHandler.countDown();
+				awaitSnapshot(runtime,
+						value -> value.subscriptions() == 1
+								&& value.dispatcher().activeSlots() == 0,
+						"wraparound subscription was not established");
+				clock.advance(keepAliveInterval);
+				runtime.runTimerCycle();
+				Assertions.assertEquals(": keepalive\n\n", client.readChunkText());
+				client.closeWithReset();
+			}
+		} finally {
+			releaseHandler.countDown();
+			shutdown(runtime);
+		}
+	}
+
+	@Test
+	public void rescheduled_keep_alive_remains_ordered_across_signed_nano_time_wrap()
+			throws Exception {
+		Duration keepAliveInterval = Duration.ofSeconds(4);
+		ManualClock clock = new ManualClock(Long.MAX_VALUE
+				- Duration.ofSeconds(6).toNanos());
+		AtomicReference<McpTransportRuntime.Invocation> invocation =
+				new AtomicReference<>();
+		CountDownLatch subscriptionReady = new CountDownLatch(1);
+		McpTransportRuntime runtime = new McpTransportRuntime(
+				wraparoundConfiguration(keepAliveInterval), value -> {
+					invocation.set(value);
+					value.becomeSubscription();
+					subscriptionReady.countDown();
+				}, clock);
+
+		try {
+			runtime.start();
+			try (RawHttpClient client = RawHttpClient.post(
+					runtime.port(), "/subscription", "rescheduled-wrap")) {
+				await(subscriptionReady, "wraparound subscription handler did not run");
+				assertStreamingHead(client.readHead());
+				awaitSnapshot(runtime,
+						value -> value.subscriptions() == 1,
+						"wraparound subscription was not established");
+
+				clock.advance(keepAliveInterval);
+				runtime.runTimerCycle();
+				Assertions.assertEquals(": keepalive\n\n", client.readChunkText());
+
+				clock.advance(Duration.ofSeconds(3));
+				runtime.runTimerCycle();
+				Assertions.assertFalse(invocation.get().isCanceled(),
+						"request deadline expired at the signed nanoTime boundary");
+				client.assertNoChunkWithin(Duration.ofMillis(200),
+						"rescheduled keep-alive fired before its wrapped deadline");
+
+				clock.advance(Duration.ofSeconds(1));
+				runtime.runTimerCycle();
+				Assertions.assertEquals(": keepalive\n\n", client.readChunkText());
+				client.closeWithReset();
+			}
+		} finally {
+			shutdown(runtime);
+		}
 	}
 
 	private void closeBeforeStartReleasesDedicatedRuntime(McpThreadStrategy strategy) throws Exception {
@@ -1271,6 +1405,29 @@ public class McpTransportContainmentSpikeTests {
 				strategy);
 	}
 
+	private static McpTransportConfiguration wraparoundConfiguration(
+			Duration keepAliveInterval) {
+		return wraparoundConfiguration(keepAliveInterval, DEFAULT_OUTBOUND_BYTES);
+	}
+
+	private static McpTransportConfiguration wraparoundConfiguration(
+			Duration keepAliveInterval, int outboundByteCapacity) {
+		return new McpTransportConfiguration(
+				LOOPBACK,
+				0,
+				1,
+				8,
+				1,
+				1,
+				4,
+				outboundByteCapacity,
+				DEFAULT_TERMINAL_BYTES,
+				Duration.ofSeconds(60),
+				Duration.ofSeconds(30),
+				keepAliveInterval,
+				McpThreadStrategy.PLATFORM);
+	}
+
 	private static McpTransportRuntime.Snapshot awaitSnapshot(McpTransportRuntime runtime,
 			Predicate<McpTransportRuntime.Snapshot> predicate, String failureMessage) {
 		long deadline = System.nanoTime() + TEST_TIMEOUT.toNanos();
@@ -1329,7 +1486,11 @@ public class McpTransportContainmentSpikeTests {
 		private final AtomicLong now;
 
 		private ManualClock() {
-			this.now = new AtomicLong();
+			this(0L);
+		}
+
+		private ManualClock(long initialNanos) {
+			this.now = new AtomicLong(initialNanos);
 		}
 
 		@Override
@@ -1477,6 +1638,21 @@ public class McpTransportContainmentSpikeTests {
 				throw new EOFException("Expected another HTTP chunk, but reached the terminal chunk");
 
 			return new String(chunk, StandardCharsets.UTF_8);
+		}
+
+		private void assertNoChunkWithin(Duration timeout, String failureMessage)
+				throws IOException {
+			int previousTimeout = socket.getSoTimeout();
+			long timeoutMillis = Math.max(1L, timeout.toMillis());
+			socket.setSoTimeout((int) Math.min(Integer.MAX_VALUE, timeoutMillis));
+			try {
+				int value = inputStream.read();
+				Assertions.fail(failureMessage + "; unexpected first byte=" + value);
+			} catch (SocketTimeoutException expected) {
+				// No bytes became readable before the bounded observation deadline.
+			} finally {
+				socket.setSoTimeout(previousTimeout);
+			}
 		}
 
 		private byte[] readChunk() throws IOException {

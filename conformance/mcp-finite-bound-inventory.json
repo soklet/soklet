@@ -1495,6 +1495,10 @@
         "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#creationIsImmediatelyReadableAndCapacityNeverEvictsLiveTasks",
         "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#defaultsAndBuilderResetsAreFiniteAndValidated",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionTests.java#cancellation_sidecars_remain_bounded_by_handler_concurrency",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#digestIsExactlyThirtyTwoBytesDefensiveAndValueBased",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#oneOwnerJobCoalescesGenerationsAndAdvancesOnlyItsBaseline",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#resetAndInactiveFinishFenceLateWorkersAndClearBaselines",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#bounded_handler_capacity_queues_one_and_rejects_the_third_exactly",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredPerPrincipalCapRejectsWithoutDisturbingAndRecovers",
@@ -1511,7 +1515,7 @@
       ],
       "category": "QUEUE_STREAM",
       "deterministicFailure": {
-        "contract": "Full request queues return their fixed capacity outcome; each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all task state, and late workers cannot restore it or clear a replacement generation.",
+        "contract": "Full request queues return their fixed capacity outcome. Running cancellation sidecars and queued cancellation sidecars are independently bounded by the configured application-handler concurrency; cancellation before handler entry is suppressed without creating a sidecar, and shutdown waits for admitted sidecars to exit. Each subscription retains at most one 32-byte SHA-256 baseline digest and one queued or active generation marker for each of the two fixed catalog families, retains no rendered catalog, submits at most one queued or running catalog-projection owner job, and coalesces newer invalidations; only the affected family's baseline advances, and only after transport acceptance. Each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all catalog and task state, and late workers cannot restore it or clear a replacement generation.",
         "stage": "APPLICATION_OR_STREAM_ADMISSION"
       },
       "enforcementOwners": [
@@ -1524,6 +1528,16 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
           "member": "McpApplicationHandlerDispatcher",
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "member": "cancellationCallbackExecutor",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueue.java",
+          "member": "McpCatalogProjectionQueue",
+          "owner": "com.soklet.internal.mcp.protocol.McpCatalogProjectionQueue"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
@@ -1547,9 +1561,10 @@
         }
       ],
       "id": "FINITE-QUEUE-STREAM-001",
-      "name": "Request, task, subscription, simulation, and stream queue bounds",
+      "name": "Request, catalog, task, subscription, simulation, and stream queue bounds",
       "positiveTests": [
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#familiesRetainRequestOrderAndActiveRerunsReturnAtTheTail",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#slow_reader_applies_bounded_backpressure_without_blocking_other_requests",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#ownerContinuationReturnsToTailBehindAWaitingPeer",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#transientExecutorRejectionRetainsBoundedProjectionWorkForRetry",
@@ -1699,13 +1714,31 @@
       ],
       "values": [
         {
+          "accounting": "bytes retained by each accepted tools or prompts catalog-family baseline digest",
+          "key": "queue.catalog-projection-digest-bytes",
+          "unit": "BYTES",
+          "value": "32"
+        },
+        {
+          "accounting": "catalog-family baseline digests retained per subscription, one each for tools and prompts",
+          "key": "queue.catalog-projection-family-digests",
+          "unit": "DIGESTS",
+          "value": "2"
+        },
+        {
+          "accounting": "queued or running catalog-projection owner jobs per subscription; newer family invalidations coalesce into this slot",
+          "key": "queue.catalog-projection-owner-jobs",
+          "unit": "JOBS",
+          "value": "1"
+        },
+        {
           "accounting": "queued application handlers",
           "key": "queue.handler-capacity",
           "unit": "TASKS",
           "value": "128"
         },
         {
-          "accounting": "simultaneously executing application handlers",
+          "accounting": "simultaneously executing application handlers; separately, the maximum running cancellation sidecars and maximum queued cancellation sidecars are each exactly this configured handler-concurrency value",
           "key": "queue.handler-concurrency",
           "unit": "TASKS",
           "value": "32"
@@ -2227,24 +2260,42 @@
     },
     {
       "boundaryTests": [
-        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDurationsRejectNonpositiveAndUnrepresentableValues"
+        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDurationsRejectNonpositiveAndUnrepresentableValues",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfigurationTests.java#authorizationDurationsMustBePositiveAndFinite"
       ],
       "category": "TIME",
       "deterministicFailure": {
-        "contract": "Nonpositive or nanosecond-unrepresentable subscription-maintenance durations fail builder configuration; these settings remain behaviorally neutral until P1b runtime wiring lands.",
-        "stage": "CONFIGURATION"
+        "contract": "Nonpositive or nanosecond-unrepresentable subscription-maintenance durations fail configuration; authorization checks are queue-inclusively deadline-clipped and successful grants are capped before acknowledgement or renewed delivery. The catalog-projection timeout is retained in runtime configuration for bounded projection scheduling.",
+        "stage": "CONFIGURATION_OR_DEADLINE"
       },
       "enforcementOwners": [
         {
           "file": "src/main/java/com/soklet/McpServer.java",
           "member": "requirePositiveDuration",
           "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "effectiveSubscriptionAuthorizationGrant",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "reserveSubscriptionAuthorizationCheckWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "member": "McpSubscriptionRuntimeConfiguration",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
         }
       ],
       "id": "FINITE-TIME-002",
-      "name": "Subscription-maintenance configuration time bounds",
+      "name": "Subscription-maintenance runtime time bounds",
       "positiveTests": [
-        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDefaultsAndNullResetsAreRetained"
+        "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDefaultsAndNullResetsAreRetained",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java#initialAuthorizationPrecedesAcknowledgmentAndExposesImmutableCandidates",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfigurationTests.java#exactAuthorizationConfigurationIsPreserved"
       ],
       "sourceOwners": [
         {
@@ -2253,6 +2304,34 @@
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "DEFAULT_MAXIMUM_SUBSCRIPTION_AUTHORIZATION_DURATION",
           "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_SUBSCRIPTION_RENEWAL_STAGGER_NANOS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUBSCRIPTION_RENEWAL_STAGGER_NANOS",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#authorizationTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "authorizationTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#catalogProjectionTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "catalogProjectionTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#maximumAuthorizationDuration",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumAuthorizationDuration",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/McpServer.java",
@@ -2282,6 +2361,12 @@
           "key": "subscription.authorization.maximum-duration-nanos",
           "unit": "NANOSECONDS",
           "value": "60000000000"
+        },
+        {
+          "accounting": "maximum deterministic per-subscription staggering added to the halfway renewal point",
+          "key": "subscription.authorization.renewal-maximum-stagger-nanos",
+          "unit": "NANOSECONDS",
+          "value": "1000000000"
         },
         {
           "accounting": "configured queue-inclusive deadline for one subscription-authorization check",

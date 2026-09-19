@@ -47,7 +47,7 @@ import com.soklet.McpRequestStateProtector;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
@@ -65,6 +65,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -723,8 +724,9 @@ public class McpFinalTagGoldenWireProductionTests {
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.host("127.0.0.1")
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

@@ -33,6 +33,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -43,6 +44,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -57,10 +59,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Real-listener evidence for application-orchestrated localization reloads in
- * a two-node fleet. Each node owns its translation snapshot and local
- * invalidation control; Soklet owns request-local snapshot consistency and
- * listener cleanup, but no distributed session or fleet activation protocol.
+ * Real-listener evidence for application-orchestrated localization reloads and
+ * subscription catalog invalidation in a two-node fleet. Each node owns its
+ * translation/authorization snapshot and local invalidation control; Soklet
+ * owns request-local snapshot consistency and listener cleanup, but no
+ * distributed session, broker, or fleet activation protocol.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -71,6 +74,13 @@ class McpLocalizationFleetPublicRuntimeTests {
 	private static final String MCP_PATH = "/localization/fleet";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final String TENANT_HEADER = "X-Test-Tenant";
+	private static final String ANONYMOUS = "anonymous";
+	private static final String TENANT_ALPHA = "alpha";
+	private static final String TENANT_BETA = "beta";
+	private static final String SHARED_TOOL = "fleet.shared";
+	private static final String ALPHA_TOOL = "fleet.alpha";
+	private static final String BETA_TOOL = "fleet.beta";
 	private static final Duration WAIT = Duration.ofSeconds(5);
 	private static final Duration NO_EVENT_WAIT = Duration.ofMillis(500);
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
@@ -172,13 +182,15 @@ class McpLocalizationFleetPublicRuntimeTests {
 			CompletableFuture<String> parkedResponse = CompletableFuture.supplyAsync(
 					() -> toolsListUnchecked(fleet.first(), "parked-old-response"));
 			pause.awaitFirstLookup();
+			ContextObservation parkedContext = fleet.first().latestContext();
 			try {
 				fleet.activateFirst();
 			} finally {
 				pause.release();
 			}
 			assertCoherentRevision(await(parkedResponse), firstR41, firstR42);
-			assertLatestContextRevision(fleet.first(), firstR41);
+			assertEquals(firstR41.revision(), parkedContext.context()
+					.getRevision().orElseThrow());
 			assertListChanged(first.nextFrame(WAIT));
 			assertThrows(SocketTimeoutException.class,
 					() -> second.nextFrame(NO_EVENT_WAIT));
@@ -222,7 +234,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertAcknowledgment(firstSubscription.nextFrame(WAIT));
 			assertEquals("fr-CA", firstSubscription.contentLanguage());
 			awaitRuntime(fleet.first(), 1, 1);
-			assertEquals(1, fleet.first().contextCount());
+			assertEquals(2, fleet.first().contextCount());
 			assertEquals(0, fleet.second().contextCount());
 			assertEquals(0, fleet.second().server().getDiagnostics()
 					.getActiveSubscriptions());
@@ -238,7 +250,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertAcknowledgment(reconnectedSubscription.nextFrame(WAIT));
 			assertEquals("fr-CA", reconnectedSubscription.contentLanguage());
 			awaitRuntime(fleet.second(), 1, 1);
-			assertEquals(1, fleet.second().contextCount());
+			assertEquals(2, fleet.second().contextCount());
 
 			ContextObservation firstContext = fleet.first().context(0);
 			ContextObservation secondContext = fleet.second().context(0);
@@ -258,7 +270,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertTrue(firstContext.resourceListCursor().isEmpty());
 			assertTrue(secondContext.resourceListCursor().isEmpty());
 
-			fleet.second().invalidateCatalogs();
+			fleet.second().activate(CatalogSnapshot.valid("R42"));
 			assertListChanged(reconnectedSubscription.nextFrame(WAIT));
 			reconnectedSubscription.close();
 			awaitRuntime(fleet.second(), 0, 0);
@@ -267,6 +279,149 @@ class McpLocalizationFleetPublicRuntimeTests {
 		} finally {
 			close(firstSubscription);
 			close(reconnectedSubscription);
+			fleet.close();
+			assertStoppedWithRetainedAddress(fleet.first());
+			assertStoppedWithRetainedAddress(fleet.second());
+		}
+	}
+
+	@Test
+	@Timeout(90)
+	void applicationBrokerRecoveryCoversDelayedDuplicateMissedAndRevokedFleetState()
+			throws Exception {
+		TwoNodeFleet fleet = new TwoNodeFleet();
+		LiveSubscription firstAlpha = null;
+		LiveSubscription firstBeta = null;
+		LiveSubscription secondAlpha = null;
+		LiveSubscription reconnectedAlpha = null;
+
+		try {
+			fleet.start();
+			LiveSubscription alphaOnFirst = fleet.first().subscribe(
+					"fleet-alpha-a", "fr-CA", TENANT_ALPHA);
+			LiveSubscription betaOnFirst = fleet.first().subscribe(
+					"fleet-beta-a", "fr-CA", TENANT_BETA);
+			LiveSubscription alphaOnSecond = fleet.second().subscribe(
+					"fleet-alpha-b", "fr-CA", TENANT_ALPHA);
+			firstAlpha = alphaOnFirst;
+			firstBeta = betaOnFirst;
+			secondAlpha = alphaOnSecond;
+			assertAcknowledgment(alphaOnFirst.nextFrame(WAIT));
+			assertAcknowledgment(betaOnFirst.nextFrame(WAIT));
+			assertAcknowledgment(alphaOnSecond.nextFrame(WAIT));
+			awaitRuntime(fleet.first(), 2, 2);
+			awaitRuntime(fleet.second(), 1, 1);
+
+			CatalogSnapshot r41 = CatalogSnapshot.valid("R41");
+			CatalogSnapshot r42 = CatalogSnapshot.valid("R42");
+			assertTenantCatalog(fleet.first().toolsList(
+					"initial-alpha-a", TENANT_ALPHA), r41,
+					Set.of(SHARED_TOOL, ALPHA_TOOL));
+			assertTenantCatalog(fleet.first().toolsList(
+					"initial-beta-a", TENANT_BETA), r41,
+					Set.of(SHARED_TOOL, BETA_TOOL));
+			assertTenantCatalog(fleet.second().toolsList(
+					"initial-alpha-b", TENANT_ALPHA), r41,
+					Set.of(SHARED_TOOL, ALPHA_TOOL));
+
+			// One tenant loses a tool on both nodes. The application broker
+			// reaches node A first; node-local comparison suppresses the broad
+			// invalidation for beta and node B remains untouched until delivery.
+			fleet.first().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
+			fleet.second().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
+			fleet.broker().publishToolsListChanged(fleet.first());
+			assertListChanged(alphaOnFirst.nextFrame(WAIT));
+			assertThrows(SocketTimeoutException.class,
+					() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
+			assertThrows(SocketTimeoutException.class,
+					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+			assertTenantCatalog(fleet.first().toolsList(
+					"filtered-alpha-a", TENANT_ALPHA), r41,
+					Set.of(SHARED_TOOL));
+
+			fleet.broker().publishToolsListChanged(fleet.second());
+			assertListChanged(alphaOnSecond.nextFrame(WAIT));
+
+			// At-least-once broker delivery is safe: the exact current visible
+			// projection matches each accepted baseline, so no duplicate wire
+			// notification is emitted.
+			fleet.broker().publishToolsListChanged(fleet.first(), fleet.second());
+			assertThrows(SocketTimeoutException.class,
+					() -> alphaOnFirst.nextFrame(NO_EVENT_WAIT));
+			assertThrows(SocketTimeoutException.class,
+					() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
+			assertThrows(SocketTimeoutException.class,
+					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+
+			// Translation state reaches node A while node B is still stale.
+			// The application installs the snapshot before invoking the public
+			// node-local localization invalidator.
+			fleet.first().install(r42);
+			fleet.broker().publishLocalizationChanged(fleet.first());
+			assertListChanged(alphaOnFirst.nextFrame(WAIT));
+			assertListChanged(betaOnFirst.nextFrame(WAIT));
+			assertThrows(SocketTimeoutException.class,
+					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+			assertTenantCatalog(fleet.first().toolsList(
+					"translated-alpha-a", TENANT_ALPHA), r42,
+					Set.of(SHARED_TOOL));
+			assertTenantCatalog(fleet.second().toolsList(
+					"delayed-alpha-b", TENANT_ALPHA), r41,
+					Set.of(SHARED_TOOL));
+
+			// Node B catches up its application snapshot while the broker is
+			// interrupted, so its invalidation is deliberately missed. Recovery
+			// uses only the public server-local reconciler; fresh authorization
+			// and catalog projection discover the missed translation change.
+			fleet.broker().interrupt();
+			fleet.second().install(r42);
+			fleet.broker().publishLocalizationChanged(fleet.second());
+			assertThrows(SocketTimeoutException.class,
+					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+			fleet.broker().recover();
+			assertListChanged(alphaOnSecond.nextFrame(WAIT));
+			assertTenantCatalog(fleet.second().toolsList(
+					"reconciled-alpha-b", TENANT_ALPHA), r42,
+					Set.of(SHARED_TOOL));
+
+			// A whole-subscription revocation is authoritative on both nodes.
+			// Explicit reconciliation observes the denied authorization and closes
+			// each local stream as a reconciliation failure; the unrelated beta
+			// stream on node A remains live.
+			fleet.first().authorized(TENANT_ALPHA, false);
+			fleet.second().authorized(TENANT_ALPHA, false);
+			fleet.broker().recover();
+			fleet.first().metrics().awaitSubscriptionClosed(
+					McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED);
+			fleet.second().metrics().awaitSubscriptionClosed(
+					McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED);
+			alphaOnFirst.awaitTransportClosed(WAIT);
+			alphaOnSecond.awaitTransportClosed(WAIT);
+			awaitRuntime(fleet.first(), 1, 1);
+			awaitRuntime(fleet.second(), 0, 0);
+			fleet.first().visibleTools(TENANT_BETA, Set.of(SHARED_TOOL));
+			fleet.first().publisher().publishToolsListChanged();
+			assertListChanged(betaOnFirst.nextFrame(WAIT));
+
+			// Reconnection is a new admission. After the application restores
+			// access on node B, the client acknowledges there and explicitly
+			// refetches; baseline creation itself is not a replay signal.
+			fleet.second().authorized(TENANT_ALPHA, true);
+			LiveSubscription reconnectedOnSecond = fleet.second().subscribe(
+					"fleet-alpha-reconnected", "fr-CA", TENANT_ALPHA);
+			reconnectedAlpha = reconnectedOnSecond;
+			assertAcknowledgment(reconnectedOnSecond.nextFrame(WAIT));
+			awaitRuntime(fleet.second(), 1, 1);
+			assertThrows(SocketTimeoutException.class,
+					() -> reconnectedOnSecond.nextFrame(NO_EVENT_WAIT));
+			assertTenantCatalog(fleet.second().toolsList(
+					"refetch-on-node-b", TENANT_ALPHA), r42,
+					Set.of(SHARED_TOOL));
+		} finally {
+			close(firstAlpha);
+			close(firstBeta);
+			close(secondAlpha);
+			close(reconnectedAlpha);
 			fleet.close();
 			assertStoppedWithRetainedAddress(fleet.first());
 			assertStoppedWithRetainedAddress(fleet.second());
@@ -299,8 +454,21 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 	private static void assertListChanged(String frame) {
 		assertTrue(frame.contains("notifications/tools/list_changed"), frame);
+		assertFalse(frame.contains("fleet."), frame);
 		assertFalse(frame.contains("R41"), frame);
 		assertFalse(frame.contains("R42"), frame);
+	}
+
+	private static void assertTenantCatalog(String body,
+			CatalogSnapshot expectedSnapshot, Set<String> expectedTools) {
+		for (String tool : Set.of(SHARED_TOOL, ALPHA_TOOL, BETA_TOOL))
+			assertEquals(expectedTools.contains(tool),
+					body.contains("\"name\":\"" + tool + "\""), body);
+		assertTrue(occurrences(body, expectedSnapshot.marker())
+				>= expectedTools.size() * 2, body);
+		String unexpectedMarker = "R41".equals(expectedSnapshot.revisionValue())
+				? "[R42]:" : "[R41]:";
+		assertFalse(body.contains(unexpectedMarker), body);
 	}
 
 	private static void assertCoherentRevision(String body,
@@ -391,6 +559,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 				CatalogSnapshot.valid("R41"));
 		private final FleetNode second = new FleetNode("node-b",
 				CatalogSnapshot.valid("R41"));
+		private final FleetBroker broker = new FleetBroker(this.first, this.second);
 		private CatalogSnapshot stagedFirst;
 		private CatalogSnapshot stagedSecond;
 
@@ -400,6 +569,10 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private FleetNode second() {
 			return this.second;
+		}
+
+		private FleetBroker broker() {
+			return this.broker;
 		}
 
 		private void start() {
@@ -447,9 +620,49 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 	}
 
+	private static final class FleetBroker {
+		private final List<FleetNode> nodes;
+		private boolean interrupted;
+
+		private FleetBroker(FleetNode... nodes) {
+			this.nodes = List.of(nodes);
+		}
+
+		private void publishToolsListChanged(FleetNode... targets) {
+			if (this.interrupted)
+				return;
+			for (FleetNode target : targets)
+				target.publisher().publishToolsListChanged();
+		}
+
+		private void publishLocalizationChanged(FleetNode... targets) {
+			if (this.interrupted)
+				return;
+			for (FleetNode target : targets)
+				target.invalidateCatalogs();
+		}
+
+		private void interrupt() {
+			this.interrupted = true;
+		}
+
+		private void recover() {
+			this.interrupted = false;
+			for (FleetNode node : this.nodes)
+				node.server().getSubscriptionReconciler()
+						.reconcileSubscriptions();
+		}
+	}
+
 	private static final class FleetNode implements AutoCloseable {
 		private final String name;
 		private final AtomicReference<CatalogSnapshot> activeSnapshot;
+		private final McpSubscriptionEventPublisher publisher =
+				McpSubscriptionEventPublisher.fromInMemoryDefaults();
+		private final Map<String, Set<String>> visibleTools =
+				new ConcurrentHashMap<>();
+		private final Set<String> authorizedTenants =
+				ConcurrentHashMap.newKeySet();
 		private final AtomicReference<RenderPause> renderPause =
 				new AtomicReference<>();
 		private final AtomicInteger invalidations = new AtomicInteger();
@@ -458,16 +671,26 @@ class McpLocalizationFleetPublicRuntimeTests {
 				new CopyOnWriteArrayList<>();
 		private final CopyOnWriteArrayList<LiveSubscription> subscriptions =
 				new CopyOnWriteArrayList<>();
+		private final RecordingMetrics metrics = new RecordingMetrics();
 		private final McpServer server;
 		private final Soklet soklet;
 
 		private FleetNode(String name, CatalogSnapshot initialSnapshot) {
 			this.name = name;
 			this.activeSnapshot = new AtomicReference<>(initialSnapshot);
+			this.visibleTools.put(ANONYMOUS,
+					Set.of(SHARED_TOOL, ALPHA_TOOL, BETA_TOOL));
+			this.visibleTools.put(TENANT_ALPHA,
+					Set.of(SHARED_TOOL, ALPHA_TOOL));
+			this.visibleTools.put(TENANT_BETA,
+					Set.of(SHARED_TOOL, BETA_TOOL));
+			this.authorizedTenants.addAll(
+					Set.of(ANONYMOUS, TENANT_ALPHA, TENANT_BETA));
 			this.server = buildServer();
 			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(this.server)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(this.metrics)
 					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build());
 		}
@@ -478,6 +701,14 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private McpServer server() {
 			return this.server;
+		}
+
+		private McpSubscriptionEventPublisher publisher() {
+			return this.publisher;
+		}
+
+		private RecordingMetrics metrics() {
+			return this.metrics;
 		}
 
 		private CatalogSnapshot activeSnapshot() {
@@ -517,8 +748,23 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private void activate(CatalogSnapshot snapshot) {
-			this.activeSnapshot.set(snapshot);
+			install(snapshot);
 			invalidateCatalogs();
+		}
+
+		private void install(CatalogSnapshot snapshot) {
+			this.activeSnapshot.set(snapshot);
+		}
+
+		private void visibleTools(String tenant, Set<String> toolNames) {
+			this.visibleTools.put(tenant, Set.copyOf(toolNames));
+		}
+
+		private void authorized(String tenant, boolean authorized) {
+			if (authorized)
+				this.authorizedTenants.add(tenant);
+			else
+				this.authorizedTenants.remove(tenant);
 		}
 
 		private void invalidateCatalogs() {
@@ -535,13 +781,22 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private LiveSubscription subscribe(String id, String language)
 				throws IOException {
+			return subscribe(id, language, ANONYMOUS);
+		}
+
+		private LiveSubscription subscribe(String id, String language,
+				String tenant) throws IOException {
 			LiveSubscription subscription = LiveSubscription.open(this, id,
-					language);
+					language, tenant);
 			this.subscriptions.add(subscription);
 			return subscription;
 		}
 
 		private String toolsList(String id) throws Exception {
+			return toolsList(id, ANONYMOUS);
+		}
+
+		private String toolsList(String id, String tenant) throws Exception {
 			String body = requestBody(id, "tools/list",
 					"", "");
 			HttpRequest request = HttpRequest.newBuilder(uri())
@@ -549,6 +804,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 					.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
 					.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
 					.header("Accept-Language", "fr-CA")
+					.header(TENANT_HEADER, tenant)
 					.header("MCP-Protocol-Version", PROTOCOL_VERSION)
 					.header("Mcp-Method", "tools/list")
 					.POST(HttpRequest.BodyPublishers.ofString(body,
@@ -570,18 +826,21 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private McpServer buildServer() {
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
+			McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH,
+					McpImplementation
 							.withNameAndVersion(this.name, "1.0")
 							.title("Canonical server title")
 							.description("Canonical server description")
-							.build())
-					.addTool(McpToolRegistration.withName("fleet.tool")
+							.build());
+			for (String toolName : List.of(SHARED_TOOL, ALPHA_TOOL, BETA_TOOL))
+				endpointBuilder.addTool(McpToolRegistration.withName(toolName)
 							.jsonObjectArguments()
 							.handler((request, arguments, features) ->
 									McpCompleteResult.fromToolText("unused"))
-							.title("Canonical tool title")
-							.description("Canonical tool description")
-							.build())
+							.title("Canonical " + toolName + " title")
+							.description("Canonical " + toolName + " description")
+							.build());
+			McpEndpoint endpoint = endpointBuilder
 					.addResource(McpResourceRegistration.withUriAndName(
 							URI.create("fleet://resource"), "fleet-resource")
 							.handler((request, resource, features) ->
@@ -594,10 +853,12 @@ class McpLocalizationFleetPublicRuntimeTests {
 							.build())
 					.subscriptionConfig(McpSubscriptionConfig
 							.withEventPublisherAndNotificationTypes(
-									McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+									this.publisher,
 									EnumSet.of(
 											McpSubscriptionNotificationType
-													.RESOURCES_LIST_CHANGED))
+													.RESOURCES_LIST_CHANGED,
+											McpSubscriptionNotificationType
+													.TOOLS_LIST_CHANGED))
 							.build())
 					.build();
 			McpLocalizer localizer = McpLocalizer
@@ -632,14 +893,42 @@ class McpLocalizationFleetPublicRuntimeTests {
 					})
 					.build();
 			return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.admissionController(context -> {
+						String tenant = context.getRequest().getHeader(TENANT_HEADER)
+								.orElse(ANONYMOUS);
+						return McpAdmissionDecision.accepted(McpAdmissionIdentity
+								.withRateLimitPartitionKey("rate-" + tenant)
+								.authorizationPartitionKey("auth-" + tenant)
+								.principal(tenant)
+								.build());
+					})
+					.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+							(request, registration, features) -> {
+								String tenant = request.getAdmissionIdentity()
+										.getPrincipal().map(Object::toString)
+										.orElse(ANONYMOUS);
+								return this.visibleTools.getOrDefault(tenant, Set.of())
+										.contains(registration.getName());
+							},
+							(request, registration, features) -> true))
 					.host(LOOPBACK)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.maximumSubscriptionDuration(Duration.ofSeconds(30))
-					.subscriptionAuthorizer(
-							McpSubscriptionAuthorizer.denyAllInstance())
+					.subscriptionAuthorizer((context, features) -> {
+						String tenant = context.getInitialRequestContext()
+								.getAdmissionIdentity().getPrincipal()
+								.map(Object::toString).orElse(ANONYMOUS);
+						if (!this.authorizedTenants.contains(tenant))
+							return McpSubscriptionAuthorization.deniedInstance();
+						return McpSubscriptionAuthorization.Allowed
+								.withValidUntil(Instant.now().plus(Duration.ofMinutes(5)))
+								.applicationContext(this.name + ':' + tenant + ':'
+										+ this.activeSnapshot.get().revisionValue())
+								.build();
+					})
 					.localizer(localizer)
 					.build();
 		}
@@ -687,6 +976,38 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 	}
 
+	@ThreadSafe
+	private static final class RecordingMetrics implements MetricsCollector {
+		private final CopyOnWriteArrayList<McpMetricsEvent> events =
+				new CopyOnWriteArrayList<>();
+		private final CountDownLatch subscriptionClosed = new CountDownLatch(1);
+
+		@Override
+		public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+			this.events.add(event);
+			if (event instanceof McpMetricsEvent.SubscriptionClosed)
+				this.subscriptionClosed.countDown();
+		}
+
+		private void awaitSubscriptionClosed(
+				McpStreamTerminationReason expectedReason) {
+			try {
+				assertTrue(this.subscriptionClosed.await(
+						WAIT.toMillis(), TimeUnit.MILLISECONDS),
+						() -> "Missing subscription close event; events=" + this.events);
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(exception);
+			}
+			assertTrue(this.events.stream()
+					.filter(McpMetricsEvent.SubscriptionClosed.class::isInstance)
+					.map(McpMetricsEvent.SubscriptionClosed.class::cast)
+					.anyMatch(event -> event.getReason() == expectedReason),
+					() -> "Missing subscription close reason " + expectedReason
+							+ "; events=" + this.events);
+		}
+	}
+
 	private static final class LiveSubscription implements AutoCloseable {
 		private final FleetNode node;
 		private final Socket socket;
@@ -702,7 +1023,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private static LiveSubscription open(FleetNode node, String id,
-				String language) throws IOException {
+				String language, String tenant) throws IOException {
 			Socket socket = new Socket();
 			try {
 				socket.connect(new InetSocketAddress(LOOPBACK, node.port()),
@@ -718,6 +1039,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 						+ "Accept: " + JSON_MEDIA_TYPE
 						+ ", text/event-stream\r\n"
 						+ "Accept-Language: " + language + "\r\n"
+						+ TENANT_HEADER + ": " + tenant + "\r\n"
 						+ "MCP-Protocol-Version: " + PROTOCOL_VERSION + "\r\n"
 						+ "Mcp-Method: subscriptions/listen\r\n"
 						+ "Content-Length: " + encodedBody.length + "\r\n"

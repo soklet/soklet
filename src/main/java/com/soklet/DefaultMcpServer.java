@@ -320,11 +320,6 @@ final class DefaultMcpServer implements McpServer {
 		this.localizationCatalogInvalidator =
 				new DefaultMcpLocalizationCatalogInvalidator(
 				localizer != null, this::publishLocalizationCatalogInvalidation);
-		this.subscriptionReconciler = new McpSubscriptionReconciler() {
-			@Override
-			public void reconcileSubscriptions() {
-			}
-		};
 		this.mcpMetricEventDelivery = new McpMetricEventDelivery();
 		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
@@ -373,6 +368,10 @@ final class DefaultMcpServer implements McpServer {
 				this.keepAliveInterval,
 				this.maximumSubscriptionsPerPartition,
 				this.maximumSubscriptionDuration,
+				this.subscriptionCatalogProjectionTimeout,
+				this.subscriptionAuthorizationTimeout,
+				this.maximumSubscriptionAuthorizationDuration,
+				this.subscriptionAuthorizer,
 				applicationExecutionObserver(), this.lifecycleAdapter,
 				new HttpTransportPlan(this.requestHeaderTimeout,
 						this.requestBodyTimeout,
@@ -382,6 +381,8 @@ final class DefaultMcpServer implements McpServer {
 						this.maximumHeadersSizeInBytes,
 						this.maximumRequestTargetLengthInBytes,
 						this.concurrentConnectionLimit));
+		this.subscriptionReconciler =
+				this.runtimeBridge::reconcileSubscriptions;
 		this.lifecycleAdapter.bindRuntime(this.runtimeBridge);
 	}
 
@@ -463,6 +464,17 @@ final class DefaultMcpServer implements McpServer {
 						McpMetricsEvent.unknownMirroredHeader(
 								requireNonNull(endpointPath),
 								metricMethod(jsonRpcMethod)));
+			}
+
+			@Override
+			public void recordSubscriptionMaintenance(
+					@NonNull String endpointPath,
+					McpMetricsEvent.SubscriptionMaintenance.@NonNull Work work,
+					McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome outcome) {
+				mcpMetricEventDelivery.record(
+						McpMetricsEvent.subscriptionMaintenance(
+								requireNonNull(endpointPath), requireNonNull(work),
+								requireNonNull(outcome)));
 			}
 
 			@Override
@@ -698,7 +710,8 @@ final class DefaultMcpServer implements McpServer {
 							requestContext, exactInput.cancelationToken(),
 							exactInput.pastDeadline(),
 							exactInput.continuationLocale(),
-							exactInput.selectedLocaleSlot(), Optional.empty());
+							exactInput.selectedLocaleSlot(), Optional.empty(),
+							exactInput.acceptLanguageValues());
 					Map<Class<?>, Object> features = new LinkedHashMap<>();
 					features.put(CancelationToken.class,
 							exactInput.cancelationToken());
@@ -1017,10 +1030,10 @@ final class DefaultMcpServer implements McpServer {
 			case DEFAULT_TEXT -> new McpRuntimeCatalogLocalizer.Outcome(
 					McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
 					input.canonicalDocument(),
-					contentLanguageTag(configuredLocalizer.getFallbackLocale()));
+					contentLanguageTag(configuredLocalizer.getFallbackLocale()), true);
 			case FAIL_REQUEST -> new McpRuntimeCatalogLocalizer.Outcome(
 					McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
-					input.canonicalDocument(), Optional.empty());
+					input.canonicalDocument(), Optional.empty(), true);
 		};
 	}
 
@@ -1039,10 +1052,10 @@ final class DefaultMcpServer implements McpServer {
 				? new McpRuntimeCatalogLocalizer.Outcome(
 						McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
 						input.canonicalDocument(), contentLanguageTag(
-								configuredLocalizer.getFallbackLocale()))
+								configuredLocalizer.getFallbackLocale()), true)
 				: new McpRuntimeCatalogLocalizer.Outcome(
 						McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
-						input.canonicalDocument(), Optional.empty());
+						input.canonicalDocument(), Optional.empty(), true);
 	}
 
 	private static McpCanonicalLocalizationPlan.@NonNull ResponseKind toPlanResponseKind(
@@ -2463,6 +2476,20 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull Optional<@NonNull String> continuationLocale,
 					@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 					@NonNull Optional<@NonNull String> resourceListCursor) {
+		return applicationLocalizationContext(requestContext, token, pastDeadline,
+				continuationLocale, selectedLocaleSlot, resourceListCursor, null);
+	}
+
+	@NonNull
+	private Optional<@NonNull McpLocalizationContext>
+			applicationLocalizationContext(
+					@NonNull McpRequestContext requestContext,
+					@NonNull CancelationToken token,
+					@NonNull BooleanSupplier pastDeadline,
+					@NonNull Optional<@NonNull String> continuationLocale,
+					@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+					@NonNull Optional<@NonNull String> resourceListCursor,
+					@Nullable List<@NonNull String> acceptLanguageValues) {
 		McpLocalizer configuredLocalizer = this.localizer;
 
 		if (configuredLocalizer == null) {
@@ -2483,7 +2510,9 @@ final class DefaultMcpServer implements McpServer {
 		McpLocalizationRequest localizationRequest =
 				new DefaultMcpLocalizationRequest(requestContext,
 						McpLocaleSupport.boundedLanguageRanges(
-								requestContext instanceof DefaultMcpRequestContext context
+								acceptLanguageValues != null
+										? acceptLanguageValues
+										: requestContext instanceof DefaultMcpRequestContext context
 										? context.acceptLanguageValues()
 										: DefaultMcpRequestContext.acceptLanguageValues(
 												requestContext.getRequest())),

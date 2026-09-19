@@ -437,7 +437,8 @@ final class McpTransportRuntime implements AutoCloseable {
 
 		long exchangeId = exchangeSequence.incrementAndGet();
 		String requestId = new String(request.body(), StandardCharsets.UTF_8);
-		long deadlineNanos = saturatingAdd(clock.nanoTime(), configuration.requestDeadline().toNanos());
+		long deadlineNanos = clock.nanoTime()
+				+ configuration.requestDeadline().toNanos();
 		Exchange exchange = new Exchange(
 				exchangeId,
 				request,
@@ -559,15 +560,6 @@ final class McpTransportRuntime implements AutoCloseable {
 		return frame.toString().getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static long saturatingAdd(long left, long right) {
-		long result = left + right;
-
-		if (((left ^ result) & (right ^ result)) < 0)
-			return Long.MAX_VALUE;
-
-		return result;
-	}
-
 	private final class Exchange {
 		private final long exchangeId;
 		@NonNull
@@ -683,14 +675,13 @@ final class McpTransportRuntime implements AutoCloseable {
 				return;
 
 			if (subscription.get()) {
+				nextKeepAliveNanos.set(clock.nanoTime()
+						+ configuration.keepAliveInterval().toNanos());
 				subscriptions.put(exchangeId, this);
 
 				if (responseCleaned.get() || cancellation.get() != null) {
 					subscriptions.remove(exchangeId, this);
 				} else {
-					nextKeepAliveNanos.set(saturatingAdd(
-						clock.nanoTime(),
-						configuration.keepAliveInterval().toNanos()));
 					signalTimer();
 				}
 			} else {
@@ -819,7 +810,8 @@ final class McpTransportRuntime implements AutoCloseable {
 				}
 			}
 
-			if (subscription.get() && now - nextKeepAliveNanos.get() >= 0L) {
+			if (subscriptions.get(exchangeId) == this
+					&& now - nextKeepAliveNanos.get() >= 0L) {
 				long keepAliveIntervalNanos =
 						configuration.keepAliveInterval().toNanos();
 				McpOutboundChannel.OfferResult result =
@@ -832,7 +824,7 @@ final class McpTransportRuntime implements AutoCloseable {
 							: Long.MAX_VALUE;
 					nextKeepAliveNanos.set(next != Long.MAX_VALUE
 							&& next - now > 0L ? next
-							: saturatingAdd(now, keepAliveIntervalNanos));
+							: now + keepAliveIntervalNanos);
 				}
 
 				if (result == McpOutboundChannel.OfferResult.TOO_LARGE)

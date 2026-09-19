@@ -32,7 +32,7 @@ import com.soklet.McpRequestOutcome;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
@@ -59,6 +59,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -66,6 +68,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 /**
  * Negative coverage for the MCP server-to-client JSON-RPC direction boundary.
@@ -122,8 +125,9 @@ public class McpStreamTests {
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
@@ -493,6 +497,17 @@ public class McpStreamTests {
 				@NonNull Object coalescingKey) {
 			this.mutations.incrementAndGet();
 			return McpOutboundChannel.OfferResult.ACCEPTED;
+		}
+
+		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull OfferResult> offerCoalescingIf(
+				McpRequestSseStream.@NonNull Frame frame,
+				@NonNull Object coalescingKey,
+				@NonNull BooleanSupplier offerAllowed) {
+			if (!offerAllowed.getAsBoolean())
+				return Optional.empty();
+			return Optional.of(offerCoalescing(frame, coalescingKey));
 		}
 
 		@Override

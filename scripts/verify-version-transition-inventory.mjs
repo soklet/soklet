@@ -17,6 +17,7 @@ export const INVENTORY_EXCLUSIONS = Object.freeze([
 export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'MCP_QUICKSTART.md',
   'MIGRATING_TO_4_0.md',
+  'benchmarks/src/main/java/com/soklet/McpSubscriptionRenewalBenchmark.java',
   'conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md',
   'conformance/official/public-fixture-test-src/com/soklet/conformance/McpChunkedHttpClient.java',
   'conformance/official/public-fixture-test-src/com/soklet/conformance/McpTaskNotificationSocketDriver.java',
@@ -31,7 +32,14 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'release/scripts/install-pinned-gradle-linux-x64.sh',
   'scripts/verify-consumer-ci-self-test.mjs',
   'src/test/java/com/soklet/HeaderLocaleTests.java',
+  'src/test/java/com/soklet/McpSubscriptionCatalogProjectionPublicRuntimeTests.java',
   'src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationTerminationPublicRuntimeTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationTimeoutPublicRuntimeTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionCatalogOfferBoundaryTests.java',
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionDeadlineWraparoundTests.java',
   'src/test/java/com/soklet/internal/microhttp/RequestParserFramingTests.java',
   'verification/consumer-build/README.md',
   'verification/consumer-build/build.gradle',
@@ -139,7 +147,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'2e2ef4bbae30848f66f904e0461e1fc06c9f8a39dee5ee31df0e1c879e2afeb7';
+	'cd5c63a121709fc34217185b556df35b96d5c19fe8daa3103ee4a74040ebde89';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

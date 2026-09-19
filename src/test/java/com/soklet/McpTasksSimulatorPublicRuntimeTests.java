@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Timeout;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -521,8 +522,9 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.taskManager(this.taskManager)
-					.subscriptionAuthorizer(
-							McpSubscriptionAuthorizer.denyAllInstance())
+					.subscriptionAuthorizer((context, features) ->
+							McpSubscriptionAuthorization.Allowed.fromValidUntil(
+									Instant.now().plus(Duration.ofMinutes(5))))
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.build();

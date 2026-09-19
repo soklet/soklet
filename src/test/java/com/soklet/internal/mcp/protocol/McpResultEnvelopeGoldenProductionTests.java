@@ -49,7 +49,7 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpResourcePage;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
@@ -72,6 +72,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HexFormat;
@@ -1027,8 +1028,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

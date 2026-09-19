@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.MetricsCollector;
+import com.soklet.McpMetricsEvent;
 import com.soklet.McpRequestContext;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -83,6 +84,18 @@ public interface McpApplicationExecutionObserver {
 			throw new NullPointerException("endpointPath");
 		if (jsonRpcMethod == null)
 			throw new NullPointerException("jsonRpcMethod");
+	}
+
+	/** Records one bounded subscription-maintenance outcome. */
+	default void recordSubscriptionMaintenance(@NonNull String endpointPath,
+			McpMetricsEvent.SubscriptionMaintenance.@NonNull Work work,
+			McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome outcome) {
+		if (endpointPath == null)
+			throw new NullPointerException("endpointPath");
+		if (work == null)
+			throw new NullPointerException("work");
+		if (outcome == null)
+			throw new NullPointerException("outcome");
 	}
 
 	void recordHandlerExecutionStarted();

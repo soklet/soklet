@@ -46,6 +46,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -300,27 +301,42 @@ final class McpSimulationRuntime implements McpSimulation,
 	@Override
 	public McpOutboundChannel.@NonNull OfferResult offer(
 			McpRequestSseStream.@NonNull Frame frame) {
-		return offer(frame, null);
+		return offer(frame, null, () -> true).orElseThrow();
 	}
 
 	@Override
 	public McpOutboundChannel.@NonNull OfferResult offerCoalescing(
 			McpRequestSseStream.@NonNull Frame frame,
 			@NonNull Object coalescingKey) {
-		return offer(frame, requireNonNull(coalescingKey));
+		return offer(frame, requireNonNull(coalescingKey), () -> true)
+				.orElseThrow();
 	}
 
-	private McpOutboundChannel.@NonNull OfferResult offer(
+	@Override
+	@NonNull
+	public Optional<McpOutboundChannel.@NonNull OfferResult> offerCoalescingIf(
 			McpRequestSseStream.@NonNull Frame frame,
-			@Nullable Object coalescingKey) {
+			@NonNull Object coalescingKey,
+			@NonNull BooleanSupplier offerAllowed) {
+		return offer(frame, requireNonNull(coalescingKey),
+				requireNonNull(offerAllowed));
+	}
+
+	@NonNull
+	private Optional<McpOutboundChannel.@NonNull OfferResult> offer(
+			McpRequestSseStream.@NonNull Frame frame,
+			@Nullable Object coalescingKey,
+			@NonNull BooleanSupplier offerAllowed) {
 		McpRequestSseStream.Listener listener;
 		Termination termination = null;
 		synchronized (this.lock) {
+			if (!requireNonNull(offerAllowed).getAsBoolean())
+				return Optional.empty();
 			if (this.channelTerminal || this.cancelWon)
-				return McpOutboundChannel.OfferResult.CLOSED;
+				return Optional.of(McpOutboundChannel.OfferResult.CLOSED);
 			if (coalescingKey != null
 					&& this.pendingCoalescingKeys.contains(coalescingKey))
-				return McpOutboundChannel.OfferResult.ACCEPTED;
+				return Optional.of(McpOutboundChannel.OfferResult.COALESCED);
 			if (!this.responsePublished) {
 				termination = captureFrameWhileLocked(frame, coalescingKey,
 						this.preResponseItems);
@@ -330,7 +346,7 @@ final class McpSimulationRuntime implements McpSimulation,
 					// the exact capture-limit terminal. The first offending frame is
 					// omitted, but its producer observes acceptance long enough to
 					// commit the SSE response.
-					return McpOutboundChannel.OfferResult.ACCEPTED;
+					return Optional.of(McpOutboundChannel.OfferResult.ACCEPTED);
 				}
 				listener = null;
 			} else {
@@ -342,8 +358,9 @@ final class McpSimulationRuntime implements McpSimulation,
 		if (termination != null && listener != null)
 			listener.didTerminate(termination.cancellationReason(),
 					termination.observationReason(), null);
-		return termination == null ? McpOutboundChannel.OfferResult.ACCEPTED
-				: McpOutboundChannel.OfferResult.CLOSED;
+		return Optional.of(termination == null
+				? McpOutboundChannel.OfferResult.ACCEPTED
+				: McpOutboundChannel.OfferResult.CLOSED);
 	}
 
 	@Override

@@ -29,6 +29,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -77,10 +78,12 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void invalidateCatalogsDeliversOneCoarseInvalidationPerLocalizedFamily() {
+		AtomicReference<String> snapshot = new AtomicReference<>("BEFORE:");
 		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		List<String> frames = new ArrayList<>();
 		SokletSimulator.run(simulatorConfig(true, localizer(
-				text -> McpLocalizationResult.useDefaultText())), simulator -> {
+				text -> McpLocalizationResult.localized(
+						snapshot.get() + text.getDefaultText()))), simulator -> {
 			scopedServer.set(simulator.getMcpServer().orElseThrow());
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("invalidation",
@@ -95,6 +98,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertTrue(acknowledgment.contains("\"resourcesListChanged\":true"),
 					acknowledgment);
 
+			snapshot.set("AFTER:");
 			scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 			for (int index = 0; index < 3; ++index)
@@ -106,7 +110,8 @@ class McpLocalizationReloadRuntimeTests {
 		assertTrue(all.contains("notifications/prompts/list_changed"), all);
 		assertTrue(all.contains("notifications/resources/list_changed"), all);
 		// Coarse means coarse: no localized text, locale, key, or revision.
-		assertFalse(all.contains("FR:"), all);
+		assertFalse(all.contains("BEFORE:"), all);
+		assertFalse(all.contains("AFTER:"), all);
 		assertFalse(all.contains("fr"), all);
 		assertTrue(all.contains("\"io.modelcontextprotocol/subscriptionId\""),
 				all);
@@ -114,6 +119,7 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void localizedPromptPublisherNeedsNoUnrelatedApplicationPublisher() {
+		AtomicReference<String> snapshot = new AtomicReference<>("BEFORE:");
 		// Only the prompt carries localizable text: no tools, and the resource
 		// surface and application publishers are deliberately absent.
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
@@ -127,7 +133,8 @@ class McpLocalizationReloadRuntimeTests {
 				.build();
 		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		SokletSimulator.run(simulatorConfig(endpoint, localizer(
-				text -> McpLocalizationResult.useDefaultText())), simulator -> {
+				text -> McpLocalizationResult.localized(
+						snapshot.get() + text.getDefaultText()))), simulator -> {
 			scopedServer.set(simulator.getMcpServer().orElseThrow());
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("prompts-only",
@@ -142,6 +149,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertFalse(acknowledgment.contains("resourcesListChanged"),
 					acknowledgment);
 
+			snapshot.set("AFTER:");
 			scopedServer.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 
 			String frame = nextFrame(simulation);
@@ -260,7 +268,8 @@ class McpLocalizationReloadRuntimeTests {
 
 		List<String> frames = drain(escaped.get());
 		String terminal = frames.get(frames.size() - 1);
-		assertTrue(terminal.contains("\"title\":\"Canonical title\""), terminal);
+		assertTrue(terminal.contains("\"title\":\"NEW:Canonical title\""),
+				terminal);
 		assertFalse(terminal.contains("OLD:"), terminal);
 	}
 
@@ -456,14 +465,18 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void twoNodesInvalidateIndependently() {
+		AtomicReference<String> firstSnapshot = new AtomicReference<>("FIRST-OLD:");
+		AtomicReference<String> secondSnapshot = new AtomicReference<>("SECOND-OLD:");
 		AtomicReference<McpServer> first = new AtomicReference<>();
 		AtomicReference<McpServer> second = new AtomicReference<>();
 
 		SokletSimulator.run(simulatorConfig(true, localizer(
-				text -> McpLocalizationResult.useDefaultText())), firstSimulator -> {
+				text -> McpLocalizationResult.localized(
+						firstSnapshot.get() + text.getDefaultText()))), firstSimulator -> {
 			first.set(firstSimulator.getMcpServer().orElseThrow());
 			SokletSimulator.run(simulatorConfig(true, localizer(
-					text -> McpLocalizationResult.useDefaultText())), secondSimulator -> {
+					text -> McpLocalizationResult.localized(
+							secondSnapshot.get() + text.getDefaultText()))), secondSimulator -> {
 				second.set(secondSimulator.getMcpServer().orElseThrow());
 				McpSimulation firstSubscription = firstSimulator
 						.startMcpRequest(subscriptionRequest("node-one",
@@ -476,6 +489,7 @@ class McpLocalizationReloadRuntimeTests {
 
 				// The control is a local-server operation: each node's call
 				// reaches only its own streams.
+				firstSnapshot.set("FIRST-NEW:");
 				first.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 				assertTrue(nextFrame(firstSubscription)
 						.contains("notifications/tools/list_changed"));
@@ -483,6 +497,7 @@ class McpLocalizationReloadRuntimeTests {
 						Duration.ofMillis(150)).isEmpty(),
 						"Node one's invalidation must not reach node two.");
 
+				secondSnapshot.set("SECOND-NEW:");
 				second.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
 				assertTrue(nextFrame(secondSubscription)
 						.contains("notifications/tools/list_changed"));
@@ -744,8 +759,9 @@ class McpLocalizationReloadRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.maximumSubscriptionDuration(Duration.ofMillis(400))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance());
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))));
 
 		if (localizer != null)
 			builder.localizer(localizer);

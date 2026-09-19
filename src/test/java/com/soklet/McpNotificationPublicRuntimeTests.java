@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Timeout;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -347,8 +348,9 @@ public class McpNotificationPublicRuntimeTests {
 	private static McpServer.Builder baseServerBuilder(
 			McpServer.@NonNull Builder builder) {
 		return builder.host(LOOPBACK)
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

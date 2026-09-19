@@ -35,6 +35,8 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpResourcePage;
 import com.soklet.McpServer;
 import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpSubscriptionAuthorization;
+import com.soklet.McpSubscriptionAuthorizationContext;
 import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEventPublisher;
@@ -157,6 +159,236 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					"task-first"), client.readChunkText(),
 					"Only an accepted task ID may produce a notification.");
 		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void taskAuthorizationUsesCredentialFreeReplacementContextAndCannotExpandOnReconciliation()
+			throws Exception {
+		String acceptedTaskId = "task-derived-context-accepted";
+		String rejectedTaskId = "task-derived-context-rejected";
+		String rateLimitPartition = "derived-context-rate";
+		String authorizationPartition = "derived-context-authorization";
+		Object principal = new Object();
+		Object admissionApplicationContext = new Object();
+		Object replacementApplicationContext = new Object();
+		List<McpSubscriptionAuthorizationContext> authorizationContexts =
+				new CopyOnWriteArrayList<>();
+		CountDownLatch reconciliationAuthorization = new CountDownLatch(1);
+		AtomicInteger authorizationInvocations = new AtomicInteger();
+		McpSubscriptionAuthorizer authorizer = (context, features) -> {
+			authorizationContexts.add(context);
+			int invocation = authorizationInvocations.incrementAndGet();
+			if (invocation == 1) {
+				Assertions.assertSame(admissionApplicationContext,
+						context.getApplicationContext().orElseThrow());
+				Assertions.assertEquals(Set.of(acceptedTaskId, rejectedTaskId),
+						context.getTaskIds());
+			} else if (invocation == 2) {
+				Assertions.assertSame(replacementApplicationContext,
+						context.getApplicationContext().orElseThrow());
+				Assertions.assertEquals(Set.of(acceptedTaskId),
+						context.getTaskIds(),
+						"Reconciliation must not reconsider a task ID omitted from the ACK.");
+				reconciliationAuthorization.countDown();
+			} else {
+				throw new AssertionError(
+						"Unexpected subscription authorization invocation " + invocation);
+			}
+			return McpSubscriptionAuthorization.Allowed
+					.withValidUntil(Instant.now().plus(Duration.ofMinutes(5)))
+					.applicationContext(replacementApplicationContext)
+					.build();
+		};
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpServer server = serverBuilder(taskManager, new AtomicInteger())
+				.admissionController(context -> McpAdmissionDecision.accepted(
+						McpAdmissionIdentity
+								.withRateLimitPartitionKey(rateLimitPartition)
+								.authorizationPartitionKey(authorizationPartition)
+								.principal(principal)
+								.applicationContext(admissionApplicationContext)
+								.build()))
+				.subscriptionAuthorizer(authorizer)
+				.build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, acceptedTaskId, ALPHA);
+			seedTask(port, rejectedTaskId, ALPHA);
+			taskManager.putTask(taskManager.requireTask(rejectedTaskId),
+					"another-authorization-partition");
+			taskManager.resetFindInvocations();
+
+			client = listenWithCredentialCanaries(port,
+					"\"derived-task-context\"", acceptedTaskId, rejectedTaskId);
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"derived-task-context\"",
+					List.of(acceptedTaskId)), client.readChunkText(),
+					"The ACK must contain only task IDs accepted with the replacement context.");
+
+			Assertions.assertEquals(1, authorizationInvocations.get());
+			Assertions.assertEquals(1, authorizationContexts.size());
+			McpRequestContext initial = authorizationContexts.get(0)
+					.getInitialRequestContext();
+			Assertions.assertEquals("Bearer original-credential",
+					initial.getRequest().getHeader("Authorization").orElseThrow());
+			Assertions.assertTrue(initial.getRequest().getBody().isPresent());
+			Assertions.assertTrue(initial.getRequestMetadata()
+					.find("authorizationTestMetadata").isPresent());
+			Assertions.assertTrue(initial.getTraceContext().isPresent());
+			Assertions.assertEquals(Map.of("credential", "metadata-secret"),
+					initial.getBaggage());
+
+			List<McpTaskRequestContext> initialTaskContexts =
+					taskManager.findContexts();
+			Assertions.assertEquals(2, initialTaskContexts.size());
+			Assertions.assertEquals(Set.of(acceptedTaskId, rejectedTaskId),
+					Set.of(initialTaskContexts.get(0).getTaskId(),
+							initialTaskContexts.get(1).getTaskId()));
+			McpRequestContext derived = initialTaskContexts.get(0)
+					.getRequestContext();
+			Assertions.assertSame(derived,
+					initialTaskContexts.get(1).getRequestContext());
+			Assertions.assertNotSame(initial, derived);
+			Assertions.assertTrue(derived.getRequest().getHeaders().isEmpty());
+			Assertions.assertTrue(derived.getRequest().getBody().isEmpty());
+			Assertions.assertEquals(McpJsonObject.emptyInstance(),
+					derived.getRequestMetadata());
+			Assertions.assertTrue(derived.getFrameworkRequestState().isEmpty());
+			Assertions.assertTrue(derived.getApplicationRequestState().isEmpty());
+			Assertions.assertTrue(derived.getTraceContext().isEmpty());
+			Assertions.assertTrue(derived.getRequest().getTraceContext().isEmpty());
+			Assertions.assertTrue(derived.getBaggage().isEmpty());
+			Assertions.assertTrue(derived.getRequestId().isEmpty());
+			McpAdmissionIdentity derivedIdentity = derived.getAdmissionIdentity();
+			Assertions.assertSame(principal,
+					derivedIdentity.getPrincipal().orElseThrow());
+			Assertions.assertSame(replacementApplicationContext,
+					derivedIdentity.getApplicationContext().orElseThrow());
+			Assertions.assertEquals(rateLimitPartition,
+					derivedIdentity.getRateLimitPartitionKey());
+			Assertions.assertEquals(Optional.of(authorizationPartition),
+					derivedIdentity.getAuthorizationPartitionKey());
+
+			taskManager.resetFindInvocations();
+			server.getSubscriptionReconciler().reconcileSubscriptions();
+			Assertions.assertTrue(reconciliationAuthorization.await(5,
+					TimeUnit.SECONDS),
+					"Reconciliation did not perform a fresh authorization check.");
+			taskManager.awaitFindCompletions(acceptedTaskId, 2);
+			Assertions.assertEquals(2,
+					taskManager.findInvocations(acceptedTaskId));
+			Assertions.assertEquals(0,
+					taskManager.findInvocations(rejectedTaskId),
+					"A task omitted from the ACK must not be added on renewal.");
+			Assertions.assertEquals(2, taskManager.findContexts().size());
+			for (McpTaskRequestContext context : taskManager.findContexts())
+				Assertions.assertSame(replacementApplicationContext,
+						context.getRequestContext().getAdmissionIdentity()
+								.getApplicationContext().orElseThrow());
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void reconciliationFencesOldTaskContextAndDropsOnlyRevokedQueuedTask()
+			throws Exception {
+		String revokedTaskId = "task-revision-revoked";
+		String retainedTaskId = "task-revision-retained";
+		Object firstContext = new Object();
+		Object replacementContext = new Object();
+		AtomicInteger authorizations = new AtomicInteger();
+		CountDownLatch reconciliationAuthorization = new CountDownLatch(1);
+		McpSubscriptionAuthorizer authorizer = (context, features) -> {
+			int invocation = authorizations.incrementAndGet();
+			Object applicationContext;
+			if (invocation == 1) {
+				applicationContext = firstContext;
+			} else if (invocation == 2) {
+				applicationContext = replacementContext;
+				reconciliationAuthorization.countDown();
+			} else {
+				throw new AssertionError(
+						"Unexpected authorization invocation " + invocation);
+			}
+			return McpSubscriptionAuthorization.Allowed
+					.withValidUntil(Instant.now().plus(Duration.ofMinutes(5)))
+					.applicationContext(applicationContext)
+					.build();
+		};
+		ScriptedTaskManager taskManager = new ScriptedTaskManager();
+		McpServer server = serverBuilder(taskManager, new AtomicInteger())
+				.subscriptionAuthorizer(authorizer)
+				.build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, revokedTaskId, ALPHA);
+			seedTask(port, retainedTaskId, ALPHA);
+			client = listen(port, "\"task-revision-fence\"", ALPHA, true,
+					"{\"taskIds\":[\"" + revokedTaskId + "\",\""
+							+ retainedTaskId + "\"]}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"task-revision-fence\"",
+					List.of(revokedTaskId, retainedTaskId)), client.readChunkText());
+
+			taskManager.resetFindInvocations();
+			taskManager.blockTaskFindsAfterSnapshot(Set.of(revokedTaskId));
+			taskManager.publishTaskChanged(revokedTaskId);
+			taskManager.awaitBlockedTaskFinds();
+			taskManager.publishTaskChanged(retainedTaskId);
+			taskManager.revokeForApplicationContext(revokedTaskId,
+					replacementContext);
+
+			server.getSubscriptionReconciler().reconcileSubscriptions();
+			Assertions.assertTrue(reconciliationAuthorization.await(5,
+					TimeUnit.SECONDS));
+			taskManager.awaitFindCompletions(retainedTaskId, 1);
+			taskManager.releaseBlockedTaskFinds();
+
+			Assertions.assertEquals(workingNotification("\"task-revision-fence\"",
+					retainedTaskId), client.readChunkText(),
+					"Only the retained task may be projected under fresh authorization.");
+			taskManager.awaitFindCompletions(revokedTaskId, 2);
+			taskManager.awaitFindCompletions(retainedTaskId, 2);
+			Assertions.assertEquals(2,
+					taskManager.findInvocations(revokedTaskId),
+					"The revoked queued task ran after fresh authorization.");
+			Assertions.assertEquals(2,
+					taskManager.findInvocations(retainedTaskId));
+
+			List<McpTaskRequestContext> revokedContexts = taskManager.findContexts()
+					.stream().filter(context -> revokedTaskId.equals(context.getTaskId()))
+					.toList();
+			Assertions.assertEquals(2, revokedContexts.size());
+			Assertions.assertSame(firstContext, revokedContexts.get(0)
+					.getRequestContext().getAdmissionIdentity()
+					.getApplicationContext().orElseThrow());
+			Assertions.assertSame(replacementContext, revokedContexts.get(1)
+					.getRequestContext().getAdmissionIdentity()
+					.getApplicationContext().orElseThrow());
+			List<McpTaskRequestContext> retainedContexts = taskManager.findContexts()
+					.stream().filter(context -> retainedTaskId.equals(context.getTaskId()))
+					.toList();
+			Assertions.assertEquals(2, retainedContexts.size());
+			for (McpTaskRequestContext context : retainedContexts)
+				Assertions.assertSame(replacementContext, context.getRequestContext()
+						.getAdmissionIdentity().getApplicationContext().orElseThrow());
+		} finally {
+			taskManager.releaseBlockedTaskFinds();
 			if (client != null)
 				client.closeWithReset();
 			soklet.close();
@@ -1115,8 +1347,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			@NonNull AtomicInteger admissions) {
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.admissionController(context -> {
 					admissions.incrementAndGet();
 					String tenant = context.getRequest()
@@ -1298,6 +1531,33 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 						"Mcp-Method", "subscriptions/listen"),
 				new McpChunkedHttpClient.RequestHeader(
 						"X-Test-Tenant", tenant)), receiveBufferBytes);
+	}
+
+	private static McpChunkedHttpClient listenWithCredentialCanaries(int port,
+			@NonNull String idJson, @NonNull String acceptedTaskId,
+			@NonNull String rejectedTaskId) throws Exception {
+		String traceparent =
+				"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":" + idJson
+				+ ",\"method\":\"subscriptions/listen\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{"
+				+ "\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}},"
+				+ "\"authorizationTestMetadata\":\"metadata-secret\","
+				+ "\"traceparent\":\"" + traceparent + "\","
+				+ "\"baggage\":\"credential=metadata-secret\"},"
+				+ "\"notifications\":{\"taskIds\":[\"" + acceptedTaskId
+				+ "\",\"" + rejectedTaskId + "\"]}}}";
+		return McpChunkedHttpClient.postMcpMessage(port, body, List.of(
+				new McpChunkedHttpClient.RequestHeader(
+						"MCP-Protocol-Version", PROTOCOL_VERSION),
+				new McpChunkedHttpClient.RequestHeader(
+						"Mcp-Method", "subscriptions/listen"),
+				new McpChunkedHttpClient.RequestHeader(
+						"Authorization", "Bearer original-credential"),
+				new McpChunkedHttpClient.RequestHeader(
+						"traceparent", traceparent)), 0);
 	}
 
 	private static String taskMetadata(boolean tasksCapable) {
@@ -1846,6 +2106,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		private final Set<@NonNull String> revokedTaskIds =
 				ConcurrentHashMap.newKeySet();
 		@NonNull
+		private final Map<@NonNull String, @NonNull Object>
+				revokedApplicationContexts = new ConcurrentHashMap<>();
+		@NonNull
 		private final Set<@NonNull String> failNextFindTaskIds =
 				ConcurrentHashMap.newKeySet();
 		private final @Nullable McpTaskEventPublisher taskEventPublisher;
@@ -1857,6 +2120,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		@NonNull
 		private final Map<@NonNull String, @NonNull AtomicInteger>
 				findCompletionsByTask = new ConcurrentHashMap<>();
+		@NonNull
+		private final List<@NonNull McpTaskRequestContext> findContexts =
+				new CopyOnWriteArrayList<>();
 		@NonNull
 		private final CountDownLatch revokedLookup = new CountDownLatch(1);
 		@NonNull
@@ -1889,6 +2155,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		public Optional<@NonNull McpTask> findTask(
 				@NonNull McpTaskRequestContext context) {
 			this.findInvocations.incrementAndGet();
+			this.findContexts.add(context);
 			String taskId = context.getTaskId();
 			this.findInvocationsByTask.computeIfAbsent(taskId,
 					ignored -> new AtomicInteger()).incrementAndGet();
@@ -1906,6 +2173,13 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					return Optional.empty();
 				}
 				McpRequestContext requestContext = context.getRequestContext();
+				Object revokedApplicationContext =
+						this.revokedApplicationContexts.get(taskId);
+				if (revokedApplicationContext != null
+						&& requestContext.getAdmissionIdentity()
+								.getApplicationContext().orElse(null)
+								== revokedApplicationContext)
+					return Optional.empty();
 				String authorizationPartition = requestContext
 						.getAdmissionIdentity()
 						.getAuthorizationPartitionKey().orElseThrow();
@@ -1964,6 +2238,11 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 
 		private void revoke(@NonNull String taskId) {
 			this.revokedTaskIds.add(taskId);
+		}
+
+		private void revokeForApplicationContext(@NonNull String taskId,
+				@NonNull Object applicationContext) {
+			this.revokedApplicationContexts.put(taskId, applicationContext);
 		}
 
 		private void failNextFind(@NonNull String taskId) {
@@ -2132,10 +2411,16 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			return completions == null ? 0 : completions.get();
 		}
 
+		@NonNull
+		private List<@NonNull McpTaskRequestContext> findContexts() {
+			return List.copyOf(this.findContexts);
+		}
+
 		private void resetFindInvocations() {
 			this.findInvocations.set(0);
 			this.findInvocationsByTask.clear();
 			this.findCompletionsByTask.clear();
+			this.findContexts.clear();
 		}
 	}
 

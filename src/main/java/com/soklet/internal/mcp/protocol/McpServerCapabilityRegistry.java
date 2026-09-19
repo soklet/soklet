@@ -162,25 +162,31 @@ final class McpServerCapabilityRegistry {
 				serverInformation);
 
 		boolean subscriptionsSupported = endpoint.subscriptionConfig().isPresent();
+		Set<McpResourceNotificationType> notificationTypes = endpoint
+				.subscriptionConfig()
+				.map(McpNormalizedSubscriptionConfiguration::notificationTypes)
+				.orElseGet(Set::of);
 		Optional<McpCatalogCapability> toolsCapability = tools.isEmpty()
 				? Optional.empty()
-				: Optional.of(subscriptionsSupported && localizedResponseKinds
-						.contains(McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST)
+				: Optional.of(catalogListChangedSupported(subscriptionsSupported,
+						true, notificationTypes,
+						McpResourceNotificationType.TOOLS_LIST_CHANGED,
+						localizedResponseKinds,
+						McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST)
 						? McpCatalogCapability.LIST_CHANGED
 						: McpCatalogCapability.IMMUTABLE);
 		Optional<McpCatalogCapability> promptsCapability = prompts.isEmpty()
 				? Optional.empty()
-				: Optional.of(subscriptionsSupported && localizedResponseKinds
-						.contains(
-								McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST)
+				: Optional.of(catalogListChangedSupported(subscriptionsSupported,
+						true, notificationTypes,
+						McpResourceNotificationType.PROMPTS_LIST_CHANGED,
+						localizedResponseKinds,
+						McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST)
 						? McpCatalogCapability.LIST_CHANGED
 						: McpCatalogCapability.IMMUTABLE);
 		Optional<McpResourceCapability> resourcesCapability;
 
 		if (endpoint.hasResourceSurface()) {
-			Set<McpResourceNotificationType> notificationTypes = endpoint.subscriptionConfig()
-					.map(McpNormalizedSubscriptionConfiguration::notificationTypes)
-					.orElseGet(Set::of);
 			boolean localizedResourceCatalog = subscriptionsSupported
 					&& (localizedResponseKinds.contains(
 							McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST)
@@ -209,6 +215,20 @@ final class McpServerCapabilityRegistry {
 				capabilities, endpoint.instructions(),
 				endpoint.discoveryCachePolicy().timeToLiveMilliseconds(),
 				endpoint.discoveryCachePolicy().scope(), optionalResultMetadata);
+	}
+
+	static boolean catalogListChangedSupported(boolean subscriptionsSupported,
+			boolean catalogPresent,
+			@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes,
+			@NonNull McpResourceNotificationType notificationType,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds,
+			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind) {
+		return subscriptionsSupported && catalogPresent
+				&& (requireNonNull(notificationTypes).contains(
+						requireNonNull(notificationType))
+						|| requireNonNull(localizedResponseKinds).contains(
+								requireNonNull(responseKind)));
 	}
 
 	@NonNull

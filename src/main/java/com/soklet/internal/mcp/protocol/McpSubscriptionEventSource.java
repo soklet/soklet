@@ -94,7 +94,8 @@ record McpSubscriptionEventSource(@NonNull Object identity,
 
 	@ThreadSafe
 	sealed interface Event permits Event.ResourcesListChanged,
-			Event.ResourceUpdated, Event.LocalizationCatalogsChanged,
+			Event.ResourceUpdated, Event.ToolsListChanged,
+			Event.PromptsListChanged, Event.LocalizationCatalogsChanged,
 			Event.TaskChanged {
 		/**
 		 * Framework-owned coarse localization catalog invalidation. Carries
@@ -106,6 +107,12 @@ record McpSubscriptionEventSource(@NonNull Object identity,
 		}
 
 		record ResourcesListChanged() implements Event {
+		}
+
+		record ToolsListChanged() implements Event {
+		}
+
+		record PromptsListChanged() implements Event {
 		}
 
 		record ResourceUpdated(@NonNull URI resourceUri,

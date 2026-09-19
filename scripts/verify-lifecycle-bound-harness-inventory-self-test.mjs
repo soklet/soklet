@@ -1957,8 +1957,8 @@ run('generated D1p semantic evidence is not live lifecycle source', () => {
   const source = readFileSync(join(ROOT, path), 'utf8');
   assert.match(source, /\bshutdownTimeout\s*\(/u);
   assert.deepEqual(verifyNoSurvivingLegacySites(new Map([[path, source]])), []);
-  assert.equal(EVIDENCE.currentLegacyExclusions.length, 23);
-  assert.equal(INVENTORY.currentLegacyExclusions.length, 23);
+  assert.equal(EVIDENCE.currentLegacyExclusions.length, 24);
+  assert.equal(INVENTORY.currentLegacyExclusions.length, 24);
 });
 
 run('only exact generated D1p evidence paths bypass source scanning', () => {

@@ -16,17 +16,21 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpSubscriptionAuthorizer;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable internal projection of the public MCP stream and subscription
- * bounds. Production construction supplies the configured values; older
- * package-private bridge seams retain these defaults.
+ * bounds. Public server construction supplies the configured authorization
+ * policy and exact bounds. Older package-private bridge seams retain these
+ * defaults with authorization absent so their pre-authorization behavior stays
+ * source-compatible; that absence is never used by {@code McpServer.Builder}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -34,7 +38,27 @@ import static java.util.Objects.requireNonNull;
 record McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
 		@NonNull Duration writeTimeout, @NonNull Duration keepAliveInterval,
 		@NonNull Duration shutdownTimeout, int maximumSubscriptionsPerPartition,
-		@NonNull Duration maximumSubscriptionDuration) {
+		@NonNull Duration maximumSubscriptionDuration,
+		@NonNull Duration catalogProjectionTimeout,
+		@NonNull Duration authorizationTimeout,
+		@NonNull Duration maximumAuthorizationDuration,
+		@NonNull Optional<@NonNull McpSubscriptionAuthorizer> authorizer) {
+	/**
+	 * Preserves the authorization-free compatibility seam used by direct internal
+	 * runtime tests. Public server construction always supplies an authorizer and
+	 * the exact configured authorization bounds through the full constructor.
+	 */
+	McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
+			@NonNull Duration writeTimeout, @NonNull Duration keepAliveInterval,
+			@NonNull Duration shutdownTimeout,
+			int maximumSubscriptionsPerPartition,
+			@NonNull Duration maximumSubscriptionDuration) {
+		this(streamQueueCapacity, writeTimeout, keepAliveInterval, shutdownTimeout,
+				maximumSubscriptionsPerPartition, maximumSubscriptionDuration,
+				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofMinutes(1),
+				Optional.empty());
+	}
+
 	McpSubscriptionRuntimeConfiguration {
 		if (streamQueueCapacity < 1)
 			throw new IllegalArgumentException("Stream queue capacity must be positive.");
@@ -47,6 +71,14 @@ record McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
 		shutdownTimeout = requirePositive(shutdownTimeout, "Shutdown timeout");
 		maximumSubscriptionDuration = requirePositive(maximumSubscriptionDuration,
 				"Maximum subscription duration");
+		catalogProjectionTimeout = requirePositive(catalogProjectionTimeout,
+				"Subscription catalog projection timeout");
+		authorizationTimeout = requirePositive(authorizationTimeout,
+				"Subscription authorization timeout");
+		maximumAuthorizationDuration = requirePositive(
+				maximumAuthorizationDuration,
+				"Maximum subscription authorization duration");
+		authorizer = requireNonNull(authorizer);
 		if (keepAliveInterval.compareTo(writeTimeout) >= 0)
 			throw new IllegalArgumentException(
 					"Keep-alive interval must be shorter than write timeout.");
@@ -56,7 +88,9 @@ record McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
 	static McpSubscriptionRuntimeConfiguration productionDefaults() {
 		return new McpSubscriptionRuntimeConfiguration(128,
 				Duration.ofSeconds(30), Duration.ofSeconds(15),
-				Duration.ofSeconds(30), 32, Duration.ofHours(24));
+				Duration.ofSeconds(30), 32, Duration.ofHours(24),
+				Duration.ofSeconds(5), Duration.ofSeconds(5),
+				Duration.ofMinutes(1), Optional.empty());
 	}
 
 	@NonNull

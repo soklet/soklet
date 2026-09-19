@@ -80,6 +80,28 @@ public class McpTaskNotificationProjectionSchedulerTests {
 	}
 
 	@Test
+	public void deferredSchedulerReservationPreservesTaskStateAndOrder() {
+		McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
+				new McpHttpServerRuntime.TaskNotificationProjectionQueue(3);
+		Assertions.assertTrue(queue.request("alpha"));
+		Assertions.assertFalse(queue.request("beta"));
+
+		queue.deferOutstandingJob();
+		Assertions.assertFalse(queue.jobOutstanding());
+		Assertions.assertTrue(queue.request("alpha"));
+		McpHttpServerRuntime.TaskNotificationProjection alpha = projection(queue);
+		Assertions.assertEquals("alpha", alpha.taskId());
+		Assertions.assertEquals(2L, alpha.generation());
+		Assertions.assertTrue(queue.finish(alpha, true));
+		McpHttpServerRuntime.TaskNotificationProjection beta = projection(queue);
+		Assertions.assertEquals("beta", beta.taskId());
+		Assertions.assertFalse(queue.finish(beta, true));
+
+		Assertions.assertThrows(IllegalStateException.class,
+				queue::deferOutstandingJob);
+	}
+
+	@Test
 	public void rejectionAndInactiveCompletionDrainOwnerState() {
 		CapturingExecutor executor = new CapturingExecutor();
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =

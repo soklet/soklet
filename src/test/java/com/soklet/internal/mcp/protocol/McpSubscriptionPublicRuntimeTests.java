@@ -28,6 +28,8 @@ import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpMetricsEvent;
+import com.soklet.McpPromptOutput;
+import com.soklet.McpPromptRegistration;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpAdmissionController;
 import com.soklet.McpRequestContext;
@@ -36,7 +38,8 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
 import com.soklet.McpStreamTerminationReason;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
+import com.soklet.McpSubscriptionAuthorizationContext;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
@@ -44,6 +47,7 @@ import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionEventRegistration;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
+import com.soklet.McpToolRegistration;
 import com.soklet.MetricsCollector;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
@@ -59,6 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Field;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -189,6 +194,70 @@ public class McpSubscriptionPublicRuntimeTests {
 			publisher.publishResourcesListChanged();
 			Assertions.assertEquals(resourceListChanged("\"intersection\""),
 					client.readChunkText());
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+			owner.close();
+		}
+	}
+
+	@Test
+	public void declaredNonlocalizedCatalogFamiliesAreAcceptedWithoutResourceSupport()
+			throws Exception {
+		RecordingPublisher publisher = new RecordingPublisher();
+		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				.withEventPublisherAndNotificationTypes(publisher, EnumSet.of(
+						McpSubscriptionNotificationType.TOOLS_LIST_CHANGED,
+						McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED))
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+						McpImplementation.withNameAndVersion(
+								"catalog-subscription-runtime-test", "4.0.0")
+								.build())
+				.addTool(McpToolRegistration.withName("catalog.tool")
+						.jsonObjectArguments()
+						.handler((request, arguments, features) ->
+								McpCompleteResult.fromToolText("unused"))
+						.build())
+				.addPrompt(McpPromptRegistration.withName("catalog.prompt")
+						.handler((request, prompt, features) ->
+								McpCompleteResult.fromPromptOutput(
+										McpPromptOutput.fromMessages()))
+						.build())
+				.subscriptionConfig(subscriptions)
+				.build();
+		AtomicReference<McpSubscriptionAuthorizationContext> authorizationContext =
+				new AtomicReference<>();
+		McpServer server = serverBuilder(List.of(endpoint),
+				McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+				.subscriptionAuthorizer((context, features) -> {
+					authorizationContext.set(context);
+					return McpSubscriptionAuthorization.Allowed.fromValidUntil(
+							Instant.now().plus(Duration.ofMinutes(5)));
+				})
+				.build();
+		Soklet owner = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+
+		try {
+			owner.start();
+			client = listen(boundPort(server), "\"catalog-families\"",
+					"{\"toolsListChanged\":true,"
+							+ "\"promptsListChanged\":true,"
+							+ "\"resourcesListChanged\":true}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"catalog-families\"",
+					"{\"toolsListChanged\":true,"
+							+ "\"promptsListChanged\":true}"),
+					client.readChunkText());
+			McpSubscriptionAuthorizationContext context =
+					authorizationContext.get();
+			Assertions.assertNotNull(context);
+			Assertions.assertTrue(context.isToolsListChangedIncluded());
+			Assertions.assertTrue(context.isPromptsListChangedIncluded());
+			Assertions.assertFalse(context.isResourcesListChangedIncluded());
+			Assertions.assertTrue(context.getResourceSubscriptionUris().isEmpty());
 		} finally {
 			if (client != null)
 				client.closeWithReset();
@@ -852,7 +921,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			observations.assertRequest(McpRequestOutcome.COMPLETE,
 					"duration");
 			observations.assertStreamMetrics(
-					McpStreamTerminationReason.DEADLINE_EXCEEDED, null);
+					McpStreamTerminationReason.DEADLINE_EXCEEDED, null, 1);
 		} finally {
 			soklet.close();
 		}
@@ -1325,8 +1394,9 @@ public class McpSubscriptionPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
 			McpAdmissionController admissionController) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(admissionController)
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.host(LOOPBACK)
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.allowed())
@@ -1659,6 +1729,14 @@ public class McpSubscriptionPublicRuntimeTests {
 		private void assertStreamMetrics(
 				@NonNull McpStreamTerminationReason expectedReason,
 				@Nullable Boolean expectKeepAlive) throws InterruptedException {
+			assertStreamMetrics(expectedReason, expectKeepAlive, 0);
+		}
+
+		private void assertStreamMetrics(
+				@NonNull McpStreamTerminationReason expectedReason,
+				@Nullable Boolean expectKeepAlive,
+				int expectedActiveAuthorizationChecks)
+				throws InterruptedException {
 			Assertions.assertTrue(this.requestFinishedMetric.await(
 					5, TimeUnit.SECONDS),
 					"The request-finished metric did not arrive.");
@@ -1666,17 +1744,47 @@ public class McpSubscriptionPublicRuntimeTests {
 			List<McpMetricsEvent> withoutKeepAlives = events.stream()
 					.filter(event -> !(event instanceof McpMetricsEvent.KeepAliveEmitted))
 					.toList();
-			Assertions.assertEquals(List.of(
+			List<McpMetricsEvent.SubscriptionMaintenance> maintenanceEvents =
+					withoutKeepAlives.stream()
+							.filter(McpMetricsEvent.SubscriptionMaintenance.class::isInstance)
+							.map(McpMetricsEvent.SubscriptionMaintenance.class::cast)
+							.toList();
+			List<Class<?>> expectedEventTypes = new ArrayList<>(List.of(
 					McpMetricsEvent.ServerStarted.class,
 					McpMetricsEvent.ConnectionAccepted.class,
 					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
+					McpMetricsEvent.HandlerExecutionStarted.class,
+					McpMetricsEvent.HandlerExecutionFinished.class,
 					McpMetricsEvent.RequestStreamOpened.class,
-					McpMetricsEvent.SubscriptionOpened.class,
+					McpMetricsEvent.SubscriptionOpened.class));
+			for (int index = 0; index < expectedActiveAuthorizationChecks;
+					index++) {
+				expectedEventTypes.add(
+						McpMetricsEvent.HandlerExecutionStarted.class);
+				expectedEventTypes.add(
+						McpMetricsEvent.HandlerExecutionFinished.class);
+			}
+			expectedEventTypes.addAll(List.of(
 					McpMetricsEvent.RequestStreamClosed.class,
 					McpMetricsEvent.SubscriptionClosed.class,
-					McpMetricsEvent.RequestFinished.class),
-					withoutKeepAlives.stream().map(Object::getClass).toList());
+					McpMetricsEvent.RequestFinished.class));
+			Assertions.assertEquals(expectedEventTypes,
+					withoutKeepAlives.stream()
+							.filter(event -> !(event instanceof
+									McpMetricsEvent.SubscriptionMaintenance))
+							.map(Object::getClass).toList());
+			Assertions.assertEquals(1 + expectedActiveAuthorizationChecks,
+					maintenanceEvents.size());
+			for (McpMetricsEvent.SubscriptionMaintenance maintenance
+					: maintenanceEvents) {
+				Assertions.assertEquals(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						maintenance.getWork());
+				Assertions.assertEquals(
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED,
+						maintenance.getOutcome());
+			}
 			McpMetricsEvent.RequestStreamClosed streamClosed = withoutKeepAlives
 					.stream()
 					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)

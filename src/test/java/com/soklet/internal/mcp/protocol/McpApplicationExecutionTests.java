@@ -333,6 +333,46 @@ public class McpApplicationExecutionTests {
 	}
 
 	@Test
+	public void preboundCancellationAndExpiredPolicyCompleteWithoutCallbackEntry()
+			throws Exception {
+		AtomicLong now = new AtomicLong(100L);
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		McpApplicationExecution.BoundedPolicyCancellation cancellation =
+				execution.newBoundedPolicyCancellation();
+		AtomicInteger callbackInvocations = new AtomicInteger();
+		AtomicInteger cancellationCallbacks = new AtomicInteger();
+		cancellation.onCancel(cancellationCallbacks::incrementAndGet);
+		cancellation.cancel(StreamTerminationReason.APPLICATION_CANCELED);
+
+		try {
+			execution.start();
+			McpApplicationPolicyDeadlineException exception =
+					Assertions.assertThrows(
+							McpApplicationPolicyDeadlineException.class,
+							() -> execution.invokeBoundedPolicy(() -> {
+								callbackInvocations.incrementAndGet();
+								return "must-not-run";
+							}, 100L, cancellation));
+
+			Assertions.assertTrue(exception.queued());
+			Assertions.assertTrue(cancellation.isCancellationRequested());
+			Assertions.assertFalse(cancellation.canceledPhysicalWorkOutstanding(),
+					"A never-entered policy cannot retain physical callback work.");
+			Assertions.assertEquals(0, callbackInvocations.get());
+			Assertions.assertEquals(0, cancellationCallbacks.get(),
+					"A never-entered policy must discard synthetic callback state.");
+			Assertions.assertNull(executor.command());
+		} finally {
+			execution.stop();
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
 	public void bounded_policy_expired_after_dispatch_but_before_entry_is_active()
 			throws Exception {
 		AtomicLong now = new AtomicLong();
@@ -391,8 +431,8 @@ public class McpApplicationExecutionTests {
 				new McpApplicationExecutionConfiguration(
 						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
 				clock, ignored -> executor);
-		AtomicReference<StreamTerminationReason> reservedReason =
-				new AtomicReference<>();
+		McpApplicationExecution.BoundedPolicyCancellation cancellation =
+				execution.newBoundedPolicyCancellation();
 		AtomicReference<StreamTerminationReason> reasonObservedAtInterrupt =
 				new AtomicReference<>();
 		AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -403,11 +443,12 @@ public class McpApplicationExecutionTests {
 					try {
 						new CountDownLatch(1).await();
 					} catch (InterruptedException ignored) {
-						reasonObservedAtInterrupt.set(reservedReason.get());
+						reasonObservedAtInterrupt.set(
+								cancellation.reason().orElse(null));
 						callbackInterrupted.countDown();
 					}
 					return "interrupted";
-				}, deadline, reason -> reservedReason.compareAndSet(null, reason));
+				}, deadline, cancellation);
 			} catch (Throwable throwable) {
 				failure.set(throwable);
 			}
@@ -448,6 +489,223 @@ public class McpApplicationExecutionTests {
 				worker.join(TimeUnit.SECONDS.toMillis(5));
 			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
 		}
+	}
+
+	@Test
+	public void bounded_policy_deadline_does_not_wait_for_blocking_cancel_hook()
+			throws Exception {
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM);
+		McpApplicationExecution.BoundedPolicyCancellation cancellation =
+				execution.newBoundedPolicyCancellation();
+		CountDownLatch callbackEntered = new CountDownLatch(1);
+		CountDownLatch callbackInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseCallback = new CountDownLatch(1);
+		CountDownLatch cancelHookEntered = new CountDownLatch(1);
+		CountDownLatch releaseCancelHook = new CountDownLatch(1);
+		CountDownLatch cancelHookExited = new CountDownLatch(1);
+		CountDownLatch physicalExit = new CountDownLatch(1);
+		AtomicReference<Throwable> callerFailure = new AtomicReference<>();
+		Thread caller = new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					cancellation.onCancel(() -> {
+						cancelHookEntered.countDown();
+						try {
+							awaitLatch(releaseCancelHook);
+						} finally {
+							cancelHookExited.countDown();
+						}
+					});
+					callbackEntered.countDown();
+					while (releaseCallback.getCount() != 0L) {
+						try {
+							releaseCallback.await();
+						} catch (InterruptedException ignored) {
+							callbackInterrupted.countDown();
+						}
+					}
+					return "released";
+				}, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(200),
+						cancellation, physicalExit::countDown);
+			} catch (Throwable throwable) {
+				callerFailure.set(throwable);
+			}
+		}, "mcp-bounded-policy-blocking-cancel-hook-test");
+
+		try {
+			execution.start();
+			caller.start();
+			Assertions.assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(callbackInterrupted.await(5, TimeUnit.SECONDS),
+					"The deadline did not interrupt the active policy callback.");
+			Assertions.assertTrue(cancelHookEntered.await(5, TimeUnit.SECONDS),
+					"The cancellation sidecar did not deliver the hook.");
+			caller.join(TimeUnit.SECONDS.toMillis(2));
+			Assertions.assertFalse(caller.isAlive(),
+					"A blocking cancellation hook delayed the logical deadline.");
+			McpApplicationPolicyDeadlineException deadline =
+					Assertions.assertInstanceOf(
+							McpApplicationPolicyDeadlineException.class,
+							callerFailure.get());
+			Assertions.assertFalse(deadline.queued());
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
+					cancellation.reason().orElseThrow());
+			Assertions.assertEquals(1, execution.snapshot().activeHandlerSlots(),
+					"The physical slot escaped while both callback chains were active.");
+			Assertions.assertTrue(cancellation.canceledPhysicalWorkOutstanding());
+			Assertions.assertEquals(1L, physicalExit.getCount());
+
+			releaseCancelHook.countDown();
+			Assertions.assertTrue(cancelHookExited.await(5, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, execution.snapshot().activeHandlerSlots(),
+					"Hook exit alone released an interrupt-resistant callback slot.");
+			Assertions.assertEquals(1L, physicalExit.getCount());
+
+			releaseCallback.countDown();
+			Assertions.assertTrue(physicalExit.await(5, TimeUnit.SECONDS));
+			awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 0);
+			Assertions.assertFalse(cancellation.canceledPhysicalWorkOutstanding());
+		} finally {
+			releaseCancelHook.countDown();
+			releaseCallback.countDown();
+			execution.stop();
+			caller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void cancellation_sidecars_remain_bounded_by_handler_concurrency()
+			throws Exception {
+		int concurrency = 2;
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						concurrency, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM);
+		McpApplicationExecution.BoundedPolicyCancellation firstCancellation =
+				execution.newBoundedPolicyCancellation();
+		McpApplicationExecution.BoundedPolicyCancellation secondCancellation =
+				execution.newBoundedPolicyCancellation();
+		CountDownLatch callbacksEntered = new CountDownLatch(concurrency);
+		CountDownLatch releaseCallbacks = new CountDownLatch(1);
+		CountDownLatch hooksEntered = new CountDownLatch(concurrency);
+		CountDownLatch releaseHooks = new CountDownLatch(1);
+		AtomicInteger activeHooks = new AtomicInteger();
+		AtomicInteger maximumActiveHooks = new AtomicInteger();
+		AtomicReference<Throwable> firstFailure = new AtomicReference<>();
+		AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+
+		Thread firstCaller = boundedPolicyCaller(execution, firstCancellation,
+				callbacksEntered, releaseCallbacks, hooksEntered, releaseHooks,
+				activeHooks, maximumActiveHooks, firstFailure,
+				"mcp-bounded-sidecar-first");
+		Thread secondCaller = boundedPolicyCaller(execution, secondCancellation,
+				callbacksEntered, releaseCallbacks, hooksEntered, releaseHooks,
+				activeHooks, maximumActiveHooks, secondFailure,
+				"mcp-bounded-sidecar-second");
+		Thread thirdCaller = null;
+		try {
+			execution.start();
+			firstCaller.start();
+			secondCaller.start();
+			Assertions.assertTrue(callbacksEntered.await(5, TimeUnit.SECONDS));
+			firstCancellation.cancel(StreamTerminationReason.APPLICATION_CANCELED);
+			secondCancellation.cancel(StreamTerminationReason.APPLICATION_CANCELED);
+			Assertions.assertTrue(hooksEntered.await(5, TimeUnit.SECONDS));
+
+			releaseCallbacks.countDown();
+			firstCaller.join(TimeUnit.SECONDS.toMillis(5));
+			secondCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(firstCaller.isAlive());
+			Assertions.assertFalse(secondCaller.isAlive());
+			Assertions.assertNull(firstFailure.get());
+			Assertions.assertNull(secondFailure.get());
+			Assertions.assertEquals(concurrency,
+					execution.snapshot().activeHandlerSlots());
+
+			McpApplicationExecution.BoundedPolicyCancellation queuedCancellation =
+					execution.newBoundedPolicyCancellation();
+			AtomicInteger queuedInvocations = new AtomicInteger();
+			AtomicReference<Throwable> queuedFailure = new AtomicReference<>();
+			thirdCaller = new Thread(() -> {
+				try {
+					execution.invokeBoundedPolicy(() -> {
+						queuedInvocations.incrementAndGet();
+						return "must-not-run";
+					}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30),
+						queuedCancellation);
+				} catch (Throwable throwable) {
+					queuedFailure.set(throwable);
+				}
+			}, "mcp-bounded-sidecar-queued");
+			thirdCaller.start();
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+			queuedCancellation.cancel(StreamTerminationReason.APPLICATION_CANCELED);
+			thirdCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(thirdCaller.isAlive());
+			Assertions.assertInstanceOf(McpApplicationPolicyCanceledException.class,
+					queuedFailure.get());
+			Assertions.assertEquals(0, queuedInvocations.get());
+			Assertions.assertFalse(
+					queuedCancellation.canceledPhysicalWorkOutstanding());
+			Assertions.assertEquals(concurrency, activeHooks.get());
+			Assertions.assertEquals(concurrency, maximumActiveHooks.get());
+
+			execution.stop();
+			Assertions.assertFalse(
+					execution.awaitTermination(Duration.ofMillis(100)),
+					"Shutdown completed while bounded cancellation hooks were active.");
+			releaseHooks.countDown();
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+			Assertions.assertEquals(0, activeHooks.get());
+		} finally {
+			releaseCallbacks.countDown();
+			releaseHooks.countDown();
+			execution.stop();
+			firstCaller.join(TimeUnit.SECONDS.toMillis(5));
+			secondCaller.join(TimeUnit.SECONDS.toMillis(5));
+			if (thirdCaller != null)
+				thirdCaller.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	private static Thread boundedPolicyCaller(
+			McpApplicationExecution execution,
+			McpApplicationExecution.BoundedPolicyCancellation cancellation,
+			CountDownLatch callbacksEntered, CountDownLatch releaseCallbacks,
+			CountDownLatch hooksEntered, CountDownLatch releaseHooks,
+			AtomicInteger activeHooks, AtomicInteger maximumActiveHooks,
+			AtomicReference<Throwable> failure, String threadName) {
+		return new Thread(() -> {
+			try {
+				execution.invokeBoundedPolicy(() -> {
+					cancellation.onCancel(() -> {
+						int active = activeHooks.incrementAndGet();
+						maximumActiveHooks.accumulateAndGet(active, Math::max);
+						hooksEntered.countDown();
+						try {
+							awaitLatch(releaseHooks);
+						} finally {
+							activeHooks.decrementAndGet();
+						}
+					});
+					callbacksEntered.countDown();
+					while (releaseCallbacks.getCount() != 0L)
+						try {
+							releaseCallbacks.await();
+						} catch (InterruptedException ignored) {
+							// Deliberately retain the physical dispatcher slot.
+						}
+					return "released";
+				}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), cancellation);
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, threadName);
 	}
 
 	@Test

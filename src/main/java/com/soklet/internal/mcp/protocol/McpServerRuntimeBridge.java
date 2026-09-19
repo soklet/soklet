@@ -48,6 +48,7 @@ import com.soklet.McpSimulation;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionEventRegistration;
@@ -732,6 +733,68 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Creates one production listener projection with the exact public stream,
+	 * subscription-authorization, lifecycle, and HTTP hardening controls.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval,
+			int maximumSubscriptionsPerPartition,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull Duration subscriptionCatalogProjectionTimeout,
+			@NonNull Duration subscriptionAuthorizationTimeout,
+			@NonNull Duration maximumSubscriptionAuthorizationDuration,
+			@NonNull McpSubscriptionAuthorizer subscriptionAuthorizer,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
+			@NonNull LifecycleAdapter lifecycleAdapter,
+			@NonNull HttpTransportPlan httpTransportPlan) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
+						unknownMirroredHeaderNameDiagnosticConsumer),
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				requireNonNull(requestStateProtectionPlan),
+				new McpSubscriptionRuntimeConfiguration(streamQueueCapacity,
+						writeTimeout, keepAliveInterval,
+						McpSubscriptionRuntimeConfiguration.productionDefaults()
+								.shutdownTimeout(),
+						maximumSubscriptionsPerPartition,
+						maximumSubscriptionDuration,
+						subscriptionCatalogProjectionTimeout,
+						subscriptionAuthorizationTimeout,
+						maximumSubscriptionAuthorizationDuration,
+						Optional.of(requireNonNull(subscriptionAuthorizer))),
+				requireNonNull(applicationExecutionObserver),
+				requireNonNull(lifecycleAdapter),
+				requireNonNull(httpTransportPlan));
+	}
+
+	/**
 	 * Deterministic compatibility seam for direct internal runtime tests.  The
 	 * explicit timeout is not consulted by common-lifecycle quiesce, force, or
 	 * proof observation, which receive the owner's fixed absolute boundaries.
@@ -813,6 +876,14 @@ public final class McpServerRuntimeBridge {
 					: localizedEndpointInvalidations)
 				invalidation.publisher().publish(invalidation.event());
 		}
+	}
+
+	/**
+	 * Fences local subscription delivery and schedules fresh authorization checks.
+	 * Returning does not wait for application callbacks or client delivery.
+	 */
+	public void reconcileSubscriptions() {
+		this.runtime.reconcileSubscriptions();
 	}
 
 	@NonNull
@@ -1471,6 +1542,10 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(event);
 		if (event instanceof McpSubscriptionEvent.ResourcesListChanged)
 			return new McpSubscriptionEventSource.Event.ResourcesListChanged();
+		if (event instanceof McpSubscriptionEvent.ToolsListChanged)
+			return new McpSubscriptionEventSource.Event.ToolsListChanged();
+		if (event instanceof McpSubscriptionEvent.PromptsListChanged)
+			return new McpSubscriptionEventSource.Event.PromptsListChanged();
 		if (event instanceof McpSubscriptionEvent.ResourceUpdated updated) {
 			String wireResourceUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
 					updated.getResourceUri().toASCIIString(), "Subscription resource URI");
@@ -1848,6 +1923,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpRequestContext requestContext,
 			@NonNull CancelationToken cancelationToken,
 			@NonNull BooleanSupplier pastDeadline,
+			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull Optional<@NonNull String> continuationLocale,
 			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot) {
 		/** Validates one request-scoped access input. */
@@ -1855,8 +1931,18 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestContext);
 			requireNonNull(cancelationToken);
 			requireNonNull(pastDeadline);
+			acceptLanguageValues = List.copyOf(
+					requireNonNull(acceptLanguageValues));
 			requireNonNull(continuationLocale);
 			requireNonNull(selectedLocaleSlot);
+		}
+
+		/** @return rendering that does not expose language preferences or identity */
+		@Override
+		@NonNull
+		public String toString() {
+			return "CatalogAccessInput{acceptLanguageValueCount="
+					+ acceptLanguageValues.size() + "}";
 		}
 	}
 
@@ -3863,6 +3949,8 @@ public final class McpServerRuntimeBridge {
 					catalogAccessAdapter.orElseThrow().open(new CatalogAccessInput(
 							requirePublicRequestContext(invocation),
 							invocation.cancelationToken(), invocation.pastDeadline(),
+							RequestObservationInput.acceptLanguageValues(
+									requirePublicRequestContext(invocation).getRequest()),
 							continuationLocale, invocation.selectedLocale())),
 					"The MCP catalog access adapter returned null."));
 		}

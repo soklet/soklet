@@ -78,6 +78,8 @@ final class McpApplicationHandlerDispatcher {
 		@NonNull
 		private final Consumer<@NonNull Throwable> cancellationObserver;
 		@NonNull
+		private final Runnable physicalExitObserver;
+		@NonNull
 		private final Object interruptLock;
 		private volatile @Nullable Thread handlerThread;
 		private boolean interruptRequested;
@@ -86,10 +88,12 @@ final class McpApplicationHandlerDispatcher {
 
 		private Ticket(@NonNull Work work,
 				@NonNull Consumer<@NonNull Throwable> failureObserver,
-				@NonNull Consumer<@NonNull Throwable> cancellationObserver) {
+				@NonNull Consumer<@NonNull Throwable> cancellationObserver,
+				@NonNull Runnable physicalExitObserver) {
 			this.work = requireNonNull(work);
 			this.failureObserver = requireNonNull(failureObserver);
 			this.cancellationObserver = requireNonNull(cancellationObserver);
+			this.physicalExitObserver = requireNonNull(physicalExitObserver);
 			this.interruptLock = new Object();
 			this.state = TicketState.NEW;
 		}
@@ -182,15 +186,24 @@ final class McpApplicationHandlerDispatcher {
 	@NonNull
 	Ticket newTicket(@NonNull Work work,
 			@NonNull Consumer<@NonNull Throwable> failureObserver) {
-		return newTicket(work, failureObserver, ignored -> {});
+		return newTicket(work, failureObserver, ignored -> {}, () -> {});
 	}
 
 	@NonNull
 	Ticket newTicket(@NonNull Work work,
 			@NonNull Consumer<@NonNull Throwable> failureObserver,
 			@NonNull Consumer<@NonNull Throwable> cancellationObserver) {
+		return newTicket(work, failureObserver, cancellationObserver, () -> {});
+	}
+
+	@NonNull
+	Ticket newTicket(@NonNull Work work,
+			@NonNull Consumer<@NonNull Throwable> failureObserver,
+			@NonNull Consumer<@NonNull Throwable> cancellationObserver,
+			@NonNull Runnable physicalExitObserver) {
 		return new Ticket(requireNonNull(work), requireNonNull(failureObserver),
-				requireNonNull(cancellationObserver));
+				requireNonNull(cancellationObserver),
+				requireNonNull(physicalExitObserver));
 	}
 
 	void beginObserverDeferral() {
@@ -279,7 +292,7 @@ final class McpApplicationHandlerDispatcher {
 	List<@NonNull Ticket> stopAccepting() {
 		List<Ticket> canceledTickets;
 
-			synchronized (lock) {
+		synchronized (lock) {
 			if (!accepting)
 				if (!draining)
 					return List.of();
@@ -441,6 +454,7 @@ final class McpApplicationHandlerDispatcher {
 		}
 
 		notifySlotReleased();
+		notifyPhysicalExit(ticket);
 		drainObserver();
 		if (next != null)
 			dispatch(next);
@@ -462,6 +476,7 @@ final class McpApplicationHandlerDispatcher {
 			next = promoteNextLocked();
 		}
 		notifySlotReleased();
+		notifyPhysicalExit(ticket);
 		drainObserver();
 		return next;
 	}
@@ -550,6 +565,14 @@ final class McpApplicationHandlerDispatcher {
 			ticket.cancellationObserver.accept(throwable);
 		} catch (Throwable ignored) {
 			// Cancellation reporting must not corrupt dispatcher shutdown.
+		}
+	}
+
+	private void notifyPhysicalExit(@NonNull Ticket ticket) {
+		try {
+			ticket.physicalExitObserver.run();
+		} catch (Throwable ignored) {
+			// Exit reporting must not corrupt accounting or promotion.
 		}
 	}
 

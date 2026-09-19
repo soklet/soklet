@@ -130,6 +130,40 @@ public class McpServerCapabilityRegistryTests {
 	}
 
 	@Test
+	public void tool_and_prompt_list_changed_flags_compose_declared_and_localized_support() {
+		McpNormalizedEndpoint.Builder base = endpointBuilder()
+				.tool(McpNormalizedOperation.named("lookup"))
+				.prompt(McpNormalizedOperation.named("summarize"));
+		McpServerCapabilityRegistry toolsDeclared =
+				McpServerCapabilityRegistry.fromEndpoint(base
+						.subscriptionConfig(
+								McpNormalizedSubscriptionConfiguration.supporting(
+										McpResourceNotificationType.TOOLS_LIST_CHANGED))
+						.build());
+		McpServerCapabilityRegistry promptsDeclared =
+				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()
+						.tool(McpNormalizedOperation.named("lookup"))
+						.prompt(McpNormalizedOperation.named("summarize"))
+						.subscriptionConfig(
+								McpNormalizedSubscriptionConfiguration.supporting(
+										McpResourceNotificationType.PROMPTS_LIST_CHANGED))
+						.build());
+		McpServerCapabilityRegistry composed =
+				McpServerCapabilityRegistry.fromEndpoint(endpointBuilder()
+						.tool(McpNormalizedOperation.named("lookup"))
+						.prompt(McpNormalizedOperation.named("summarize"))
+						.subscriptionConfig(
+								McpNormalizedSubscriptionConfiguration.supporting(
+										McpResourceNotificationType.TOOLS_LIST_CHANGED))
+						.build(), Set.of(
+								McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST));
+
+		assertCatalogListChanged(toolsDeclared, true, false);
+		assertCatalogListChanged(promptsDeclared, false, true);
+		assertCatalogListChanged(composed, true, true);
+	}
+
+	@Test
 	public void every_registered_resource_surface_derives_resources_capability() {
 		List<McpNormalizedEndpoint> endpoints = List.of(
 				endpointBuilder().exactResource("catalog://items/1").build(),
@@ -201,6 +235,20 @@ public class McpServerCapabilityRegistryTests {
 		Assertions.assertEquals(Set.of("tools"),
 				toolOnly.capabilities().toJsonObject().members().keySet());
 		Assertions.assertFalse(toolOnly.capabilities().resources().isPresent());
+	}
+
+	private static void assertCatalogListChanged(
+			McpServerCapabilityRegistry registry, boolean tools,
+			boolean prompts) {
+		McpJsonObject capabilities = registry.capabilities().toJsonObject();
+		McpJsonObject toolCapability = (McpJsonObject) capabilities.members()
+				.get("tools");
+		McpJsonObject promptCapability = (McpJsonObject) capabilities.members()
+				.get("prompts");
+		Assertions.assertEquals(tools,
+				toolCapability.members().containsKey("listChanged"));
+		Assertions.assertEquals(prompts,
+				promptCapability.members().containsKey("listChanged"));
 	}
 
 	@Test

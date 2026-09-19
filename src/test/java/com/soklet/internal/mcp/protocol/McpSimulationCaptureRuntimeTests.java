@@ -111,7 +111,7 @@ public class McpSimulationCaptureRuntimeTests {
 		McpRequestSseStream.Frame coalesced = frame("coalesced");
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				staged.runtime().offerCoalescing(coalesced, coalescingKey));
-		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.COALESCED,
 				staged.runtime().offerCoalescing(coalesced, coalescingKey));
 		staged.runtime().acceptResponse(staged.runtime().response(List.of()));
 		assertEncodedBytes(coalesced, staged.runtime().awaitStreamItem(

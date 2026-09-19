@@ -31,7 +31,7 @@ import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
 import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
@@ -57,6 +57,7 @@ import java.net.URI;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Selector;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -393,8 +394,9 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	private static McpServer server(@NonNull List<@NonNull McpEndpoint> endpoints,
 			@NonNull Duration shutdownTimeout) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

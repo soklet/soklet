@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Timeout;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -636,11 +637,12 @@ public class McpSimulatorEveryOperationTests {
 				return McpAdmissionDecision.accepted();
 			};
 			return SimulatorConfig.builder()
-					.configureMcpServer(mcpServerBuilder -> mcpServerBuilder
+				.configureMcpServer(mcpServerBuilder -> mcpServerBuilder
 						.port(0)
 						.endpointRegistry(endpointRegistry)
-						.subscriptionAuthorizer(
-								McpSubscriptionAuthorizer.denyAllInstance())
+						.subscriptionAuthorizer((context, features) ->
+								McpSubscriptionAuthorization.Allowed.fromValidUntil(
+										Instant.now().plus(Duration.ofMinutes(5))))
 						.admissionController(admissionController)
 						.host(LOOPBACK)
 						.requestRateLimiter(context ->
@@ -744,6 +746,9 @@ public class McpSimulatorEveryOperationTests {
 				case "subscriptions/listen" -> List.of(
 						McpMetricsEvent.RequestAccepted.class,
 						McpMetricsEvent.RequestStarted.class,
+						McpMetricsEvent.HandlerExecutionStarted.class,
+						McpMetricsEvent.HandlerExecutionFinished.class,
+						McpMetricsEvent.SubscriptionMaintenance.class,
 						McpMetricsEvent.RequestStreamOpened.class,
 						McpMetricsEvent.SubscriptionOpened.class,
 						McpMetricsEvent.RequestStreamClosed.class,

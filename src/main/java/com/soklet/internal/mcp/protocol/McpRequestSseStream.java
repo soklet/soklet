@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -78,6 +79,11 @@ final class McpRequestSseStream {
 		McpOutboundChannel.@NonNull OfferResult offerCoalescing(
 				@NonNull Frame frame, @NonNull Object coalescingKey);
 
+		@NonNull
+		Optional<McpOutboundChannel.@NonNull OfferResult> offerCoalescingIf(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier offerAllowed);
+
 		default McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
 				@NonNull Frame frame, long nowNanos, long idleIntervalNanos) {
 			return offer(requireNonNull(frame));
@@ -115,6 +121,10 @@ final class McpRequestSseStream {
 		void beforeTerminalReservation();
 
 		default void beforeMessageEnqueue() {
+			// No-op outside deterministic race tests.
+		}
+
+		default void beforeCoalescingMessageOffer() {
 			// No-op outside deterministic race tests.
 		}
 
@@ -189,8 +199,26 @@ final class McpRequestSseStream {
 
 	McpOutboundChannel.@NonNull OfferResult offerCoalescingMessage(
 			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey) {
-		return channel.offerCoalescing(frame(requireNonNull(message)),
+		Frame frame = frame(requireNonNull(message));
+		testHooks.beforeCoalescingMessageOffer();
+		return channel.offerCoalescing(frame,
 				requireNonNull(coalescingKey));
+	}
+
+	/**
+	 * Revalidates a caller-owned boundary immediately before the channel offer.
+	 * Encoding and test instrumentation therefore cannot move a catalog frame
+	 * past its absolute projection deadline unnoticed.
+	 */
+	@NonNull
+	Optional<McpOutboundChannel.@NonNull OfferResult>
+			offerCoalescingMessageIf(@NonNull McpJsonRpcMessage message,
+					@NonNull Object coalescingKey,
+					@NonNull BooleanSupplier offerAllowed) {
+		Frame frame = frame(requireNonNull(message));
+		testHooks.beforeCoalescingMessageOffer();
+		return channel.offerCoalescingIf(frame, requireNonNull(coalescingKey),
+				requireNonNull(offerAllowed));
 	}
 
 	boolean completeMessage(@NonNull McpJsonRpcMessage message) {
@@ -309,6 +337,16 @@ final class McpRequestSseStream {
 				@NonNull Frame frame, @NonNull Object coalescingKey) {
 			return this.delegate.offerCoalescing(
 					requireNonNull(frame).encodedBytes(), requireNonNull(coalescingKey));
+		}
+
+		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull OfferResult> offerCoalescingIf(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier offerAllowed) {
+			return this.delegate.offerCoalescingIf(
+					requireNonNull(frame).encodedBytes(), requireNonNull(coalescingKey),
+					requireNonNull(offerAllowed));
 		}
 
 		@Override

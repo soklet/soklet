@@ -241,6 +241,14 @@ public class McpFiniteBoundInventoryTests {
 				fieldValue(publicBuilder, "keepAliveInterval"));
 		Assertions.assertEquals(subscription.maximumSubscriptionDuration(),
 				fieldValue(publicBuilder, "maximumSubscriptionDuration"));
+		Assertions.assertEquals(subscription.catalogProjectionTimeout(),
+				fieldValue(publicBuilder,
+						"subscriptionCatalogProjectionTimeout"));
+		Assertions.assertEquals(subscription.authorizationTimeout(),
+				fieldValue(publicBuilder, "subscriptionAuthorizationTimeout"));
+		Assertions.assertEquals(subscription.maximumAuthorizationDuration(),
+				fieldValue(publicBuilder,
+						"maximumSubscriptionAuthorizationDuration"));
 		Assertions.assertEquals(subscription.writeTimeout(),
 				fieldValue(publicBuilder, "writeTimeout"));
 		Assertions.assertEquals(application.requestDeadline(),
@@ -266,14 +274,15 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "subscription.maximum-duration-nanos",
 				subscription.maximumSubscriptionDuration().toNanos());
 		put(values, "subscription.authorization.maximum-duration-nanos",
-				((Duration) fieldValue(publicBuilder,
-						"maximumSubscriptionAuthorizationDuration")).toNanos());
+				subscription.maximumAuthorizationDuration().toNanos());
+		put(values, "subscription.authorization.renewal-maximum-stagger-nanos",
+				staticNumber(
+						"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+						"MAXIMUM_SUBSCRIPTION_RENEWAL_STAGGER_NANOS"));
 		put(values, "subscription.authorization.timeout-nanos",
-				((Duration) fieldValue(publicBuilder,
-						"subscriptionAuthorizationTimeout")).toNanos());
+				subscription.authorizationTimeout().toNanos());
 		put(values, "subscription.catalog-projection.timeout-nanos",
-				((Duration) fieldValue(publicBuilder,
-						"subscriptionCatalogProjectionTimeout")).toNanos());
+				subscription.catalogProjectionTimeout().toNanos());
 
 		McpJsonLimits json = McpJsonLimits.productionDefaults();
 		McpJsonLimits jsonHard = McpJsonLimits.maximumSupported();
@@ -456,6 +465,15 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "cursor.maximum-bytes.hard",
 				McpCursorLimit.MAXIMUM_SUPPORTED_SIZE_IN_BYTES);
 
+		put(values, "queue.catalog-projection-digest-bytes", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpCatalogProjectionQueue",
+				"SHA_256_BYTE_COUNT"));
+		put(values, "queue.catalog-projection-family-digests",
+				McpCatalogProjectionQueue.Family.values().length);
+		Assertions.assertEquals(boolean.class,
+				McpCatalogProjectionQueue.class
+						.getDeclaredField("jobOutstanding").getType());
+		put(values, "queue.catalog-projection-owner-jobs", 1);
 		put(values, "queue.handler-concurrency", application.handlerConcurrency());
 		put(values, "queue.handler-capacity", application.handlerQueueCapacity());
 		put(values, "queue.protocol-concurrency",

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Timeout;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -61,9 +62,10 @@ class McpLocalizationSubscriptionRuntimeTests {
 					.build();
 
 	@Test
-	void theTerminalFrameIsPreRenderedLocalizedAtSubscriptionOpen() {
+	void localizedTerminalSurvivesOrdinaryMidpointAuthorizationRenewal() {
 		AtomicInteger contexts = new AtomicInteger();
 		AtomicInteger contextsAtResponse = new AtomicInteger(-1);
+		AtomicInteger authorizations = new AtomicInteger();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					contexts.incrementAndGet();
 					return context(text -> McpLocalizationResult
@@ -71,18 +73,22 @@ class McpLocalizationSubscriptionRuntimeTests {
 				})
 				.build();
 
-		List<String> frames = subscribeAndDrain(localizer, 2, response -> {
-			contextsAtResponse.set(contexts.get());
-			assertEquals(Set.of("fr"),
-					response.getHeaders().get("Content-Language"));
-			assertEquals(Set.of("Accept-Language"),
-					response.getHeaders().get("Vary"));
-		});
+		List<String> frames = subscribeAndDrain(localizer, 2, authorizations,
+				response -> {
+					contextsAtResponse.set(contexts.get());
+					assertEquals(Set.of("fr"),
+							response.getHeaders().get("Content-Language"));
+					assertEquals(Set.of("Accept-Language"),
+							response.getHeaders().get("Vary"));
+				});
 
 		assertEquals(1, contexts.get(),
 				"Exactly one context per subscription open.");
 		assertEquals(1, contextsAtResponse.get(),
 				"The context must exist before response commitment.");
+		assertEquals(2, authorizations.get(),
+				"The localized terminal must survive the ordinary midpoint "
+						+ "authorization renewal with unchanged application context.");
 		String terminal = frames.get(frames.size() - 1);
 		assertTrue(terminal.contains("\"title\":\"FR:Canonical title\""),
 				terminal);
@@ -161,10 +167,17 @@ class McpLocalizationSubscriptionRuntimeTests {
 
 	private static List<String> subscribeAndDrain(McpLocalizer localizer,
 			int maximumSubscriptionsPerPartition, ResponseProbe probe) {
+		return subscribeAndDrain(localizer, maximumSubscriptionsPerPartition,
+				new AtomicInteger(), probe);
+	}
+
+	private static List<String> subscribeAndDrain(McpLocalizer localizer,
+			int maximumSubscriptionsPerPartition,
+			AtomicInteger authorizationInvocations, ResponseProbe probe) {
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
 		SokletSimulator.run(simulatorConfig(localizer,
-				maximumSubscriptionsPerPartition), simulator -> {
+				maximumSubscriptionsPerPartition, authorizationInvocations), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
 			escaped.set(simulation);
@@ -214,6 +227,14 @@ class McpLocalizationSubscriptionRuntimeTests {
 
 	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
 			int maximumSubscriptionsPerPartition) {
+		return simulatorConfig(localizer, maximumSubscriptionsPerPartition,
+				new AtomicInteger());
+	}
+
+	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
+			int maximumSubscriptionsPerPartition,
+			AtomicInteger authorizationInvocations) {
+		Object authorizationApplicationContext = new Object();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-subscription", "1.0")
 						.title("Canonical title")
@@ -250,8 +271,13 @@ class McpLocalizationSubscriptionRuntimeTests {
 					.maximumSubscriptionsPerPartition(
 							maximumSubscriptionsPerPartition)
 					.maximumSubscriptionDuration(Duration.ofMillis(300))
-					.subscriptionAuthorizer(
-							McpSubscriptionAuthorizer.denyAllInstance())
+					.subscriptionAuthorizer((context, features) -> {
+						authorizationInvocations.incrementAndGet();
+						return McpSubscriptionAuthorization.Allowed
+								.withValidUntil(Instant.now().plus(Duration.ofMinutes(5)))
+								.applicationContext(authorizationApplicationContext)
+								.build();
+					})
 					.localizer(localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

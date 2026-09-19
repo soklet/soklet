@@ -32,6 +32,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -164,6 +165,39 @@ public class McpTransportPrimitiveTests {
 		secondSource.close();
 		Assertions.assertTrue(channel.snapshot().closed());
 		Assertions.assertEquals(1, listener.terminationCount.get());
+	}
+
+	@Test
+	public void outbound_channel_reports_duplicate_coalescing_without_mutating_the_queue()
+			throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(2, 16, 4,
+				System::nanoTime, listener);
+		WritableSource source = channel.newWritableSource();
+		Object key = new Object();
+
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				channel.offerCoalescing(ascii("one"), key));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.COALESCED,
+				channel.offerCoalescing(ascii("duplicate"), key));
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(3, channel.snapshot().bufferedBytes());
+
+		PartialWriteSocketChannel socketChannel = new PartialWriteSocketChannel(1);
+		source.start();
+		while (source.isReadyToWrite()) {
+			long written = source.writeTo(socketChannel, 1L);
+			Assertions.assertTrue(written > 0L);
+		}
+		Assertions.assertEquals("3\r\none\r\n",
+				ascii(socketChannel.writtenBytes()));
+
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				channel.offerCoalescing(ascii("two"), key),
+				"A key becomes reusable only after its prior frame is fully written.");
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(3, channel.snapshot().bufferedBytes());
+		source.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 	}
 
 	@Test
@@ -325,6 +359,122 @@ public class McpTransportPrimitiveTests {
 		Assertions.assertEquals(0, fullListener.terminationCount.get(),
 				"A full queue must not turn an optional keep-alive into termination.");
 		fullSource.close(StreamTerminationReason.SERVER_STOPPING, null);
+	}
+
+	@Test
+	public void write_idle_deadlines_remain_ordered_across_nano_time_wrap()
+			throws Exception {
+		long startedAt = Long.MAX_VALUE - 5L;
+		long idleInterval = 10L;
+		AtomicLong now = new AtomicLong(startedAt);
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(
+				2, 32, 32, now::get, listener);
+		WritableSource source = channel.newWritableSource();
+		source.writeReadyCallback(() -> {
+			// The test drives writes directly.
+		});
+		source.start();
+
+		long beforeDeadline = startedAt + 9L;
+		Assertions.assertTrue(beforeDeadline < 0L,
+				"The proof must cross the signed nanoTime boundary.");
+		Assertions.assertEquals(startedAt + idleInterval,
+				channel.responseWriteIdleDeadlineNanos(idleInterval));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.NOT_IDLE,
+				channel.offerIfWriteIdleExpired(ascii("keepalive"),
+						beforeDeadline, idleInterval));
+		Assertions.assertFalse(channel.failIfWriteIdleExpired(beforeDeadline,
+				idleInterval, StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null));
+
+		long deadline = startedAt + idleInterval;
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				channel.offerIfWriteIdleExpired(ascii("keepalive"), deadline,
+						idleInterval));
+		Assertions.assertFalse(channel.snapshot().closed());
+		source.close(StreamTerminationReason.SERVER_STOPPING, null);
+	}
+
+	@Test
+	public void conditional_coalesced_offer_revalidates_after_lock_contention()
+			throws Exception {
+		CountDownLatch backpressureEntered = new CountDownLatch(1);
+		CountDownLatch releaseBackpressure = new CountDownLatch(1);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpOutboundChannel.Listener listener = new McpOutboundChannel.Listener() {
+			@Override
+			public void didWrite(long byteCount, long timestampNanos) {
+				// The test does not drain the channel.
+			}
+
+			@Override
+			public void didApplyBackpressure() {
+				backpressureEntered.countDown();
+				try {
+					if (!releaseBackpressure.await(3, TimeUnit.SECONDS))
+						throw new AssertionError(
+								"The channel-lock holder was not released.");
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+					throw new AssertionError(exception);
+				}
+			}
+
+			@Override
+			public void didTerminate(StreamTerminationReason reason,
+					@Nullable Throwable cause) {
+				// No-op
+			}
+		};
+		McpOutboundChannel channel = new McpOutboundChannel(
+				1, 64, 64, System::nanoTime, listener);
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				channel.offer(ascii("occupied")));
+
+		Thread lockHolder = new Thread(() -> {
+			try {
+				channel.enqueue(ascii("waiting"));
+			} catch (Throwable throwable) {
+				failure.compareAndSet(null, throwable);
+			}
+		}, "mcp-conditional-offer-lock-holder");
+		AtomicReference<Optional<McpOutboundChannel.OfferResult>> result =
+				new AtomicReference<>();
+		CountDownLatch offerStarted = new CountDownLatch(1);
+		AtomicLong boundary = new AtomicLong(1L);
+		Thread offer = new Thread(() -> {
+			offerStarted.countDown();
+			try {
+				result.set(channel.offerCoalescingIf(ascii("catalog"), "catalog",
+						() -> boundary.get() > 0L));
+			} catch (Throwable throwable) {
+				failure.compareAndSet(null, throwable);
+			}
+		}, "mcp-conditional-offer-contender");
+
+		try {
+			lockHolder.start();
+			Assertions.assertTrue(backpressureEntered.await(3, TimeUnit.SECONDS));
+			offer.start();
+			Assertions.assertTrue(offerStarted.await(3, TimeUnit.SECONDS));
+			boundary.set(0L);
+			releaseBackpressure.countDown();
+			offer.join(TimeUnit.SECONDS.toMillis(3));
+			Assertions.assertFalse(offer.isAlive(),
+					"The conditional offer remained blocked on the channel lock.");
+			Assertions.assertNull(failure.get());
+			Assertions.assertEquals(Optional.empty(), result.get(),
+					"The offer used a boundary decision made before lock acquisition.");
+			Assertions.assertEquals(1, channel.snapshot().bufferedFrames(),
+					"A deadline-suppressed offer mutated channel capacity.");
+		} finally {
+			releaseBackpressure.countDown();
+			channel.close(StreamTerminationReason.SERVER_STOPPING, null);
+			lockHolder.join(TimeUnit.SECONDS.toMillis(3));
+			offer.join(TimeUnit.SECONDS.toMillis(3));
+		}
+		Assertions.assertFalse(lockHolder.isAlive());
+		Assertions.assertNull(failure.get());
 	}
 
 	private static void awaitCondition(Condition condition) throws Exception {

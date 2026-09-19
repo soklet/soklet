@@ -37,6 +37,40 @@ import java.util.function.BooleanSupplier;
 @NotThreadSafe
 public class McpApplicationHandlerDispatcherTests {
 	@Test
+	public void physicalExitObserverRunsOnceAfterSlotAccounting() throws Exception {
+		ExecutorService executor = singleThreadExecutor(
+				"mcp-application-physical-exit-test");
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 1, executor);
+		CountDownLatch workExited = new CountDownLatch(1);
+		CountDownLatch exitObserved = new CountDownLatch(1);
+		AtomicInteger exitCalls = new AtomicInteger();
+		AtomicInteger activeSlotsAtExit = new AtomicInteger(-1);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(
+				workExited::countDown, failure::set, ignored -> {}, () -> {
+					exitCalls.incrementAndGet();
+					activeSlotsAtExit.set(dispatcher.snapshot().activeSlots());
+					exitObserved.countDown();
+				});
+
+		try {
+			Assertions.assertEquals(
+					McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admit(ticket));
+			Assertions.assertTrue(workExited.await(3, TimeUnit.SECONDS));
+			Assertions.assertTrue(exitObserved.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, exitCalls.get());
+			Assertions.assertEquals(0, activeSlotsAtExit.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
+					ticket.state());
+			Assertions.assertNull(failure.get());
+		} finally {
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
 	public void observer_transitions_are_globally_ordered_and_drained_unlocked()
 			throws Exception {
 		ExecutorService executor = singleThreadExecutor(
@@ -591,9 +625,15 @@ public class McpApplicationHandlerDispatcherTests {
 		executor.failure(submissionError);
 		AtomicReference<Throwable> observedFailure = new AtomicReference<>();
 		AtomicInteger rejectedRuns = new AtomicInteger();
+		AtomicInteger physicalExitCalls = new AtomicInteger();
+		AtomicInteger activeSlotsAtExit = new AtomicInteger(-1);
 		CountDownLatch survivorRan = new CountDownLatch(1);
 		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(
-				rejectedRuns::incrementAndGet, observedFailure::set);
+				rejectedRuns::incrementAndGet, observedFailure::set, ignored -> {},
+				() -> {
+					physicalExitCalls.incrementAndGet();
+					activeSlotsAtExit.set(dispatcher.snapshot().activeSlots());
+				});
 		McpApplicationHandlerDispatcher.Ticket survivor = dispatcher.newTicket(
 				survivorRan::countDown, observedFailure::set);
 
@@ -607,6 +647,8 @@ public class McpApplicationHandlerDispatcherTests {
 			Assertions.assertEquals(0, rejectedRuns.get());
 			Assertions.assertEquals(0, dispatcher.snapshot().activeSlots(),
 					"A fatal submission failure must not burn the dispatcher slot.");
+			Assertions.assertEquals(1, physicalExitCalls.get());
+			Assertions.assertEquals(0, activeSlotsAtExit.get());
 
 			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.DISPATCHED,
 					dispatcher.admit(survivor));

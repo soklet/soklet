@@ -32,8 +32,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
 import static java.lang.String.format;
@@ -49,6 +51,7 @@ import static java.util.Objects.requireNonNull;
 public final class McpOutboundChannel {
 	public enum OfferResult {
 		ACCEPTED,
+		COALESCED,
 		FULL,
 		TOO_LARGE,
 		CLOSED,
@@ -174,12 +177,57 @@ public final class McpOutboundChannel {
 	 *
 	 * @param payload frame payload
 	 * @param coalescingKey semantic duplicate key
-	 * @return {@link OfferResult#ACCEPTED} when queued or already represented
+	 * @return {@link OfferResult#ACCEPTED} when newly queued or
+	 *         {@link OfferResult#COALESCED} when already represented
 	 */
 	@NonNull
 	public OfferResult offerCoalescing(byte @NonNull [] payload,
 			@NonNull Object coalescingKey) {
 		return offer(payload, requireNonNull(coalescingKey));
+	}
+
+	/**
+	 * Offers a coalesced frame only when a caller-owned boundary still permits
+	 * mutation after this method acquires the channel lock. The predicate must be
+	 * bounded and must not call back into this channel.
+	 *
+	 * @param payload frame payload
+	 * @param coalescingKey semantic duplicate key
+	 * @param offerAllowed boundary predicate evaluated at the offer linearization
+	 *        point
+	 * @return empty when the boundary suppresses the offer
+	 */
+	@NonNull
+	public Optional<@NonNull OfferResult> offerCoalescingIf(
+			byte @NonNull [] payload, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier offerAllowed) {
+		requireNonNull(payload);
+		requireNonNull(coalescingKey);
+		requireNonNull(offerAllowed);
+
+		if (payload.length == 0)
+			return Optional.of(OfferResult.TOO_LARGE);
+
+		byte[] ownedPayload = Arrays.copyOf(payload, payload.length);
+		Runnable wake;
+		synchronized (lock) {
+			if (!offerAllowed.getAsBoolean())
+				return Optional.empty();
+			if (closed || failure != null || terminalReserved)
+				return Optional.of(OfferResult.CLOSED);
+			if (pendingCoalescingKeys.contains(coalescingKey))
+				return Optional.of(OfferResult.COALESCED);
+			if (ownedPayload.length > byteCapacity)
+				return Optional.of(OfferResult.TOO_LARGE);
+			if (!hasRegularCapacity(ownedPayload.length))
+				return Optional.of(OfferResult.FULL);
+
+			addRegularChunk(ownedPayload, coalescingKey);
+			wake = reserveWakeIfNeeded();
+		}
+
+		wake.run();
+		return Optional.of(OfferResult.ACCEPTED);
 	}
 
 	/**
@@ -213,8 +261,8 @@ public final class McpOutboundChannel {
 				return OfferResult.CLOSED;
 			if (ownedPayload.length > byteCapacity)
 				return OfferResult.TOO_LARGE;
-			if (!started || nowNanos - saturatingAdd(
-					lastWriteAtNanos, idleIntervalNanos) < 0L)
+			if (!started
+					|| nowNanos - (lastWriteAtNanos + idleIntervalNanos) < 0L)
 				return OfferResult.NOT_IDLE;
 			if (!hasRegularCapacity(ownedPayload.length))
 				return OfferResult.FULL;
@@ -246,7 +294,7 @@ public final class McpOutboundChannel {
 
 			if (coalescingKey != null
 					&& pendingCoalescingKeys.contains(coalescingKey))
-				return OfferResult.ACCEPTED;
+				return OfferResult.COALESCED;
 
 			if (ownedPayload.length > byteCapacity)
 				return OfferResult.TOO_LARGE;
@@ -336,7 +384,7 @@ public final class McpOutboundChannel {
 
 		synchronized (lock) {
 			if (!started || closed || terminalWritten || failure != null
-					|| nowNanos - saturatingAdd(lastWriteAtNanos, timeoutNanos) < 0L)
+					|| nowNanos - (lastWriteAtNanos + timeoutNanos) < 0L)
 				return false;
 
 			reserveFailure(reason, cause);
@@ -353,7 +401,7 @@ public final class McpOutboundChannel {
 			if (!started || closed || terminalWritten || failure != null)
 				return Long.MAX_VALUE;
 
-			return saturatingAdd(lastWriteAtNanos, timeoutNanos);
+			return lastWriteAtNanos + timeoutNanos;
 		}
 	}
 
@@ -665,15 +713,6 @@ public final class McpOutboundChannel {
 		bufferedFrames = 0;
 		bufferedBytes = 0;
 		terminalBytes = 0;
-	}
-
-	private static long saturatingAdd(long left, long right) {
-		long result = left + right;
-
-		if (((left ^ result) & (right ^ result)) < 0)
-			return Long.MAX_VALUE;
-
-		return result;
 	}
 
 	private static final class Chunk {

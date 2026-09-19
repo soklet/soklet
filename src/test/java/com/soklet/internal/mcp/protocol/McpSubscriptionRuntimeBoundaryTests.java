@@ -1100,7 +1100,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				channel.offerCoalescing(ascii("one"), firstKey));
-		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.COALESCED,
 				channel.offerCoalescing(ascii("duplicate"), firstKey));
 		Assertions.assertEquals(1, channel.snapshot().bufferedFrames(),
 				"A pending duplicate must be represented by the first frame.");
@@ -1117,7 +1117,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		source.start();
 		PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1);
 		source.writeTo(socket, 1L);
-		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.COALESCED,
 				channel.offerCoalescing(ascii("still-duplicate"), firstKey));
 		Assertions.assertEquals(2, channel.snapshot().bufferedFrames(),
 				"A partially in-flight key must remain coalesced.");
