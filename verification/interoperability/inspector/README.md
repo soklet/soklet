@@ -1,8 +1,11 @@
 # Isolated Inspector host-harness foundation
 
 This P0-H profile runs the **unmodified Inspector CLI**, not a synthetic MCP
-client, against the packaged public Soklet fixture. It qualifies base modern
-HTTP transport and observes requested Apps/Skills advertisements. It does not
+client, against the packaged public Soklet fixture. A separate profile drives
+the **unmodified Inspector web client in real headless Chrome**, including its
+visible connection switch, tool list, Execute Tool action, result, and disconnect.
+These profiles qualify base modern HTTP transport and observe requested
+Apps/Skills advertisements. They do not
 qualify an Apps renderer, a Skills consumer, or an immutable release candidate.
 It is not a new release gate and does not replace the TypeScript/Go hooks.
 
@@ -13,7 +16,7 @@ digests are independently pinned by the runner. Installation uses the exact
 lock, an isolated npm cache/configuration, and `npm ci --ignore-scripts`.
 No floating `npx`, native build, or upstream lifecycle script is used.
 
-## Run
+## Run the CLI profile
 
 Requirements: POSIX process groups, Node `26.5.0`, npm `11.17.0`, a real JDK
 executable (not the macOS `/usr/bin/java` launcher), Git, and `unzip`. Network
@@ -56,9 +59,9 @@ not forward it to `InspectorClient`; the web client does. The capability
 builder therefore uses default-on advertisements for the CLI's disabled
 config. A config file containing `false` is not absence evidence. The harness
 checks the actual per-request wire capability maps and preserves the mismatch.
-The next host slice must exercise genuine OFF behavior through the pinned web
-client or a separately reviewed host version; do not patch the CLI and call it
-unmodified-host qualification.
+The web profile below exercises genuine OFF behavior without patching the CLI.
+The CLI limitation remains a non-passing CLI result; a separate passing web
+profile does not relabel it as unmodified-CLI absence coverage.
 
 Source references: [CLI options](https://github.com/modelcontextprotocol/inspector/blob/2e90a628e6296c62e4bef942afbb43d3faa4baf4/clients/cli/src/cli.ts),
 [extension construction](https://github.com/modelcontextprotocol/inspector/blob/2e90a628e6296c62e4bef942afbb43d3faa4baf4/core/mcp/extensions.ts),
@@ -71,6 +74,84 @@ separately from raw wire: Inspector projects the list to `{tools}` and its SDK
 projects the call to `{_meta, content}`, whereas the wire must still contain
 `resultType: "complete"`. Both paths perform two tool listings after discovery;
 the call path then invokes the tool. The trace guard pins that observed order.
+
+## Run the web profile
+
+The initial web profile supports installed **Google Chrome on macOS**. It uses
+the existing locked Inspector distribution; there are no new npm dependencies,
+browser downloads, injected MCP client calls, or upstream patches. It verifies
+the prebuilt web assets exist so upstream cannot fall back to an npm build.
+
+```sh
+node verification/interoperability/inspector/run-web.mjs \
+  --candidate-jar /absolute/path/to/candidate.jar \
+  --candidate-pom /absolute/path/to/pom.xml \
+  --java /absolute/path/to/jdk/bin/java \
+  --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+  --work-dir target/inspector/web-local-run
+```
+
+Two fresh browser/Inspector/JVM sessions request both extensions ON, then OFF.
+Each must display the tool list and expected tool result, disconnect, and shut
+down cleanly. Exit 0 requires both rows to pass; every other outcome exits 1.
+There is no blocked-toggle exemption in the web profile.
+
+The observed request profile is exactly seven exchanges per session:
+discovery first, five catalog-list responses, and the explicit tool call last.
+The middle multiset is two `tools/list` requests plus one each of `prompts/list`,
+`resources/list`, and `resources/templates/list`; their concurrent completion
+order may vary. Selecting Tools causes its second listing. Exact fixture
+descriptors are checked for the additional catalogs. The web ON UI declaration
+contains both the Apps MIME and `elicitation: {}`; OFF requires both extension
+keys actually absent on every request. Neither the extra declaration nor a
+running sandbox listener proves an App rendered. SSE between the browser and
+Inspector's internal backend is not an MCP subscription or MCP session.
+
+The receipt records Chrome's reported product/revision and a SHA-256 identity
+of the entire installed application bundle before and after the run, alongside
+the candidate, dependencies, fixture, source tree, and per-session assertions.
+This records the actual local binary; it does not claim a reproducible browser
+build or authorize an automatic browser update.
+
+### Web isolation and network policy
+
+The web server binds only `127.0.0.1`, with one exact allowed origin and a
+separate disposable API token. Authentication remains enabled: missing auth
+must return 401 and a foreign Origin must return 403. Authenticated config must
+report a read-only catalog and explicitly configured nondurable memory secret
+storage. The browser opens the bare origin; upstream injects its API token
+internally. **The host's startup banner contains that token: never save or
+print raw stdout, HTML, browser storage, network headers, or config panels.**
+The live session file must remain byte-identical.
+
+Chrome gets a new private profile, no first-run or sync, a basic password store
+and mock keychain, suppressed background networking, no inherited proxy, and
+loopback-only hostname resolution. Sandbox, CSP, certificate validation, and
+origin protections are not disabled. A dependency-free bounded DevTools
+connection drives only DOM controls and reads the displayed result; it does
+not call Inspector's client methods or synthesize MCP messages.
+
+The attached page's intercepted requests may continue only to its exact
+Inspector origin. The one optional Google Fonts stylesheet declared in the
+pinned `index.html` is **blocked**, with its exact URL/method/resource type
+recognized and recorded only as a count; system fonts are used. Any other
+attempted origin fails the run. This is a page-request guard, not an OS-wide
+network sandbox or proof about every Chrome background socket. No font bytes
+are fetched or replaced, and this profile makes no visual-layout claim.
+
+The host also starts its normal auxiliary loopback sandbox/App-origin
+listeners on disposable ports. They are not exercised as renderers here.
+Read-only `--config` does not make browser or OAuth/UI storage read-only:
+all such storage belongs to the fresh private session and is removed after
+bounded cleanup. No existing user profile, account, catalog, or keychain is
+used or cleared.
+
+Web fixture and host processes have 120-second bounds, Chrome 90 seconds,
+readiness/UI waits 10 seconds, backend config reads 1.5 seconds/64 KiB,
+and page requests a 256-request cap. DevTools commands/messages/event callbacks
+and closure have independent bounds and fixed redacted errors. Final page
+observations are checked again after browser closure. Process-group cleanup
+attempts every owner independently; cleanup failure cannot yield PASS.
 
 ## Isolation, bounds, and evidence limits
 
@@ -114,9 +195,14 @@ node --test verification/interoperability/inspector/config-self-test.mjs \
   verification/interoperability/inspector/runner-self-test.mjs
 node verification/interoperability/inspector/process-self-test.mjs
 node verification/interoperability/inspector/trace-self-test.mjs
+node verification/interoperability/inspector/cdp-self-test.mjs
+node --test verification/interoperability/inspector/web-probe-self-test.mjs
+node verification/interoperability/inspector/web-trace-self-test.mjs
 ```
 
 The trace self-test needs loopback sockets. It uses a local mock only to test
 the harness's byte forwarding, redaction, limits, and negative cases; its
-results are not host interoperability evidence. Positive host evidence must
-come from the installed pinned Inspector and the candidate-JAR fixture.
+results are not host interoperability evidence. DevTools self-tests use a
+mock WebSocket, not a qualifying browser. Positive host evidence must come
+from the installed pinned Inspector, actual browser for the web profile, and
+candidate-JAR fixture.

@@ -1,7 +1,8 @@
 # Pinned MCP SDK interoperability
 
 The separate [Inspector host-harness foundation](inspector/README.md) exercises
-the pinned real CLI with isolated state and sanitized modern-protocol traces.
+the pinned real CLI and web client in isolated Chrome, with isolated state and
+sanitized modern-protocol traces, including genuine web extension ON/OFF.
 It is development-only P0-H evidence, not an Apps/Skills support claim or a
 replacement for either SDK release hook below.
 

@@ -208,10 +208,18 @@ async function probe({ java, classpath, entry, work, enabled, operation }) {
   return record;
 }
 
-export async function runHarness({ candidateJar, candidatePom, java, workDirectory }) {
+export async function runHarness({ candidateJar, candidatePom, java, workDirectory,
+  surface = 'cli', browserExecutable }) {
+  if (!['cli', 'web'].includes(surface)) fail('HARNESS_SURFACE_INVALID');
+  const web = surface === 'web';
   const jar = regularFile(candidateJar);
   const pom = regularFile(candidatePom);
   const javaPath = regularFile(java);
+  const chrome = web ? regularFile(browserExecutable) : null;
+  if (web && (process.platform !== 'darwin'
+      || !chrome.endsWith('/Google Chrome.app/Contents/MacOS/Google Chrome')))
+    fail('WEB_BROWSER_DISTRIBUTION_INVALID');
+  const browserRoot = web ? resolve(dirname(chrome), '../..') : null;
   const work = resolve(workDirectory);
   const outputParent = resolve(root, 'target/inspector');
   if (!work.startsWith(`${outputParent}${sep}`) || existsSync(work)) fail('WORK_DIRECTORY_MUST_BE_FRESH');
@@ -228,18 +236,21 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
   const receipt = { formatVersion: 1, evidenceClass: 'LOCAL_HOST_HARNESS_DEVELOPMENT_ONLY', stage: 'INPUTS',
     status: 'FAILED', releaseCandidateEvidence: false, sourceTreeIdentity: null,
     candidateJarSha256: hashFile(jar), candidatePomSha256: hashFile(pom),
-    harnessId: 'soklet.inspector.base-transport.v1', profileId: 'modern-cli-extension-toggles.v1',
+    harnessId: 'soklet.inspector.base-transport.v1',
+    profileId: `modern-${surface}-extension-toggles.v1`,
     targetName: '@modelcontextprotocol/inspector', targetVersion: '2.7.0',
     targetCommit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4',
     artifactIntegrity: INSPECTOR_INTEGRITY, packageLockSha256: LOCK_SHA,
     protocolVersion: PROTOCOL, executedAt: new Date().toISOString(),
     appsRendering: 'NOT_RUN', skillsRetrieval: 'NOT_RUN', browserVersion: null,
     limitations: ['Dirty-tree development evidence is not a release receipt.',
-      'The unchanged CLI has no renderer; Apps rendering, CSP and permissions are not tested.',
+      web ? 'The real web UI exercises ordinary tools only; Apps rendering, CSP and permissions are not tested.'
+        : 'The unchanged CLI has no renderer; Apps rendering, CSP and permissions are not tested.',
       'The current fixture has no Apps or Skills registrations; core fallback only is exercised.',
       'Disposable bearer authorization terminates at the loopback proxy, not at Soklet.',
       'No OAuth, production host, localization, tenant isolation, or Skills activation is qualified.',
-      'Requested extension settings are verified on the wire; a disabled-row mismatch stays blocked.'],
+      web ? 'Both web rows require exact actual extension advertisements; a disabled-row mismatch fails.'
+        : 'Requested extension settings are verified on the wire; a disabled-row mismatch stays blocked.'],
     runs: [] };
   const persist = () => writeFileSync(resolve(work, 'receipt.json'), json(receipt), { mode: 0o600 });
   const onSignal = () => {
@@ -251,6 +262,7 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
   persist();
   try {
     receipt.sourceTreeIdentity = await sourceIdentity(env);
+    if (web) receipt.browserDistributionIdentity = directoryIdentity(browserRoot);
     const npmVersion = await command('npm', ['--version'], work, env);
     if (npmVersion.stdout.trim() !== '11.17.0') fail('NPM_VERSION_MISMATCH');
     const javaVersion = await command(javaPath, ['-version'], work, env);
@@ -278,6 +290,8 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
     const entry = regularFile(resolve(inspector, 'clients/launcher/build/index.js'));
     const identity = JSON.parse(readFileSync(resolve(inspector, 'package.json')));
     if (identity.name !== receipt.targetName || identity.version !== receipt.targetVersion) fail('INSTALLED_IDENTITY_MISMATCH');
+    // Otherwise upstream --web may invoke a build with new dependency activity.
+    if (web) regularFile(resolve(inspector, 'clients/web/dist/index.html'));
     receipt.installedTreeIdentity = directoryIdentity(resolve(install, 'node_modules'));
     receipt.launcherSha256 = hashFile(entry);
     const fixtureOutput = resolve(work, 'public-fixture');
@@ -289,9 +303,16 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
     receipt.fixtureClassTree = directoryIdentity(resolve(fixtureOutput, 'classes'));
     receipt.stage = 'PROBES';
     for (const enabled of [true, false]) {
-      for (const operation of ['tools/list', 'tools/call']) {
-        receipt.runs.push(await probe({ java: javaPath, classpath, entry, work, enabled, operation }));
+      if (web) {
+        const { probeWeb } = await import('./web-probe.mjs');
+        receipt.runs.push(await probeWeb({ java: javaPath, classpath, entry, work, enabled, chrome,
+          helpers: { managed, makeIsolation, readyLine, root, fixtureMain, fixtureWarning: FIXTURE_WARNING } }));
         persist();
+      } else {
+        for (const operation of ['tools/list', 'tools/call']) {
+          receipt.runs.push(await probe({ java: javaPath, classpath, entry, work, enabled, operation }));
+          persist();
+        }
       }
     }
     receipt.stage = 'POST_RUN_INTEGRITY';
@@ -299,9 +320,16 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
         || JSON.stringify(receipt.installedTreeIdentity) !== JSON.stringify(directoryIdentity(resolve(install, 'node_modules')))
         || JSON.stringify(receipt.fixtureClassTree) !== JSON.stringify(directoryIdentity(resolve(fixtureOutput, 'classes')))
         || JSON.stringify(receipt.sourceTreeIdentity) !== JSON.stringify(await sourceIdentity(env))) fail('RUN_INPUT_DRIFT');
+    if (web) {
+      if (JSON.stringify(receipt.browserDistributionIdentity) !== JSON.stringify(directoryIdentity(browserRoot)))
+        fail('BROWSER_INPUT_DRIFT');
+      receipt.browserVersion = receipt.runs[0]?.browserVersion ?? null;
+      if (!receipt.browserVersion || receipt.runs.some(row =>
+        JSON.stringify(row.browserVersion) !== JSON.stringify(receipt.browserVersion))) fail('BROWSER_IDENTITY_MISMATCH');
+    }
     receipt.inputsUnchanged = true;
     receipt.status = receipt.runs.every(row => row.status === 'PASSED') ? 'PASSED'
-      : receipt.runs.slice(0, 2).every(row => row.status === 'PASSED')
+      : !web && receipt.runs.slice(0, 2).every(row => row.status === 'PASSED')
         && receipt.runs.slice(2).every(row => row.status === 'BLOCKED_HOST_EXTENSION_TOGGLE')
         ? 'BLOCKED_HOST_EXTENSION_TOGGLE' : 'FAILED';
     receipt.stage = 'COMPLETE';

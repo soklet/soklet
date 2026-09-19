@@ -980,13 +980,16 @@
       "id": "CLASS-INSPECTOR-HOST-PROBE",
       "paths": [
         "verification/interoperability/inspector/README.md",
+        "verification/interoperability/inspector/cdp.mjs",
         "verification/interoperability/inspector/process.mjs",
         "verification/interoperability/inspector/run.mjs",
         "verification/interoperability/inspector/runner-self-test.mjs",
         "verification/interoperability/inspector/trace-self-test.mjs",
-        "verification/interoperability/inspector/trace.mjs"
+        "verification/interoperability/inspector/trace.mjs",
+        "verification/interoperability/inspector/web-probe.mjs",
+        "verification/interoperability/inspector/web-trace-self-test.mjs"
       ],
-      "rationale": "The Inspector qualification harness is an external host probe, not a JUnit lifecycle scope, the official local simulator PROCESS_HARNESS, or a settled V4 release gate. Its child fixture JVM and Inspector process have explicit bounded process-group cleanup; its loopback trace and process/runner self-tests independently check bounds and redaction. Discovery retains all source candidates without borrowing a synthetic JUnit or settled-harness policy or treating the observed host result as immutable candidate PASS evidence.",
+      "rationale": "The Inspector CLI and real-browser web qualification harnesses are external host probes, not JUnit lifecycle scopes, the official local simulator PROCESS_HARNESS, or settled V4 release gates. Their fixture JVM, Inspector host, and Chrome child processes have explicit 120/120/90-second bounds and bounded process-group cleanup; web readiness/UI waits have ten-second deadlines, backend config reads a 1.5-second timeout and 64-KiB cap, page requests a 256-request cap, and CDP has bounded commands, messages, callbacks, and closure. Independent process, runner, trace, CDP, and web-probe self-tests check bounds and redaction. Discovery retains all source candidates without borrowing a synthetic JUnit or settled-harness policy or treating observed host results as immutable candidate PASS evidence.",
       "requiredAction": "NONE"
     },
     {
@@ -1183,8 +1186,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 7473,
-    "candidateSha256": "bb65fe8d5f1cdbcab84f26ea99e50c1717c3dfafa271e6c6cfc8908920c340a8",
+    "candidateCount": 7484,
+    "candidateSha256": "f138523e22e6b47992d826beae8c82c35b43426bf177d7bc5eb7de26ff44549b",
     "candidates": [
       {
         "kinds": [
@@ -60516,7 +60519,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 8,
+        "line": 9,
         "lineSha256": "6d867819d9253dfeb8d7442f209dc8a25e930bc4b1ad857a7b944fa8e2beeafb",
         "path": "verification/interoperability/README.md"
       },
@@ -60524,7 +60527,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 36,
+        "line": 37,
         "lineSha256": "954e4aee8de439f43bb646112ef48a05302f94d1d47bbd1f2f9581d6c0d9f336",
         "path": "verification/interoperability/README.md"
       },
@@ -60541,14 +60544,14 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 4,
-        "lineSha256": "31e42bf8bd2e33cc2f3b3fb94211ffc441ab4715a774e257aa3ca7940704fa22",
+        "lineSha256": "bf4a14c418edcadabc433630965815f81da2680b9150ed947abcb655c82f0dbe",
         "path": "verification/interoperability/inspector/README.md"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 89,
+        "line": 170,
         "lineSha256": "6a53b0e2e5164b8b389b05a9aa4fc09ebbbf8e6759ee1b2d627e33d5a21393c4",
         "path": "verification/interoperability/inspector/README.md"
       },
@@ -60556,9 +60559,81 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 90,
+        "line": 171,
         "lineSha256": "3a79db1c66032e4a0ccd4f8f6c996198c8ec1c96993d5712fc9e930a6d49865d",
         "path": "verification/interoperability/inspector/README.md"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 88,
+        "lineSha256": "8ff361401bb0954154f67bfab56bf11b0705ae4527072404b4673f3091ba7e0f",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 107,
+        "lineSha256": "a2715b295e825f81f9abd1b60e7849a770b834359a2e45f240e647bc00a99c61",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 108,
+        "lineSha256": "a8cdc326df679dbf618f997b83281bdb12abd4d0ca72f7d5ff15712e41eafcc6",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 130,
+        "lineSha256": "a2715b295e825f81f9abd1b60e7849a770b834359a2e45f240e647bc00a99c61",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 135,
+        "lineSha256": "5e872e224e92b78851ba192b838ae45b103d05056884097af548ef6353e4d58d",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 156,
+        "lineSha256": "a2715b295e825f81f9abd1b60e7849a770b834359a2e45f240e647bc00a99c61",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 238,
+        "lineSha256": "8ff361401bb0954154f67bfab56bf11b0705ae4527072404b4673f3091ba7e0f",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 281,
+        "lineSha256": "1872df0b097156ff8ab8410b8104a8d8a9e41660aa245a4ce0c096ec973fa0fa",
+        "path": "verification/interoperability/inspector/cdp.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 323,
+        "lineSha256": "12621dbb70f9779203d3c6dc16c11118a583ef7ab7d6f61b17a94d77e295f575",
+        "path": "verification/interoperability/inspector/cdp.mjs"
       },
       {
         "kinds": [
@@ -60612,7 +60687,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 240,
+        "line": 250,
         "lineSha256": "4fff34984cc932092f71081e5cc218586fe2e8749860585d4bf6d688b1e61627",
         "path": "verification/interoperability/inspector/run.mjs"
       },
@@ -60636,7 +60711,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 144,
+        "line": 214,
         "lineSha256": "ac9417c6f39a29d05cb8256b0eea26167172812d8ddadd13f2198933f278af6e",
         "path": "verification/interoperability/inspector/trace.mjs"
       },
@@ -60644,7 +60719,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 174,
+        "line": 244,
         "lineSha256": "d9dc02a28931811800b01fc97066d2d4811b82e6ce5f450e2ba47bba6c03a1b7",
         "path": "verification/interoperability/inspector/trace.mjs"
       },
@@ -60652,7 +60727,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 175,
+        "line": 245,
         "lineSha256": "f8fdcdabeaceac849d958217a9d9a1a4b8e2b495e5396fea3f90ee19565d5c6a",
         "path": "verification/interoperability/inspector/trace.mjs"
       },
@@ -60660,9 +60735,25 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 178,
+        "line": 248,
         "lineSha256": "fe8e4d115ec0da863ff8956d0555656f254efba9b50392ce0a803cfe3176cdbc",
         "path": "verification/interoperability/inspector/trace.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 11,
+        "lineSha256": "f039c0541911c821118cdc6806a27eab2dc3e2e3175d5a3dafebf29c04397034",
+        "path": "verification/interoperability/inspector/web-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 142,
+        "lineSha256": "0427b61d776a451d0f52b800ff4e061b40f53d83b53c3298bdb3d9da6c616979",
+        "path": "verification/interoperability/inspector/web-trace-self-test.mjs"
       },
       {
         "kinds": [
@@ -61329,11 +61420,11 @@
       "FIXED_WAIT_CANDIDATE": 1864,
       "JUNIT_OUTER_GUARD": 359,
       "LIFECYCLE_SIGNAL": 4261,
-      "NAMED_TIMEOUT_CANDIDATE": 1318,
+      "NAMED_TIMEOUT_CANDIDATE": 1329,
       "PROCESS_OUTER_GUARD": 11,
       "WORKFLOW_OUTER_GUARD": 14
     },
-    "pathCount": 338
+    "pathCount": 341
   },
   "formatVersion": 2,
   "javascriptGuards": [

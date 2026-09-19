@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest } from 'node:http';
+import { isDeepStrictEqual } from 'node:util';
 
 export const PROTOCOL = '2026-07-28';
 export const UI = 'io.modelcontextprotocol/ui';
@@ -7,24 +8,60 @@ const META = 'io.modelcontextprotocol/';
 const MAX_BODY = 1024 * 1024;
 const MAX_EXCHANGES = 32;
 const METHODS = new Set(['server/discover', 'tools/list', 'tools/call']);
+const WEB_LIST_METHODS = ['prompts/list', 'resources/list', 'resources/templates/list', 'tools/list'];
+const WEB_METHODS = new Set([...METHODS, ...WEB_LIST_METHODS]);
+const WEB_ACQUISITION_METHODS = [...WEB_LIST_METHODS, 'tools/list'];
 const TOOL_NAMES = [
   'json_schema_2020_12_tool', 'test_audio_content', 'test_custom_header',
   'test_embedded_resource', 'test_error_handling', 'test_image_content',
   'test_multiple_content_types', 'test_simple_text', 'test_tool_with_progress',
 ];
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+// Exact public tools-list fixture descriptors, not arbitrary host data. These
+// remain in memory for comparison; the trace never retains descriptor values.
+const WEB_LISTS = {
+  'prompts/list': { key: 'prompts', entries: [
+    { name: 'test_simple_prompt', description: 'Returns a deterministic simple prompt.' },
+    { name: 'test_prompt_with_arguments', description: 'Substitutes two required string arguments.',
+      arguments: [{ name: 'arg1', description: 'First test argument', required: true },
+        { name: 'arg2', description: 'Second test argument', required: true }] },
+    { name: 'test_prompt_with_embedded_resource', description: 'Embeds the requested text resource.',
+      arguments: [{ name: 'resourceUri', description: 'URI of the resource to embed', required: true }] },
+    { name: 'test_prompt_with_image', description: 'Returns deterministic image prompt content.' },
+  ] },
+  'resources/list': { key: 'resources', entries: [
+    { uri: 'test://static-text', name: 'Static text resource',
+      description: 'A deterministic UTF-8 text resource.', mimeType: 'text/plain' },
+    { uri: 'test://static-binary', name: 'Static binary resource',
+      description: 'A deterministic PNG resource.', mimeType: 'image/png' },
+  ] },
+  'resources/templates/list': { key: 'resourceTemplates', entries: [
+    { uriTemplate: 'test://template/{id}/data', name: 'Template data resource',
+      description: 'A deterministic RFC 6570 Level 1 template.', mimeType: 'application/json' },
+  ] },
+};
+const sortedByName = entries => [...entries].sort((left, right) =>
+  String(left?.name).localeCompare(String(right?.name)));
 
-export function validResult(method, result) {
+export function validResult(method, result, surface = 'cli') {
+  if (surface !== 'cli' && surface !== 'web') return false;
   if (!object(result) || result.resultType !== 'complete') return false;
   if (method === 'server/discover') {
     return JSON.stringify(result.supportedVersions) === JSON.stringify([PROTOCOL])
       && object(result.capabilities?.tools)
+      && (surface !== 'web' || (object(result.capabilities?.prompts)
+        && object(result.capabilities?.resources)))
       && !Object.hasOwn(result.capabilities?.extensions ?? {}, UI)
       && !Object.hasOwn(result.capabilities?.extensions ?? {}, SKILLS);
   }
   if (method === 'tools/list') {
     return Array.isArray(result.tools) && result.nextCursor === undefined
       && JSON.stringify(result.tools.map(tool => tool?.name).sort()) === JSON.stringify(TOOL_NAMES);
+  }
+  if (surface === 'web' && Object.hasOwn(WEB_LISTS, method)) {
+    const { key, entries } = WEB_LISTS[method];
+    return Array.isArray(result[key]) && result.nextCursor === undefined
+      && isDeepStrictEqual(sortedByName(result[key]), sortedByName(entries));
   }
   return method === 'tools/call' && result.isError === undefined
     && result.content?.length === 1 && result.content[0]?.type === 'text'
@@ -34,20 +71,24 @@ export function validResult(method, result) {
 // Deliberately project booleans/enums/counts, not raw IDs, metadata, arguments,
 // headers, response bodies, or hashes of potentially sensitive body bytes.
 export function projectExchange({ request, response, headers, status, responseHeaders,
-  requestBytes, responseBytes, authorized, enabled, sequence }) {
-  const method = METHODS.has(request?.method) ? request.method : 'UNSUPPORTED';
+  requestBytes, responseBytes, authorized, enabled, sequence, surface = 'cli' }) {
+  if (surface !== 'cli' && surface !== 'web') throw new Error('INVALID_TRACE_SURFACE');
+  const methods = surface === 'web' ? WEB_METHODS : METHODS;
+  const method = methods.has(request?.method) ? request.method : 'UNSUPPORTED';
   const metadata = request?.params?._meta;
   const capabilities = metadata?.[`${META}clientCapabilities`];
   const extensions = capabilities?.extensions;
   const ui = object(extensions) && Object.hasOwn(extensions, UI);
   const skills = object(extensions) && Object.hasOwn(extensions, SKILLS);
-  const uiShape = ui && JSON.stringify(extensions[UI])
-    === JSON.stringify({ mimeTypes: ['text/html;profile=mcp-app'] });
+  const uiShape = ui && (surface === 'web'
+    ? isDeepStrictEqual(extensions[UI], { mimeTypes: ['text/html;profile=mcp-app'], elicitation: {} })
+    : JSON.stringify(extensions[UI]) === JSON.stringify({ mimeTypes: ['text/html;profile=mcp-app'] }));
   const skillsShape = skills && object(extensions[SKILLS])
     && Object.keys(extensions[SKILLS]).length === 0;
   const extensionSelectionMatches = enabled
     ? uiShape && skillsShape : !ui && !skills;
   const row = {
+    ...(surface === 'web' ? { surface: 'web' } : {}),
     sequence,
     requestedExtensions: enabled ? 'ENABLED' : 'DISABLED',
     method,
@@ -71,7 +112,9 @@ export function projectExchange({ request, response, headers, status, responseHe
     responseJson: /^application\/json(?:;|$)/i.test(responseHeaders['content-type'] ?? ''),
     responseNoStore: responseHeaders['cache-control'] === 'no-store',
     responseCorrelated: response?.jsonrpc === '2.0' && response.id === request?.id,
-    resultMatchesFixture: validResult(method, response?.result),
+    resultMatchesFixture: validResult(method, response?.result, surface),
+    ...(surface === 'web' ? { responseEnvelopeValid: object(response)
+      && isDeepStrictEqual(Object.keys(response).sort(), ['id', 'jsonrpc', 'result']) } : {}),
     requestBytes,
     responseBytes,
   };
@@ -99,6 +142,31 @@ export function adjudicateTrace(rows, enabled, operation) {
   return 'FAILED';
 }
 
+export function adjudicateWebTrace(rows, enabled) {
+  // Observed with unmodified 2.7.0 web: four managed catalog stores refresh on
+  // connect, then selecting Tools refreshes its list again. Their completions
+  // may interleave, but discovery must precede them and the one explicit
+  // plain-text tool call must follow all five. This profile does not
+  // admit subscriptions, Apps resources, Skills retrieval, or extra requests.
+  if (typeof enabled !== 'boolean' || !Array.isArray(rows) || rows.length !== 7
+      || rows[0]?.method !== 'server/discover' || rows[6]?.method !== 'tools/call'
+      || !isDeepStrictEqual(rows.slice(1, 6).map(row => row?.method).sort(), WEB_ACQUISITION_METHODS))
+    return 'FAILED';
+  const required = ['authorized', 'requestEnvelopeValid', 'protocolMetadataMatches',
+    'protocolHeaderMatches', 'methodHeaderMatches', 'perRequestCapabilitiesPresent', 'noSessionState',
+    'toolSelectionValid', 'responseJson', 'responseNoStore', 'responseCorrelated',
+    'resultMatchesFixture', 'responseEnvelopeValid', 'extensionSelectionMatches'];
+  return rows.every((row, index) => row?.surface === 'web' && row.sequence === index + 1
+    && WEB_METHODS.has(row.method) && row.responseStatus === 200
+    && required.every(key => row[key] === true)
+    && row.requestedExtensions === (enabled ? 'ENABLED' : 'DISABLED')
+    && row.appsAdvertised === enabled && row.appsMimeMatches === enabled
+    && row.skillsAdvertised === enabled && row.skillsShapeMatches === enabled
+    && Number.isSafeInteger(row.requestBytes) && row.requestBytes > 0 && row.requestBytes <= MAX_BODY
+    && Number.isSafeInteger(row.responseBytes) && row.responseBytes > 0 && row.responseBytes <= MAX_BODY)
+    ? 'PASSED' : 'FAILED';
+}
+
 function collectBody(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -115,10 +183,12 @@ function collectBody(stream) {
   });
 }
 
-export async function startProxy({ fixturePort, token, enabled }) {
+export async function startProxy({ fixturePort, token, enabled, surface = 'cli' }) {
   if (!Number.isInteger(fixturePort) || fixturePort < 1 || fixturePort > 65535
-      || !/^[a-f0-9]{64}$/.test(token) || typeof enabled !== 'boolean')
+      || !/^[a-f0-9]{64}$/.test(token) || typeof enabled !== 'boolean'
+      || (surface !== 'cli' && surface !== 'web'))
     throw new Error('INVALID_PROXY_CONFIGURATION');
+  const methods = surface === 'web' ? WEB_METHODS : METHODS;
   const rows = [];
   const sockets = new Set();
   let exchanges = 0;
@@ -132,7 +202,7 @@ export async function startProxy({ fixturePort, token, enabled }) {
       const body = await collectBody(incoming);
       const request = JSON.parse(body.toString('utf8'));
       // Unknown/legacy methods are never substituted or forwarded as modern.
-      if (!METHODS.has(request?.method)) throw new Error('UNEXPECTED_METHOD');
+      if (!methods.has(request?.method)) throw new Error('UNEXPECTED_METHOD');
       if (incoming.headers['mcp-protocol-version'] !== PROTOCOL
           || request.params?._meta?.[`${META}protocolVersion`] !== PROTOCOL)
         throw new Error('MODERN_PROTOCOL_REQUIRED');
@@ -151,7 +221,7 @@ export async function startProxy({ fixturePort, token, enabled }) {
           rows.push(projectExchange({ request, response: value,
             headers: incoming.headers, status: response.statusCode,
             responseHeaders: response.headers, requestBytes: body.length,
-            responseBytes: bytes.length, authorized, enabled, sequence: rows.length + 1 }));
+            responseBytes: bytes.length, authorized, enabled, sequence: rows.length + 1, surface }));
           outgoing.writeHead(response.statusCode, response.headers);
           outgoing.end(bytes);
         } catch {
