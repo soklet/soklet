@@ -21,6 +21,7 @@ import com.soklet.LifecycleObserver;
 import com.soklet.LifecyclePolicy;
 import com.soklet.McpAbsentOriginPolicy;
 import com.soklet.McpAudioContent;
+import com.soklet.McpArgumentCompletionResult;
 import com.soklet.McpBlobResourceContents;
 import com.soklet.McpCachePolicy;
 import com.soklet.McpCompleteResult;
@@ -42,7 +43,7 @@ import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpSubscriptionEventPublisher;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpOfficialSchemaConformanceTool;
 import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
@@ -162,6 +163,7 @@ public final class McpConformanceFixture {
 			"UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
 	private static final Set<String> SUPPORTED_SCENARIOS = Set.of(
 			"server-stateless",
+			"completion-complete",
 			"tools-list",
 			"tools-call-simple-text",
 			"tools-call-image",
@@ -312,8 +314,10 @@ public final class McpConformanceFixture {
 				McpRateLimitDecision.allowed();
 		McpServer.Builder configured = mcpServerBuilder
 				.host(LOOPBACK)
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				// This loopback-only fixture grants bounded access to its public test data.
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plusSeconds(30)))
 				.requestRateLimiter(allowLimiter)
 				.toolRateLimiter(allowLimiter)
 				.protectionConfig(REQUEST_STATE_PROTECTION)
@@ -769,6 +773,9 @@ public final class McpConformanceFixture {
 								"First test argument"))
 						.addArgument(requiredPromptArgument("arg2",
 								"Second test argument"))
+						.completionHandler((request, completion, features) ->
+								completeArgument(List.of("test-one", "test-two"),
+										completion.getArgumentValue()))
 						.build(),
 				McpPromptRegistration.withName(
 						"test_prompt_with_embedded_resource")
@@ -830,6 +837,14 @@ public final class McpConformanceFixture {
 				McpPromptOutput.fromMessages(messages));
 	}
 
+	private static McpArgumentCompletionResult completeArgument(
+			List<String> values, String prefix) {
+		List<String> matches = values.stream()
+				.filter(value -> value.startsWith(prefix)).toList();
+		return McpArgumentCompletionResult.withValues(matches)
+				.total((long) matches.size()).hasMore(false).build();
+	}
+
 	private static List<McpResourceRegistration> resources() {
 		return List.of(
 				McpResourceRegistration.withUriAndName(
@@ -869,6 +884,9 @@ public final class McpConformanceFixture {
 									.build());
 						})
 						.description("A deterministic RFC 6570 Level 1 template.")
+						.completionHandler((request, completion, features) ->
+								completeArgument(List.of("test-1", "test-2"),
+										completion.getArgumentValue()))
 						.mimeType("application/json")
 						.cachePolicy(CACHE_POLICY)
 						.build());

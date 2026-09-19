@@ -2,9 +2,27 @@
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
   "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
-  "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication. The 2026-09-13 alpha.11 repin re-observed all 49 selected profiles; an accepted SKIPPED profile is not exercised coverage.",
-  "deferredProfilePolicy": "No Soklet 4.0.0 RUN row remains deferred after atomic Phase 5 activation. Null is retained only for the NOT_APPLICABLE completion-complete row and never means accept anything.",
+  "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication. The 2026-09-13 alpha.11 repin re-observed its then-selected 49 profiles; Completion's current profile comes from a separate 2026-09-19 pinned-CLI local observation. An accepted SKIPPED profile is not exercised coverage.",
+  "deferredProfilePolicy": "All 46 Soklet 4.0.0 RUN rows have exact reviewed profiles. Null remains only for the four owner-approved retired-feature NOT_APPLICABLE rows and never means accept anything.",
   "profiles": [
+    {
+      "id": "completion-complete.phase4.v1",
+      "scenario": "completion-complete",
+      "frozenInPhase": 4,
+      "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+      "checks": [
+        {
+          "id": "completion-complete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario produced one wire-schema-valid SUCCESS and no wire-schema-harness-error in the 2026-09-19 local dirty-candidate observation; 2 JSON-RPC messages were validated."
+      }
+    },
     {
       "id": "tools-list.phase4.v2",
       "scenario": "tools-list",

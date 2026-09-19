@@ -17,6 +17,9 @@
 package com.soklet.conformance;
 
 import com.soklet.McpCompleteResult;
+import com.soklet.McpArgumentCompletionResult;
+import com.soklet.McpCompletionContext;
+import com.soklet.McpCompletionHandler;
 import com.soklet.McpEndpoint;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequiredResult;
@@ -105,9 +108,49 @@ public final class McpConformanceFixtureContractTest {
 	public static void main(String[] arguments) throws Exception {
 		registrationsAreExactAndScenarioScoped();
 		taskRegistrationsAreCompleteAndScenarioScoped();
+		completionRegistrationsAreSharedAndDeterministic();
 		basicHandlersCompleteOnlyAfterTheirExpectedResponses();
 		frameworkStateHandlersAdvanceAndCompleteDeterministically();
 		promptHandlerUsesTheUniversalInputRequiredResultContract();
+	}
+
+	private static void completionRegistrationsAreSharedAndDeterministic()
+			throws Exception {
+		for (String scenario : List.of("completion-complete", "tools-list",
+				"server-stateless", "tasks-lifecycle")) {
+			McpEndpoint endpoint = McpConformanceFixture.endpointForScenario(scenario);
+			McpCompletionHandler prompt = endpoint.getPrompts().stream()
+					.filter(value -> value.getName().equals("test_prompt_with_arguments"))
+					.findFirst().orElseThrow().getCompletionHandler().orElseThrow();
+			McpCompletionHandler resource = endpoint.getResources().stream()
+					.filter(value -> value.getUriTemplate().orElse("")
+							.equals("test://template/{id}/data"))
+					.findFirst().orElseThrow().getCompletionHandler().orElseThrow();
+			assertCompletion(prompt, "arg1", "test", List.of("test-one", "test-two"));
+			assertCompletion(prompt, "arg1", "test-o", List.of("test-one"));
+			assertCompletion(prompt, "arg1", "absent", List.of());
+			assertCompletion(resource, "id", "test", List.of("test-1", "test-2"));
+			assertCompletion(resource, "id", "test-2", List.of("test-2"));
+			assertCompletion(resource, "id", "absent", List.of());
+		}
+	}
+
+	private static void assertCompletion(McpCompletionHandler handler,
+			String argument, String prefix, List<String> expected) throws Exception {
+		McpCompletionContext completion = new McpCompletionContext() {
+			@Override
+			public String getArgumentName() { return argument; }
+			@Override
+			public String getArgumentValue() { return prefix; }
+			@Override
+			public Map<String, String> getContextArguments() { return Map.of(); }
+		};
+		McpArgumentCompletionResult result = handler.handle(
+				context(responses(), null), completion, NO_FEATURES);
+		assertEquals(expected, result.getValues(), "Wrong Completion values");
+		assertEquals(Optional.of((long) expected.size()), result.getTotal(),
+				"Wrong Completion total");
+		assertEquals(Optional.of(false), result.getHasMore(), "Wrong Completion hasMore");
 	}
 
 	private static void taskRegistrationsAreCompleteAndScenarioScoped()

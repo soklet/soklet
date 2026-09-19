@@ -52,6 +52,8 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'verification/consumer-build/src/sse/java/example/ConsumerSseEndpoints.java',
   'verification/consumer-build/tools/ConsumerJarMutation.java',
   'verification/consumer-build/verify.mjs',
+  'verification/interoperability/inspector/package-lock.json',
+  'verification/interoperability/inspector/runner-self-test.mjs',
 ]);
 
 export const ORDERED_PATTERNS = Object.freeze([
@@ -147,7 +149,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'ee14f155742ba082aea6e7fe6c79df0b77ada2ef8d19b8828057a0afaab52c27';
+	'da7d72f1141adc011e4d8007c790e7ec92974562988f8e4bb0db707b616373ac';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

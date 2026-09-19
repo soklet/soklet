@@ -2641,6 +2641,8 @@ final class McpApplicationExecution {
 						McpProfileApplicationResultKind.RESOURCE_READ);
 				case "resources/list" -> Optional.of(
 						McpProfileApplicationResultKind.RESOURCE_LIST);
+				case "completion/complete" -> Optional.of(
+						McpProfileApplicationResultKind.COMPLETION);
 				default -> Optional.empty();
 			};
 			if (kind.isEmpty())

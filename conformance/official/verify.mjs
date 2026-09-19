@@ -45,16 +45,15 @@ const expectedPins = Object.freeze({
   specificationLicenseVendoredPath: 'final-schema/LICENSE.upstream',
   finalLicenseSha256: '0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a',
   fullCount: 50,
-  runCount: 45,
+  runCount: 46,
   excludedNames: Object.freeze([
-    'completion-complete',
     'input-required-result-basic-sampling',
     'input-required-result-basic-list-roots',
     'input-required-result-multiple-input-requests',
     'input-required-result-capability-check',
   ]),
   fullDigest: '25a6351c04df32aa7866e5f962770c00cd14856250ac6c3bf2dbbef8f5985613',
-  runDigest: '842360f4fe0d5a7aa2307a7f79e41fa115a28fbe73debd05721f0a2b10ec90ec',
+  runDigest: '0d00a78e96a7496558f2687143b8dff15a79558f4cad15cad74f0948cbadb2c6',
   nodeVersion: '26.5.0',
   npmVersion: '11.17.0',
   nodeChecksumsUrl: 'https://nodejs.org/dist/v26.5.0/SHASUMS256.txt',
@@ -397,7 +396,7 @@ function verifyPins(pins) {
       || inventory.serialization.order !== 'PINNED_CLI_OUTPUT'
       || inventory.fullInventorySha256 !== expectedPins.fullDigest
       || inventory.selectedRunSetSha256 !== expectedPins.runDigest)
-    throw new Error('Scenario inventory pin differs from the reviewed Phase 3 values');
+    throw new Error('Scenario inventory pin differs from the reviewed selection');
   assertExactKeys(pins.upstreamDriftReview, [
     'reviewedOn', 'decision', 'suiteLabelsProtocolVersionAsDraft',
     'suiteVendoredSchemaMatchesFinalTaggedSchema', 'knownSchemaDifference',
@@ -456,7 +455,7 @@ function verifyScenarioManifest(selection, pins) {
       if (!expectedPins.excludedNames.includes(scenario.name) || scenario.earliestPhase !== null
           || scenario.phase3Status !== 'NOT_APPLICABLE'
           || scenario.expectedCheckProfile !== null)
-        throw new Error('Only the exact reviewed unsupported-feature scenarios may be NOT_APPLICABLE');
+        throw new Error('Only the exact reviewed retired-feature scenarios may be NOT_APPLICABLE');
 		} else if (scenario.selection === 'RUN') {
       runCount++;
       if (![4, 5].includes(scenario.earliestPhase))
@@ -486,7 +485,7 @@ function verifyScenarioManifest(selection, pins) {
     .map((scenario) => scenario.name);
   if (sha256(inventoryBytes(runNames)) !== pins.scenarioInventory.selectedRunSetSha256)
     throw new Error('Scenario manifest RUN digest differs from the reviewed pin');
-  if (selection.scenarios.filter((scenario) => scenario.earliestPhase === 4).length !== 23
+  if (selection.scenarios.filter((scenario) => scenario.earliestPhase === 4).length !== 24
       || selection.scenarios.filter((scenario) => scenario.earliestPhase === 5).length !== 22)
     throw new Error('Phase 4/5 scenario ownership counts changed');
 }

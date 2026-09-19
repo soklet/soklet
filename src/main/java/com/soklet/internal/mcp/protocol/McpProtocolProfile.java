@@ -90,7 +90,8 @@ enum McpProfileApplicationResultKind {
 	TOOL,
 	PROMPT,
 	RESOURCE_READ,
-	RESOURCE_LIST
+	RESOURCE_LIST,
+	COMPLETION
 }
 
 /** Framework-owned progress and subscription-control notifications. */

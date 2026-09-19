@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Candidate-artifact, public-API-only replay of the pinned 39 core RUN scenarios
+ * Candidate-artifact, public-API-only replay of the pinned 36 core RUN scenarios
  * through Soklet's off-network MCP simulator.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -77,6 +77,7 @@ public final class McpLocalSimulatorScenarioDriver {
 			"{\"action\":\"accept\",\"content\":{\"color\":\"blue\"}}";
 	private static final List<ScenarioRow> EXPECTED_ROWS = List.of(
 			new ScenarioRow(1, "server-stateless"),
+			new ScenarioRow(2, "completion-complete"),
 			new ScenarioRow(3, "tools-list"),
 			new ScenarioRow(4, "tools-call-simple-text"),
 			new ScenarioRow(5, "tools-call-image"),
@@ -150,7 +151,7 @@ public final class McpLocalSimulatorScenarioDriver {
 	private static List<ScenarioRow> parseRows(String[] arguments) {
 		if (arguments.length != EXPECTED_ROWS.size())
 			throw new IllegalArgumentException(
-					"The local simulator driver requires exactly 39 rows.");
+					"The local simulator driver requires exactly 36 rows.");
 		List<ScenarioRow> rows = new ArrayList<>(arguments.length);
 		for (String argument : arguments) {
 			int separator = argument.indexOf(':');
@@ -200,6 +201,7 @@ public final class McpLocalSimulatorScenarioDriver {
 	private static int expectedSemanticTerminals(String scenario) {
 		return switch (scenario) {
 			case "server-stateless" -> 5;
+			case "completion-complete" -> 2;
 			case "json-schema-2020-12",
 					"server-sse-multiple-streams",
 					"http-header-validation",
@@ -221,6 +223,7 @@ public final class McpLocalSimulatorScenarioDriver {
 		String prefix = "local-" + row.ordinal();
 		switch (row.name()) {
 			case "server-stateless" -> serverStateless(simulator, server, prefix);
+			case "completion-complete" -> completionComplete(simulator, prefix);
 			case "tools-list" -> toolsList(simulator, prefix);
 			case "tools-call-simple-text" -> toolCall(simulator, prefix,
 					"test_simple_text", "{}", "This is a simple text response");
@@ -298,6 +301,26 @@ public final class McpLocalSimulatorScenarioDriver {
 		}
 	}
 
+	private static void completionComplete(Simulator simulator, String id) {
+		JsonExchange prompt = json(simulator, request(id + "-prompt",
+				"completion/complete", null,
+				",\"ref\":{\"type\":\"ref/prompt\",\"name\":\"test_prompt_with_arguments\"}"
+						+ ",\"argument\":{\"name\":\"arg1\",\"value\":\"test\"}",
+				EMPTY_CAPABILITIES, "", LOOPBACK + ":0", null, Map.of()));
+		assertComplete(prompt, id + "-prompt", "\"completion\":{",
+				"\"values\":[\"test-one\",\"test-two\"]",
+				"\"total\":2", "\"hasMore\":false");
+
+		JsonExchange resource = json(simulator, request(id + "-resource",
+				"completion/complete", null,
+				",\"ref\":{\"type\":\"ref/resource\",\"uri\":\"test://template/{id}/data\"}"
+						+ ",\"argument\":{\"name\":\"id\",\"value\":\"test\"}",
+				EMPTY_CAPABILITIES, "", LOOPBACK + ":0", null, Map.of()));
+		assertComplete(resource, id + "-resource", "\"completion\":{",
+				"\"values\":[\"test-1\",\"test-2\"]",
+				"\"total\":2", "\"hasMore\":false");
+	}
+
 	private static void serverStateless(Simulator simulator, McpServer server,
 			String id) {
 		JsonExchange discover = json(simulator, request(id + "-discover",
@@ -305,7 +328,8 @@ public final class McpLocalSimulatorScenarioDriver {
 				null, Map.of()));
 		assertSuccess(discover, id + "-discover", "\"supportedVersions\":[\""
 				+ PROTOCOL_VERSION + "\"]", "\"capabilities\":{", "\"tools\":",
-				"\"prompts\":", "\"resources\":", "soklet-public-conformance");
+				"\"prompts\":", "\"resources\":", "\"completions\":{}",
+				"soklet-public-conformance");
 		JsonExchange missingCapability = json(simulator, toolRequest(
 				id + "-missing-capability", "test_missing_elicitation_capability", "{}",
 				EMPTY_CAPABILITIES, "", Map.of()));

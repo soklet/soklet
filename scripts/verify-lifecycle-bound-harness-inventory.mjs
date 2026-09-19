@@ -413,7 +413,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["rejectedUnexpectedRestartDoesNotDuplicateBeforeFreshOwner","f4e7d5392de0df5da2dd468969ae18d43b2188c81d87fa21afabdebd1d4ef9ef",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["unexpectedListenerTerminationAndFreshOwnerHaveExactParity","658fb897e3bcf0c822984d9d201f5c79c95dee91bc0957419d653a984b2c9b14",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpSimulatorEveryOperationTests.java", "e8a67bc4da178e1c05c0e11b6b9cce66b4ae9eeb8f0ad41f63126cce3a431209", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpSimulatorEveryOperationTests.java", "8457397cbf08be837a8a2be44fdab40717e93e9a9daa12fd78a5b9c9b69956d2", [
     ["recognizedRequestMethodsReplayExactJsonOrSseShapes","175949c5dfa1e8cea7c9552a111e065b76b062f423a15ccf3ab4e1a4e891c3b3",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000},"dynamicNodeCount":9,"controlJoinMillis":20000,"controlComposition":"REVIEWED_DYNAMIC_NODE_MAX"}],
     ["cancellationNotificationIsAcceptedAndIgnoredWithoutTerminatingItsTargetSimulation","587c6a5a4677396070f00431a3fcf3c925d12dcf4ba4faf1f0a90214765f2531",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000},"controlJoinMillis":40000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained","6919769d8b299d97fc8f58cf32f284e614fad839139e6bf74d5e3f77dce2649d",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000},"controlJoinMillis":25000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
@@ -600,6 +600,20 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java", "0096fd786b20d22689452e69327314f9c9305c8651308b9e3a148de1ab46dd13", [
     ["literal_loopback_bind_spellings_do_not_require_allowed_hosts","3d1edfa1f0627558c8bd577bcb4936857cfe630d55d6aaf55299a5c200d9082b",{"generation":{"count":6,"mode":"SEQUENTIAL","complete":6,"prior":5,"incomplete":1},"controlledLifecycleCoreMillis":0}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/McpCompletionWireParityTests.java", "e1ac889bd8e7cd4c6443c44a6aca975c4caa1b5094415e4202bc54c3c483949b", [
+    ["empty","c8040defb4386c409d195e45a0a1b82e3f4f11c9fc8ff46a02a3513bd43b86d0",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["hundred","fa65d224bdfc69aaa4f2ec9fa8e2f6600be6a4c5d79c3471a116c73bc38082cc",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["totalOnly","b122bf07ed6130f6e34313bd0e488b3bb90eef8e25f2e03d377d49163971203a",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["moreOnly","bbad1f7ef5022120952d971c7f440149cbdeea036e35f5cafa1ed98d2eafcd92",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["both","e6be21a180a9b116de2243e9e1cdc32d46c0d7530fcf722eb3a4d5f1fa2c90df",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["maxTotal","8c9aa28deed0a14c199c34faa99b473029e0e6e591e84e2a439e4a590fbd088e",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["tooMany","e2e076085aa774a292c0be2af0322e70aa7a3c402a67a56a3df2ba2f11624773",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["negativeTotal","99f62c20f8e5e9acd4f373d5117d5f5f3ddc54cdfc834e554998f73520a9c578",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["unsafeTotal","c75735ed188ab3a369ad41d8afca4bace5b9c51549aee607b0433505edbaf9eb",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["belowSize","4dcf4fbe3de680d98019801f71aaa9c9d0c5362a3f347c93bb411084fc56020c",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["inconsistentMore","f322d9acdfef8b1cc0d85e02893bc3b20ebd00566f367b03b9b56297986435db",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["inconsistentComplete","840a5dfd12d9a8e92b2bf672a073307de9db2a6be777c06bac05c49087fb8709",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
 ], 'lifecycle scope topology');
 

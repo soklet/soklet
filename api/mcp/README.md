@@ -123,6 +123,42 @@ compatibility inventory.
 
 ## Current local evidence
 
+### 2026-09-19 P2 Completion conformance and documentation slice (not a refreeze)
+
+The pinned official Completion scenario now has an observed, exact profile:
+one successful Completion check and one automatic wire-schema success over
+two messages. Independently captured request/response bytes also validate
+against the checksum-pinned final Completion schemas. Current selection is
+46 official RUN rows (24 Phase 4 and 22 Phase 5); the full working-tree run
+matches 45 profiles and retains the known Sampling-dependent
+`server-stateless` failure. Skipped upstream notification checks remain skips.
+The fixture configures truthful prompt and template completers across
+scenarios, and the candidate-JAR simulator selection now includes Completion.
+
+The website Completion guide, security/limiter explanations, and compiled
+programmatic/annotated examples are updated. Its API map now distinguishes
+current-source owners from preserved signature snapshots. This local evidence
+does not close P0-C, MCP-G2, the coordinated result-family sealing, or clean
+release-candidate qualification. Signature and incompatibility ledgers remain
+unchanged.
+
+### 2026-09-18 P2 Completion runtime verification slice (not a refreeze)
+
+Dedicated listener tests now cover selected locale and fallback, concurrent
+tenant isolation, cancellation, deadlines, request-scoped progress, malformed
+progress tokens, and shutdown ownership for both Completion reference types.
+Listener/simulator cases compare exact terminal envelopes at 0/100 values,
+reject 101 values and invalid totals, preserve Unicode/order/duplicates, and
+exercise independently omitted optional fields and application metadata.
+Completion also passes through the selected protocol profile's application
+result hook as a complete-only operation. No public API owner or signature
+changed in this slice.
+
+These tests supplement the runtime/annotation checkpoint below. Observed
+official Completion conformance and website evidence remain open; the
+signature/incompatibility ledgers and official scenario selection are unchanged
+while P0-C and MCP-G2 remain open.
+
 ### 2026-09-18 P2 Completion runtime and annotation slice (not a refreeze)
 
 Current source adds `@McpPromptCompletion` and

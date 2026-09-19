@@ -15,12 +15,12 @@
       },
       "officialConformance": {
         "pinsPath": "conformance/official/upstream-pins.json",
-        "pinsSha256": "2af12649ecac962ac797ada04733eb24f573335a0e9cfd0f8828d2f33f7c01e8",
+        "pinsSha256": "addaa40af8a40b957ea93605279920a53a9de43b38e081bb53ef0542b67181b8",
         "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107"
       },
       "scenarios": {
         "path": "conformance/official/scenarios.json",
-        "sha256": "f3265867ca83b9515324aeb7b079aa6f7fffa7c06832e4fb987191eb37d57a59"
+        "sha256": "ad63828e790bf50e91da99aba642d9277a273a7a676c7a553b11a2a4eb35a6be"
       },
       "goldens": [
         {

@@ -11,24 +11,28 @@ import { verifyManifestSet } from './verify.mjs';
 
 const { selection } = verifyManifestSet();
 const rows = localSimulatorRows(selection);
-assert.equal(rows.length, 35);
+assert.equal(rows.length, 36);
 assert.equal(rows[0].ordinal, 1);
 assert.equal(rows[0].name, 'server-stateless');
-assert.equal(rows[1].ordinal, 3);
-assert.equal(rows[1].name, 'tools-list');
-assert.equal(rows[34].ordinal, 50);
-assert.equal(rows[34].name, 'input-required-result-validate-input');
+assert.equal(rows[1].ordinal, 2);
+assert.equal(rows[1].name, 'completion-complete');
+assert.equal(rows[2].ordinal, 3);
+assert.equal(rows[2].name, 'tools-list');
+assert.equal(rows[35].ordinal, 50);
+assert.equal(rows[35].name, 'input-required-result-validate-input');
 assert.deepEqual(localSimulatorDriverArguments(rows).slice(0, 3), [
   '1:server-stateless',
+  '2:completion-complete',
   '3:tools-list',
-  '4:tools-call-simple-text',
 ]);
 
 const expected = expectedLocalSimulatorOutput(rows);
-assert.equal(expected.toString('utf8').split('\n').length, 36);
+assert.equal(expected.toString('utf8').split('\n').length, 37);
 assert.equal(expected.toString('utf8').split('\n')[0],
   'PASS\t1\tserver-stateless');
-assert.equal(expected.toString('utf8').split('\n')[34],
+assert.equal(expected.toString('utf8').split('\n')[1],
+  'PASS\t2\tcompletion-complete');
+assert.equal(expected.toString('utf8').split('\n')[35],
   'PASS\t50\tinput-required-result-validate-input');
 assert.deepEqual(verifyLocalSimulatorDriverResult({
   error: undefined,
@@ -74,7 +78,7 @@ duplicate.scenarios[3].name = duplicate.scenarios[2].name;
 assert.throws(() => localSimulatorRows(duplicate), /invalid or duplicate name/);
 const missing = structuredClone(selection);
 missing.scenarios[3].selection = 'NOT_APPLICABLE';
-assert.throws(() => localSimulatorRows(missing), /exactly 35 RUN rows/);
+assert.throws(() => localSimulatorRows(missing), /exactly 36 RUN rows/);
 
 for (const result of [
   { error: new Error('spawn failed'), signal: null, status: null,

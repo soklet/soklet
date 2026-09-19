@@ -1,5 +1,10 @@
 # Pinned MCP SDK interoperability
 
+The separate [Inspector host-harness foundation](inspector/README.md) exercises
+the pinned real CLI with isolated state and sanitized modern-protocol traces.
+It is development-only P0-H evidence, not an Apps/Skills support claim or a
+replacement for either SDK release hook below.
+
 These hooks exercise the checksum-matched Soklet candidate through the public
 MCP HTTP transport with the pinned TypeScript and Go SDK releases. Both clients
 negotiate `2026-07-28`, list the candidate fixture's tools, call

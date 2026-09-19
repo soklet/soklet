@@ -14,9 +14,9 @@ const timeoutMilliseconds = 120_000;
 const maximumOutputBytes = 1024 * 1024;
 const maximumDiagnosticCharacters = 16 * 1024;
 // Preserve the exact manifest ordinals, including gaps for Tasks (covered by
-// their socket supplement), Completion, and unsupported Roots/Sampling cases.
+// their socket supplement) and unsupported Roots/Sampling cases.
 const expectedOrdinals = Object.freeze([
-  1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
   20, 21, 22, 23, 24, 25, 26, 37, 40, 42, 43, 44, 45, 46, 47, 49, 50,
 ]);
 
@@ -24,8 +24,8 @@ export function localSimulatorRows(selection) {
   // This pre-existing replay covers core scenarios; Tasks have separate socket/simulator tests.
   const scenarios = activeScenarios(selection, 5)
     .filter((scenario) => !taskExtensionScenarioNames.includes(scenario.name));
-  if (scenarios.length !== 35)
-    throw new Error('Local simulator manifest projection must contain exactly 35 RUN rows');
+  if (scenarios.length !== 36)
+    throw new Error('Local simulator manifest projection must contain exactly 36 RUN rows');
 
   const names = new Set();
   return Object.freeze(scenarios.map((scenario, index) => {
@@ -65,7 +65,7 @@ export function verifyLocalSimulatorDriverResult(result, expectedOutput) {
   if (stderr.length !== 0)
     throw new Error('Local simulator driver wrote unexpected stderr');
   if (!stdout.equals(expectedOutput))
-    throw new Error('Local simulator driver output differs from the exact 35-row projection');
+    throw new Error('Local simulator driver output differs from the exact 36-row projection');
   return stdout;
 }
 

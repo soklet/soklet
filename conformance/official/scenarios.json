@@ -4,7 +4,7 @@
   "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
   "currentImplementationPhase": 5,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phaseExecutionPolicy": "The complete pinned 50-scenario inventory is retained. The 2026-09-16 owner-approved Roots/Sampling removal selects 45 RUN scenarios and marks four scenarios whose assertions require those removed features NOT_APPLICABLE, alongside unsupported Completion. Prior observations are historical; changed fixture bytes require fresh observation. Exact upstream SKIPPED checks remain explicit and require independent local supplements rather than being counted as success.",
+  "phaseExecutionPolicy": "The complete pinned 50-scenario inventory is retained. The 2026-09-16 owner-approved Roots/Sampling removal leaves four scenarios whose assertions require those removed features NOT_APPLICABLE. Completion is now selected from a 2026-09-19 pinned-CLI local dirty-candidate observation, making 46 RUN scenarios; the full current selection still requires fresh verification and is not a release receipt. Exact upstream SKIPPED checks remain explicit and require independent local supplements rather than being counted as success.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -34,13 +34,23 @@
     {
       "ordinal": 2,
       "name": "completion-complete",
-      "selection": "NOT_APPLICABLE",
-      "earliestPhase": null,
-      "phase3Status": "NOT_APPLICABLE",
-      "expectedCheckProfile": null,
-      "requiredFixtureRegistrations": [],
-      "localSupplements": [],
-      "rationale": "Soklet 4.0.0 does not implement or advertise Completion."
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": "completion-complete.phase4.v1",
+      "requiredFixtureRegistrations": [
+        "registered test_prompt_with_arguments prompt declaring arg1 with a deterministic completion handler",
+        "registered test://template/{id}/data resource template declaring id with a deterministic completion handler",
+        "conditional completions capability advertisement when handlers are registered",
+        "standalone fixture contract verifies deterministic prompt and resource-template completions across supported scenarios"
+      ],
+      "localSupplements": [
+        "McpCompletionPublicRuntimeTests#completionUsesExactRoutesAndNeutralErrors",
+        "McpCompletionPublicRuntimeTests#noCompleterDoesNotAdvertiseOrRouteCompletion",
+        "McpCompletionWireParityTests#hundred",
+        "McpCompletionLocalizationPublicRuntimeTests#selectedLocaleAndApplicationFallbackReachBothCompletionTargets"
+      ],
+      "rationale": "The exact pinned alpha.11 scenario sends one prompt Completion request for test_prompt_with_arguments.arg1 with prefix test and verifies a completion.values array; it does not exercise resource-template Completion. A 2026-09-19 local dirty-candidate observation returned one completion-complete SUCCESS and one automatic wire-schema-valid SUCCESS over two messages. The separately executed standalone fixture contract and named core JUnit supplements cover resource-template suggestions, conditional capability advertisement, exact route/error behavior, wire bounds, and localization. This is not a full-suite or release-candidate PASS receipt."
     },
     {
       "ordinal": 3,

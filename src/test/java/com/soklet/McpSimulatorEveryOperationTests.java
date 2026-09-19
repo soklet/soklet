@@ -759,8 +759,29 @@ public class McpSimulatorEveryOperationTests {
 						McpMetricsEvent.RequestStarted.class,
 						McpMetricsEvent.RequestFinished.class);
 			};
-			Assertions.assertEquals(expected,
-					events.stream().map(Object::getClass).toList(), events.toString());
+			List<Class<?>> actual = events.stream().map(Object::getClass).toList();
+			if ("subscriptions/listen".equals(method)) {
+				// The authorization callback ticket publishes its result before its
+				// physical-exit metric. The request thread can record maintenance,
+				// open the stream, or even finish it while that ticket is exiting.
+				// Preserve exact order for every other event and require one physical
+				// exit after its corresponding handler start.
+				Assertions.assertEquals(1L, actual.stream().filter(type -> type
+						== McpMetricsEvent.HandlerExecutionFinished.class).count(),
+						events.toString());
+				Assertions.assertTrue(actual.indexOf(
+						McpMetricsEvent.HandlerExecutionStarted.class)
+						< actual.indexOf(
+							McpMetricsEvent.HandlerExecutionFinished.class),
+						events.toString());
+				Assertions.assertEquals(expected.stream().filter(type -> type
+						!= McpMetricsEvent.HandlerExecutionFinished.class).toList(),
+						actual.stream().filter(type -> type
+							!= McpMetricsEvent.HandlerExecutionFinished.class).toList(),
+						events.toString());
+				return;
+			}
+			Assertions.assertEquals(expected, actual, events.toString());
 		}
 
 		private void assertOffNetwork() {

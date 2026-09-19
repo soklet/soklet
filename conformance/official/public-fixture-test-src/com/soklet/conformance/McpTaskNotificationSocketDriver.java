@@ -35,7 +35,7 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpResourcePage;
 import com.soklet.McpServer;
 import com.soklet.McpStreamTerminationReason;
-import com.soklet.McpSubscriptionAuthorizer;
+import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionEventRegistration;
@@ -585,8 +585,9 @@ public final class McpTaskNotificationSocketDriver {
 			AtomicInteger admissions) {
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plusSeconds(30)))
 				.admissionController(context -> {
 					admissions.incrementAndGet();
 					String tenant = context.getRequest()

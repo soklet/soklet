@@ -44,7 +44,7 @@ public class McpServerCapabilityRegistryTests {
 
 	@Test
 	public void capability_registry_advertises_the_exact_registration_power_set() {
-		for (int mask = 0; mask < 8; ++mask) {
+		for (int mask = 0; mask < 16; ++mask) {
 			McpNormalizedEndpoint.Builder builder = endpointBuilder();
 			java.util.LinkedHashSet<String> expectedCapabilities =
 					new java.util.LinkedHashSet<>();
@@ -64,14 +64,42 @@ public class McpServerCapabilityRegistryTests {
 				expectedCapabilities.add("resources");
 			}
 
+			if ((mask & 8) != 0) {
+				builder.completionSupported(true);
+				expectedCapabilities.add("completions");
+			}
+
 			McpJsonObject capabilities = McpServerCapabilityRegistry
 					.fromEndpoint(builder.build()).capabilities().toJsonObject();
 			Assertions.assertEquals(expectedCapabilities, capabilities.members().keySet());
-			Assertions.assertFalse(capabilities.members().containsKey("completions"));
+			Assertions.assertEquals((mask & 8) != 0,
+					capabilities.members().containsKey("completions"));
+			if ((mask & 8) != 0)
+				Assertions.assertEquals(McpJsonObject.empty(),
+						capabilities.members().get("completions"));
 			Assertions.assertFalse(capabilities.members().containsKey("experimental"));
 			Assertions.assertFalse(capabilities.members().containsKey("extensions"));
 			Assertions.assertFalse(capabilities.members().containsKey("logging"));
 		}
+	}
+
+	@Test
+	public void completion_advertisement_is_independent_of_catalog_registration() {
+		McpJsonObject absent = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder()
+						.prompt(McpNormalizedOperation.named("summarize"))
+						.resourceTemplate("catalog://items/{id}")
+						.build()).capabilities().toJsonObject();
+		McpJsonObject present = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder().completionSupported(true).build())
+				.capabilities().toJsonObject();
+
+		Assertions.assertEquals(Set.of("prompts", "resources"),
+				absent.members().keySet());
+		Assertions.assertFalse(absent.members().containsKey("completions"));
+		Assertions.assertEquals(Set.of("completions"), present.members().keySet());
+		Assertions.assertEquals(McpJsonObject.empty(),
+				present.members().get("completions"));
 	}
 
 	@Test

@@ -37,13 +37,59 @@ const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-conformance-self-test-
 try {
 	const manifests = verifyManifestSet();
 	assert.equal(manifests.selection.currentImplementationPhase, 5);
-	assert.equal(activeScenarios(manifests.selection, 4).length, 23);
-	assert.equal(activeScenarios(manifests.selection, 5).length, 45);
-	assert.equal(manifests.expectedChecks.profiles.length, 45);
+	assert.equal(activeScenarios(manifests.selection, 4).length, 24);
+	assert.equal(activeScenarios(manifests.selection, 5).length, 46);
+	assert.equal(manifests.expectedChecks.profiles.length, 46);
 	assert.equal(
 		manifests.expectedChecks.profiles.filter((profile) => profile.frozenInPhase < 5).length,
-		23,
+		24,
 	);
+	const completionScenario = manifests.selection.scenarios[1];
+	assert.equal(completionScenario.name, 'completion-complete');
+	assert.equal(completionScenario.selection, 'RUN');
+	assert.equal(completionScenario.earliestPhase, 4);
+	assert.equal(completionScenario.expectedCheckProfile, 'completion-complete.phase4.v1');
+	assert.deepEqual(manifests.pins.scenarioInventory.excludedNames, [
+		'input-required-result-basic-sampling',
+		'input-required-result-basic-list-roots',
+		'input-required-result-multiple-input-requests',
+		'input-required-result-capability-check',
+	]);
+	const completionProfile = manifests.expectedChecks.profiles.find(
+		(candidate) => candidate.id === completionScenario.expectedCheckProfile);
+	assert.notEqual(completionProfile, undefined);
+	assert.deepEqual(completionProfile.checks, [
+		{ id: 'completion-complete', status: 'SUCCESS', count: 1 },
+	]);
+	assert.equal(completionProfile.automaticWireChecks['wire-schema-valid'], 1);
+	assert.equal(completionProfile.automaticWireChecks['wire-schema-harness-error'], 0);
+	const completionChecks = [
+		{ id: 'completion-complete', status: 'SUCCESS' },
+		{ id: 'wire-schema-valid', status: 'SUCCESS', details: { messagesValidated: 2 } },
+	];
+	assert.doesNotThrow(() => adjudicateChecks(
+		'completion-complete', completionChecks, completionProfile));
+	for (const changedChecks of [
+		completionChecks.slice(0, 1),
+		completionChecks.slice(1),
+		[...completionChecks, completionChecks[0]],
+		[completionChecks[0], completionChecks[1], completionChecks[1]],
+	]) assert.throws(() => adjudicateChecks(
+		'completion-complete', changedChecks, completionProfile), /multiset mismatch/);
+	assert.throws(() => adjudicateChecks('completion-complete', [
+		{ id: 'completion-complete', status: 'FAILURE' }, completionChecks[1],
+	], completionProfile), /forbidden FAILURE/);
+	let completionCopy = copyOfficialRoot('completion-selection-mutation');
+	const completionScenarioPath = resolve(completionCopy, 'scenarios.json');
+	const mutatedSelection = readCanonicalJson(completionScenarioPath);
+	Object.assign(mutatedSelection.scenarios[1], {
+		selection: 'NOT_APPLICABLE', earliestPhase: null,
+		phase3Status: 'NOT_APPLICABLE', expectedCheckProfile: null,
+		requiredFixtureRegistrations: [], localSupplements: [],
+		rationale: 'Incorrectly omit observed Completion from the current official gate.',
+	});
+	writeFileSync(completionScenarioPath, `${JSON.stringify(mutatedSelection, null, 2)}\n`);
+	assert.throws(() => verifyManifestSet(completionCopy), /retired-feature scenarios/);
   const syntheticListing = 'Server scenarios (test against a server):\n'
     + manifests.selection.scenarios
       .map((scenario) => `  - ${scenario.name} [${scenario.name.startsWith('tasks-') ? 'extension' : '2026-07-28'}]\n`)

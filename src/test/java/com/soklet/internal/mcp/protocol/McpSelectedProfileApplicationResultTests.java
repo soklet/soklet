@@ -69,7 +69,8 @@ public class McpSelectedProfileApplicationResultTests {
 		for (McpProfileApplicationResultKind kind
 				: McpProfileApplicationResultKind.values()) {
 			scenarios.add(new Scenario(kind, method(kind), completeResult(kind)));
-			if (kind != McpProfileApplicationResultKind.RESOURCE_LIST)
+			if (kind != McpProfileApplicationResultKind.RESOURCE_LIST
+					&& kind != McpProfileApplicationResultKind.COMPLETION)
 				scenarios.add(new Scenario(kind, method(kind), inputRequiredResult(kind)));
 		}
 
@@ -95,8 +96,8 @@ public class McpSelectedProfileApplicationResultTests {
 			}
 			Assertions.assertEquals(
 					EnumSet.allOf(McpProfileApplicationResultKind.class), observedKinds);
-			Assertions.assertEquals(7, fake.calls().size(),
-					"Dynamic resources/list is complete-only; the other kinds support both results.");
+			Assertions.assertEquals(8, fake.calls().size(),
+					"Dynamic resources/list and Completion are complete-only; the other kinds support both results.");
 		} finally {
 			execution.stop();
 			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
@@ -215,6 +216,12 @@ public class McpSelectedProfileApplicationResultTests {
 				fields.put("cacheScope", new McpJsonString("public"));
 				fields.put("ttlMs", new McpJsonNumber(60L));
 			}
+			case COMPLETION -> fields.put("completion", new McpJsonObject(
+					Map.of("values", new McpJsonArray(List.of(
+							new McpJsonString("python"),
+							new McpJsonString("pytorch"))),
+							"total", new McpJsonNumber(12L),
+							"hasMore", McpJsonBoolean.TRUE)));
 		}
 		return McpWireResult.complete(new McpJsonObject(fields),
 				Optional.of(metadata(kind.name().toLowerCase())));
@@ -240,6 +247,7 @@ public class McpSelectedProfileApplicationResultTests {
 			case PROMPT -> "prompts/get";
 			case RESOURCE_READ -> "resources/read";
 			case RESOURCE_LIST -> "resources/list";
+			case COMPLETION -> "completion/complete";
 		};
 	}
 

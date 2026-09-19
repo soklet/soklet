@@ -2978,9 +2978,20 @@ including the per-request client capability map, belongs inside `params._meta`.
 An arbitrary extension field or an unsupported extension capability still does
 not register a method or enable matching server behavior.
 
+Current source supports MCP argument Completion for declared prompt arguments
+and literal registered resource templates with configured completers. It
+advertises `completions` only where a completer is available. Each suggestion
+must be authorized by the application callback; Completion neither invokes a
+prompt/resource read handler nor makes client-supplied arguments trustworthy.
+Enabling a completer requires a server-wide request limiter, which applies to
+all admitted MCP methods, not just Completion. See
+[Argument completion](README.md#argument-completion) for registrations,
+annotations, limits, and the request-wide policy boundary. The current-source
+API additions remain pending the coordinated API refreeze.
+
 Soklet does not provide stdio transport, public arbitrary JSON Schema
-registration, MCP Completion, MCP logging capability, mutable tool/prompt list
-publishers, or an application result-extension registry. OAuth protected-
+registration, MCP logging capability, or an application result-extension
+registry. OAuth protected-
 resource metadata and identity-provider behavior remain deployment
 responsibilities; core Soklet does not implement DPoP-bound access tokens. A deployment claiming MCP Authorization must publish RFC
 9728 protected-resource metadata with at least one authorization server through
@@ -3073,11 +3084,12 @@ Their SHA-256 values are
 and `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`.
 The dated development checkpoints below retain their original hashes.
 
-The current MCP API universe is 250 owners: 136 Phase 4, 36 Phase 5, and all 64
-Phase 6 owners are frozen. The 14 Tasks owners retain their provisional
-maturity classification, but their 4.0.0 signatures are also frozen through
-the dedicated `provisional.signatures.jsonl` gate. Sixty-one non-MCP owners
-bring current-side coverage to 311. The
+The last reviewed pre-P1b MCP 4.0.0 signature snapshot covers 250 owners: 136 Phase
+4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks owners. Current-source
+ownership has advanced to 270 MCP owners plus 61 non-MCP owners; the newer
+includes do not refreeze signatures. See the
+[API inventory](api/mcp/README.md#reviewed-ownership) for the exact current
+partition and the coordinated-refreeze boundary. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed
@@ -3085,7 +3097,7 @@ contract is likewise closed: every framework MCP token exposes only a fixed
 bounded category in `StreamingResponseCanceledException`. No reason-valued
 cancellation metric is planned under this contract.
 
-### Current release status — September 13, 2026
+### Historical release-status checkpoint — September 13, 2026
 
 The format-v2 manifest has 26 ordered gates: nineteen are `READY`, six remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and `candidate-conformance` is

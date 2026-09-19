@@ -153,8 +153,8 @@ export async function runOfficialConformance(options, { processObject = process 
 		const expectedScenarioCount = options.phase === 3
 			? 1
 			: options.phase === 4
-				? 23
-				: options.phase === 5 ? 45 : null;
+			? 24
+			: options.phase === 5 ? 46 : null;
 		if (expectedScenarioCount !== null && scenarios.length !== expectedScenarioCount)
 			throw new Error(
 				`Phase ${options.phase} must select exactly ${expectedScenarioCount} reviewed scenarios`,

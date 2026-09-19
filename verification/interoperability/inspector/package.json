@@ -1,0 +1,17 @@
+{
+  "name": "soklet-mcp-inspector-interoperability",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": "26.5.0",
+    "npm": "11.17.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/inspector": "2.7.0"
+  },
+  "overrides": {
+    "@modelcontextprotocol/ext-apps": "$@modelcontextprotocol/ext-apps"
+  }
+}

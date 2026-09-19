@@ -42,13 +42,32 @@ The current gate is pinned to `@modelcontextprotocol/conformance`
 `0.2.0-alpha.11`, commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`.
 `scenarios.json` preserves the 50 relevant names in exact CLI order: 40
 `2026-07-28` core rows and ten Tasks extension rows. For Soklet 4.0.0, after the owner-approved
-Roots/Sampling removal, its 45 `RUN` rows exclude unsupported
-`completion-complete` and four scenarios whose assertions require Sampling or
-Roots: basic-sampling, basic-list-roots, multiple-input-requests, and
+Roots/Sampling removal, its 46 `RUN` rows now include `completion-complete` and
+exclude four scenarios whose assertions require Sampling or Roots:
+basic-sampling, basic-list-roots, multiple-input-requests, and
 capability-check. The last two names refer to generic concepts, but the pinned
 upstream implementations specifically require those deprecated methods.
 Elicitation-based local tests retain the generic behavior coverage. These
 exclusions are explicit scope decisions, not successful conformance results.
+
+The exact pinned Completion scenario was separately observed on 2026-09-19
+against a dirty packaged development candidate: one `completion-complete`
+`SUCCESS` and one `wire-schema-valid` `SUCCESS` over two JSON-RPC messages.
+Independent validation of the captured request and response against the
+checksum-pinned final `CompleteRequest` and `CompleteResultResponse` schema
+definitions passed. The official scenario sends one prompt-argument request;
+resource-template completion and conditional capability behavior rely on the
+standalone public-fixture contract and named core JUnit supplements. This
+observation freezes only Completion's expected
+check profile. It is neither a full 46-scenario verification nor a clean
+release-candidate receipt.
+
+The subsequent 2026-09-19 full working-tree verification matched 45 of the
+46 selected profiles, including Completion, and validated all 48 final-tag
+golden messages. The unchanged `server-stateless` failures described below
+keep the aggregate gate red. A matched profile containing an explicit
+upstream skip is not exercised coverage. This run is development evidence,
+not a clean release-candidate receipt.
 
 The current elicitation-based development fixtures are production-tested and
 bound by the error-mapping manifest SHA-256
@@ -57,7 +76,7 @@ and result-envelope manifest SHA-256
 `d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`.
 Historical dated checkpoints below retain their original hashes and results.
 
-The native 2026-09-16 run passed 44 of the 45 selected scenarios and validated
+The historical native 2026-09-16 run passed 44 of the then-45 selected scenarios and validated
 all 48 schema-bound golden messages. `server-stateless` remains **failing**:
 `sep-2575-server-rejects-undeclared-capability` and
 `sep-2575-missing-capability-http-400` both report `FAILURE` with
@@ -81,7 +100,7 @@ Tasks names use the reviewed extension command template without a version
 selector; the audited CLI default is `2026-07-28`. Neither path uses
 `--force`, `--suite`, or expected-failure suppression.
 
-The 2026-09-13 repin re-observed all 49 selected profiles against the exact built
+The historical 2026-09-13 repin re-observed its 49 selected profiles against the exact built
 CLI and the packaged working-tree JAR. The nine runnable Tasks scenarios
 produced 44 successful checks. `tasks-status-notifications` still emits one
 explicit upstream `SKIPPED` because its harness does not observe
@@ -100,13 +119,14 @@ records an unresolved external-toolchain risk disposition; publication is not
 approved by this repin. DF-01 retains future same-revision growth obligations.
 
 `earliestPhase` means the first phase in which a scenario is mandatory as part
-of that phase's full gate. The 23 applicable non-MRTR scenarios other than
+of that phase's full gate. The 24 applicable non-MRTR scenarios other than
 `server-stateless` and `tools-call-with-progress` are mandatory in Phase 4.
-Those two scenarios, all 14 MRTR scenarios, and the ten Tasks extension rows
+Those two scenarios, the ten remaining RUN MRTR scenarios, and the ten Tasks extension rows
 are mandatory in Phase 5.
 `dns-rebinding-protection` was additionally active as an early Phase 3 smoke
-test because its production Host/Origin path already existed. Phase 4 now runs
-all 23 owned scenarios through one common fullest-truthful Phase 4 fixture.
+test because its production Host/Origin path already existed. The current Phase
+4 selection runs all 24 owned scenarios through one common fullest-truthful
+Phase 4 fixture; the historical 23-scenario Phase 4 gate is unchanged.
 Each scenario receives a fresh deterministic JVM; the fixture never changes
 its advertised capabilities to suit the selected scenario.
 
@@ -115,7 +135,11 @@ compiles and runs against packaged `target/soklet-4.0.0.jar`; release
 verification instead uses the explicit checksum-locked main JAR. Its runtime
 classpath contains only fixture classes plus the selected JAR, never
 `target/classes` or `target/test-classes`. Normal configuration and handlers
-use public APIs.
+use public APIs. The loopback-only fixture and independent Tasks socket driver
+explicitly authorize their public test-data subscriptions with renewable
+30-second grants; production's deny-by-default subscription policy is
+unchanged. The September 19 replay caught the obsolete deny-all fixture setup
+and reran both the simulator and official scenarios after that correction.
 The public `McpToolRegistration.ArgumentTypeStage.inputSchema(...)` path
 registers and enforces the exact official Profile 1 schema. The fixture imports
 no `com.soklet.internal` type.
@@ -127,24 +151,25 @@ stable graph identity, wrapped request dispatch, SSE broadcaster forwarding,
 delegate-subtree proof, decorator-owned cleanup, and complete graceful results.
 This is packaged development evidence, not release-candidate evidence; the
 later release gate separately requires checksum-matched JAR/POM provenance and
-the full 49-profile run (including the explicitly declared upstream skip).
+the full current 46-profile run (including the explicitly declared upstream skips).
 
 Every scenario row names the truthful fixture registrations or features it
 needs and the local tests that supplement official-suite coverage. Existing
 test names are used where the production seam already exists. Names owned by a
 future phase are checked-in evidence obligations: they must be implemented and
 green before that row can acquire an expected profile. Empty arrays are valid
-only for the intentionally unsupported Completion row.
+for the four intentionally excluded retired-feature rows.
 
 Expected profiles are evidence, not guesses. `expected-checks.json` binds all
-49 selected rows to the exact alpha.11 commit. The prior 39 core profiles were
+46 currently selected rows to the exact alpha.11 commit. The prior 39 core profiles were
 re-observed; `tools-list.phase4.v2` adds the upstream deterministic-order check.
 Ten reviewed Tasks profiles were then frozen, with the notification skip reason
-matched exactly. Every other new Tasks check succeeded. The manifest remains
+matched exactly. Every other new Tasks check succeeded. Completion's additional
+profile records the separate 2026-09-19 local observation. The manifest remains
 `currentImplementationPhase: 5`. Current hashes live in the machine-verified
 pin/profile evidence files; historical checkpoint hashes below remain historical.
-Null never means “accept anything”; for a future phase it means “not executable
-in this phase.”
+Null never means “accept anything”; it remains only on the four explicitly
+excluded retired-feature rows.
 
 The complete Maven soak profile passes four tests with zero failures, errors,
 or skips on JDK 21 and JDK 26 in smoke mode and on JDK 21 in nightly mode. The
@@ -585,10 +610,10 @@ registration, and uses `jdeps` to reject any compiled dependency on
 `com.soklet.internal`. It also compiles and runs standalone public-API contract
 tests for both the exact Phase 5 registrations and the external transport graph
 shapes. The test output also contains a public-API-only local simulator driver.
-`run-local-simulator.mjs` derives the 35 core RUN rows from the pinned
+`run-local-simulator.mjs` derives the 36 core RUN rows from the pinned
 `scenarios.json` manifest in exact CLI ordinal order, omitting the ten Tasks
 extension rows (which have separate live and simulator coverage), executes every row
-off-network against the packaged candidate, and byte-compares the driver's 35
+off-network against the packaged candidate, and byte-compares the driver's 36
 PASS records. The driver covers real fixture handlers, response and SSE shapes,
 Host/Origin/header policy, progress isolation, protected multi-round state, and
 stopped/unbound diagnostics without opening a socket. Its classes are never
@@ -710,7 +735,7 @@ all 81 expected outcome occurrences and 22 independently validated golden
 messages. This remains candidate-development evidence rather than
 release-candidate evidence.
 
-## Current local development revalidation
+## Historical local development revalidation — August 15, 2026
 
 The final 2026-08-15 local artifact-backed replay is green through both
 independent paths: `run-local-simulator.mjs` passes 39/39 in exact manifest
