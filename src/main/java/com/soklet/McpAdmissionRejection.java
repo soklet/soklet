@@ -128,7 +128,7 @@ public final class McpAdmissionRejection {
 		@Nullable
 		private McpJsonRpcError jsonRpcError;
 		@NonNull
-		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers =
+		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers =
 				new LinkedHashMap<>();
 
 		private Builder() {
@@ -159,14 +159,21 @@ public final class McpAdmissionRejection {
 		 *
 		 * @param headers application response headers
 		 * @return this builder
+		 * @throws NullPointerException if the map, a name, a value set, or a value is null
 		 */
 		@NonNull
 		public Builder headers(
 				@NonNull Map<@NonNull String, ? extends @NonNull Set<@NonNull String>> headers) {
 			requireNonNull(headers);
-			this.headers.clear();
-			headers.forEach((name, values) -> this.headers.put(
-					requireNonNull(name), new LinkedHashSet<>(requireNonNull(values))));
+			Map<String, Set<String>> copied = new LinkedHashMap<>();
+			headers.forEach((name, values) -> {
+				String checkedName = requireNonNull(name);
+				Set<String> copiedValues = new LinkedHashSet<>();
+				requireNonNull(values).forEach(
+						value -> copiedValues.add(requireNonNull(value)));
+				copied.put(checkedName, copiedValues);
+			});
+			this.headers = copied;
 			return this;
 		}
 
@@ -177,11 +184,14 @@ public final class McpAdmissionRejection {
 		 * @param name header name
 		 * @param value header value
 		 * @return this builder
+		 * @throws NullPointerException if the name or value is null
 		 */
 		@NonNull
 		public Builder addHeader(@NonNull String name, @NonNull String value) {
-			this.headers.computeIfAbsent(requireNonNull(name), ignored -> new LinkedHashSet<>())
-					.add(requireNonNull(value));
+			requireNonNull(name);
+			requireNonNull(value);
+			this.headers.computeIfAbsent(name, ignored -> new LinkedHashSet<>())
+					.add(value);
 			return this;
 		}
 

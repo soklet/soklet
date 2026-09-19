@@ -38,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -186,6 +187,33 @@ record McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler,
 		requireNonNull(inputRequestPlan);
 		requireNonNull(requestStateMode);
 	}
+}
+
+/** Exact prompt-name or literal resource-template Completion route. */
+@ThreadSafe
+record McpApplicationCompletionRoute(
+		@NonNull McpApplicationCompletionHandler handler,
+		@NonNull Set<@NonNull String> argumentNames) {
+	McpApplicationCompletionRoute {
+		requireNonNull(handler);
+		argumentNames = Set.copyOf(requireNonNull(argumentNames));
+	}
+
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpApplicationCompletionRoute[handler=<redacted>, "
+				+ "argumentNames=<redacted>]";
+	}
+}
+
+@ThreadSafe
+@FunctionalInterface
+interface McpApplicationCompletionHandler {
+	@NonNull McpWireResult handle(@NonNull McpApplicationInvocation invocation,
+			@NonNull String argumentName, @NonNull String argumentValue,
+			@NonNull Map<@NonNull String, @NonNull String> contextArguments)
+			throws Exception;
 }
 
 /**
@@ -366,6 +394,10 @@ final class McpApplicationRequestRouter {
 	@NonNull
 	private final Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName;
 	@NonNull
+	private final Map<@NonNull String, @NonNull McpApplicationCompletionRoute> promptCompletionRoutes;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpApplicationCompletionRoute> resourceCompletionRoutes;
+	@NonNull
 	private final Map<@NonNull URI, @NonNull McpApplicationResourceReadRoute>
 			exactResourceRoutesByUri;
 	@NonNull
@@ -378,6 +410,8 @@ final class McpApplicationRequestRouter {
 			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
 			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
 			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationCompletionRoute> promptCompletionRoutes,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationCompletionRoute> resourceCompletionRoutes,
 			@NonNull Map<@NonNull URI, @NonNull McpApplicationResourceReadRoute>
 					exactResourceRoutesByUri,
 			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
@@ -386,6 +420,8 @@ final class McpApplicationRequestRouter {
 		this.handlersByMethod = handlersByMethod;
 		this.toolRoutesByName = toolRoutesByName;
 		this.promptRoutesByName = promptRoutesByName;
+		this.promptCompletionRoutes = promptCompletionRoutes;
+		this.resourceCompletionRoutes = resourceCompletionRoutes;
 		this.exactResourceRoutesByUri = exactResourceRoutesByUri;
 		this.resourceTemplateRoutes = resourceTemplateRoutes;
 		this.resourceListRoute = resourceListRoute;
@@ -394,6 +430,7 @@ final class McpApplicationRequestRouter {
 	@NonNull
 	static McpApplicationRequestRouter empty() {
 		return new McpApplicationRequestRouter(Map.of(), Map.of(), Map.of(),
+				Map.of(), Map.of(),
 				Map.of(), List.of(), Optional.empty());
 	}
 
@@ -508,6 +545,27 @@ final class McpApplicationRequestRouter {
 	}
 
 	@NonNull
+	static McpApplicationRequestRouter
+			fromFrameworkHandlersAndCompletionRoutes(
+				@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> frameworkHandlersByMethod,
+				@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+				@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+				@NonNull Map<@NonNull String, @NonNull McpApplicationResourceReadRoute> exactResourceRoutesByUri,
+				@NonNull List<@NonNull McpApplicationResourceTemplateRoute> resourceTemplateRoutes,
+				@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute,
+				@NonNull Map<@NonNull String, @NonNull McpApplicationCompletionRoute> promptCompletionRoutes,
+				@NonNull Map<@NonNull String, @NonNull McpApplicationCompletionRoute> resourceCompletionRoutes) {
+		McpApplicationRequestRouter ordinary = fromFrameworkHandlersAndValidatedOperationRoutes(
+				frameworkHandlersByMethod, toolRoutesByName, promptRoutesByName,
+				exactResourceRoutesByUri, resourceTemplateRoutes, resourceListRoute);
+		return new McpApplicationRequestRouter(ordinary.handlersByMethod,
+				ordinary.toolRoutesByName, ordinary.promptRoutesByName,
+				Map.copyOf(promptCompletionRoutes), Map.copyOf(resourceCompletionRoutes),
+				ordinary.exactResourceRoutesByUri, ordinary.resourceTemplateRoutes,
+				ordinary.resourceListRoute);
+	}
+
+	@NonNull
 	private static McpApplicationRequestRouter fromHandlersAndOperationRoutes(
 			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
 			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
@@ -602,6 +660,7 @@ final class McpApplicationRequestRouter {
 				Collections.unmodifiableMap(copied),
 				Collections.unmodifiableMap(copiedToolRoutes),
 				Collections.unmodifiableMap(copiedPromptRoutes),
+				Map.of(), Map.of(),
 				Collections.unmodifiableMap(copiedExactResourceRoutes),
 				copiedResourceTemplateRoutes, resourceListRoute);
 	}
@@ -609,6 +668,7 @@ final class McpApplicationRequestRouter {
 	private static boolean isFrameworkOwnedMethod(@NonNull String method) {
 		return method.startsWith("tasks/") || switch (method) {
 			case "server/discover", "tools/list", "prompts/list", "resources/list",
+					"completion/complete",
 					"resources/templates/list" -> true;
 			default -> false;
 		};
@@ -634,6 +694,18 @@ final class McpApplicationRequestRouter {
 	@NonNull
 	Optional<@NonNull McpApplicationPromptRoute> resolvePrompt(@NonNull String name) {
 		return Optional.ofNullable(promptRoutesByName.get(requireNonNull(name)));
+	}
+
+	@NonNull
+	Optional<@NonNull McpApplicationCompletionRoute> resolvePromptCompletion(
+			@NonNull String name) {
+		return Optional.ofNullable(promptCompletionRoutes.get(requireNonNull(name)));
+	}
+
+	@NonNull
+	Optional<@NonNull McpApplicationCompletionRoute> resolveResourceCompletion(
+			@NonNull String literalTemplate) {
+		return Optional.ofNullable(resourceCompletionRoutes.get(requireNonNull(literalTemplate)));
 	}
 
 	@NonNull

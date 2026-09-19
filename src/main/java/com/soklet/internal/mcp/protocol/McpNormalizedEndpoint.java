@@ -50,6 +50,7 @@ final class McpNormalizedEndpoint {
 	private final McpJsonObject discoveryMetadata;
 	@NonNull
 	private final Map<@NonNull String, @NonNull McpJsonObject> serverExtensions;
+	private final boolean completionSupported;
 	@NonNull
 	private final List<@NonNull McpNormalizedOperation> tools;
 	@NonNull
@@ -83,6 +84,7 @@ final class McpNormalizedEndpoint {
 		this.discoveryMetadata = builder.discoveryMetadata;
 		this.serverExtensions = McpProtocolSupport.immutableOpenObjectMap(
 				builder.serverExtensions);
+		this.completionSupported = builder.completionSupported;
 		this.tools = immutableOperations(builder.tools, "tool");
 		this.prompts = immutableOperations(builder.prompts, "prompt");
 		this.exactResources = immutableOperations(builder.exactResources, "exact resource URI");
@@ -142,6 +144,10 @@ final class McpNormalizedEndpoint {
 	@NonNull
 	Map<@NonNull String, @NonNull McpJsonObject> serverExtensions() {
 		return serverExtensions;
+	}
+
+	boolean completionSupported() {
+		return completionSupported;
 	}
 
 	@NonNull
@@ -317,6 +323,7 @@ final class McpNormalizedEndpoint {
 		private McpJsonObject discoveryMetadata;
 		@NonNull
 		private final Map<@NonNull String, @NonNull McpJsonObject> serverExtensions;
+		private boolean completionSupported;
 		@NonNull
 		private final List<@NonNull McpNormalizedOperation> tools;
 		@NonNull
@@ -389,6 +396,12 @@ final class McpNormalizedEndpoint {
 			serverExtensions.put(
 					McpProtocolSupport.requireExtensionIdentifier(identifier),
 					requireNonNull(settings));
+			return this;
+		}
+
+		@NonNull
+		Builder completionSupported(boolean completionSupported) {
+			this.completionSupported = completionSupported;
 			return this;
 		}
 

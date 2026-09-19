@@ -205,7 +205,7 @@ final class McpServerCapabilityRegistry {
 
 		this.capabilities = new McpServerCapabilities(
 				toolsCapability, promptsCapability, resourcesCapability,
-				endpoint.serverExtensions());
+				endpoint.completionSupported(), endpoint.serverExtensions());
 
 		McpResultMetadata resultMetadata =
 				new McpResultMetadata(serverInformation, endpoint.discoveryMetadata());
@@ -550,6 +550,7 @@ record McpServerCapabilities(
 		@NonNull Optional<@NonNull McpCatalogCapability> tools,
 		@NonNull Optional<@NonNull McpCatalogCapability> prompts,
 		@NonNull Optional<@NonNull McpResourceCapability> resources,
+		boolean completions,
 		@NonNull Map<@NonNull String, @NonNull McpJsonObject> extensions) {
 	McpServerCapabilities {
 		requireNonNull(tools);
@@ -566,6 +567,8 @@ record McpServerCapabilities(
 		tools.ifPresent(value -> values.put("tools", value.toJsonObject()));
 		prompts.ifPresent(value -> values.put("prompts", value.toJsonObject()));
 		resources.ifPresent(value -> values.put("resources", value.toJsonObject()));
+		if (completions)
+			values.put("completions", McpJsonObject.empty());
 		if (!extensions.isEmpty()) {
 			Map<String, McpJsonValue> extensionValues =
 					new LinkedHashMap<>(extensions.size());

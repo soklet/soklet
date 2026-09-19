@@ -834,6 +834,66 @@ listener binds to `127.0.0.1` by default; configure
 authentication/admission, and TLS termination deliberately
 before exposing it remotely.
 
+##### Argument completion
+
+MCP `completion/complete` suggests up to 100 values for a declared prompt
+argument or resource-template variable. Configure a completer on a prompt or
+URI-template registration to advertise `completions` for that endpoint; exact
+resources cannot have completers. A resource reference is the literal
+registered template (for example, `catalog://products/{sku}`), not an expanded
+resource URI. The handler receives the partial value and other supplied
+arguments in `McpCompletionContext`. Treat those values as untrusted input and
+authorize each suggestion, including any sensitive identifier, before
+returning it. Soklet does not match, translate, deduplicate, or cache returned
+suggestions.
+
+For a programmatic registration, attach the callback to the prompt or template
+builder and install a server-wide request limiter:
+
+```java
+McpPromptRegistration prompt = McpPromptRegistration.withName("code_review")
+  .handler(promptHandler)
+  .addArgument(McpPromptArgumentDeclaration.withName("language").build())
+  .completionHandler((requestContext, completionContext, invocationFeatures) ->
+    McpArgumentCompletionResult.fromValues(List.of("java")))
+  .build();
+
+McpServer mcpServer = McpServer.withPort(8081)
+  .endpointRegistry(registryContainingPrompt)
+  .requestRateLimiter(requestLimiter)
+  .build();
+```
+
+`promptHandler`, `registryContainingPrompt`, and `requestLimiter` above are
+application-provided. For an annotated endpoint, declare the companion method
+beside its `@McpPrompt(name = "code_review", ...)` method and configure the
+same request-wide limiter on the server:
+
+```java
+@McpPromptCompletion(name = "code_review")
+@NonNull
+public McpArgumentCompletionResult completeCodeReviewArgument(
+    @NonNull McpRequestContext requestContext,
+    McpCompletionContext.@NonNull Prompt completionContextPrompt,
+    @NonNull McpInvocationFeatures invocationFeatures) {
+  return McpArgumentCompletionResult.fromValues(List.of("java"));
+}
+
+McpServer mcpServer = McpServer.withPort(8081)
+  .requestRateLimiter(requestLimiter)
+  .build();
+```
+
+Use `@McpResourceCompletion(uri = "catalog://products/{sku}")` and
+`McpCompletionContext.Resource` for a template method. Each annotated target
+must be registered in the same endpoint. Server construction fails when any
+completer is configured without `requestRateLimiter`. This limiter is charged
+once through the normal request stage for *all* admitted MCP methods—not only
+Completion—and is not the tool limiter. The application must choose a
+meaningful caller/tenant budget and coordinate it across nodes where needed;
+`McpRateLimitContext.getOperationType()` can select a tighter Completion
+budget. A callback alone does not establish an effective policy.
+
 ##### Operation classification
 
 Application policy and handler interceptors can branch on the semantic

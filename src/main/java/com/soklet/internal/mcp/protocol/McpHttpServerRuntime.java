@@ -4453,9 +4453,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				"resources/templates/list".equals(mappedRequest.method());
 		boolean subscriptionListenRequest =
 				"subscriptions/listen".equals(mappedRequest.method());
+		boolean completionRequestMethod =
+				"completion/complete".equals(mappedRequest.method());
 		boolean taskRequest = isTaskRequestMethod(mappedRequest.method());
 		boolean callerAwareCatalog = endpoint.catalogAccessAdapter().isPresent();
 		Optional<String> operationName = Optional.empty();
+		Optional<CompletionRequest> completionRequest = Optional.empty();
 		Optional<McpApplicationToolRoute> toolRoute = Optional.empty();
 		Optional<McpApplicationPromptRoute> promptRoute = Optional.empty();
 		Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
@@ -4558,6 +4561,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
 				return missingTasksCapability(protocolProfile, mappedRequest.id(),
 						corsHeaders);
+		} else if (completionRequestMethod) {
+			if (!capabilityRegistry.capabilities().completions())
+				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
+			completionRequest = parseCompletionRequest(
+					mappedRequest.params().fields().members());
+			if (completionRequest.isEmpty())
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			operationName = Optional.of(completionRequest.orElseThrow().reference());
 		} else if (taskRequest) {
 			Optional<McpApplicationRequestHandler> taskHandler =
 					applicationRouter.resolve(mappedRequest.method());
@@ -4769,6 +4780,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 		}
 
+		boolean completionPromptRequest = completionRequest
+				.map(value -> value.promptReference()).orElse(false);
 		boolean deferredCatalogDirectRequest = callerAwareCatalog
 				&& ("tools/call".equals(mappedRequest.method())
 						|| "prompts/get".equals(mappedRequest.method()));
@@ -5026,6 +5039,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (toolRateLimitDecision instanceof McpRateLimitDecision.Denied denied)
 			return observedRateLimited(requestControl, mappedRequest.id(),
 					denied.retryAfter(), corsHeaders);
+		if (completionPromptRequest && capabilityRegistry.promptDescriptor(
+				operationName.orElseThrow()).isEmpty())
+			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		if (deferredCatalogDirectInvalidRoute)
 			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		if (deferredCatalogDirectMissingHandler)
@@ -5033,7 +5049,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		if (callerAwareCatalog) {
 			boolean policyRequest = toolsListRequest || promptsListRequest
-					|| deferredCatalogDirectRequest;
+					|| deferredCatalogDirectRequest || completionPromptRequest;
 			if (policyRequest) {
 				McpRequestContext policyContext = requestControl.publicRequestContext()
 						.orElse(null);
@@ -5078,7 +5094,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								} else if ("tools/call".equals(mappedRequest.method())) {
 									directAccessible = session.isToolAccessible(
 											policyOperationName.orElseThrow());
-								} else if ("prompts/get".equals(mappedRequest.method())) {
+								} else if ("prompts/get".equals(mappedRequest.method())
+										|| completionPromptRequest) {
 									directAccessible = session.isPromptAccessible(
 											policyOperationName.orElseThrow());
 								}
@@ -5331,6 +5348,47 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						.resourceTemplatesList(), protocolProfile,
 					McpRuntimeCatalogLocalizer.ResponseKind.RESOURCE_TEMPLATES_LIST, mappedRequest.id(),
 					endpointPolicy, requestControl, corsHeaders);
+		}
+
+		if (completionRequest.isPresent()) {
+			CompletionRequest completion = completionRequest.orElseThrow();
+			McpApplicationCompletionRoute route;
+			if (completion.promptReference()) {
+				Optional<McpNormalizedPromptDescriptor> descriptor =
+						capabilityRegistry.promptDescriptor(completion.reference());
+				if (descriptor.isEmpty())
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				Set<String> argumentNames = descriptor.orElseThrow().arguments().stream()
+						.map(McpNormalizedPromptArgumentDescriptor::name)
+						.collect(java.util.stream.Collectors.toSet());
+				if (!argumentNames.contains(completion.argumentName())
+						|| !argumentNames.containsAll(completion.contextArguments().keySet()))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				route = applicationRouter.resolvePromptCompletion(
+						completion.reference()).orElse(null);
+				if (route == null) {
+					applicationHandler = Optional.of(invocation ->
+							McpWireResult.complete(new McpJsonObject(Map.of(
+									"completion", new McpJsonObject(Map.of(
+											"values", new McpJsonArray(List.of())))))));
+				}
+			} else {
+				route = applicationRouter.resolveResourceCompletion(
+						completion.reference()).orElse(null);
+				if (route == null)
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				if (!route.argumentNames().contains(completion.argumentName())
+						|| !route.argumentNames().containsAll(
+							completion.contextArguments().keySet()))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			}
+			if (route != null) {
+				McpApplicationCompletionRoute selectedRoute = route;
+				applicationHandler = Optional.of(invocation ->
+						selectedRoute.handler().handle(invocation,
+								completion.argumentName(), completion.argumentValue(),
+								completion.contextArguments()));
+			}
 		}
 
 		McpApplicationRequestHandler resolvedApplicationHandler =
@@ -5708,6 +5766,77 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		return true;
+	}
+
+	private record CompletionRequest(boolean promptReference,
+			@NonNull String reference, @NonNull String argumentName,
+			@NonNull String argumentValue,
+			@NonNull Map<String, String> contextArguments) {
+		private CompletionRequest {
+			requireNonNull(reference);
+			requireNonNull(argumentName);
+			requireNonNull(argumentValue);
+			contextArguments = Map.copyOf(requireNonNull(contextArguments));
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "CompletionRequest[promptReference=" + promptReference
+					+ ", reference=<redacted>, argumentName=<redacted>, "
+					+ "argumentValue=<redacted>, contextArguments=<redacted>]";
+		}
+	}
+
+	@NonNull
+	private static Optional<CompletionRequest> parseCompletionRequest(
+			@NonNull Map<String, McpJsonValue> fields) {
+		if (!(fields.get("ref") instanceof McpJsonObject reference)
+				|| !(fields.get("argument") instanceof McpJsonObject argument))
+			return Optional.empty();
+		McpJsonValue typeValue = reference.members().get("type");
+		if (!(typeValue instanceof McpJsonString type))
+			return Optional.empty();
+		boolean promptReference;
+		String referenceKey;
+		if ("ref/prompt".equals(type.value())) {
+			promptReference = true;
+			referenceKey = "name";
+		} else if ("ref/resource".equals(type.value())) {
+			promptReference = false;
+			referenceKey = "uri";
+		} else {
+			return Optional.empty();
+		}
+		if (!(reference.members().get(referenceKey)
+						instanceof McpJsonString referenceString)
+				|| referenceString.value().isBlank()
+				|| !(argument.members().get("name")
+						instanceof McpJsonString argumentName)
+				|| argumentName.value().isBlank()
+				|| !(argument.members().get("value")
+						instanceof McpJsonString argumentValue))
+			return Optional.empty();
+		Map<String, String> contextArguments = new LinkedHashMap<>();
+		McpJsonValue contextValue = fields.get("context");
+		if (contextValue != null) {
+			if (!(contextValue instanceof McpJsonObject context))
+				return Optional.empty();
+			McpJsonValue argumentsValue = context.members().get("arguments");
+			if (argumentsValue != null) {
+				if (!(argumentsValue instanceof McpJsonObject arguments))
+					return Optional.empty();
+				for (Map.Entry<String, McpJsonValue> entry
+						: arguments.members().entrySet()) {
+					if (!(entry.getValue() instanceof McpJsonString value))
+						return Optional.empty();
+					contextArguments.put(entry.getKey(), value.value());
+				}
+			}
+		}
+		return Optional.of(new CompletionRequest(promptReference,
+				referenceString.value(), argumentName.value(), argumentValue.value(),
+				contextArguments));
 	}
 
 	@NonNull

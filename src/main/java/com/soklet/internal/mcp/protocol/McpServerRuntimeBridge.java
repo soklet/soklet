@@ -32,6 +32,7 @@ import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNull;
 import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
+import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpLocalizationContext;
@@ -1142,6 +1143,8 @@ public final class McpServerRuntimeBridge {
 				McpNormalizedEndpoint.withServerInformation(implementation)
 						.serverInformationIncluded(
 								publicEndpoint.isServerInfoIncluded());
+		endpointBuilder.completionSupported(
+				!endpointPlan.completionPlans().isEmpty());
 		if (endpointPlan.tasksSupported())
 			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
@@ -1334,6 +1337,24 @@ public final class McpServerRuntimeBridge {
 							invokeResourceList(resourceListPlan, invocation,
 									publicEndpoint));
 				});
+		Map<String, McpApplicationCompletionRoute> promptCompletionRoutes =
+				new LinkedHashMap<>();
+		Map<String, McpApplicationCompletionRoute> resourceCompletionRoutes =
+				new LinkedHashMap<>();
+		for (CompletionPlan completionPlan : endpointPlan.completionPlans()) {
+			McpApplicationCompletionRoute route = new McpApplicationCompletionRoute(
+					(invocation, argumentName, argumentValue, contextArguments) ->
+							invokeCompletion(completionPlan, invocation,
+									publicEndpoint, argumentName, argumentValue,
+									contextArguments),
+					Set.copyOf(completionPlan.argumentNames()));
+			Map<String, McpApplicationCompletionRoute> routes =
+					completionPlan.referenceType() == CompletionPlan.ReferenceType.PROMPT
+							? promptCompletionRoutes : resourceCompletionRoutes;
+			if (routes.putIfAbsent(completionPlan.reference(), route) != null)
+				throw new IllegalArgumentException(
+						"Duplicate MCP Completion reference.");
+		}
 		McpNormalizedEndpoint endpoint = endpointBuilder.build();
 
 		McpProtocolAdmissionController protocolAdmissionController = context -> {
@@ -1390,9 +1411,10 @@ public final class McpServerRuntimeBridge {
 		});
 		McpApplicationRequestRouter applicationRouter =
 				McpApplicationRequestRouter
-						.fromFrameworkHandlersAndValidatedOperationRoutes(
+						.fromFrameworkHandlersAndCompletionRoutes(
 						frameworkHandlers, toolRoutes, promptRoutes, exactResourceRoutes,
-						resourceTemplateRoutes, internalResourceListRoute);
+						resourceTemplateRoutes, internalResourceListRoute,
+						promptCompletionRoutes, resourceCompletionRoutes);
 		if (requestObservationAdapter.isEmpty())
 			return new McpHttpEndpointBinding(endpointPolicy, endpoint,
 					applicationRouter,
@@ -1854,7 +1876,8 @@ public final class McpServerRuntimeBridge {
 			boolean localizationEnabled,
 			@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter,
 			@NonNull Optional<@NonNull CatalogAccessAdapter>
-					catalogAccessAdapter) {
+					catalogAccessAdapter,
+			@NonNull List<@NonNull CompletionPlan> completionPlans) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1865,6 +1888,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(catalogLocalizer);
 			requireNonNull(taskManagerAdapter);
 			requireNonNull(catalogAccessAdapter);
+			completionPlans = List.copyOf(requireNonNull(completionPlans));
 		}
 
 		/** @return whether this endpoint has the Tasks protocol extension */
@@ -1879,7 +1903,7 @@ public final class McpServerRuntimeBridge {
 				@NonNull List<@NonNull ResourcePlan> resourcePlans,
 				@NonNull ResourceListPlan resourceListPlan) {
 			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
-					Optional.empty(), false, Optional.empty(), Optional.empty());
+					Optional.empty(), false, Optional.empty(), Optional.empty(), List.of());
 		}
 
 		/**
@@ -1896,8 +1920,75 @@ public final class McpServerRuntimeBridge {
 				@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter) {
 			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
 					catalogLocalizer, localizationEnabled, taskManagerAdapter,
-					Optional.empty());
+					Optional.empty(), List.of());
 		}
+
+		/** Compatibility constructor without Completion plans. */
+		public EndpointPlan(@NonNull McpEndpoint endpoint,
+				@NonNull List<@NonNull ToolPlan> toolPlans,
+				@NonNull List<@NonNull PromptPlan> promptPlans,
+				@NonNull List<@NonNull ResourcePlan> resourcePlans,
+				@NonNull ResourceListPlan resourceListPlan,
+				@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
+				boolean localizationEnabled,
+				@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter,
+				@NonNull Optional<@NonNull CatalogAccessAdapter> catalogAccessAdapter) {
+			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
+					catalogLocalizer, localizationEnabled, taskManagerAdapter,
+					catalogAccessAdapter, List.of());
+		}
+	}
+
+	/** Immutable route for one literal Completion reference. */
+	@ThreadSafe
+	public record CompletionPlan(@NonNull ReferenceType referenceType,
+			@NonNull String reference,
+			@NonNull List<@NonNull String> argumentNames,
+			@NonNull CompletionInvoker invoker) {
+		public enum ReferenceType { PROMPT, RESOURCE }
+		public CompletionPlan {
+			requireNonNull(referenceType);
+			reference = McpProtocolSupport.requireNonBlank(reference,
+					"Completion reference");
+			argumentNames = List.copyOf(requireNonNull(argumentNames));
+			requireNonNull(invoker);
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "CompletionPlan[referenceType=" + referenceType
+					+ ", reference=<redacted>, argumentCount="
+					+ argumentNames.size() + ", invoker=<redacted>]";
+		}
+	}
+
+	/** Application-facing input after exact Completion route resolution. */
+	@ThreadSafe
+	public record CompletionInvocation(@NonNull PromptInvocation base,
+			@NonNull String argumentName, @NonNull String argumentValue,
+			@NonNull Map<String, String> contextArguments) {
+		public CompletionInvocation {
+			requireNonNull(base);
+			requireNonNull(argumentName);
+			requireNonNull(argumentValue);
+			contextArguments = Map.copyOf(requireNonNull(contextArguments));
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "CompletionInvocation[base=<redacted>, argumentName=<redacted>, "
+					+ "argumentValue=<redacted>, contextArguments=<redacted>]";
+		}
+	}
+
+	/** One terminal argument-completion callback. */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface CompletionInvoker {
+		com.soklet.@NonNull McpArgumentCompletionResult invoke(
+				@NonNull CompletionInvocation invocation) throws Exception;
 	}
 
 	/**
@@ -4271,6 +4362,69 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
+	private static McpWireResult invokeCompletion(
+			@NonNull CompletionPlan completionPlan,
+			@NonNull McpApplicationInvocation invocation,
+			@NonNull McpEndpoint publicEndpoint,
+			@NonNull String argumentName, @NonNull String argumentValue,
+			@NonNull Map<String, String> contextArguments) throws Exception {
+		McpJsonRpcMessage.Request request = invocation.request();
+		McpRequestMetadata requestMetadata = request.params().metadata();
+		PromptInvocation base = new PromptInvocation(
+				invocation.sokletRequest().orElseThrow(() ->
+						new IllegalStateException(
+								"A production MCP Completion invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation), publicEndpoint, Map.of(),
+				request.method(), toPublic(request.id()),
+				selectedProtocolRevision(invocation), completionPlan.reference(),
+				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
+				(McpJsonObject) toPublic(requestMetadata.clientCapabilities().toJsonObject()),
+				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				toPublic(invocation.admissionIdentity().admittedIdentity()),
+				McpJsonObject.emptyInstance(), invocation.cancelationToken(),
+				progressEmitterFor(invocation, McpInputRequestPlan.empty()),
+				invocation::requireHandlerEntry, invocation.pastDeadline(),
+				Optional.empty(), invocation.selectedLocale(),
+				invocation.catalogAccessView().flatMap(
+						CatalogAccessSession::localizationContext));
+		com.soklet.McpArgumentCompletionResult result;
+		try {
+			result = requireNonNull(completionPlan.invoker().invoke(
+					new CompletionInvocation(base, argumentName, argumentValue,
+							contextArguments)),
+					"The MCP Completion invoker returned null.");
+		} catch (McpJsonRpcException exception) {
+			com.soklet.McpJsonRpcError error = exception.getError();
+			throw new McpApplicationJsonRpcException(new McpJsonRpcError(
+					error.getCode(), error.getMessage(),
+					error.getData().map(McpServerRuntimeBridge::toInternal)));
+		}
+		List<com.soklet.internal.mcp.protocol.McpJsonValue> values =
+				result.getValues().stream()
+						.map(com.soklet.internal.mcp.protocol.McpJsonString::new)
+						.map(com.soklet.internal.mcp.protocol.McpJsonValue.class::cast)
+						.toList();
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> completionFields =
+				new LinkedHashMap<>();
+		completionFields.put("values",
+				new com.soklet.internal.mcp.protocol.McpJsonArray(values));
+		result.getTotal().ifPresent(total -> completionFields.put("total",
+				new com.soklet.internal.mcp.protocol.McpJsonNumber(total)));
+		result.getHasMore().ifPresent(hasMore -> completionFields.put("hasMore",
+				com.soklet.internal.mcp.protocol.McpJsonBoolean.fromBoolean(hasMore)));
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> resultFields = Map.of("completion",
+				new com.soklet.internal.mcp.protocol.McpJsonObject(completionFields));
+		com.soklet.internal.mcp.protocol.McpJsonObject metadata =
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(result.getMetadata());
+		McpResultMetadata resultMetadata =
+				new McpResultMetadata(Optional.empty(), metadata);
+		return McpWireResult.complete(
+				new com.soklet.internal.mcp.protocol.McpJsonObject(resultFields),
+				resultMetadata.isEmpty() ? Optional.empty()
+						: Optional.of(resultMetadata));
+	}
+
 	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,

@@ -14,22 +14,25 @@
  * limitations under the License.
  */
 
-package com.soklet;
+package com.soklet.annotation;
 
-import javax.annotation.concurrent.ThreadSafe;
+import org.jspecify.annotations.NonNull;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
- * Open result spine for programmatic MCP handlers and handler interception.
- *
- * <p>The framework-owned result family includes {@link McpCompleteResult},
- * {@link McpInputRequiredResult}, {@link McpTaskCreatedResult}, and
- * {@link McpResourcePage}, and {@link McpArgumentCompletionResult}.
- * Applications should not implement this interface
- * directly. Each MCP method accepts only its corresponding result
- * implementation.
+ * Attaches an argument completer to a prompt declared in the same MCP endpoint.
+ * The named prompt must have an {@link McpPrompt} handler method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
-public interface McpOperationResult {
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface McpPromptCompletion {
+	/** @return the target prompt's published name */
+	@NonNull
+	String name();
 }

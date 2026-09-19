@@ -80,6 +80,8 @@ public final class McpResourceRegistration {
 	private final McpJsonObject metadata;
 	@NonNull
 	private final McpResourceReadHandler handler;
+	@Nullable
+	private final McpCompletionHandler completionHandler;
 
 	/**
 	 * Begins a staged exact-resource registration.
@@ -148,6 +150,7 @@ public final class McpResourceRegistration {
 		this.requestStateMode = state.requestStateMode;
 		this.metadata = state.metadata;
 		this.handler = state.handler;
+		this.completionHandler = state.completionHandler;
 	}
 
 	/** @return whether this registration uses an exact URI or URI template */
@@ -251,6 +254,17 @@ public final class McpResourceRegistration {
 	@NonNull
 	public McpResourceReadHandler getHandler() {
 		return this.handler;
+	}
+
+	/**
+	 * Returns the template's argument completer, when configured.
+	 *
+	 * @return configured completer, or empty for exact resources and templates
+	 * without one
+	 */
+	@NonNull
+	public Optional<@NonNull McpCompletionHandler> getCompletionHandler() {
+		return Optional.ofNullable(this.completionHandler);
 	}
 
 	@NonNull
@@ -643,6 +657,20 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
+		/**
+		 * Configures the handler for partial URI-template variable suggestions.
+		 * Repeated calls replace the previous handler.
+		 *
+		 * @param completionHandler non-null argument completer
+		 * @return this builder
+		 */
+		@NonNull
+		public TemplateBuilder completionHandler(
+				@NonNull McpCompletionHandler completionHandler) {
+			this.state.completionHandler = requireNonNull(completionHandler);
+			return this;
+		}
+
 		/** @return immutable URI-template resource registration */
 		@NonNull
 		public McpResourceRegistration build() {
@@ -696,6 +724,8 @@ public final class McpResourceRegistration {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 		@NonNull
 		private final McpResourceReadHandler handler;
+		@Nullable
+		private McpCompletionHandler completionHandler;
 
 		private BuilderState(@Nullable URI uri,
 				@Nullable String uriTemplate, @NonNull String name,

@@ -1295,3 +1295,46 @@ until P0-C is dispositioned and MCP-G2 authorizes regeneration and review.
 Current-source ownership and evolution evidence does not replace those frozen
 ledgers. Subscription runtime wiring also remains out of scope for this
 checkpoint.
+
+## 2026-09-18 P2 Completion public API foundation; no refreeze
+
+The first P2 slice introduces six current-source Phase 4 owners:
+`McpArgumentCompletionResult` and its builder, `McpCompletionContext` and its
+`Prompt`/`Resource` nested contexts, and `McpCompletionHandler`. The existing
+Phase 4 prompt and resource registrations gain optional completion-handler
+getters; only the prompt and resource-template builders gain setters. Exact
+resource builders remain setter-free. The reviewed Phase 4 current-source
+owner count is now 142, with include SHA-256
+`0421dc19debdd9c229eaba506fd43cefcc586e6aea11ec0f6f49c4b9463f8c42`.
+The full current-source Phase 4 JSpecify nullability-layout SHA-256 is
+`8ee18b8abf51eea1d6791de5cd6e8781a067418045391ac5430e951790063e7e`;
+its delta is the six new owners and the four completion attachment/accessor
+methods on the two existing registrations. The 4.0 result root remains open
+until `McpSkillPage` can join the final sealed family in one compiling change.
+
+This is current-source ownership and reflection evidence only, not a Phase 4
+refreeze or Completion runtime-support claim. `phase-4.signatures.jsonl` and
+`current-incompatibilities.jsonl` retain their reviewed pre-P1b bytes while
+P0-C and MCP-G2 remain open.
+
+## 2026-09-18 P2 Completion runtime and annotation current-source delta; no refreeze
+
+Two more Phase 4 owners, `@McpPromptCompletion` and
+`@McpResourceCompletion`, bind methods to prompt and URI-template
+registrations. This brings current-source Phase 4 ownership to 144, with
+`phase-4.includes` SHA-256
+`f5ee078c211e75700e8824e69e795974fd1483131c1f627d7b7b9f2780f934e9`.
+The reviewed full Phase 4 JSpecify nullability-layout SHA-256 is
+`d0612fd532f213d2ff0acf7c13a88269ac5d9bd32fa3ca727312ef3c486ccd64`.
+The reflection contract also records `McpOperationType.COMPLETION_COMPLETE`
+in declaration order. `McpHandlerInterceptor` now explicitly covers
+Completion, while `McpServer.Builder.requestRateLimiter` documents the
+request-wide limiter required whenever a completer is configured.
+
+The route and annotation-generated callbacks have focused runtime and
+processor evidence, but official Completion observation, the broader
+localization/lifecycle/simulator matrix, and MCP-G2 remain open. Neither the
+phase signature ledgers nor the released-artifact incompatibility ledger is
+regenerated at this checkpoint. `McpOperationResult` remains open until the
+Completion and Skills result types can be sealed together in one compiling
+change.

@@ -61,6 +61,8 @@ public final class McpPromptRegistration {
 	private final McpJsonObject metadata;
 	@NonNull
 	private final McpPromptHandler handler;
+	@Nullable
+	private final McpCompletionHandler completionHandler;
 
 	/**
 	 * Begins a staged registration for a named prompt.
@@ -85,6 +87,7 @@ public final class McpPromptRegistration {
 		this.requestStateMode = builder.requestStateMode;
 		this.metadata = builder.metadata;
 		this.handler = builder.handler;
+		this.completionHandler = builder.completionHandler;
 	}
 
 	/** @return published prompt name */
@@ -148,6 +151,12 @@ public final class McpPromptRegistration {
 	@NonNull
 	public McpPromptHandler getHandler() {
 		return this.handler;
+	}
+
+	/** @return configured argument completer, or empty when omitted */
+	@NonNull
+	public Optional<@NonNull McpCompletionHandler> getCompletionHandler() {
+		return Optional.ofNullable(this.completionHandler);
 	}
 
 	/**
@@ -260,6 +269,8 @@ public final class McpPromptRegistration {
 		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
+		@Nullable
+		private McpCompletionHandler completionHandler;
 
 		private Builder(@NonNull String name,
 				@NonNull McpPromptHandler handler) {
@@ -362,6 +373,20 @@ public final class McpPromptRegistration {
 		@NonNull
 		public Builder metadata(@NonNull McpJsonObject metadata) {
 			this.metadata = requireNonNull(metadata);
+			return this;
+		}
+
+		/**
+		 * Configures the handler for partial prompt-argument suggestions.
+		 * Repeated calls replace the previous handler.
+		 *
+		 * @param completionHandler non-null argument completer
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder completionHandler(
+				@NonNull McpCompletionHandler completionHandler) {
+			this.completionHandler = requireNonNull(completionHandler);
 			return this;
 		}
 

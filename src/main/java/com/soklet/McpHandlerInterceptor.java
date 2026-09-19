@@ -27,10 +27,10 @@ import static java.util.Objects.requireNonNull;
  * handler invocation.
  * <p>
  * Soklet invokes the configured interceptor for tool calls, prompt gets,
- * resource reads, and custom resource-list handling, including handlers
- * discovered from annotations. Framework-owned discovery and static catalog
- * generation do not invoke application handlers and therefore do not traverse
- * this hook.
+ * resource reads, argument completion, and custom resource-list handling,
+ * including handlers discovered from annotations. Framework-owned discovery
+ * and static catalog generation do not invoke application handlers and
+ * therefore do not traverse this hook.
  * <p>
  * Interception occurs after admission, rate limiting, handler-queue admission,
  * and handler-slot acquisition, but before complete application-input
@@ -41,6 +41,9 @@ import static java.util.Objects.requireNonNull;
  * short-circuit by returning a method-compatible result without invoking it.
  * Either result still traverses Soklet's applicable result validation,
  * tool-output sanitization, output-schema validation, and response generation.
+ * Argument-completion invocations require an
+ * {@link McpArgumentCompletionResult}; a result for another MCP operation is
+ * rejected even when returned by an interceptor.
  * A {@code null} return or thrown exception fails closed without exposing
  * exception-derived data.
  * <p>

@@ -51,6 +51,8 @@ public enum McpOperationType {
 	RESOURCES_TEMPLATES_LIST,
 	/** Resource retrieval through {@code resources/read}. */
 	RESOURCES_READ,
+	/** Argument suggestions through {@code completion/complete}. */
+	COMPLETION_COMPLETE,
 	/** Subscription stream creation through {@code subscriptions/listen}. */
 	SUBSCRIPTIONS_LISTEN,
 	/** Durable task retrieval through {@code tasks/get}. */
@@ -75,6 +77,7 @@ public enum McpOperationType {
 			case "resources/list" -> RESOURCES_LIST;
 			case "resources/templates/list" -> RESOURCES_TEMPLATES_LIST;
 			case "resources/read" -> RESOURCES_READ;
+			case "completion/complete" -> COMPLETION_COMPLETE;
 			case "subscriptions/listen" -> SUBSCRIPTIONS_LISTEN;
 			case "tasks/get" -> TASKS_GET;
 			case "tasks/update" -> TASKS_UPDATE;

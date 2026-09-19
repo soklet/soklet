@@ -1163,9 +1163,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		/**
 		 * Configures the optional limiter applied once to every admitted MCP
 		 * request or notification.
+		 * <p>
+		 * A request limiter is required when any endpoint configures argument
+		 * Completion. Server construction fails without one. This limiter covers
+		 * the entire MCP server, including initialize, catalog, and other methods;
+		 * it is not an endpoint-only Completion limiter. Applications own the
+		 * budget, caller partitioning, and any fleet coordination. They may use
+		 * {@link McpRateLimitContext#getOperationType()} to distinguish
+		 * {@link McpOperationType#COMPLETION_COMPLETE} from other operations.
 		 *
 		 * @param requestRateLimiter application-owned request limiter, or null to
-		 *                           disable request-wide limiting
+		 *                           disable request-wide limiting when no endpoint
+		 *                           configures Completion
 		 * @return this builder
 		 */
 		@NonNull

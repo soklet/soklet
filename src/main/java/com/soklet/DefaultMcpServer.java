@@ -28,6 +28,8 @@ import com.soklet.internal.mcp.protocol.McpTaskOriginPersistedStateCodec;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CompletionInvocation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CompletionPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessSession;
@@ -119,7 +121,7 @@ final class DefaultMcpServer implements McpServer {
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
-			"resources/read", "subscriptions/listen", "notifications/cancelled",
+			"resources/read", "completion/complete", "subscriptions/listen", "notifications/cancelled",
 			"tasks/get", "tasks/update", "tasks/cancel");
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
@@ -341,6 +343,10 @@ final class DefaultMcpServer implements McpServer {
 				this.taskEventPublisher,
 				subscriptionAuthorizerExplicitlyConfigured);
 		validateTaskRequiredTools(endpointPlans, taskManager);
+		if (this.requestRateLimiter == null && endpointPlans.stream()
+				.anyMatch(plan -> !plan.completionPlans().isEmpty()))
+			throw new IllegalStateException(
+					"An MCP request rate limiter must be configured when Completion is enabled.");
 		validateRequestStateProtection(endpointPlans, protectionConfig);
 		Optional<RequestStateProtectionPlan> requestStateProtectionPlan =
 				Optional.ofNullable(protectionConfig)
@@ -620,6 +626,20 @@ final class DefaultMcpServer implements McpServer {
 		List<ResourcePlan> resourcePlans = endpoint.getResources().stream()
 				.map(this::toResourcePlan)
 				.toList();
+		List<CompletionPlan> completionPlans = new ArrayList<>();
+		for (McpPromptRegistration prompt : endpoint.getPrompts())
+			if (prompt.getCompletionHandler().isPresent())
+				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.PROMPT,
+					prompt.getName(), prompt.getArguments().stream()
+							.map(McpPromptArgumentDeclaration::getName).toList(),
+					invocation -> invokeCompletion(prompt, invocation)));
+		for (McpResourceRegistration resource : endpoint.getResources())
+			if (resource.getAddressType() == McpResourceAddressType.URI_TEMPLATE
+					&& resource.getCompletionHandler().isPresent())
+				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.RESOURCE,
+					resource.getUriTemplate().orElseThrow(),
+					resourceTemplateVariableNames(resource.getUriTemplate().orElseThrow()),
+					invocation -> invokeCompletion(resource, invocation)));
 		List<McpResourceDescriptor> registeredResourceDescriptors = endpoint
 				.getResources().stream()
 				.filter(resource -> resource.getAddressType()
@@ -636,7 +656,21 @@ final class DefaultMcpServer implements McpServer {
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),
 				this.localizer != null, taskManagerAdapter(endpoint),
-				catalogAccessAdapter(endpoint));
+				catalogAccessAdapter(endpoint), completionPlans);
+	}
+
+	@NonNull
+	private static List<@NonNull String> resourceTemplateVariableNames(
+			@NonNull String template) {
+		List<String> names = new ArrayList<>();
+		for (int start = template.indexOf('{'); start >= 0;
+				start = template.indexOf('{', start + 1)) {
+			int end = template.indexOf('}', start + 1);
+			if (end < 0)
+				throw new IllegalArgumentException("Invalid MCP resource template.");
+			names.add(template.substring(start + 1, end));
+		}
+		return List.copyOf(names);
 	}
 
 	/**
@@ -1997,6 +2031,85 @@ final class DefaultMcpServer implements McpServer {
 
 		return PromptInvocationResult.complete(promptOutputFields(output),
 				completeResult.getMetadata());
+	}
+
+	@NonNull
+	private McpArgumentCompletionResult invokeCompletion(
+			@NonNull McpPromptRegistration prompt,
+			@NonNull CompletionInvocation invocation) throws Exception {
+		return invokeCompletion(prompt.getCompletionHandler().orElseThrow(),
+				new PromptCompletionContext(prompt, invocation), invocation.base());
+	}
+
+	@NonNull
+	private McpArgumentCompletionResult invokeCompletion(
+			@NonNull McpResourceRegistration resource,
+			@NonNull CompletionInvocation invocation) throws Exception {
+		return invokeCompletion(resource.getCompletionHandler().orElseThrow(),
+				new ResourceCompletionContext(resource, invocation), invocation.base());
+	}
+
+	@NonNull
+	private McpArgumentCompletionResult invokeCompletion(
+			@NonNull McpCompletionHandler handler,
+			@NonNull McpCompletionContext completionContext,
+			@NonNull PromptInvocation invocation) throws Exception {
+		McpRequestContext requestContext = invocation.requestContext();
+		McpInvocationFeatures features = invocationFeatures(requestContext,
+				invocation.endpoint(), invocation.jsonRpcMethod(),
+				invocation.cancelationToken(), invocation.progressEmitter(),
+				invocation.pastDeadline(), invocation.continuationLocale(),
+				invocation.selectedLocaleSlot(), Optional.empty(), Optional.empty(),
+				invocation.localizationContext());
+		McpOperationResult result = interceptHandler(requestContext,
+				invocation.handlerEntryGuard(), features,
+				() -> handler.handle(requestContext, completionContext, features));
+		if (!(result instanceof McpArgumentCompletionResult completionResult))
+			throw new IllegalArgumentException(
+					"An MCP Completion interceptor must return an argument-completion result.");
+		return completionResult;
+	}
+
+	private record PromptCompletionContext(
+			@NonNull McpPromptRegistration registration,
+			@NonNull String argumentName, @NonNull String argumentValue,
+			@NonNull Map<@NonNull String, @NonNull String> contextArguments)
+			implements McpCompletionContext.Prompt {
+		private PromptCompletionContext(@NonNull McpPromptRegistration registration,
+				@NonNull CompletionInvocation invocation) {
+			this(registration, invocation.argumentName(), invocation.argumentValue(),
+					invocation.contextArguments());
+		}
+		@Override public @NonNull String getArgumentName() { return argumentName; }
+		@Override public @NonNull String getArgumentValue() { return argumentValue; }
+		@Override public @NonNull Map<@NonNull String, @NonNull String> getContextArguments() { return contextArguments; }
+		@Override public @NonNull McpPromptRegistration getPromptRegistration() { return registration; }
+		@Override public @NonNull String toString() {
+			return "PromptCompletionContext[registration=<redacted>, "
+					+ "argumentName=<redacted>, argumentValue=<redacted>, "
+					+ "contextArguments=<redacted>]";
+		}
+	}
+
+	private record ResourceCompletionContext(
+			@NonNull McpResourceRegistration registration,
+			@NonNull String argumentName, @NonNull String argumentValue,
+			@NonNull Map<@NonNull String, @NonNull String> contextArguments)
+			implements McpCompletionContext.Resource {
+		private ResourceCompletionContext(@NonNull McpResourceRegistration registration,
+				@NonNull CompletionInvocation invocation) {
+			this(registration, invocation.argumentName(), invocation.argumentValue(),
+					invocation.contextArguments());
+		}
+		@Override public @NonNull String getArgumentName() { return argumentName; }
+		@Override public @NonNull String getArgumentValue() { return argumentValue; }
+		@Override public @NonNull Map<@NonNull String, @NonNull String> getContextArguments() { return contextArguments; }
+		@Override public @NonNull McpResourceRegistration getResourceRegistration() { return registration; }
+		@Override public @NonNull String toString() {
+			return "ResourceCompletionContext[registration=<redacted>, "
+					+ "argumentName=<redacted>, argumentValue=<redacted>, "
+					+ "contextArguments=<redacted>]";
+		}
 	}
 
 	@NonNull

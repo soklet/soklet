@@ -560,7 +560,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpProtocolProfileRegistryTests.java", "f10803a58f6847de2ddb61ba61c1b70aee837f3fa0bb0e674f4fa73e26fe6bb4", [
     ["fakeProfileEntersOnlyThroughTheExplicitRuntimeTestSeam","6f7e90f54ed0a74a1f86ef1cfd4723d2b55367c9552e86498838855cf2773a1f",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpResultEnvelopeGoldenProductionTests.java", "39a798740554a1c740c137777b66b804cafe0091aaa2eb9ca3dbeff560b39385", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpResultEnvelopeGoldenProductionTests.java", "06e3b093e665e7a5c882934f66c902d2219c1e41be09b9c09eef5d07b61e6567", [
     ["everyFrameworkAndApplicationCompleteAuthorityMatchesGoldens","0e5ffd968dc9e13086364265b4f9acfe1ebdb9c26196372e7406a99bf6930011",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1}}],
     ["requestScopedAndSubscriptionSseTerminalsMatchGoldens","db866095567c47cdfa1b554e5590db4a81da51aa10c5fb857f098d2b5d903118",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1},"controlJoinMillis":0,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
   ]),

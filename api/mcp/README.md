@@ -97,20 +97,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 136 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 144 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
 | `non-mcp-public-api.allowlist` | 61 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, and value-converter owners |
 
-The 262-entry current-source MCP union plus the 61-entry non-MCP allowlist owns
-exactly 323 current types. Ownership alone does not freeze a type. The phase
+The 270-entry current-source MCP union plus the 61-entry non-MCP allowlist owns
+exactly 331 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
 the updated include inventories establish current-source ownership without
 claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`239076145534dae18826ec6184414fb016fd89394f59c213161c305da98bdecd`,
+`f5ee078c211e75700e8824e69e795974fd1483131c1f627d7b7b9f2780f934e9`,
 `bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
 and
 `be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`.
@@ -122,6 +122,53 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-18 P2 Completion runtime and annotation slice (not a refreeze)
+
+Current source adds `@McpPromptCompletion` and
+`@McpResourceCompletion` as two Phase 4 owners, bringing the owner partition to
+144/45/67/14 (270 MCP owners) plus 61 non-MCP owners, 331 total. The reviewed
+Phase 4 include SHA-256 is
+`f5ee078c211e75700e8824e69e795974fd1483131c1f627d7b7b9f2780f934e9`,
+and its full JSpecify nullability-layout SHA-256 is
+`d0612fd532f213d2ff0acf7c13a88269ac5d9bd32fa3ca727312ef3c486ccd64`.
+`McpOperationType` now includes `COMPLETION_COMPLETE`; the existing handler
+interceptor covers that operation and requires an argument-completion result.
+
+An endpoint advertises `completions` only when it has a configured completer.
+The `completion/complete` route uses exact prompt names and literal registered
+URI-template strings, caller-aware prompt access, the normal bounded handler
+pipeline, and the server-wide request limiter. Server construction rejects a
+configured completer without that limiter. The annotation processor binds
+dedicated completion methods to the same registrations as programmatic
+handlers; exact-resource builders remain setter-free. The public README
+describes both configuration paths and the request-wide limiter consequence.
+
+Focused runtime and processor tests pass. Broader locale/tenant,
+cancellation/deadline/progress, simulator/listener, and official-conformance
+evidence remains open; this checkpoint does not claim P2 package exit or a
+formal API refreeze. The signature and incompatibility ledgers remain at
+their reviewed pre-P1b bytes while P0-C and MCP-G2 remain open.
+
+### 2026-09-18 P2 public API foundation (not a refreeze)
+
+The first P2 slice adds the six Phase 4 current-source owners
+`McpArgumentCompletionResult` and its builder, `McpCompletionContext` and its
+two typed nested contexts, and `McpCompletionHandler`. The existing Phase 4
+prompt and resource registrations gain the agreed optional getters, with a
+completion setter only on prompt and resource-template builders. This makes the
+current-source owner partition 142/45/67/14, or 268 MCP owners, plus 61
+non-MCP owners for 329 total. The Phase 4 include SHA-256 is
+`0421dc19debdd9c229eaba506fd43cefcc586e6aea11ec0f6f49c4b9463f8c42`;
+the reviewed current-source Phase 4 nullability-layout SHA-256 is
+`8ee18b8abf51eea1d6791de5cd6e8781a067418045391ac5430e951790063e7e`.
+
+No `completion/complete` route or capability is advertised at this checkpoint.
+`McpOperationResult` remains open until the Completion and Skills result types
+can be sealed together. The Phase 4/5/6 and provisional signature ledgers and
+`current-incompatibilities.jsonl` remain at their last reviewed pre-P1b bytes;
+P0-C and MCP-G2 still block formal refreeze. The P1b checkpoint below records
+the earlier current-source snapshot rather than the current owner totals.
 
 ### 2026-09-18 P1b current-source foundation (not a refreeze)
 

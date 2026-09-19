@@ -27,7 +27,9 @@ import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpMayRequestInput;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
+import com.soklet.annotation.McpPromptCompletion;
 import com.soklet.annotation.McpResource;
+import com.soklet.annotation.McpResourceCompletion;
 import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
@@ -79,7 +81,8 @@ public class AnnotationNullnessContractTests {
 			DELETE.class, DELETEs.class, FormParameter.class,
 			GET.class, GETs.class, HEAD.class, HEADs.class,
 			McpHeader.class, McpMayRequestInput.class, McpPrompt.class,
-			McpPromptArgument.class, McpResource.class,
+			McpPromptArgument.class, McpPromptCompletion.class,
+			McpResource.class, McpResourceCompletion.class,
 			McpResourceList.class, McpResourceUriParameter.class,
 			McpServerEndpoint.class, McpTool.class, McpToolArgument.class,
 			McpToolProperty.class, Multipart.class, OPTIONS.class,

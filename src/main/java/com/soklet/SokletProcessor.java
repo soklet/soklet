@@ -23,7 +23,9 @@ import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
+import com.soklet.annotation.McpPromptCompletion;
 import com.soklet.annotation.McpResource;
+import com.soklet.annotation.McpResourceCompletion;
 import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
@@ -228,6 +230,10 @@ public final class SokletProcessor extends AbstractProcessor {
 	private TypeMirror cancelationTokenType;
 	private TypeMirror mcpProgressReporterType;
 	private TypeMirror mcpPromptOutputType;
+	private TypeMirror mcpArgumentCompletionResultType;
+	private TypeMirror mcpCompletionContextType;
+	private TypeMirror mcpPromptCompletionContextType;
+	private TypeMirror mcpResourceCompletionContextType;
 	private TypeMirror mcpResourceOutputType;
 	private TypeMirror mcpResourcePageType;
 	private TypeMirror mcpResourceReadContextType;
@@ -312,6 +318,22 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement("com.soklet.McpPromptOutput");
 		this.mcpPromptOutputType = mcpPromptOutput == null
 				? null : mcpPromptOutput.asType();
+		TypeElement mcpArgumentCompletionResult =
+				elements.getTypeElement("com.soklet.McpArgumentCompletionResult");
+		this.mcpArgumentCompletionResultType = mcpArgumentCompletionResult == null
+				? null : mcpArgumentCompletionResult.asType();
+		TypeElement mcpCompletionContext =
+				elements.getTypeElement("com.soklet.McpCompletionContext");
+		this.mcpCompletionContextType = mcpCompletionContext == null
+				? null : mcpCompletionContext.asType();
+		TypeElement mcpPromptCompletionContext =
+				elements.getTypeElement("com.soklet.McpCompletionContext.Prompt");
+		this.mcpPromptCompletionContextType = mcpPromptCompletionContext == null
+				? null : mcpPromptCompletionContext.asType();
+		TypeElement mcpResourceCompletionContext =
+				elements.getTypeElement("com.soklet.McpCompletionContext.Resource");
+		this.mcpResourceCompletionContextType = mcpResourceCompletionContext == null
+				? null : mcpResourceCompletionContext.asType();
 		TypeElement mcpResourceOutput =
 				elements.getTypeElement("com.soklet.McpResourceOutput");
 		this.mcpResourceOutputType = mcpResourceOutput == null
@@ -373,7 +395,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.add(McpHeader.class.getCanonicalName());
 		out.add(McpPrompt.class.getCanonicalName());
 		out.add(McpPromptArgument.class.getCanonicalName());
+		out.add(McpPromptCompletion.class.getCanonicalName());
 		out.add(McpResource.class.getCanonicalName());
+		out.add(McpResourceCompletion.class.getCanonicalName());
 		out.add(McpResourceUriParameter.class.getCanonicalName());
 		out.add(McpResourceList.class.getCanonicalName());
 		// Keep the processor active when a touched type removes its final Soklet
@@ -540,8 +564,12 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement(McpPrompt.class.getCanonicalName());
 		TypeElement promptArgumentAnnotation = elements.getTypeElement(
 				McpPromptArgument.class.getCanonicalName());
+		TypeElement promptCompletionAnnotation = elements.getTypeElement(
+				McpPromptCompletion.class.getCanonicalName());
 		TypeElement resourceAnnotation =
 				elements.getTypeElement(McpResource.class.getCanonicalName());
+		TypeElement resourceCompletionAnnotation = elements.getTypeElement(
+				McpResourceCompletion.class.getCanonicalName());
 		TypeElement resourceUriParameterAnnotation = elements.getTypeElement(
 				McpResourceUriParameter.class.getCanonicalName());
 		TypeElement listResourcesAnnotation = elements.getTypeElement(
@@ -550,6 +578,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				|| argumentAnnotation == null || headerAnnotation == null
 				|| promptAnnotation == null
 				|| promptArgumentAnnotation == null || resourceAnnotation == null
+				|| promptCompletionAnnotation == null
+				|| resourceCompletionAnnotation == null
 				|| resourceUriParameterAnnotation == null
 				|| listResourcesAnnotation == null)
 			return;
@@ -558,7 +588,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				toolAnnotation, argumentAnnotation, headerAnnotation,
 				promptAnnotation,
 				promptArgumentAnnotation, resourceAnnotation,
-				resourceUriParameterAnnotation, listResourcesAnnotation);
+				resourceUriParameterAnnotation, listResourcesAnnotation,
+				promptCompletionAnnotation, resourceCompletionAnnotation);
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
 				endpointAnnotation)) {
@@ -594,7 +625,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				continue;
 			if (hasUnresolvedMcpOperationType(endpointType, toolAnnotation,
 					promptAnnotation, resourceAnnotation,
-					listResourcesAnnotation)) {
+					listResourcesAnnotation, promptCompletionAnnotation,
+					resourceCompletionAnnotation)) {
 				if (roundEnv.processingOver()) {
 					mcpError(endpointType,
 							"Soklet: @McpServerEndpoint contains an unresolved MCP operation parameter or return type after annotation processing completed.");
@@ -610,7 +642,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					toolAnnotation, argumentAnnotation, headerAnnotation,
 					promptAnnotation,
 					promptArgumentAnnotation, resourceAnnotation,
-					resourceUriParameterAnnotation, listResourcesAnnotation);
+					resourceUriParameterAnnotation, listResourcesAnnotation,
+					promptCompletionAnnotation, resourceCompletionAnnotation);
 			if (endpoint == null)
 				continue;
 
@@ -638,13 +671,17 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement promptAnnotation,
 			@NonNull TypeElement resourceAnnotation,
-			@NonNull TypeElement listResourcesAnnotation) {
+			@NonNull TypeElement listResourcesAnnotation,
+			@NonNull TypeElement promptCompletionAnnotation,
+			@NonNull TypeElement resourceCompletionAnnotation) {
 		for (Element enclosed : endpointType.getEnclosedElements()) {
 			if (enclosed.getKind() != ElementKind.METHOD
 					|| (findAnnotation(enclosed, toolAnnotation) == null
 					&& findAnnotation(enclosed, promptAnnotation) == null
 					&& findAnnotation(enclosed, resourceAnnotation) == null
-					&& findAnnotation(enclosed, listResourcesAnnotation) == null))
+					&& findAnnotation(enclosed, listResourcesAnnotation) == null
+					&& findAnnotation(enclosed, promptCompletionAnnotation) == null
+					&& findAnnotation(enclosed, resourceCompletionAnnotation) == null))
 				continue;
 			ExecutableElement method = (ExecutableElement) enclosed;
 			if (containsErrorType(method.getReturnType()))
@@ -736,7 +773,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement promptArgumentAnnotation,
 			@NonNull TypeElement resourceAnnotation,
 			@NonNull TypeElement resourceUriParameterAnnotation,
-			@NonNull TypeElement listResourcesAnnotation) {
+			@NonNull TypeElement listResourcesAnnotation,
+			@NonNull TypeElement promptCompletionAnnotation,
+			@NonNull TypeElement resourceCompletionAnnotation) {
 		for (Element element : roundEnv.getElementsAnnotatedWith(toolAnnotation)) {
 			if (element.getKind() != ElementKind.METHOD) {
 				mcpError(element,
@@ -773,6 +812,32 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (findAnnotation(owner, endpointAnnotation) == null)
 				mcpError(element,
 						"Soklet: @McpResource methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				promptCompletionAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpPromptCompletion can only be applied to methods.");
+				continue;
+			}
+			if (findAnnotation(element.getEnclosingElement(),
+					endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpPromptCompletion methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				resourceCompletionAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpResourceCompletion can only be applied to methods.");
+				continue;
+			}
+			if (findAnnotation(element.getEnclosingElement(),
+					endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpResourceCompletion methods must be declared directly by an @McpServerEndpoint class.");
 		}
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
@@ -875,7 +940,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement promptArgumentAnnotation,
 			@NonNull TypeElement resourceAnnotation,
 			@NonNull TypeElement resourceUriParameterAnnotation,
-			@NonNull TypeElement listResourcesAnnotation) {
+			@NonNull TypeElement listResourcesAnnotation,
+			@NonNull TypeElement promptCompletionAnnotation,
+			@NonNull TypeElement resourceCompletionAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
 		AnnotationMirror annotation = findAnnotation(endpointType,
 				McpServerEndpoint.class.getCanonicalName());
@@ -980,9 +1047,12 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<McpToolModel> tools = new ArrayList<>();
 		List<McpPromptModel> prompts = new ArrayList<>();
 		List<McpResourceModel> resources = new ArrayList<>();
+		List<McpCompletionModel> promptCompletions = new ArrayList<>();
+		List<McpCompletionModel> resourceCompletions = new ArrayList<>();
 		McpResourceListModel resourceList = null;
 		rejectInheritedMcpOperations(endpointType, toolAnnotation,
-				promptAnnotation, resourceAnnotation, listResourcesAnnotation);
+				promptAnnotation, resourceAnnotation, listResourcesAnnotation,
+				promptCompletionAnnotation, resourceCompletionAnnotation);
 		for (Element enclosed : endpointType.getEnclosedElements()) {
 			if (enclosed.getKind() != ElementKind.METHOD)
 				continue;
@@ -991,13 +1061,18 @@ public final class SokletProcessor extends AbstractProcessor {
 			boolean resource = findAnnotation(enclosed, resourceAnnotation) != null;
 			boolean listResources = findAnnotation(enclosed,
 					listResourcesAnnotation) != null;
+			boolean promptCompletion = findAnnotation(enclosed,
+					promptCompletionAnnotation) != null;
+			boolean resourceCompletion = findAnnotation(enclosed,
+					resourceCompletionAnnotation) != null;
 			if (tool && prompt) {
 				mcpError(enclosed,
 						"Soklet: An MCP handler method must not declare both @McpTool and @McpPrompt.");
 				continue;
 			}
 			if ((tool ? 1 : 0) + (prompt ? 1 : 0) + (resource ? 1 : 0)
-					+ (listResources ? 1 : 0) > 1) {
+					+ (listResources ? 1 : 0) + (promptCompletion ? 1 : 0)
+					+ (resourceCompletion ? 1 : 0) > 1) {
 				mcpError(enclosed,
 						"Soklet: An MCP handler method must declare exactly one operation annotation.");
 				continue;
@@ -1028,6 +1103,12 @@ public final class SokletProcessor extends AbstractProcessor {
 					else
 						resourceList = model;
 				}
+			} else if (promptCompletion || resourceCompletion) {
+				McpCompletionModel model = validateMcpCompletion(
+						(ExecutableElement) enclosed, promptCompletion);
+				if (model != null)
+					(promptCompletion ? promptCompletions : resourceCompletions)
+							.add(model);
 			}
 		}
 
@@ -1056,6 +1137,19 @@ public final class SokletProcessor extends AbstractProcessor {
 						"Soklet: Duplicate MCP prompt name '%s' in endpoint %s.",
 						prompt.name(), endpointBinaryName);
 		}
+		Map<String, McpCompletionModel> promptCompletionByName =
+				new LinkedHashMap<>();
+		for (McpCompletionModel completion : promptCompletions) {
+			if (!promptNames.contains(completion.target()))
+				mcpError(completion.method(),
+						"Soklet: @McpPromptCompletion target '%s' has no @McpPrompt registration in this endpoint.",
+						completion.target());
+			if (promptCompletionByName.putIfAbsent(completion.target(),
+						completion) != null)
+				mcpError(completion.method(),
+						"Soklet: Duplicate @McpPromptCompletion for prompt '%s'.",
+						completion.target());
+		}
 
 		resources.sort(Comparator.comparing(McpResourceModel::address)
 				.thenComparing(resource -> resource.method().getSimpleName()
@@ -1073,6 +1167,19 @@ public final class SokletProcessor extends AbstractProcessor {
 				mcpError(resource.method(),
 						"Soklet: Duplicate MCP resource address in endpoint %s.",
 						endpointBinaryName);
+		}
+		Map<String, McpCompletionModel> resourceCompletionByAddress =
+				new LinkedHashMap<>();
+		for (McpCompletionModel completion : resourceCompletions) {
+			if (!resourceTemplateAddresses.contains(completion.target()))
+				mcpError(completion.method(),
+						"Soklet: @McpResourceCompletion target '%s' has no @McpResource URI-template registration in this endpoint.",
+						completion.target());
+			if (resourceCompletionByAddress.putIfAbsent(completion.target(),
+						completion) != null)
+				mcpError(completion.method(),
+						"Soklet: Duplicate @McpResourceCompletion for URI template '%s'.",
+						completion.target());
 		}
 		List<McpResourceModel> templates = resources.stream()
 				.filter(McpResourceModel::template).toList();
@@ -1116,7 +1223,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				resourceListCacheTimeToLiveInMilliseconds, resourceListCacheScope,
 				resourceTemplateListCacheTimeToLiveInMilliseconds,
 				resourceTemplateListCacheScope, List.copyOf(tools),
-				List.copyOf(prompts), List.copyOf(resources), resourceList);
+				List.copyOf(prompts), List.copyOf(resources), resourceList,
+				Map.copyOf(promptCompletionByName),
+				Map.copyOf(resourceCompletionByAddress));
 	}
 
 	private void rejectInheritedMcpOperations(
@@ -1124,14 +1233,17 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement promptAnnotation,
 			@NonNull TypeElement resourceAnnotation,
-			@NonNull TypeElement listResourcesAnnotation) {
+			@NonNull TypeElement listResourcesAnnotation,
+			@NonNull TypeElement promptCompletionAnnotation,
+			@NonNull TypeElement resourceCompletionAnnotation) {
 		for (Element member : elements.getAllMembers(endpointType)) {
 			if (member.getKind() != ElementKind.METHOD
 					|| member.getEnclosingElement().equals(endpointType))
 				continue;
 			List<String> annotations = mcpOperationAnnotationNames(member,
 					toolAnnotation, promptAnnotation, resourceAnnotation,
-					listResourcesAnnotation);
+					listResourcesAnnotation, promptCompletionAnnotation,
+					resourceCompletionAnnotation);
 			if (annotations.isEmpty())
 				continue;
 			Element owner = member.getEnclosingElement();
@@ -1160,7 +1272,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			Set<String> effectiveAnnotations = new LinkedHashSet<>(
 					mcpOperationAnnotationNames(effectiveMethod, toolAnnotation,
 							promptAnnotation, resourceAnnotation,
-							listResourcesAnnotation));
+							listResourcesAnnotation, promptCompletionAnnotation,
+							resourceCompletionAnnotation));
 			Element effectiveOwner = effectiveMethod.getEnclosingElement();
 			String effectiveOwnerName = effectiveOwner instanceof TypeElement ownerType
 					? ownerType.getQualifiedName().toString()
@@ -1174,7 +1287,9 @@ public final class SokletProcessor extends AbstractProcessor {
 					List<String> missingAnnotations = new ArrayList<>(
 							mcpOperationAnnotationNames(supertypeMethod,
 									toolAnnotation, promptAnnotation,
-									resourceAnnotation, listResourcesAnnotation));
+									resourceAnnotation, listResourcesAnnotation,
+									promptCompletionAnnotation,
+									resourceCompletionAnnotation));
 					missingAnnotations.removeAll(effectiveAnnotations);
 					missingAnnotations.removeIf(annotation ->
 							!reportedAnnotations.add(annotation));
@@ -1225,8 +1340,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement promptAnnotation,
 			@NonNull TypeElement resourceAnnotation,
-			@NonNull TypeElement listResourcesAnnotation) {
-		List<String> annotations = new ArrayList<>(4);
+			@NonNull TypeElement listResourcesAnnotation,
+			@NonNull TypeElement promptCompletionAnnotation,
+			@NonNull TypeElement resourceCompletionAnnotation) {
+		List<String> annotations = new ArrayList<>(6);
 		if (findAnnotation(element, toolAnnotation) != null)
 			annotations.add("@McpTool");
 		if (findAnnotation(element, promptAnnotation) != null)
@@ -1235,6 +1352,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			annotations.add("@McpResource");
 		if (findAnnotation(element, listResourcesAnnotation) != null)
 			annotations.add("@McpResourceList");
+		if (findAnnotation(element, promptCompletionAnnotation) != null)
+			annotations.add("@McpPromptCompletion");
+		if (findAnnotation(element, resourceCompletionAnnotation) != null)
+			annotations.add("@McpResourceCompletion");
 		return List.copyOf(annotations);
 	}
 
@@ -1990,6 +2111,104 @@ public final class SokletProcessor extends AbstractProcessor {
 		return new McpResourceListModel(method, List.copyOf(bindings));
 	}
 
+	private McpCompletionModel validateMcpCompletion(
+			@NonNull ExecutableElement method, boolean prompt) {
+		int errorsBefore = mcpProcessingErrorCount;
+		String annotationName = prompt
+				? "@McpPromptCompletion" : "@McpResourceCompletion";
+		AnnotationMirror annotation = findAnnotation(method, prompt
+				? McpPromptCompletion.class.getCanonicalName()
+				: McpResourceCompletion.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+		validateConcreteMcpHandlerMethod(method, annotationName);
+		String target = annotationString(annotation, prompt ? "name" : "uri");
+		if (target.isBlank())
+			mcpError(method, "Soklet: %s target must be nonblank.",
+					annotationName);
+		if (mcpArgumentCompletionResultType == null || !types.isSameType(
+				method.getReturnType(), mcpArgumentCompletionResultType))
+			mcpError(method,
+					"Soklet: %s method return type must be exactly McpArgumentCompletionResult.",
+					annotationName);
+		if (findAnnotation(method,
+				"org.jspecify.annotations.Nullable") != null
+				|| method.getReturnType().getAnnotationMirrors().stream()
+						.anyMatch(mirror -> mirror.getAnnotationType().toString()
+								.equals("org.jspecify.annotations.Nullable")))
+			mcpError(method,
+					"Soklet: %s method must return a nonnull McpArgumentCompletionResult.",
+					annotationName);
+
+		List<McpCompletionParameterBinding> bindings = new ArrayList<>();
+		Set<McpCompletionParameterBinding> seen = new LinkedHashSet<>();
+		for (VariableElement parameter : method.getParameters()) {
+			boolean unsupportedBinding = parameter.getAnnotationMirrors().stream()
+					.anyMatch(mirror -> mirror.getAnnotationType().toString()
+							.startsWith("com.soklet.annotation."));
+			if (unsupportedBinding)
+				mcpError(parameter,
+						"Soklet: %s parameters must not declare binding annotations; partial inputs belong in McpCompletionContext.",
+						annotationName);
+			TypeMirror type = parameter.asType();
+			McpCompletionParameterBinding binding;
+			if (isExactType(type, mcpRequestContextType))
+				binding = McpCompletionParameterBinding.REQUEST_CONTEXT;
+			else if (isExactType(type, mcpCompletionContextType))
+				binding = McpCompletionParameterBinding.COMPLETION_CONTEXT;
+			else if (isExactType(type, prompt
+					? mcpPromptCompletionContextType
+					: mcpResourceCompletionContextType))
+				binding = prompt
+						? McpCompletionParameterBinding.PROMPT_CONTEXT
+						: McpCompletionParameterBinding.RESOURCE_CONTEXT;
+			else if (isExactType(type, prompt
+					? mcpResourceCompletionContextType
+					: mcpPromptCompletionContextType)) {
+				mcpError(parameter,
+						"Soklet: %s method must not inject the other target's McpCompletionContext type.",
+						annotationName);
+				continue;
+			} else if (isExactType(type, mcpInvocationFeaturesType))
+				binding = McpCompletionParameterBinding.INVOCATION_FEATURES;
+			else if (isExactType(type, cancelationTokenType))
+				binding = McpCompletionParameterBinding.CANCELATION_TOKEN;
+			else if (isOptionalMcpProgressReporter(type))
+				binding = McpCompletionParameterBinding.PROGRESS_REPORTER;
+			else {
+				mcpError(parameter,
+						"Soklet: %s parameters must be McpCompletionContext or the matching nested target type, McpRequestContext, McpInvocationFeatures, CancelationToken, or Optional<McpProgressReporter>.",
+						annotationName);
+				continue;
+			}
+			boolean context = binding == McpCompletionParameterBinding.COMPLETION_CONTEXT
+					|| binding == McpCompletionParameterBinding.PROMPT_CONTEXT
+					|| binding == McpCompletionParameterBinding.RESOURCE_CONTEXT;
+			if (context && bindings.stream().anyMatch(existing ->
+					existing == McpCompletionParameterBinding.COMPLETION_CONTEXT
+							|| existing == McpCompletionParameterBinding.PROMPT_CONTEXT
+							|| existing == McpCompletionParameterBinding.RESOURCE_CONTEXT))
+				mcpError(parameter,
+						"Soklet: %s method must inject exactly one McpCompletionContext parameter.",
+						annotationName);
+			else if (!seen.add(binding))
+				mcpError(parameter,
+						"Soklet: %s method may inject %s at most once.",
+						annotationName, type);
+			bindings.add(binding);
+		}
+		if (bindings.stream().noneMatch(binding ->
+				binding == McpCompletionParameterBinding.COMPLETION_CONTEXT
+					|| binding == McpCompletionParameterBinding.PROMPT_CONTEXT
+					|| binding == McpCompletionParameterBinding.RESOURCE_CONTEXT))
+			mcpError(method,
+					"Soklet: %s method must inject exactly one McpCompletionContext parameter.",
+					annotationName);
+		if (mcpProcessingErrorCount != errorsBefore)
+			return null;
+		return new McpCompletionModel(method, target, List.copyOf(bindings));
+	}
+
 	private void validateConcreteMcpHandlerMethod(
 			@NonNull ExecutableElement method, @NonNull String annotationName) {
 		if (!method.getModifiers().contains(Modifier.PUBLIC))
@@ -2675,6 +2894,15 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(".addArgument(").append(argumentBuilder)
 						.append(".build());\n");
 			}
+			McpCompletionModel completion = endpoint.promptCompletions()
+					.get(prompt.name());
+			if (completion != null)
+				source.append("\t\tpromptBuilder").append(index)
+						.append(".completionHandler((requestContext, completionContextPrompt, invocationFeatures) -> instanceResolver.apply(requestContext).")
+						.append(completion.method().getSimpleName()).append('(')
+						.append(completionInvocationArguments(completion.bindings(),
+								"completionContextPrompt"))
+						.append("));\n");
 			appendInputRequestDeclarations(source, "promptBuilder" + index,
 					prompt.inputRequestDeclarations());
 			appendRequestStateMode(source, "promptBuilder" + index,
@@ -2723,6 +2951,15 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(cachePolicyExpression(resource.cacheTimeToLiveInMilliseconds(),
 								resource.cacheScope()))
 						.append(");\n");
+			McpCompletionModel completion = endpoint.resourceCompletions()
+					.get(resource.address());
+			if (completion != null)
+				source.append("\t\tresourceBuilder").append(index)
+						.append(".completionHandler((requestContext, completionContextResource, invocationFeatures) -> instanceResolver.apply(requestContext).")
+						.append(completion.method().getSimpleName()).append('(')
+						.append(completionInvocationArguments(completion.bindings(),
+								"completionContextResource"))
+						.append("));\n");
 			appendInputRequestDeclarations(source, "resourceBuilder" + index,
 					resource.inputRequestDeclarations());
 			appendRequestStateMode(source, "resourceBuilder" + index,
@@ -2911,6 +3148,31 @@ public final class SokletProcessor extends AbstractProcessor {
 				case PROGRESS_REPORTER ->
 						"features.getProgressReporter()";
 				case RESOURCE_LIST_CONTEXT -> "list";
+			});
+		}
+		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String completionInvocationArguments(
+			@NonNull List<McpCompletionParameterBinding> bindings,
+			@NonNull String contextVariable) {
+		List<String> arguments = new ArrayList<>(bindings.size());
+		for (McpCompletionParameterBinding binding : bindings) {
+			arguments.add(switch (binding) {
+				case REQUEST_CONTEXT -> "requestContext";
+				case COMPLETION_CONTEXT -> contextVariable;
+				case PROMPT_CONTEXT ->
+						"((com.soklet.McpCompletionContext.Prompt) "
+								+ contextVariable + ")";
+				case RESOURCE_CONTEXT ->
+						"((com.soklet.McpCompletionContext.Resource) "
+								+ contextVariable + ")";
+				case INVOCATION_FEATURES -> "invocationFeatures";
+				case CANCELATION_TOKEN ->
+						"invocationFeatures.getCancelationToken()";
+				case PROGRESS_REPORTER ->
+						"invocationFeatures.getProgressReporter()";
 			});
 		}
 		return String.join(", ", arguments);
@@ -4377,7 +4639,22 @@ public final class SokletProcessor extends AbstractProcessor {
 			String resourceTemplateListCacheScope,
 			List<McpToolModel> tools, List<McpPromptModel> prompts,
 			List<McpResourceModel> resources,
-			@Nullable McpResourceListModel resourceList) {}
+			@Nullable McpResourceListModel resourceList,
+			Map<String, McpCompletionModel> promptCompletions,
+			Map<String, McpCompletionModel> resourceCompletions) {}
+
+	private record McpCompletionModel(ExecutableElement method, String target,
+			List<McpCompletionParameterBinding> bindings) {}
+
+	private enum McpCompletionParameterBinding {
+		REQUEST_CONTEXT,
+		COMPLETION_CONTEXT,
+		PROMPT_CONTEXT,
+		RESOURCE_CONTEXT,
+		INVOCATION_FEATURES,
+		CANCELATION_TOKEN,
+		PROGRESS_REPORTER
+	}
 
 	private record McpToolModel(ExecutableElement method, String name,
 			String title, String description, String rateLimiterName,

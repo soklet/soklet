@@ -83,13 +83,13 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 136;
+	private static final int PHASE_FOUR_TYPE_COUNT = 144;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 262;
+	private static final int CURRENT_MCP_TYPE_COUNT = 270;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"2ccce8e3de9c7f3860bdeec071727eb27875b1996d4f410c4edaf9299a1525ee";
+			"d0612fd532f213d2ff0acf7c13a88269ac5d9bd32fa3ca727312ef3c486ccd64";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -148,6 +148,7 @@ public class McpPublicApiReflectionContractTests {
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
 							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
+							"COMPLETION_COMPLETE",
 							"SUBSCRIPTIONS_LISTEN", "TASKS_GET", "TASKS_UPDATE",
 							"TASKS_CANCEL", "NOTIFICATIONS_CANCELED", "OTHER")),
 					Map.entry("com.soklet.McpRateLimitTarget",
@@ -901,6 +902,10 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterNames(McpPromptHandler.class.getMethod("handle",
 				McpRequestContext.class, McpPromptGetContext.class,
 				McpInvocationFeatures.class), "request", "prompt", "features");
+		assertParameterNames(McpCompletionHandler.class.getMethod("handle",
+				McpRequestContext.class, McpCompletionContext.class,
+				McpInvocationFeatures.class), "requestContext",
+				"completionContext", "invocationFeatures");
 		assertParameterNames(McpResourceReadHandler.class.getMethod("handle",
 				McpRequestContext.class, McpResourceReadContext.class,
 				McpInvocationFeatures.class), "request", "resource", "features");

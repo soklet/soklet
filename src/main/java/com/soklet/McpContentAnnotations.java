@@ -106,7 +106,7 @@ public final class McpContentAnnotations {
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
-		private final Set<@NonNull McpRole> audience = new LinkedHashSet<>();
+		private Set<@NonNull McpRole> audience = new LinkedHashSet<>();
 		@Nullable
 		private Double priority;
 		@Nullable
@@ -121,14 +121,16 @@ public final class McpContentAnnotations {
 		 *
 		 * @param audience audience roles
 		 * @return this builder
+		 * @throws NullPointerException if the array or any role is null
 		 */
 		@NonNull
 		public Builder audience(
 				@NonNull McpRole @NonNull... audience) {
 			requireNonNull(audience);
-			this.audience.clear();
+			Set<McpRole> copied = new LinkedHashSet<>();
 			for (McpRole role : audience)
-				this.audience.add(requireNonNull(role));
+				copied.add(requireNonNull(role));
+			this.audience = copied;
 			return this;
 		}
 

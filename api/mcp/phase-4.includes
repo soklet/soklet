@@ -11,6 +11,8 @@ com.soklet.McpAdmissionIdentity
 com.soklet.McpAdmissionIdentity$Builder
 com.soklet.McpAdmissionRejection
 com.soklet.McpAdmissionRejection$Builder
+com.soklet.McpArgumentCompletionResult
+com.soklet.McpArgumentCompletionResult$Builder
 com.soklet.McpAudioContent
 com.soklet.McpAudioContent$Builder
 com.soklet.McpBlobResourceContents
@@ -25,6 +27,10 @@ com.soklet.McpClientCapability
 com.soklet.McpCompletePayload
 com.soklet.McpCompleteResult
 com.soklet.McpCompleteToolHandler
+com.soklet.McpCompletionContext
+com.soklet.McpCompletionContext$Prompt
+com.soklet.McpCompletionContext$Resource
+com.soklet.McpCompletionHandler
 com.soklet.McpContentAnnotations
 com.soklet.McpContentAnnotations$Builder
 com.soklet.McpContentBlock
@@ -127,7 +133,9 @@ com.soklet.SokletConfig$Builder
 com.soklet.annotation.McpHeader
 com.soklet.annotation.McpPrompt
 com.soklet.annotation.McpPromptArgument
+com.soklet.annotation.McpPromptCompletion
 com.soklet.annotation.McpResource
+com.soklet.annotation.McpResourceCompletion
 com.soklet.annotation.McpResourceList
 com.soklet.annotation.McpResourceUriParameter
 com.soklet.annotation.McpServerEndpoint
