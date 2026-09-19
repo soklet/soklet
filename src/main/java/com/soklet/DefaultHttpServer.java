@@ -76,7 +76,6 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static com.soklet.Utilities.emptyByteArray;
@@ -101,7 +100,7 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Duration DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
 	@NonNull
-	private static final ResponseGzipPolicy DEFAULT_RESPONSE_GZIP_POLICY;
+	private static final ResponseCompressor DEFAULT_RESPONSE_COMPRESSOR;
 	@NonNull
 	private static final RequestDecompressionPolicy DEFAULT_REQUEST_DECOMPRESSION_POLICY;
 	@NonNull
@@ -143,7 +142,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_BODY_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT = Duration.ofSeconds(60);
-		DEFAULT_RESPONSE_GZIP_POLICY = ResponseGzipPolicy.disabledInstance();
+		DEFAULT_RESPONSE_COMPRESSOR = ResponseCompressor.disabledInstance();
 		DEFAULT_REQUEST_DECOMPRESSION_POLICY = RequestDecompressionPolicy.disabledInstance();
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
@@ -177,7 +176,7 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private final Duration responseWriteIdleTimeout;
 	@NonNull
-	private final ResponseGzipPolicy responseGzipPolicy;
+	private final ResponseCompressor responseCompressor;
 	@NonNull
 	private final RequestDecompressionPolicy requestDecompressionPolicy;
 	@NonNull
@@ -267,7 +266,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
 		this.requestBodyTimeout = builder.requestBodyTimeout != null ? builder.requestBodyTimeout : DEFAULT_REQUEST_BODY_TIMEOUT;
 		this.responseWriteIdleTimeout = builder.responseWriteIdleTimeout != null ? builder.responseWriteIdleTimeout : DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
-		this.responseGzipPolicy = builder.responseGzipPolicy != null ? builder.responseGzipPolicy : DEFAULT_RESPONSE_GZIP_POLICY;
+		this.responseCompressor = builder.responseCompressor != null ? builder.responseCompressor : DEFAULT_RESPONSE_COMPRESSOR;
 		this.requestDecompressionPolicy = builder.requestDecompressionPolicy != null ? builder.requestDecompressionPolicy : DEFAULT_REQUEST_DECOMPRESSION_POLICY;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
@@ -667,6 +666,7 @@ final class DefaultHttpServer implements HttpServer {
 										MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
 												requestResult.getResourceMethod().orElse(null),
 												requestResult.getMarshaledResponse(),
+												requestResult.getHeadResponseCompressionBody().orElse(null),
 												streamingForcedShutdownStarted::get);
 										if (responseWritten.compareAndSet(false, true)) {
 											cancelTimeout(timeoutFutureRef.getAndSet(null));
@@ -1414,14 +1414,14 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(null, null, marshaledResponse, () -> false);
+		return toMicrohttpResponse(null, null, marshaledResponse, null, () -> false);
 	}
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
 																	@Nullable ResourceMethod resourceMethod,
 																	@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(request, resourceMethod, marshaledResponse,
+		return toMicrohttpResponse(request, resourceMethod, marshaledResponse, null,
 				() -> false);
 	}
 
@@ -1429,6 +1429,7 @@ final class DefaultHttpServer implements HttpServer {
 	private MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse,
+																@Nullable MarshaledResponseBody headResponseCompressionBody,
 																@NonNull BooleanSupplier streamingForcedShutdownStarted) {
 		requireNonNull(marshaledResponse);
 		requireNonNull(streamingForcedShutdownStarted);
@@ -1514,200 +1515,187 @@ final class DefaultHttpServer implements HttpServer {
 		}
 
 		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
+		boolean head = request != null && request.getHttpMethod() == HttpMethod.HEAD;
+		MarshaledResponseBody compressionBody = head && body == null
+				? headResponseCompressionBody
+				: body;
 
-		if (body == null) {
-			if (shouldGzipResponse(request, marshaledResponse, headers, 0))
-				return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), emptyByteArray());
+		if (isResponseCompressionCandidate(request, marshaledResponse, headers, compressionBody)) {
+			Request compressionRequest = requireNonNull(request);
+			MarshaledResponseBody uncompressedBody = requireNonNull(compressionBody);
+			// The transport result carries HEAD's original representation separately, so planning
+			// sees the same body as GET without retaining it in lifecycle/log response objects.
+			MarshaledResponse compressionResponse = sameInstance(body, uncompressedBody) ? marshaledResponse
+					: marshaledResponse.copy().body(uncompressedBody).finish();
+			ResponseCompressionPlan plan = requireNonNull(
+					getResponseCompressor().plan(compressionRequest, compressionResponse),
+					"Response compressor must not return null.");
 
-			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
+			// Both encoded and identity responses participate in encoding negotiation. This must
+			// also cover a custom planner that examines Accept-Encoding and returns none().
+			headers = varyAcceptEncodingHeaders(headers);
+			String contentEncoding = plan.getContentEncoding().orElse(null);
+
+			if (contentEncoding != null && requestAcceptsContentEncoding(compressionRequest, contentEncoding)) {
+				headers = compressedHeaders(headers, contentEncoding);
+				return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers,
+						head ? emptyByteArray() : compressResponseBody(plan, uncompressedBody));
+			}
+
+			if (!requestAcceptsIdentity(compressionRequest))
+				return new MicrohttpResponse(406, reasonPhraseForStatusCode(406),
+						compressionNotAcceptableHeaders(headers), emptyByteArray());
 		}
 
+		if (body == null)
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
+
 		if (body instanceof MarshaledResponseBody.Bytes bytes)
-			return bytesResponse(request, marshaledResponse, reasonPhrase, headers, bytes.getBytes());
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes.getBytes());
 
 		if (body instanceof MarshaledResponseBody.File file)
 			return MicrohttpResponse.withFileBody(
-					marshaledResponse.getStatusCode(),
-					reasonPhrase,
-					headers,
-					file.getPath(),
-					file.getOffset(),
-					file.getCount());
+					marshaledResponse.getStatusCode(), reasonPhrase, headers,
+					file.getPath(), file.getOffset(), file.getCount());
 
 		if (body instanceof MarshaledResponseBody.FileChannel fileChannel)
 			return MicrohttpResponse.withFileChannelBody(
-					marshaledResponse.getStatusCode(),
-					reasonPhrase,
-					headers,
-					fileChannel.getChannel(),
-					fileChannel.getOffset(),
-					fileChannel.getCount(),
-					fileChannel.getCloseOnComplete());
+					marshaledResponse.getStatusCode(), reasonPhrase, headers,
+					fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), fileChannel.getCloseOnComplete());
 
 		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
-			return byteBufferResponse(request, marshaledResponse, reasonPhrase, headers, byteBuffer.getBuffer());
+			return MicrohttpResponse.withByteBufferBody(marshaledResponse.getStatusCode(), reasonPhrase, headers, byteBuffer.getBuffer());
 
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
 	}
 
-	@NonNull
-	private MicrohttpResponse bytesResponse(@Nullable Request request,
-																					@NonNull MarshaledResponse marshaledResponse,
-																					@NonNull String reasonPhrase,
-																					@NonNull List<@NonNull Header> headers,
-																					byte @NonNull [] bytes) {
-		requireNonNull(marshaledResponse);
-		requireNonNull(reasonPhrase);
-		requireNonNull(headers);
-		requireNonNull(bytes);
+	private boolean isResponseCompressionCandidate(@Nullable Request request,
+			@NonNull MarshaledResponse marshaledResponse, @NonNull List<@NonNull Header> headers,
+			@Nullable MarshaledResponseBody body) {
+		if (request == null || sameInstance(getResponseCompressor(), ResponseCompressor.disabledInstance()))
+			return false;
 
-		if (!shouldGzipResponse(request, marshaledResponse, headers, bytes.length))
-			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes);
+		if (!(body instanceof MarshaledResponseBody.Bytes || body instanceof MarshaledResponseBody.ByteBuffer)
+				|| body.getLength() == 0)
+			return false;
 
-		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), gzip(bytes));
+		int statusCode = marshaledResponse.getStatusCode();
+		return statusCode >= 200 && statusCode != 204 && statusCode != 206 && statusCode != 304
+				&& !hasHeader(headers, "Content-Encoding")
+				&& !hasHeader(headers, "Content-Range")
+				&& !hasHeader(headers, "Transfer-Encoding");
 	}
 
-	@NonNull
-	private MicrohttpResponse byteBufferResponse(@Nullable Request request,
-																							 @NonNull MarshaledResponse marshaledResponse,
-																							 @NonNull String reasonPhrase,
-																							 @NonNull List<@NonNull Header> headers,
-																							 @NonNull ByteBuffer byteBuffer) {
-		requireNonNull(marshaledResponse);
-		requireNonNull(reasonPhrase);
-		requireNonNull(headers);
-		requireNonNull(byteBuffer);
-
-		if (!shouldGzipResponse(request, marshaledResponse, headers, byteBuffer.remaining()))
-			return MicrohttpResponse.withByteBufferBody(marshaledResponse.getStatusCode(), reasonPhrase, headers, byteBuffer);
-
-		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), gzip(byteBufferBytes(byteBuffer)));
-	}
-
-	@NonNull
-	private Boolean shouldGzipResponse(@Nullable Request request,
-																		 @NonNull MarshaledResponse marshaledResponse,
-																		 @NonNull List<@NonNull Header> headers,
-																		 @NonNull Integer bodyLength) {
-		requireNonNull(marshaledResponse);
-		requireNonNull(headers);
-		requireNonNull(bodyLength);
-
-		if (request == null)
-			return false;
-
-		if (effectiveBodyLengthForResponseGzip(request, marshaledResponse, headers, bodyLength) == 0)
-			return false;
-
-		if (!statusAllowsResponseGzip(marshaledResponse.getStatusCode()))
-			return false;
-
-		if (hasHeader(headers, "Content-Encoding")
-				|| hasHeader(headers, "Content-Range")
-				|| hasHeader(headers, "Transfer-Encoding"))
-			return false;
-
-		if (!requestAcceptsGzip(request))
-			return false;
-
-		return requireNonNull(getResponseGzipPolicy().shouldGzip(request, marshaledResponse),
-				"Response gzip policy must not return null.");
-	}
-
-	@NonNull
-	private Boolean statusAllowsResponseGzip(@NonNull Integer statusCode) {
-		requireNonNull(statusCode);
-		return statusCode >= 200 && statusCode != 204 && statusCode != 206 && statusCode != 304;
-	}
-
-	@NonNull
-	private Boolean requestAcceptsGzip(@NonNull Request request) {
-		requireNonNull(request);
-		Set<String> acceptEncodingValues = request.getHeaderValues("Accept-Encoding").orElse(Set.of());
-		Integer gzipQ = null;
-		Integer wildcardQ = null;
-
-		for (String value : acceptEncodingValues) {
-			for (String part : value.split(",", -1)) {
-				EncodingPreference encodingPreference = EncodingPreference.fromHeaderValue(part).orElse(null);
-
-				if (encodingPreference == null)
-					continue;
-
-				if ("gzip".equals(encodingPreference.coding()))
-					gzipQ = Math.max(gzipQ == null ? 0 : gzipQ, encodingPreference.q());
-				else if ("*".equals(encodingPreference.coding()))
-					wildcardQ = Math.max(wildcardQ == null ? 0 : wildcardQ, encodingPreference.q());
-			}
-		}
-
-		if (gzipQ != null)
-			return gzipQ > 0;
-
+	private boolean requestAcceptsContentEncoding(@NonNull Request request, @NonNull String contentEncoding) {
+		Integer codingQ = contentEncodingQuality(request, contentEncoding);
+		if (codingQ != null)
+			return codingQ > 0;
+		Integer wildcardQ = contentEncodingQuality(request, "*");
+		// Preserve opt-in response encoding when the client does not advertise any coding.
 		return wildcardQ != null && wildcardQ > 0;
 	}
 
-	@NonNull
-	private List<@NonNull Header> gzipHeaders(@NonNull List<@NonNull Header> headers) {
-		requireNonNull(headers);
-		List<Header> gzipHeaders = new ArrayList<>(headers.size() + 2);
-		boolean varyIncludesAcceptEncoding = hasHeaderToken(headers, "Vary", "Accept-Encoding");
-		boolean varyUpdated = false;
+	private boolean requestAcceptsIdentity(@NonNull Request request) {
+		Integer identityQ = contentEncodingQuality(request, "identity");
+		if (identityQ != null)
+			return identityQ > 0;
+		Integer wildcardQ = contentEncodingQuality(request, "*");
+		return wildcardQ == null || wildcardQ > 0;
+	}
 
-		for (Header header : headers) {
-			if (header.name().equalsIgnoreCase("Content-Length"))
-				continue;
-
-			if (!varyIncludesAcceptEncoding && !varyUpdated && header.name().equalsIgnoreCase("Vary")) {
-				String value = Utilities.trimAggressivelyToNull(header.value());
-				gzipHeaders.add(new Header(header.name(), value == null
-						? "Accept-Encoding"
-						: value + ", Accept-Encoding"));
-				varyUpdated = true;
-			} else if (header.name().equalsIgnoreCase("ETag")) {
-				gzipHeaders.add(new Header(header.name(), weakEntityTagHeaderValue(header.value())));
-			} else {
-				gzipHeaders.add(header);
+	@Nullable
+	private Integer contentEncodingQuality(@NonNull Request request, @NonNull String contentEncoding) {
+		Integer quality = null;
+		for (String value : request.getHeaderValues("Accept-Encoding").orElse(Set.of())) {
+			for (String part : value.split(",", -1)) {
+				EncodingPreference preference = EncodingPreference.fromHeaderValue(part).orElse(null);
+				if (preference != null && contentEncoding.equalsIgnoreCase(preference.coding()))
+					quality = Math.max(quality == null ? 0 : quality, preference.q());
 			}
 		}
-
-		if (!varyIncludesAcceptEncoding && !varyUpdated)
-			gzipHeaders.add(new Header("Vary", "Accept-Encoding"));
-
-		gzipHeaders.add(new Header("Content-Encoding", "gzip"));
-		gzipHeaders.sort(Comparator.comparing(Header::name));
-		return gzipHeaders;
+		return quality;
 	}
 
 	@NonNull
-	private Integer effectiveBodyLengthForResponseGzip(@NonNull Request request,
-																									 @NonNull MarshaledResponse marshaledResponse,
-																									 @NonNull List<@NonNull Header> headers,
-																									 @NonNull Integer bodyLength) {
-		requireNonNull(request);
-		requireNonNull(marshaledResponse);
-		requireNonNull(headers);
-		requireNonNull(bodyLength);
+	private List<@NonNull Header> varyAcceptEncodingHeaders(@NonNull List<@NonNull Header> headers) {
+		if (hasHeaderToken(headers, "Vary", "Accept-Encoding") || hasHeaderToken(headers, "Vary", "*"))
+			return headers;
 
-		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
-			return bodyLength;
-
-		if (!marshaledResponse.isHeadResponseGzipCandidate())
-			return 0;
-
+		List<Header> result = new ArrayList<>(headers.size() + 1);
+		boolean updated = false;
 		for (Header header : headers) {
-			if (!header.name().equalsIgnoreCase("Content-Length"))
-				continue;
-
-			try {
-				Integer contentLength = Integer.valueOf(header.value());
-				return contentLength < 0 ? 0 : contentLength;
-			} catch (NumberFormatException ignored) {
-				return 0;
+			if (!updated && header.name().equalsIgnoreCase("Vary")) {
+				String value = Utilities.trimAggressivelyToNull(header.value());
+				result.add(new Header(header.name(), value == null ? "Accept-Encoding" : value + ", Accept-Encoding"));
+				updated = true;
+			} else {
+				result.add(header);
 			}
 		}
+		if (!updated)
+			result.add(new Header("Vary", "Accept-Encoding"));
+		result.sort(Comparator.comparing(Header::name));
+		return result;
+	}
 
-		return 0;
+	@NonNull
+	private List<@NonNull Header> compressedHeaders(@NonNull List<@NonNull Header> headers,
+			@NonNull String contentEncoding) {
+		List<Header> result = new ArrayList<>(headers.size() + 1);
+		for (Header header : headers) {
+			if (header.name().equalsIgnoreCase("Content-Length"))
+				continue;
+			result.add(header.name().equalsIgnoreCase("ETag")
+					? new Header(header.name(), weakEntityTagHeaderValue(header.value())) : header);
+		}
+		result.add(new Header("Content-Encoding", contentEncoding));
+		result.sort(Comparator.comparing(Header::name));
+		return result;
+	}
+
+	@NonNull
+	private List<@NonNull Header> compressionNotAcceptableHeaders(@NonNull List<@NonNull Header> headers) {
+		// Keep response policy (including CORS, cookies, cache directives and all Vary dimensions),
+		// but do not attach the rejected representation's metadata to the empty 406 response.
+		Set<String> representationHeaders = Set.of("content-length", "content-type", "content-encoding",
+				"content-language", "content-location", "content-range", "etag", "last-modified", "accept-ranges",
+				"content-md5", "content-digest", "repr-digest", "digest");
+		List<Header> result = new ArrayList<>(headers.size());
+		for (Header header : headers)
+			if (!representationHeaders.contains(header.name().toLowerCase(ENGLISH)))
+				result.add(header);
+		return result;
+	}
+
+	private byte @NonNull [] compressResponseBody(@NonNull ResponseCompressionPlan plan,
+			@NonNull MarshaledResponseBody body) {
+		ResponseCompressionCodec codec = plan.getCodec().orElseThrow();
+		ByteBuffer input = body instanceof MarshaledResponseBody.Bytes bytes
+				? ByteBuffer.wrap(bytes.getBytes()).asReadOnlyBuffer()
+				: ((MarshaledResponseBody.ByteBuffer) body).getBuffer();
+		Thread invocationThread = Thread.currentThread();
+		AtomicBoolean active = new AtomicBoolean(true);
+		Supplier<byte @NonNull []> compressedBodySupplier = new Supplier<>() {
+			private byte @Nullable [] compressedBytes;
+
+			@Override
+			public byte @NonNull [] get() {
+				if (!sameInstance(Thread.currentThread(), invocationThread) || !active.get())
+					throw new IllegalStateException("Compression supplier must be used synchronously during its response callback.");
+				if (this.compressedBytes == null)
+					this.compressedBytes = requireNonNull(codec.compress(input.asReadOnlyBuffer()),
+							"Response compression codec must not return null.");
+				return this.compressedBytes;
+			}
+		};
+
+		try {
+			var compressedBodyProvider = plan.getCompressedBodyProvider().orElse(null);
+			return requireNonNull(compressedBodyProvider == null ? compressedBodySupplier.get()
+					: compressedBodyProvider.apply(compressedBodySupplier), "Compressed body provider must not return null.");
+		} finally {
+			active.set(false);
+		}
 	}
 
 	@NonNull
@@ -1719,20 +1707,6 @@ final class DefaultHttpServer implements HttpServer {
 			return headerValue;
 
 		return EntityTag.fromWeakValue(entityTag.getValue()).toHeaderValue();
-	}
-
-	private byte @NonNull [] gzip(byte @NonNull [] bytes) {
-		requireNonNull(bytes);
-
-		try {
-			ByteArrayOutputStream outputStream = new ByteArrayOutputStream(Math.max(32, bytes.length / 2));
-			try (GZIPOutputStream gzipOutputStream = new GZIPOutputStream(outputStream)) {
-				gzipOutputStream.write(bytes);
-			}
-			return outputStream.toByteArray();
-		} catch (IOException e) {
-			throw new UncheckedIOException("Unable to gzip response body.", e);
-		}
 	}
 
 	/**
@@ -1884,14 +1858,6 @@ final class DefaultHttpServer implements HttpServer {
 			byte @NonNull [] body,
 			@NonNull List<@NonNull Header> adjustedHeaders
 	) {}
-
-	private byte @NonNull [] byteBufferBytes(@NonNull ByteBuffer byteBuffer) {
-		requireNonNull(byteBuffer);
-		ByteBuffer source = byteBuffer.asReadOnlyBuffer();
-		byte[] bytes = new byte[source.remaining()];
-		source.get(bytes);
-		return bytes;
-	}
 
 	@NonNull
 	private Boolean hasHeader(@NonNull List<@NonNull Header> headers,
@@ -2303,8 +2269,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected ResponseGzipPolicy getResponseGzipPolicy() {
-		return this.responseGzipPolicy;
+	protected ResponseCompressor getResponseCompressor() {
+		return this.responseCompressor;
 	}
 
 	@NonNull

@@ -311,7 +311,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["completedResultIsPublishedOnlyAfterCoordinatorRoleRelease","4a728c54f345a68a3ac1c2ead8e2a6def0076690bbb748cfe60e1d36446ec933",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "583cadef932e55718f62b9df0529808435367c1013f6f29a2821909183b4ec43", [
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "ac3e3f68b0f8bcef47a96f8703942a49585845d4e764b25bc1b4fdcf05fce0e6", [
     ["earlySetupErrorRetainsIdentityCleansGenerationAndAllowsHttpRestart","8686b0fce8b5bb5579eee51892ce418c6ee7c03b1a3a013b4e7bb885e368b843",{"generation":{"count":2,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":5000}],
     ["staleHttpEventLoopFailureDoesNotClobberRestartedServer","cec3c46b78a87dd61c5fc5fe49b5ea59e9c13f4e2250a7948428bffa8c12ba4e",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
@@ -324,6 +324,12 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["releaseFailureMustBeFoldedIntoDowngradedOwnerResultBeforePublication","21c32eddc52b6be4003e6b6d696c28cdd417f434c4b8d3ecd9c991d5c9bf84fb",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["ownerFallbackPublicationReleasesWaitersAfterStrictValidationFailure","4a03dabae4fd4a8b644cbfed7793159f3211b3ae203c4c64428510bd29167061",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["mcpForwardsTheExactExternalGenerationAndParticipantEvidence","19f51a2ea945084f4366567253ff6a5811055a40ecbfa3f6d491625b1eb4cfa4",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlledLifecycleCoreMillis":0}],
+  ]),
+  // The owned and caller-owned channel cases each start and stop a fresh HTTP
+  // server sequentially. Each exchange has a 2-second connection retry and a
+  // 5-second socket-read bound, for 14 seconds of control work across both cases.
+  ...reviewedScopeFile("src/test/java/com/soklet/IntegrationTests.java", "3fdaa93df3c8429071ea1903204214f38b7e08af38d45fc0b1464a8e7beb896d", [
+    ["responseCompressionRawHeadPreservesFileChannelOwnershipAndHypotheticalLength","5953fa1cdcf3efa0779fb724a1493fb762e96a3f9fffec2caa1798cbfb86a7c6",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":14000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpCatalogAccessLocalizationPublicRuntimeTests.java", "c729962eff62f8e30c33fb861d51e05b7775be52ff073a2955b6d25e27d162f3", [
     ["filteredTenantCatalogsLocalizeOnlySurvivingStableOwners","510b49dbf487de244ee0edd18699dfe85452b14d9d7a2f6597db10ac547263f6",{"controlJoinMillis":60000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -745,7 +751,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
     ["launchedThenThrowingCoordinatorCannotRepublishOrReleaseEvidence","b03f92588538cd5cf7ce738deb0df255146cbe88d855fa64e643e0bc50965ef4",{"controlJoinMillis":2000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "583cadef932e55718f62b9df0529808435367c1013f6f29a2821909183b4ec43", [
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "ac3e3f68b0f8bcef47a96f8703942a49585845d4e764b25bc1b4fdcf05fce0e6", [
     ["httpServerCleansUpAfterUnexpectedEventLoopTermination","c0b3c2429b828d7d6b97cc5d324abf4e1bb75c12ec4b6473a7ff080dab147086",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["stopCannotPublishAnEmptyGenerationWhileStartInstallsHttpResources","daa38ff9c7f3f1effcc52664813c709b9eb9b4ad38458546dff9dd23de556bd0",{"controlJoinMillis":7100,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["startRejectsRunningHttpGenerationWhileItsStopIsInProgress","468e5c2b4365d5a53148b8525487911d065bcd75075ffac281f4cd6b149d25be",{"controlJoinMillis":6000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],

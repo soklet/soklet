@@ -37,6 +37,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,6 +54,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -797,6 +800,14 @@ public class IntegrationTests {
 					.build();
 		}
 
+		@GET("/streamed")
+		public MarshaledResponse streamed() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain")))
+					.stream(StreamingResponseBody.fromWriter((output, context) -> output.write(LARGE_RESPONSE_BODY)))
+					.build();
+		}
+
 		@GET("/q")
 		public String echoQuery(@NonNull @QueryParameter String q) {return q;}
 
@@ -1005,7 +1016,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1037,7 +1048,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1060,6 +1071,262 @@ public class IntegrationTests {
 			Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
 			Assertions.assertFalse(response.headers().containsKey("content-length"));
 			Assertions.assertEquals(0, response.body().length);
+		}
+	}
+
+	@Test
+	public void responseCompression_headPlansUsingOriginalBodyWithoutCallingProviderOrCodec() throws Exception {
+		assertHeadCompressionPlansOriginalBody(ResponseMarshaler.defaultInstance());
+	}
+
+	@Test
+	public void responseCompression_customHeadHandlerRetainsOriginalBodyForPlanning() throws Exception {
+		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
+				.headHandler((request, marshaledResponse) -> marshaledResponse.copy()
+						.withoutBody()
+						.headers(headers -> headers.put("Content-Length", Set.of(Long.toString(marshaledResponse.getBodyLength()))))
+						.finish())
+				.build();
+		assertHeadCompressionPlansOriginalBody(responseMarshaler);
+	}
+
+	@Test
+	public void responseCompressionHeadHandlerFailureDiscardsOriginalRepresentation() throws Exception {
+		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
+				.headHandler((request, marshaledResponse) -> { throw new IllegalStateException("HEAD handler failed"); })
+				.throwableHandler((request, throwable, resourceMethod) -> bodylessHeadReplacement(200))
+				.build();
+		assertHeadDoesNotPlanDiscardedRepresentation(responseMarshaler, RequestInterceptor.defaultInstance(), 200);
+	}
+
+	@Test
+	public void responseCompressionHeadInterceptorFailureDiscardsOriginalRepresentation() throws Exception {
+		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
+				.throwableHandler((request, throwable, resourceMethod) -> bodylessHeadReplacement(200))
+				.build();
+		RequestInterceptor interceptor = new RequestInterceptor() {
+			@Override
+			public void interceptRequest(ServerType serverType, Request request, ResourceMethod resourceMethod,
+					Function<Request, MarshaledResponse> responseGenerator, Consumer<MarshaledResponse> responseWriter) {
+				responseGenerator.apply(request);
+				throw new IllegalStateException("interceptor failed after generating HEAD response");
+			}
+		};
+		assertHeadDoesNotPlanDiscardedRepresentation(responseMarshaler, interceptor, 200);
+	}
+
+	@Test
+	public void responseCompressionHeadInterceptorStatusReplacementDiscardsOriginalRepresentation() throws Exception {
+		RequestInterceptor interceptor = new RequestInterceptor() {
+			@Override
+			public void interceptRequest(ServerType serverType, Request request, ResourceMethod resourceMethod,
+					Function<Request, MarshaledResponse> responseGenerator, Consumer<MarshaledResponse> responseWriter) {
+				responseGenerator.apply(request);
+				responseWriter.accept(bodylessHeadReplacement(404));
+			}
+		};
+		assertHeadDoesNotPlanDiscardedRepresentation(ResponseMarshaler.defaultInstance(), interceptor, 404);
+	}
+
+	private static MarshaledResponse bodylessHeadReplacement(int statusCode) {
+		return MarshaledResponse.withStatusCode(statusCode)
+				.headers(Map.of("Content-Type", Set.of("text/plain"), "X-Replacement", Set.of("yes")))
+				.build();
+	}
+
+	private static void assertHeadDoesNotPlanDiscardedRepresentation(ResponseMarshaler responseMarshaler,
+			RequestInterceptor requestInterceptor, int expectedStatusCode) throws Exception {
+		AtomicInteger planCalls = new AtomicInteger();
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.responseCompressor((request, marshaledResponse) -> {
+					planCalls.incrementAndGet();
+					return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
+				}).build();
+		SokletConfig config = SokletConfig.withHttpServer(httpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
+				.responseMarshaler(responseMarshaler)
+				.requestInterceptor(requestInterceptor)
+				.lifecycleObserver(new QuietLifecycle()).build();
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+				socket.setSoTimeout(5000);
+				socket.getOutputStream().write(("HEAD /vary-large HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n")
+						.getBytes(StandardCharsets.UTF_8));
+				socket.getOutputStream().flush();
+				HeadersOnlyResponse response = readHeadersOnly(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 " + expectedStatusCode + " "),
+						response.statusLine());
+				Assertions.assertEquals("yes", response.headers().get("x-replacement"));
+				Assertions.assertFalse(response.headers().containsKey("content-encoding"), response.headers().toString());
+				Assertions.assertEquals(-1, socket.getInputStream().read(), "HEAD replacement must have no wire body");
+				Assertions.assertEquals(0, planCalls.get(),
+						"The planner must not see the discarded successful response's body");
+			}
+		}
+	}
+
+	private static void assertHeadCompressionPlansOriginalBody(ResponseMarshaler responseMarshaler) throws Exception {
+		AtomicInteger planCalls = new AtomicInteger();
+		AtomicInteger providerCalls = new AtomicInteger();
+		AtomicInteger codecCalls = new AtomicInteger();
+		ResponseCompressionCodec codec = new ResponseCompressionCodec() {
+			@Override
+			public String getContentEncoding() { return "x-test"; }
+
+			@Override
+			public byte[] compress(ByteBuffer uncompressedBody) {
+				codecCalls.incrementAndGet();
+				throw new AssertionError("HEAD must not invoke the codec");
+			}
+		};
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.responseCompressor((request, marshaledResponse) -> {
+					planCalls.incrementAndGet();
+					Assertions.assertEquals(HttpMethod.HEAD, request.getHttpMethod());
+					Assertions.assertEquals((long) LARGE_RESPONSE_BODY.length, marshaledResponse.getBodyLength());
+					Assertions.assertArrayEquals(LARGE_RESPONSE_BODY,
+							((MarshaledResponseBody.Bytes) marshaledResponse.getBody().orElseThrow()).getBytes());
+					return ResponseCompressionPlan.compress(codec, compressedBodySupplier -> {
+						providerCalls.incrementAndGet();
+						throw new AssertionError("HEAD must not invoke the compressed body provider");
+					});
+				})
+				.build();
+
+		SokletConfig config = SokletConfig.withHttpServer(httpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
+				.responseMarshaler(responseMarshaler)
+				.lifecycleObserver(new QuietLifecycle()).build();
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+				socket.setSoTimeout(5000);
+				socket.getOutputStream().write(("HEAD /vary-large HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\nAccept-Encoding: x-test\r\nConnection: close\r\n\r\n")
+						.getBytes(StandardCharsets.UTF_8));
+				socket.getOutputStream().flush();
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("x-test", response.headers().get("content-encoding"));
+				Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
+				Assertions.assertFalse(response.headers().containsKey("content-length"));
+				Assertions.assertEquals(0, response.body().length);
+				Assertions.assertEquals(-1, socket.getInputStream().read(), "No bytes may follow HEAD response headers");
+				Assertions.assertEquals(1, planCalls.get());
+				Assertions.assertEquals(0, providerCalls.get());
+				Assertions.assertEquals(0, codecCalls.get());
+			}
+		}
+	}
+
+	@Test
+	public void responseCompressionUsesFinalBodyAndHeadersFromInterceptor() throws Exception {
+		byte[] replacementBody = "interceptor replacement".getBytes(StandardCharsets.UTF_8);
+		AtomicInteger planCalls = new AtomicInteger();
+		AtomicInteger providerCalls = new AtomicInteger();
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.responseCompressor((request, marshaledResponse) -> {
+					planCalls.incrementAndGet();
+					Assertions.assertArrayEquals(replacementBody,
+							((MarshaledResponseBody.Bytes) marshaledResponse.getBody().orElseThrow()).getBytes());
+					Assertions.assertEquals(Set.of("yes"), marshaledResponse.getHeaders().get("X-Modified"));
+					return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance(), compressedBodySupplier -> {
+						providerCalls.incrementAndGet();
+						return compressedBodySupplier.get();
+					});
+				}).build();
+		RequestInterceptor interceptor = new RequestInterceptor() {
+			@Override
+			public void interceptRequest(ServerType serverType, Request request, ResourceMethod resourceMethod,
+					Function<Request, MarshaledResponse> responseGenerator, Consumer<MarshaledResponse> responseWriter) {
+				MarshaledResponse response = responseGenerator.apply(request);
+				responseWriter.accept(response.copy().body(replacementBody)
+						.headers(headers -> {
+							headers.put("Content-Length", Set.of(Integer.toString(replacementBody.length)));
+							headers.put("X-Modified", Set.of("yes"));
+						}).finish());
+			}
+		};
+		SokletConfig config = SokletConfig.withHttpServer(httpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
+				.requestInterceptor(interceptor).lifecycleObserver(new QuietLifecycle()).build();
+		try (Soklet app = Soklet.fromConfig(config)) {
+			app.start();
+			HttpURLConnection connection = open("GET", new URL("http://127.0.0.1:" + port + "/vary-large"),
+					Map.of("Accept-Encoding", "gzip"));
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertEquals("gzip", connection.getHeaderField("Content-Encoding"));
+			Assertions.assertEquals("yes", connection.getHeaderField("X-Modified"));
+			Assertions.assertArrayEquals(replacementBody, gunzip(readAll(connection.getInputStream())));
+			Assertions.assertEquals(1, planCalls.get());
+			Assertions.assertEquals(1, providerCalls.get());
+		}
+	}
+
+	@Test
+	public void responseCompressionRawHeadPreservesFileChannelOwnershipAndHypotheticalLength(@TempDir Path tempDir) throws Exception {
+		Path file = tempDir.resolve("raw-head.txt");
+		Files.writeString(file, "raw HEAD body", StandardCharsets.UTF_8);
+		for (boolean closeOnComplete : List.of(true, false)) {
+			try (FileChannel channel = FileChannel.open(file)) {
+				int port = findFreePort();
+				DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(port)
+						.responseCompressor((request, marshaledResponse) -> {
+							throw new AssertionError("File channels are not compression candidates");
+						}).build();
+				server.initialize(SokletConfig.forSimulatorTesting()
+						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+						.lifecyclePolicy(LifecyclePolicy.builder()
+								.startupTimeout(Duration.ofSeconds(5))
+								.startupCancelationTimeout(Duration.ofSeconds(1))
+								.gracefulShutdownTimeout(Duration.ofSeconds(1))
+								.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+						.lifecycleObserver(new QuietLifecycle()).build(), (request, consumer) ->
+						consumer.accept(HttpRequestResult.withMarshaledResponse(
+								MarshaledResponse.withStatusCode(200).body(channel, 0L, 13L, closeOnComplete).build()).build()));
+				try {
+					server.start();
+					try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+						socket.setSoTimeout(5000);
+						socket.getOutputStream().write(("HEAD /raw-head HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+								+ "Accept-Encoding: gzip\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+						socket.getOutputStream().flush();
+						HeadersOnlyResponse response = readHeadersOnly(socket.getInputStream());
+						Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+						Assertions.assertEquals("13", response.headers().get("content-length"));
+						Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+						Assertions.assertEquals(-1, socket.getInputStream().read());
+						Assertions.assertEquals(!closeOnComplete, channel.isOpen());
+					}
+				} finally {
+					server.stop();
+				}
+			}
+		}
+	}
+
+	@Test
+	public void responseCompression_streamingResponseDoesNotInvokeCompressor() throws Exception {
+		AtomicInteger planCalls = new AtomicInteger();
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.responseCompressor((request, marshaledResponse) -> {
+					planCalls.incrementAndGet();
+					throw new AssertionError("Streaming responses must not invoke the compressor");
+				})
+				.build();
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class))) {
+			HttpURLConnection connection = open("GET", new URL("http://127.0.0.1:" + port + "/streamed"),
+					Map.of("Accept-Encoding", "gzip"));
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertNull(connection.getHeaderField("Content-Encoding"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, readAll(connection.getInputStream()));
+			Assertions.assertEquals(0, planCalls.get());
 		}
 	}
 
@@ -1093,7 +1360,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(LARGE_RESPONSE_BODY.length + 1))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(LARGE_RESPONSE_BODY.length + 1))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1118,11 +1385,11 @@ public class IntegrationTests {
 	}
 
 	@Test
-	public void responseGzip_defaultPolicySkipsBinaryContentTypes() throws Exception {
+	public void responseGzip_defaultCompressorSkipsBinaryContentTypes() throws Exception {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1152,7 +1419,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1181,7 +1448,8 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy((request, response) -> true)
+				.responseCompressor((request, marshaledResponse) ->
+						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
@@ -1210,7 +1478,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(ByteBufferResource.class));
@@ -1243,7 +1511,8 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy((request, response) -> true)
+				.responseCompressor((request, marshaledResponse) ->
+						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(FileResource.class));
@@ -1279,7 +1548,8 @@ public class IntegrationTests {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.responseGzipPolicy((request, response) -> true)
+				.responseCompressor((request, marshaledResponse) ->
+						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
 		try (Soklet app = startApp(httpServer, Set.of(FileResource.class))) {

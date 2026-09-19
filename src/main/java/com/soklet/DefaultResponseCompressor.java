@@ -29,11 +29,18 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
+final class DefaultResponseCompressor implements ResponseCompressor {
+	@NonNull
+	private static final ResponseCompressionPlan GZIP_PLAN;
+
+	static {
+		GZIP_PLAN = ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
+	}
+
 	@NonNull
 	private final Integer minimumBodySizeInBytes;
 
-	DefaultResponseGzipPolicy(@NonNull Integer minimumBodySizeInBytes) {
+	DefaultResponseCompressor(@NonNull Integer minimumBodySizeInBytes) {
 		this.minimumBodySizeInBytes = requireNonNull(minimumBodySizeInBytes);
 
 		if (minimumBodySizeInBytes < 0)
@@ -42,13 +49,14 @@ final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
 
 	@Override
 	@NonNull
-	public Boolean shouldGzip(@NonNull Request request,
-														@NonNull MarshaledResponse response) {
+	public ResponseCompressionPlan plan(@NonNull Request request,
+																			 @NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
-		requireNonNull(response);
+		requireNonNull(marshaledResponse);
 
-		return effectiveBodyLength(request, response) >= getMinimumBodySizeInBytes()
-				&& hasCompressibleContentType(response);
+		return marshaledResponse.getBodyLength() >= getMinimumBodySizeInBytes()
+				&& hasCompressibleContentType(marshaledResponse)
+				? GZIP_PLAN : ResponseCompressionPlan.none();
 	}
 
 	@NonNull
@@ -71,35 +79,6 @@ final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
 		}
 
 		return false;
-	}
-
-	@NonNull
-	private Long effectiveBodyLength(@NonNull Request request,
-																	 @NonNull MarshaledResponse response) {
-		requireNonNull(request);
-		requireNonNull(response);
-
-		Long bodyLength = response.getBodyLength();
-
-		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
-			return bodyLength;
-
-		if (!response.isHeadResponseGzipCandidate())
-			return 0L;
-
-		for (Entry<String, Set<String>> entry : response.getHeaders().entrySet()) {
-			if (!"Content-Length".equalsIgnoreCase(entry.getKey()) || entry.getValue().size() != 1)
-				continue;
-
-			try {
-				Long contentLength = Long.valueOf(entry.getValue().iterator().next());
-				return contentLength < 0 ? 0L : contentLength;
-			} catch (NumberFormatException ignored) {
-				return 0L;
-			}
-		}
-
-		return 0L;
 	}
 
 	@NonNull

@@ -220,23 +220,23 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
-	public void responseGzipPolicyDefaultsCanBeCustomizedAndFactoryMinimumMustBeNonNegative() {
+	public void responseCompressorDefaultsCanBeCustomizedAndFactoryMinimumMustBeNonNegative() {
 		DefaultHttpServer defaultServer = (DefaultHttpServer) HttpServer.withPort(0).build();
-		ResponseGzipPolicy responseGzipPolicy = ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(2_048);
+		ResponseCompressor responseCompressor = ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(2_048);
 		DefaultHttpServer customServer = (DefaultHttpServer) HttpServer.withPort(0)
-				.responseGzipPolicy(responseGzipPolicy)
+				.responseCompressor(responseCompressor)
 				.build();
 
-		Assertions.assertSame(ResponseGzipPolicy.disabledInstance(), defaultServer.getResponseGzipPolicy());
-		Assertions.assertSame(responseGzipPolicy, customServer.getResponseGzipPolicy());
+		Assertions.assertSame(ResponseCompressor.disabledInstance(), defaultServer.getResponseCompressor());
+		Assertions.assertSame(responseCompressor, customServer.getResponseCompressor());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(-1));
+				ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(-1));
 	}
 
 	@Test
-	public void defaultResponseGzipPolicyHonorsMinimumBodySizeAndCompressibleContentTypes() {
+	public void defaultResponseCompressorHonorsMinimumBodySizeAndCompressibleContentTypes() {
 		Request request = Request.withPath(HttpMethod.GET, "/large").build();
-		ResponseGzipPolicy responseGzipPolicy = ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(8);
+		ResponseCompressor responseCompressor = ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(8);
 		MarshaledResponse jsonResponse = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Content-Type", Set.of("Application/Problem+JSON; charset=UTF-8")))
 				.body("long enough".getBytes(java.nio.charset.StandardCharsets.UTF_8))
@@ -250,15 +250,16 @@ public class DefaultHttpServerTests {
 				.body("short".getBytes(java.nio.charset.StandardCharsets.UTF_8))
 				.build();
 
-		Assertions.assertTrue(responseGzipPolicy.shouldGzip(request, jsonResponse));
-		Assertions.assertFalse(responseGzipPolicy.shouldGzip(request, octetStreamResponse));
-		Assertions.assertFalse(responseGzipPolicy.shouldGzip(request, smallTextResponse));
+		Assertions.assertEquals("gzip", responseCompressor.plan(request, jsonResponse).getContentEncoding().orElseThrow());
+		Assertions.assertTrue(responseCompressor.plan(request, octetStreamResponse).getCodec().isEmpty());
+		Assertions.assertTrue(responseCompressor.plan(request, smallTextResponse).getCodec().isEmpty());
 	}
 
 	@Test
 	public void toMicrohttpResponseAppliesResponseGzipToEligibleByteArrayBody() throws IOException {
 		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
-				.responseGzipPolicy((request, response) -> true)
+				.responseCompressor((request, marshaledResponse) ->
+						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 		byte[] body = "abcdefghijklmnopqrstuvwxyz".repeat(64).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		Request request = Request.withPath(HttpMethod.GET, "/large")

@@ -11,6 +11,14 @@ com.soklet.McpAdmissionIdentity
 com.soklet.McpAdmissionIdentity$Builder
 com.soklet.McpAdmissionRejection
 com.soklet.McpAdmissionRejection$Builder
+com.soklet.McpAppResourceMetadata
+com.soklet.McpAppResourceMetadata$Builder
+com.soklet.McpAppResourceMetadata$ContentSecurityPolicy
+com.soklet.McpAppResourceMetadata$ContentSecurityPolicy$Builder
+com.soklet.McpAppResourceMetadata$Permission
+com.soklet.McpAppToolMetadata
+com.soklet.McpAppToolMetadata$Builder
+com.soklet.McpAppToolMetadata$Visibility
 com.soklet.McpArgumentCompletionResult
 com.soklet.McpArgumentCompletionResult$Builder
 com.soklet.McpAudioContent

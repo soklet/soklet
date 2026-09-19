@@ -54,6 +54,9 @@ public final class HttpRequestResult {
 	private final ResourceMethod resourceMethod;
 	@Nullable
 	private final SseHandshakeResult sseHandshakeResult;
+	// Transport-only HEAD planning input, deliberately kept out of lifecycle/log response objects.
+	@Nullable
+	private final MarshaledResponseBody headResponseCompressionBody;
 
 	/**
 	 * Acquires a builder for {@link HttpRequestResult} instances.
@@ -96,6 +99,7 @@ public final class HttpRequestResult {
 		this.corsPreflightResponse = builder.corsPreflightResponse;
 		this.resourceMethod = builder.resourceMethod;
 		this.sseHandshakeResult = builder.sseHandshakeResult;
+		this.headResponseCompressionBody = builder.headResponseCompressionBody;
 	}
 
 	@Override
@@ -191,6 +195,11 @@ public final class HttpRequestResult {
 	}
 
 
+	@NonNull
+	Optional<MarshaledResponseBody> getHeadResponseCompressionBody() {
+		return Optional.ofNullable(this.headResponseCompressionBody);
+	}
+
 	/**
 	 * The SSE handshake result, if available.
 	 *
@@ -220,6 +229,8 @@ public final class HttpRequestResult {
 		private ResourceMethod resourceMethod;
 		@Nullable
 		private SseHandshakeResult sseHandshakeResult;
+		@Nullable
+		private MarshaledResponseBody headResponseCompressionBody;
 
 		protected Builder(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -279,6 +290,12 @@ public final class HttpRequestResult {
 		}
 
 		@NonNull
+		Builder headResponseCompressionBody(@Nullable MarshaledResponseBody headResponseCompressionBody) {
+			this.headResponseCompressionBody = headResponseCompressionBody;
+			return this;
+		}
+
+		@NonNull
 		public HttpRequestResult build() {
 			return new HttpRequestResult(this);
 		}
@@ -303,7 +320,8 @@ public final class HttpRequestResult {
 					.response(requestResult.getResponse().orElse(null))
 					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
 					.resourceMethod(requestResult.getResourceMethod().orElse(null))
-					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null));
+					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null))
+					.headResponseCompressionBody(requestResult.getHeadResponseCompressionBody().orElse(null));
 		}
 
 		@NonNull
@@ -334,6 +352,12 @@ public final class HttpRequestResult {
 		@NonNull
 		Copier sseHandshakeResult(@Nullable SseHandshakeResult sseHandshakeResult) {
 			this.builder.sseHandshakeResult(sseHandshakeResult);
+			return this;
+		}
+
+		@NonNull
+		Copier headResponseCompressionBody(@Nullable MarshaledResponseBody headResponseCompressionBody) {
+			this.builder.headResponseCompressionBody(headResponseCompressionBody);
 			return this;
 		}
 

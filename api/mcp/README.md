@@ -30,14 +30,17 @@ below records the subsequent non-MCP enum correction. The
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
-`current-incompatibilities.jsonl` is the last reviewed pre-P1b compatibility
+`current-incompatibilities.jsonl` retains the reviewed pre-P1b MCP compatibility
 snapshot between the released `com.soklet:soklet:3.5.1` artifact and the
-4.0.0 development tree. It contains 654 records and has SHA-256
-`9317f7a5782062e0bd1dbf9512d0744fb97bef9a27992ce2d4707a08ba8a398f`.
-It is intentionally unchanged while the 2026-09-18 P1b current-source
-foundation awaits the P0-C disposition and MCP-G2 refreeze. At refreeze, the
-API-diff gate will regenerate the set and compare it in both directions, so an
-unexpected addition, removal, or changed record fails.
+4.0.0 development tree, with five separately reviewed non-MCP gzip-policy
+removals added by the concurrent 2026-09-19 response-compression change. It now
+contains 659 records and has SHA-256
+`6cc07247883012725bc2ecacec7ecb6963fe83e2079e68760d842018684ea2f4`.
+The MCP portion remains unchanged while the 2026-09-18 P1b current-source
+foundation awaits the P0-C disposition and MCP-G2 refreeze. This narrowly
+scoped non-MCP amendment does not qualify the later MCP changes. At refreeze,
+the API-diff gate will regenerate the set and compare it in both directions,
+so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
 It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
@@ -97,20 +100,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 144 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 152 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
-| `non-mcp-public-api.allowlist` | 61 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, and value-converter owners |
+| `non-mcp-public-api.allowlist` | 64 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 270-entry current-source MCP union plus the 61-entry non-MCP allowlist owns
-exactly 331 current types. Ownership alone does not freeze a type. The phase
+The 278-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
+exactly 342 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
 the updated include inventories establish current-source ownership without
 claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`f5ee078c211e75700e8824e69e795974fd1483131c1f627d7b7b9f2780f934e9`,
+`88fa573762f734713f28d8b4476552e09f36a0b884d7accf52a2b588029546ad`,
 `bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
 and
 `be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`.
@@ -122,6 +125,53 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-19 P3 Apps metadata/value foundation (not runtime support or a refreeze)
+
+The first Apps slice adds `McpAppToolMetadata` and `McpAppResourceMetadata`,
+their builders, the nested content-security-policy value/builder, and the two
+closed audience/permission enums: eight new Phase 4 current-source owners.
+The reviewed Phase 4 nullability-layout SHA-256 is
+`cfb2267bf3efa2db9f4a438bd190842d6c4b85a088f0e2b6318c7aef08005de5`.
+Values have structural equality, redacted diagnostics, immutable deterministic
+sets, defensive snapshots, and fail-atomic replacement setters. Omitted hints,
+explicit false, and explicit empty audiences remain distinct.
+
+Shared non-resolving validation rejects non-ASCII/non-normalized/non-UI resource
+identifiers and unsafe CSP/domain input. CSP origins require canonical DNS/IP
+and port spelling; HTTP is loopback-only, and WebSocket schemes are restricted
+to connection origins. Loopback means `localhost`, canonical IPv4 `127/8`, or
+`[::1]`, not arbitrary names that happen to resolve locally. IPv6 uses RFC 5952
+compression with dotted tails for mapped IPv4 addresses. No DNS query, fetch,
+permission grant, browser sandbox, or host-acceptance guarantee occurs here.
+
+Isolated JDK 17 and JDK 26 builds each pass 77 focused value, validation, registration,
+Completion, API ownership/reflection/nullability, and Javadoc tests, including
+26 new Apps tests. Current-source privacy rows classify the three redacted
+renderers and three fixed validation-exception sites. The compression task's
+separate non-MCP allowlist changes are included in the current totals above;
+this slice does not edit HTTP compression behavior.
+
+There are deliberately no attachment setters, annotation, MIME negotiation,
+wire serialization, capability advertisement, or runtime Apps behavior yet.
+Next is typed/raw attachment and exact resource eligibility with the shared
+MIME parser, followed by runtime/host qualification. The frozen MCP signature
+ledgers remain unchanged. The ledger-backed evolution/aggregate-freeze check
+still cannot pass until the reviewed P1b/P3 enum growth is refrozen under
+MCP-G2; active-text audit and evolution self-tests remain separate checks.
+P0-C, MCP-G2, and MCP-G4 remain open.
+
+Focused JDK 21 Error Prone/NullAway compilation of the three new Apps classes
+and existing resource-value helper reports zero diagnostics with unchanged
+checker severities. The whole-project static-analysis run remains red on 17
+pre-existing MCP runtime errors and 257 warnings; it is not counted as passing.
+The final combined source inventory covers 7,508 lifecycle discovery candidates
+across 342 classified paths, 181 lifecycle JUnit paths, and 1,214 lifecycle
+scopes with zero review gaps. The current version census preserves all 806
+previously reviewed occurrences and adds five target-only occurrences across
+237 files (811 total), without changing baseline governance. These current
+inventory refreshes include the independently reviewed compression changes;
+historical D1P evidence remains unchanged.
 
 ### 2026-09-19 P2 Completion conformance and documentation slice (not a refreeze)
 

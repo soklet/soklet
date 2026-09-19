@@ -31,6 +31,8 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'release/mcp-residual-closure-evidence.json',
   'release/scripts/install-pinned-gradle-linux-x64.sh',
   'scripts/verify-consumer-ci-self-test.mjs',
+  'src/main/java/com/soklet/McpAppResourceMetadata.java',
+  'src/main/java/com/soklet/McpAppToolMetadata.java',
   'src/test/java/com/soklet/HeaderLocaleTests.java',
   'src/test/java/com/soklet/McpSubscriptionCatalogProjectionPublicRuntimeTests.java',
   'src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java',
@@ -149,7 +151,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'da7d72f1141adc011e4d8007c790e7ec92974562988f8e4bb0db707b616373ac';
+	'07ac06894543df3fae5c31c9b5ad4dbc43c59a64066321c5012e72f02a8c9c31';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

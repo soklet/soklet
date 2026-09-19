@@ -163,7 +163,7 @@ public interface HttpServer {
 		@Nullable
 		Duration responseWriteIdleTimeout;
 		@Nullable
-		ResponseGzipPolicy responseGzipPolicy;
+		ResponseCompressor responseCompressor;
 		@Nullable
 		RequestDecompressionPolicy requestDecompressionPolicy;
 		@Nullable
@@ -301,21 +301,24 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the policy used by the standard HTTP server to decide whether eligible finalized
-		 * in-memory responses should be gzipped.
+		 * Sets the response compressor used by the standard HTTP server to plan compression of eligible
+		 * finalized in-memory byte-array and byte-buffer responses.
 		 * <p>
-		 * Soklet invokes this policy only after its own HTTP protocol checks pass. For example,
-		 * {@code Accept-Encoding} must permit {@code gzip}, and Soklet will skip streaming, file,
-		 * range, already-encoded, transfer-encoded, bodyless, and otherwise ineligible responses.
-		 * Passing {@code null} restores
-		 * {@link ResponseGzipPolicy#disabledInstance() the built-in disabled policy}.
+		 * The compressor chooses a {@link ResponseCompressionPlan}, including its codec and optional
+		 * application-owned cache callback. Soklet enforces HTTP eligibility and client acceptance of
+		 * the selected content coding, and manages response headers. File, streaming, range, already-encoded,
+		 * transfer-encoded, and otherwise bodyless responses are excluded. For {@code HEAD}, planning
+		 * can inspect the corresponding uncompressed representation, but no compression or cache callback runs.
+		 * <p>
+		 * Passing {@code null} restores {@link ResponseCompressor#disabledInstance() disabled compression}.
+		 * Request-body decompression is configured separately by {@link #requestDecompressionPolicy(RequestDecompressionPolicy)}.
 		 *
-		 * @param responseGzipPolicy the response gzip policy to use, or {@code null} for the default
+		 * @param responseCompressor the response compressor, or {@code null} for the disabled default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder responseGzipPolicy(@Nullable ResponseGzipPolicy responseGzipPolicy) {
-			this.responseGzipPolicy = responseGzipPolicy;
+		public Builder responseCompressor(@Nullable ResponseCompressor responseCompressor) {
+			this.responseCompressor = responseCompressor;
 			return this;
 		}
 

@@ -4,6 +4,13 @@
 
 ### Breaking Changes
 
+- **Response compression:** replaced `ResponseGzipPolicy` and
+  `HttpServer.Builder.responseGzipPolicy(...)` with `ResponseCompressor` and
+  the sole `responseCompressor(...)` setting, without deprecated aliases.
+  A compressor returns `ResponseCompressionPlan.none()` or a plan selecting
+  a `ResponseCompressionCodec`, optionally with an application-owned cache
+  callback. Gzip remains the only built-in codec, and compression remains
+  disabled by default. See [Response compression](MIGRATING_TO_4_0.md#response-compression).
 - **HTTP server type:** `ServerType.STANDARD_HTTP` is now `ServerType.HTTP`,
   with no deprecated alias, and `ServerType.MCP` is removed in favor of the
   dedicated MCP lifecycle and metrics APIs. Update source references, switch cases, and stored
@@ -127,6 +134,12 @@ maintenance or security fixes afterward. See the explicit
 
 ### Release Highlights
 
+- Response compression now supports application-provided codecs and caching
+  of compressed body bytes through lazy `ResponseCompressionPlan` providers.
+  Soklet retains encoding acceptance, `Vary`, validator, and framing handling;
+  there is no shared compression cache in core. Eligible `HEAD` responses
+  select a plan from the uncompressed representation without invoking its
+  body provider or codec.
 - Added a dedicated, zero-runtime-dependency MCP `2026-07-28` server with
   annotated and programmatic tools, prompts, exact/template resources,
   Java-derived typed schemas, multi-round-trip input, progress, cooperative

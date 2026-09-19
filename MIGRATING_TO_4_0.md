@@ -103,6 +103,68 @@ by a `ServerType.MCP` constant. This uppercase built-in label is separate from `
 explicit `soklet.server.type` vocabulary, which remains lowercase `http`,
 `sse`, and `mcp`.
 
+## Response compression
+
+`ResponseGzipPolicy` and `HttpServer.Builder.responseGzipPolicy(...)` are
+removed without aliases. Configure one `ResponseCompressor` using
+`HttpServer.Builder.responseCompressor(...)`. The compressor combines the
+application's compression decision with its choice of codec and optional
+compressed-body cache.
+
+Replace the common default configuration:
+
+```java
+HttpServer httpServer = HttpServer.withPort(8080)
+    .responseCompressor(
+        ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+    .build();
+```
+
+The old `ResponseGzipPolicy.disabledInstance()` becomes
+`ResponseCompressor.disabledInstance()`. Omitting `responseCompressor(...)`
+or passing `null` still disables compression.
+
+For a custom policy, replace `shouldGzip(Request, MarshaledResponse)` returning
+`Boolean` with `plan(Request, MarshaledResponse)` returning a non-null
+`ResponseCompressionPlan`. Where the old method returned `false`, return
+`ResponseCompressionPlan.none()`. Where it returned `true`, return
+`ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance())`.
+The second parameter is the finalized uncompressed response, including its
+in-memory body when planning an eligible `HEAD` response.
+
+A plan can also use `compress(codec, compressedBodyProvider)` to wrap Soklet's
+lazy, per-response memoized compression supplier with an application-owned
+cache. The provider runs synchronously only when body bytes are needed;
+`HEAD` invokes neither the provider nor the codec. Cache the resulting bytes,
+not the supplier, and never mutate cached arrays. Use bounded, thread-safe
+caches keyed by the exact representation content or a reliable version
+covering every variant, plus the codec and its settings. No shared cache is
+installed by default.
+
+Soklet checks protocol eligibility before planning and checks acceptance of
+the selected codec's content encoding before obtaining bytes. A compressor
+may therefore be called even when the client rejects the selected codec;
+providers and codecs are not invoked in that case. The server handles `Vary`,
+compressed-representation validators, and content length on cache hits and
+misses alike. Eligible responses considered by an enabled compressor receive
+`Vary: Accept-Encoding` even when the plan is `none()` or the selected encoding
+is rejected, so caches distinguish encoded and unencoded outcomes. If the
+plan declines compression or selects a rejected encoding and the client
+explicitly forbids `identity`, the server returns `406 Not Acceptable` without
+invoking the provider or codec. Requests without `Accept-Encoding` remain
+uncompressed.
+Streaming, file, file-channel, range, already-encoded,
+transfer-encoded, and bodyless responses remain excluded. The old gzip policy
+ran only after acceptance of gzip had been checked; do not use planning as a
+compression-success notification.
+
+`ResponseCompressionCodec` keeps `getContentEncoding()` and
+`compress(ByteBuffer)` together. Soklet supplies only `gzipInstance()`;
+applications can implement other codecs. No enum or second server setting is
+required. A plan selects one codec: Soklet does not automatically choose a
+fallback codec if the client rejects it. See [Response Compression](https://www.soklet.com/docs/response-writing#response-compression)
+for current examples and the codec contract.
+
 ## Lifecycle and process ownership
 
 ### One lifecycle owns all transports

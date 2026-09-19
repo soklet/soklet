@@ -399,6 +399,16 @@ public final class Soklet implements AutoCloseable {
 							// A few special cases that are "global" in that they can affect all requests and
 							// need to happen after marshaling the response...
 
+							// Preserve HEAD's in-memory representation only in the transport result, never
+							// in the bodyless MarshaledResponse exposed to lifecycle observers and logs.
+							if (serverType == ServerType.HTTP && requireNonNull(requestHolder.get()).getHttpMethod() == HttpMethod.HEAD) {
+								MarshaledResponseBody compressionBody = originalMarshaledResponse.getBody()
+										.filter(body -> body instanceof MarshaledResponseBody.Bytes
+												|| body instanceof MarshaledResponseBody.ByteBuffer).orElse(null);
+								requestResult = requestResult.copy().headResponseCompressionBody(compressionBody).finish();
+								requestResultHolder.set(requestResult);
+							}
+
 							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
 							updatedMarshaledResponse = applyHeadResponseIfApplicable(requestHolder.get(), updatedMarshaledResponse);
 
@@ -408,6 +418,10 @@ public final class Soklet implements AutoCloseable {
 							boolean suppressContentLength = sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted;
 
 							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), updatedMarshaledResponse, suppressContentLength);
+							if (!updatedMarshaledResponse.getStatusCode().equals(originalMarshaledResponse.getStatusCode())) {
+								requestResult = requestResult.copy().headResponseCompressionBody(null).finish();
+								requestResultHolder.set(requestResult);
+							}
 
 							// Update our result holder with the modified response if necessary
 							if (originalMarshaledResponse != updatedMarshaledResponse) {
@@ -419,6 +433,8 @@ public final class Soklet implements AutoCloseable {
 
 							return updatedMarshaledResponse;
 							} catch (Throwable t) {
+								requestResultHolder.updateAndGet(result -> result == null ? null
+										: result.copy().headResponseCompressionBody(null).finish());
 								if (!sameInstance(t, resourceMethodResolutionExceptionHolder.get())) {
 									throwables.add(t);
 
@@ -454,6 +470,10 @@ public final class Soklet implements AutoCloseable {
 					}, (interceptorMarshaledResponse) -> {
 						requireNonNull(interceptorMarshaledResponse);
 						didInvokeMarshaledResponseConsumer.set(true);
+						HttpRequestResult requestResult = requestResultHolder.get();
+						if (requestResult != null && !requestResult.getMarshaledResponse().getStatusCode()
+								.equals(interceptorMarshaledResponse.getStatusCode()))
+							requestResultHolder.set(requestResult.copy().headResponseCompressionBody(null).finish());
 						marshaledResponseHolder.set(interceptorMarshaledResponse);
 					});
 
@@ -463,6 +483,8 @@ public final class Soklet implements AutoCloseable {
 					}
 				} catch (Throwable t) {
 					throwables.add(t);
+					requestResultHolder.updateAndGet(result -> result == null ? null
+							: result.copy().headResponseCompressionBody(null).finish());
 
 					try {
 						// In the event that an error occurs during processing of a RequestInterceptor method, for example
@@ -506,7 +528,8 @@ public final class Soklet implements AutoCloseable {
 							HttpRequestResult requestResult = requestResultHolder.get();
 
 							if (requestResult != null)
-								requestResultConsumer.accept(requestResult);
+								requestResultConsumer.accept(requestResult.copy()
+										.marshaledResponse(requireNonNull(marshaledResponseHolder.get())).finish());
 							else
 								requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 										.resourceMethod(resourceMethodHolder.get())
@@ -602,6 +625,9 @@ public final class Soklet implements AutoCloseable {
 					.marshaledResponse(marshaledResponseHolder.get())
 					.build());
 
+			requestResultHolder.updateAndGet(result -> result == null ? null
+					: result.copy().headResponseCompressionBody(null).finish());
+
 			// If we don't have a response, let the marshaler try to make one for the exception.
 			// If that fails, use the failsafe.
 			if (marshaledResponseHolder.get() == null) {
@@ -652,7 +678,8 @@ public final class Soklet implements AutoCloseable {
 						HttpRequestResult requestResult = requestResultHolder.get();
 
 						if (requestResult != null)
-							requestResultConsumer.accept(requestResult);
+							requestResultConsumer.accept(requestResult.copy()
+									.marshaledResponse(requireNonNull(marshaledResponseHolder.get())).finish());
 						else
 							requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 									.resourceMethod(resourceMethodHolder.get())
@@ -1490,7 +1517,9 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
 
 			requestHandler.handleRequest(request, (requestResult -> {
-				requestResultHolder.set(requestResult);
+				// Simulated responses do not run transport compression or retain its private HEAD input.
+				requestResultHolder.set(requestResult.getHeadResponseCompressionBody().isEmpty() ? requestResult
+						: requestResult.copy().headResponseCompressionBody(null).finish());
 			}));
 
 			return materializeStreamingResponse(request, requestResultHolder.get());

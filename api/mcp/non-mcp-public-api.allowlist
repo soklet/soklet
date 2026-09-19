@@ -20,6 +20,9 @@ com.soklet.MetricsCollector$TransportFailureKey
 com.soklet.MultipartField$Copier
 com.soklet.ResidualActivityEvidence
 com.soklet.ResidualActivityType
+com.soklet.ResponseCompressionCodec
+com.soklet.ResponseCompressionPlan
+com.soklet.ResponseCompressor
 com.soklet.ResponseMarshaler
 com.soklet.ResponseMarshaler$Builder
 com.soklet.ResponseMarshaler$Builder$UnparsedRequestHandler

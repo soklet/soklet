@@ -80,8 +80,6 @@ public final class MarshaledResponse {
 	private final MarshaledResponseBody body;
 	@Nullable
 	private final StreamingResponseBody stream;
-	@NonNull
-	private final Boolean headResponseGzipCandidate;
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
@@ -193,7 +191,6 @@ public final class MarshaledResponse {
 				: Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
 		this.body = builder.body;
 		this.stream = builder.stream;
-		this.headResponseGzipCandidate = builder.headResponseGzipCandidate;
 
 		if (getBody().isPresent() && getStream().isPresent())
 			throw new IllegalStateException("A MarshaledResponse may not specify both a known-length body and a streaming response body.");
@@ -333,11 +330,6 @@ public final class MarshaledResponse {
 		return body == null ? 0L : body.getLength();
 	}
 
-	@NonNull
-	Boolean isHeadResponseGzipCandidate() {
-		return this.headResponseGzipCandidate;
-	}
-
 	byte @Nullable [] bodyBytesOrNull() {
 		MarshaledResponseBody body = getBody().orElse(null);
 
@@ -387,8 +379,6 @@ public final class MarshaledResponse {
 		private MarshaledResponseBody body;
 		@Nullable
 		private StreamingResponseBody stream;
-		@NonNull
-		private Boolean headResponseGzipCandidate = false;
 
 		Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
@@ -451,7 +441,6 @@ public final class MarshaledResponse {
 				return withoutBody();
 
 			this.body = body;
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -467,7 +456,6 @@ public final class MarshaledResponse {
 				return withoutBody();
 
 			this.body = fileBody(path);
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -483,7 +471,6 @@ public final class MarshaledResponse {
 		public Builder body(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
 			requireNonNull(path);
 			this.body = fileBody(path, offset, count);
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -503,7 +490,6 @@ public final class MarshaledResponse {
 												@NonNull Boolean closeOnComplete) {
 			requireNonNull(fileChannel);
 			this.body = fileChannelBody(fileChannel, offset, count, closeOnComplete);
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -519,7 +505,6 @@ public final class MarshaledResponse {
 				return withoutBody();
 
 			this.body = new MarshaledResponseBody.ByteBuffer(byteBuffer);
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -539,7 +524,6 @@ public final class MarshaledResponse {
 				return withoutStream();
 
 			this.stream = stream;
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -555,7 +539,6 @@ public final class MarshaledResponse {
 		public Builder withoutBody() {
 			releaseBodyResources(this.body);
 			this.body = null;
-			this.headResponseGzipCandidate = false;
 			return this;
 		}
 
@@ -567,12 +550,6 @@ public final class MarshaledResponse {
 		@NonNull
 		public Builder withoutStream() {
 			this.stream = null;
-			return this;
-		}
-
-		@NonNull
-		Builder headResponseGzipCandidate(@NonNull Boolean headResponseGzipCandidate) {
-			this.headResponseGzipCandidate = requireNonNull(headResponseGzipCandidate);
 			return this;
 		}
 
@@ -733,7 +710,6 @@ public final class MarshaledResponse {
 
 			marshaledResponse.getBody().ifPresent(this.builder::body);
 			marshaledResponse.getStream().ifPresent(this.builder::stream);
-			this.builder.headResponseGzipCandidate(marshaledResponse.isHeadResponseGzipCandidate());
 		}
 
 		@NonNull
@@ -915,12 +891,6 @@ public final class MarshaledResponse {
 		@NonNull
 		public Copier withoutStream() {
 			this.builder.withoutStream();
-			return this;
-		}
-
-		@NonNull
-		Copier headResponseGzipCandidate(@NonNull Boolean headResponseGzipCandidate) {
-			this.builder.headResponseGzipCandidate(headResponseGzipCandidate);
 			return this;
 		}
 

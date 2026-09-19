@@ -83,13 +83,13 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 144;
+	private static final int PHASE_FOUR_TYPE_COUNT = 152;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 270;
+	private static final int CURRENT_MCP_TYPE_COUNT = 278;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"d0612fd532f213d2ff0acf7c13a88269ac5d9bd32fa3ca727312ef3c486ccd64";
+			"cfb2267bf3efa2db9f4a438bd190842d6c4b85a088f0e2b6318c7aef08005de5";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -137,6 +137,10 @@ public class McpPublicApiReflectionContractTests {
 			Map.ofEntries(
 					Map.entry("com.soklet.McpAbsentOriginPolicy",
 							List.of("ALLOW", "REQUIRE_ORIGIN")),
+					Map.entry("com.soklet.McpAppResourceMetadata$Permission",
+							List.of("CAMERA", "MICROPHONE", "GEOLOCATION", "CLIPBOARD_WRITE")),
+					Map.entry("com.soklet.McpAppToolMetadata$Visibility",
+							List.of("MODEL", "APP")),
 					Map.entry("com.soklet.McpCacheScope",
 							List.of("PUBLIC", "PRIVATE")),
 					Map.entry("com.soklet.McpClientCapability", List.of(

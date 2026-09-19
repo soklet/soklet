@@ -26,27 +26,27 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DisabledResponseGzipPolicy implements ResponseGzipPolicy {
+final class DisabledResponseCompressor implements ResponseCompressor {
 	@NonNull
-	private static final DisabledResponseGzipPolicy INSTANCE;
+	private static final DisabledResponseCompressor INSTANCE;
 
 	static {
-		INSTANCE = new DisabledResponseGzipPolicy();
+		INSTANCE = new DisabledResponseCompressor();
 	}
 
-	private DisabledResponseGzipPolicy() {}
+	private DisabledResponseCompressor() {}
 
 	@NonNull
-	static DisabledResponseGzipPolicy defaultInstance() {
+	static DisabledResponseCompressor defaultInstance() {
 		return INSTANCE;
 	}
 
 	@Override
 	@NonNull
-	public Boolean shouldGzip(@NonNull Request request,
-														@NonNull MarshaledResponse response) {
+	public ResponseCompressionPlan plan(@NonNull Request request,
+																			 @NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
-		requireNonNull(response);
-		return false;
+		requireNonNull(marshaledResponse);
+		return ResponseCompressionPlan.none();
 	}
 }

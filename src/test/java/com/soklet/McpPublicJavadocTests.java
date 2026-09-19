@@ -82,6 +82,9 @@ public class McpPublicJavadocTests {
 			"javax.annotation.concurrent.NotThreadSafe";
 	private static final Set<String> PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES = Set.of(
 			"com.soklet.McpAdmissionIdentity$Builder",
+			"com.soklet.McpAppResourceMetadata$Builder",
+			"com.soklet.McpAppResourceMetadata$ContentSecurityPolicy$Builder",
+			"com.soklet.McpAppToolMetadata$Builder",
 			"com.soklet.McpArgumentCompletionResult$Builder",
 			"com.soklet.McpAudioContent$Builder",
 			"com.soklet.McpBlobResourceContents$Builder",

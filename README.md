@@ -621,7 +621,23 @@ public MarshaledResponse exampleImage() {
 }
 ```
 
-[`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) supports known-length byte-array, file, file-channel, and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use [`MarshaledResponse::withFile`](<https://javadoc.soklet.com/com/soklet/MarshaledResponse.html#withFile(java.nio.file.Path,com.soklet.Request)>); its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://javadoc.soklet.com/com/soklet/StaticFiles.html) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior. Standard HTTP can also opt into gzip compression for finalized in-memory byte-array and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) responses with [`HttpServer.Builder::responseGzipPolicy`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#responseGzipPolicy(com.soklet.ResponseGzipPolicy)>), including [`ResponseGzipPolicy::fromDefaultsWithMinimumBodySizeInBytes`](<https://javadoc.soklet.com/com/soklet/ResponseGzipPolicy.html#fromDefaultsWithMinimumBodySizeInBytes(java.lang.Integer)>) for common text-like response media types.
+[`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) supports known-length byte-array, file, file-channel, and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use [`MarshaledResponse::withFile`](<https://javadoc.soklet.com/com/soklet/MarshaledResponse.html#withFile(java.nio.file.Path,com.soklet.Request)>); its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://javadoc.soklet.com/com/soklet/StaticFiles.html) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
+
+##### Response Compression
+
+Standard HTTP can opt into compression for finalized in-memory byte-array and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) responses with [`HttpServer.Builder::responseCompressor`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#responseCompressor(com.soklet.ResponseCompressor)>). The provided factory selects gzip for common text-like media types at or above the supplied body-size threshold:
+
+```java
+HttpServer httpServer = HttpServer.withPort(8080)
+  .responseCompressor(
+    ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024)
+  )
+  .build();
+```
+
+Compression is disabled unless configured; passing `null` or [`ResponseCompressor::disabledInstance`](<https://javadoc.soklet.com/com/soklet/ResponseCompressor.html#disabledInstance()>) restores that default. A custom [`ResponseCompressor`](https://javadoc.soklet.com/com/soklet/ResponseCompressor.html) returns [`ResponseCompressionPlan::none`](<https://javadoc.soklet.com/com/soklet/ResponseCompressionPlan.html#none()>) or a plan selecting a [`ResponseCompressionCodec`](https://javadoc.soklet.com/com/soklet/ResponseCompressionCodec.html). Soklet supplies `ResponseCompressionCodec.gzipInstance()` using JDK gzip; applications can provide other codecs without adding a codec dependency to core.
+
+Plans can wrap Soklet's lazy compression supplier with an application-owned cache. There is no built-in cache across responses: applications own cache keys, bounds, eviction, and thread safety, while Soklet owns encoding acceptance, `Vary`, validators, and response framing. `HEAD` selects the plan using the uncompressed representation but invokes neither the codec nor the cache callback. File, streaming, range, and already-encoded responses remain outside dynamic compression. See [Response Compression](https://www.soklet.com/docs/response-writing#response-compression) for caching and codec contracts, or [the 4.0.0 migration](MIGRATING_TO_4_0.md#response-compression) when replacing `ResponseGzipPolicy`.
 
 ##### Streaming Responses
 
