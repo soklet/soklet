@@ -411,10 +411,10 @@ class SimulatorConfigDerivationTests {
 				derivedMcpServer.maximumSubscriptionDuration());
 		Assertions.assertEquals(sourceMcpServer.logRawValidatedTraceIds(),
 				derivedMcpServer.logRawValidatedTraceIds());
-		Assertions.assertNotSame(sourceMcpServer.getProtectionControl(),
-				derivedMcpServer.getProtectionControl());
-		Assertions.assertNotSame(sourceMcpServer.getTraceCorrelationControl(),
-				derivedMcpServer.getTraceCorrelationControl());
+		Assertions.assertNotSame(sourceMcpServer.getProtectionKeyringManager(),
+				derivedMcpServer.getProtectionKeyringManager());
+		Assertions.assertNotSame(sourceMcpServer.getTraceCorrelationKeyManager(),
+				derivedMcpServer.getTraceCorrelationKeyManager());
 		Assertions.assertNotSame(sourceMcpServer.getLocalizationCatalogInvalidator(),
 				derivedMcpServer.getLocalizationCatalogInvalidator());
 
@@ -515,13 +515,13 @@ class SimulatorConfigDerivationTests {
 				derivedMcpServer.getCatalogAccessPolicy());
 		assertCompleteMcpBuilderFieldInventory();
 		assertMcpConstructionTemplatesMatch(sourceMcpServer, derivedMcpServer);
-		Assertions.assertNotSame(sourceMcpServer.getProtectionControl(),
-				derivedMcpServer.getProtectionControl());
+		Assertions.assertNotSame(sourceMcpServer.getProtectionKeyringManager(),
+				derivedMcpServer.getProtectionKeyringManager());
 		Assertions.assertEquals(
 				sourceMcpServer.getDiagnostics().getProtectionKeyringFingerprint(),
 				derivedMcpServer.getDiagnostics().getProtectionKeyringFingerprint());
-		Assertions.assertNotSame(sourceMcpServer.getTraceCorrelationControl(),
-				derivedMcpServer.getTraceCorrelationControl());
+		Assertions.assertNotSame(sourceMcpServer.getTraceCorrelationKeyManager(),
+				derivedMcpServer.getTraceCorrelationKeyManager());
 		Assertions.assertEquals(
 				sourceMcpServer.getDiagnostics().getTraceCorrelationFingerprint(),
 				derivedMcpServer.getDiagnostics().getTraceCorrelationFingerprint());

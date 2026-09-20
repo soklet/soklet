@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * request state. Development-ephemeral mode is explicit and is not portable
  * across restarts or server instances. A production keyring is an immutable
  * initial value; building a server copies it into independent live state and
- * exposes subsequent mutation only through {@link McpProtectionControl}.
+ * exposes subsequent mutation only through {@link McpProtectionKeyringManager}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

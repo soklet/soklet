@@ -110,9 +110,8 @@ class McpPromptRegistrationTests {
 				})
 				.title("Recommend")
 				.description("Builds a recommendation prompt")
-				.addIcon(icon)
-				.addArgument(required)
-				.addArgument(optional)
+				.icons(java.util.List.of(icon))
+				.arguments(java.util.List.of(required, optional))
 				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
 				.build();
 		McpJsonObject input = McpJsonObject.builder()
@@ -160,10 +159,9 @@ class McpPromptRegistrationTests {
 					return McpCompleteResult.fromPromptOutput(
 							McpPromptOutput.fromMessages());
 				})
-				.addArgument(McpPromptArgumentDeclaration.withName("required")
-						.required(true).build())
-				.addArgument(McpPromptArgumentDeclaration.withName("optional")
-						.build())
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("required")
+						.required(true).build(), McpPromptArgumentDeclaration.withName("optional")
+						.build()))
 				.build();
 
 		assertInvalid(registration, McpJsonObject.emptyInstance());
@@ -192,8 +190,7 @@ class McpPromptRegistrationTests {
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
-				.addArgument(duplicate)
-				.addArgument(duplicate)
+				.arguments(java.util.List.of(duplicate, duplicate))
 				.build());
 
 		IllegalArgumentException applicationFailure =
@@ -224,18 +221,17 @@ class McpPromptRegistrationTests {
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
 				.build();
-		McpEndpoint endpoint = endpointBuilder().addPrompt(prompt).build();
+		McpEndpoint endpoint = endpointBuilder().promptRegistrations(java.util.List.of(prompt)).build();
 
-		assertEquals(List.of(prompt), endpoint.getPrompts());
+		assertEquals(List.of(prompt), endpoint.getPromptRegistrations());
 		assertThrows(UnsupportedOperationException.class,
-				() -> endpoint.getPrompts().clear());
+				() -> endpoint.getPromptRegistrations().clear());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.addPrompt(prompt)
-				.addPrompt(McpPromptRegistration.withName("one")
+				.promptRegistrations(java.util.List.of(prompt, McpPromptRegistration.withName("one")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
-						.build())
+						.build()))
 				.build());
 	}
 

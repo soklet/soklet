@@ -290,7 +290,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 		public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.rootSignal.set(context.getTerminationSignal());
+			this.rootSignal.set(context.getTransportTerminationSignal());
 			TransportDelegateAttachment attachment =
 					context.attachTerminationOwningDelegate(this.leaf,
 							context.getAdmissionFencedRequestHandler());
@@ -396,7 +396,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 		public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.signal.set(context.getTerminationSignal());
+			this.signal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

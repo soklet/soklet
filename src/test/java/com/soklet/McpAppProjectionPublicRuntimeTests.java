@@ -63,14 +63,10 @@ class McpAppProjectionPublicRuntimeTests {
 	void typedAndRawAudiencesUseEachRequestsCapabilitiesWithoutCatalogLeaks() {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.addTool(tool("ordinary", calls).metadata(unknownMetadata()).build())
-				.addTool(tool("typed-both", calls).appToolMetadata(McpAppToolMetadata.builder()
-						.resourceUri(UI_URI).build()).metadata(unknownMetadata()).build())
-				.addTool(tool("raw-model", calls).metadata(rawVisibility("model")).build())
-				.addTool(tool("raw-app", calls).metadata(rawVisibility("app")).build())
-				.addTool(tool("empty", calls).appToolMetadata(McpAppToolMetadata.builder()
-						.visibility(Set.of()).build()).build())
-				.addResource(resource()).build();
+				.toolRegistrations(java.util.List.of(tool("ordinary", calls).metadata(unknownMetadata()).build(), tool("typed-both", calls).appToolMetadata(McpAppToolMetadata.builder()
+						.resourceUri(UI_URI).build()).metadata(unknownMetadata()).build(), tool("raw-model", calls).metadata(rawVisibility("model")).build(), tool("raw-app", calls).metadata(rawVisibility("app")).build(), tool("empty", calls).appToolMetadata(McpAppToolMetadata.builder()
+						.visibility(Set.of()).build()).build()))
+				.resourceRegistrations(java.util.List.of(resource())).build();
 		run(endpoint, builder -> {}, simulator -> {
 			List<String> capabilityCases = List.of("{}", APPS,
 					"{\"extensions\":{\"io.modelcontextprotocol/ui\":{}}}",
@@ -103,9 +99,7 @@ class McpAppProjectionPublicRuntimeTests {
 		AtomicInteger calls = new AtomicInteger();
 		List<String> evaluated = new ArrayList<>();
 		McpEndpoint endpoint = endpoint()
-				.addTool(tool("app", calls).metadata(rawVisibility("app")).build())
-				.addTool(tool("empty", calls).metadata(rawVisibility()).build())
-				.addTool(tool("model", calls).metadata(rawVisibility("model")).build())
+				.toolRegistrations(java.util.List.of(tool("app", calls).metadata(rawVisibility("app")).build(), tool("empty", calls).metadata(rawVisibility()).build(), tool("model", calls).metadata(rawVisibility("model")).build()))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -139,10 +133,8 @@ class McpAppProjectionPublicRuntimeTests {
 	void directAppOnlyCallsRequireExactMimeEvenWithoutExplicitCatalogPolicy() {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.addTool(tool("app", calls).appToolMetadata(McpAppToolMetadata.builder()
-						.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build()).build())
-				.addTool(tool("empty", calls).metadata(rawVisibility()).build())
-				.addTool(tool("model", calls).metadata(rawVisibility("model")).build()).build();
+				.toolRegistrations(java.util.List.of(tool("app", calls).appToolMetadata(McpAppToolMetadata.builder()
+						.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build()).build(), tool("empty", calls).metadata(rawVisibility()).build(), tool("model", calls).metadata(rawVisibility("model")).build())).build();
 		run(endpoint, builder -> {}, simulator -> {
 			List<String> capabilityCases = List.of("{}",
 					"{\"extensions\":{\"io.modelcontextprotocol/ui\":{}}}",
@@ -171,8 +163,7 @@ class McpAppProjectionPublicRuntimeTests {
 		AtomicInteger calls = new AtomicInteger();
 		AtomicInteger lookups = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.addTool(tool("app", calls).title("App title").metadata(rawVisibility("app")).build())
-				.addTool(tool("model", calls).title("Model title").metadata(rawVisibility("model")).build())
+				.toolRegistrations(java.util.List.of(tool("app", calls).title("App title").metadata(rawVisibility("app")).build(), tool("model", calls).title("Model title").metadata(rawVisibility("model")).build()))
 				.build();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 			Locale locale = Locale.forLanguageTag(request.getLanguageRanges().get(0).getRange());
@@ -199,7 +190,7 @@ class McpAppProjectionPublicRuntimeTests {
 
 	@Test
 	void standaloneExactResourceAdvertisesAppsWithoutInvokingCustomListing() {
-		McpEndpoint endpoint = endpoint().addResource(resource())
+		McpEndpoint endpoint = endpoint().resourceRegistrations(java.util.List.of(resource()))
 				.resourceListHandler((request, list, features) -> {
 					throw new AssertionError("Discovery must not invoke custom listing.");
 				}).build();
@@ -218,11 +209,13 @@ class McpAppProjectionPublicRuntimeTests {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint.Builder endpoint = endpoint();
 		String largeValue = "x".repeat(900_000);
+		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (int index = 0; index < 5; ++index)
-			endpoint.addTool(tool("large-app-" + index, calls)
+			toolRegistrations.add(tool("large-app-" + index, calls)
 					.appToolMetadata(McpAppToolMetadata.builder()
 							.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build())
 					.metadata(McpJsonObject.builder().put("retained", largeValue).build()).build());
+		endpoint.toolRegistrations(toolRegistrations);
 		run(endpoint.build(), builder -> {}, simulator -> {
 			Capture fallback = execute(simulator, request("tools/list", null, "{}", "allowed", "fr"));
 			assertEquals(200, fallback.status(), fallback.body());
@@ -240,8 +233,7 @@ class McpAppProjectionPublicRuntimeTests {
 	void listenerAndSimulatorReturnIdenticalCatalogBytesAcrossCapabilityChanges() throws Exception {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.addTool(tool("app", calls).metadata(rawVisibility("app")).build())
-				.addTool(tool("model", calls).metadata(rawVisibility("model")).build()).build();
+				.toolRegistrations(java.util.List.of(tool("app", calls).metadata(rawVisibility("app")).build(), tool("model", calls).metadata(rawVisibility("model")).build())).build();
 		List<Capture> simulated = new ArrayList<>();
 		List<String> capabilities = List.of("{}", APPS, "{}", APPS);
 		assertEquals(4, capabilities.size());

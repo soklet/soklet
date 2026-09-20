@@ -27,18 +27,18 @@ import javax.annotation.concurrent.ThreadSafe;
  * request declared the MCP Tasks extension. Applications may use the admitted
  * request to derive their own authorization binding and must persist
  * {@link #getTaskOrigin()} in the same transaction or outbox operation as the
- * durable work description. Neither this control, the request context, nor any
+ * durable work description. Neither this task creation context, the request context, nor any
  * request cancelation token is durable work and none may be retained by a
  * worker.
  *
- * <p>The control does not schedule work, allocate a task ID, or imply that a
+ * <p>The task creation context does not schedule work, allocate a task ID, or imply that a
  * client requested asynchronous execution. The server remains the sole
  * per-invocation decision maker.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpTaskControl {
+public interface McpTaskCreationContext {
 	/**
 	 * Returns the admitted request that is being considered for task creation.
 	 *

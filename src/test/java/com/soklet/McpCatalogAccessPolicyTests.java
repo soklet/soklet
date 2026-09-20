@@ -19,6 +19,7 @@ package com.soklet;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -174,14 +175,16 @@ class McpCatalogAccessPolicyTests {
 						.withNameAndVersion("caller-filtered-node-budget", "4.0.0")
 						.build())
 				.serverInfoIncluded(false);
+		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (int index = 0; index < 100; ++index)
-			endpointBuilder.addTool(McpToolRegistration
+			toolRegistrations.add(McpToolRegistration
 					.withName("hidden." + index)
 					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText("unused"))
 					.metadata(metadata)
 					.build());
+		endpointBuilder.toolRegistrations(toolRegistrations);
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpointBuilder.build()));
 

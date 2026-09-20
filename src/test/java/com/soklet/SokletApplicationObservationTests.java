@@ -1320,7 +1320,7 @@ final class SokletApplicationObservationTests {
 					.didReceiveLogEvent(this.logEvent);
 			awaitUninterruptibly(this.releaseAttach);
 			TransportTerminationSignal terminationSignal =
-					attachmentContext.getTerminationSignal();
+					attachmentContext.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {
 					requireNonNull(context);

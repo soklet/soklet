@@ -161,7 +161,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-default-host-test",
 							"4.0.0").build())
-					.addTool(tool)
+					.toolRegistrations(java.util.List.of(tool))
 					.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(),
@@ -526,7 +526,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-subscription-test",
 							"4.0.0").build())
-					.addResource(McpResourceRegistration.withUriAndName(
+					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 							URI.create("https://example.com/simulator-resource"),
 							"Simulator resource")
 							.handler((resourceRequest, read, features) ->
@@ -536,7 +536,7 @@ public class McpSimulatorPublicRuntimeTests {
 																	"simulated")
 															.build())
 													.build()))
-							.build())
+							.build()))
 					.subscriptionConfig(subscriptions)
 					.build();
 			return List.of(endpoint);
@@ -785,7 +785,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-capture-isolation-test",
 						"4.0.0").build())
-				.addTools(List.of(slow, fast))
+				.toolRegistrations(java.util.List.of(slow, fast))
 				.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(), mcpServerBuilder -> {
@@ -1233,7 +1233,7 @@ public class McpSimulatorPublicRuntimeTests {
 							"simulator-public-runtime-test",
 							"4.0.0").build())
 					.serverInfoIncluded(false)
-					.addTools(tools)
+					.toolRegistrations(tools)
 					.build();
 			return List.of(endpoint);
 		}, admissionController, McpSimulatorPublicRuntimeTests::configureBaseServer);

@@ -373,11 +373,11 @@ public interface LifecycleObserver {
 	 * HTTP response streams, the two callbacks are normally invoked back-to-back because there is no broadcaster or
 	 * session registry cleanup phase between them.
 	 *
-	 * @param streamingResponse the stream that is terminating
-	 * @param termination       why and when the stream terminated
+	 * @param streamingResponseHandle the stream that is terminating
+	 * @param streamTermination       why and when the stream terminated
 	 */
-	default void willTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																					 @NonNull StreamTermination termination) {
+	default void willTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																					 @NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 
@@ -389,11 +389,11 @@ public interface LifecycleObserver {
 	 * response is rejected on the wire with {@code 505 HTTP Version Not Supported}, while this callback still receives
 	 * the original streaming response that was rejected.
 	 *
-	 * @param streamingResponse the stream that terminated
-	 * @param termination       why and when the stream terminated
+	 * @param streamingResponseHandle the stream that terminated
+	 * @param streamTermination       why and when the stream terminated
 	 */
-	default void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																					@NonNull StreamTermination termination) {
+	default void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																					@NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 
@@ -571,12 +571,12 @@ public interface LifecycleObserver {
 	/**
 	 * Called if an SSE connection fails to establish.
 	 *
-	 * @param reason    the handshake failure reason
+	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
 	 */
 	default void didFailToEstablishSseConnection(@NonNull Request request,
 																													 @Nullable ResourceMethod resourceMethod,
-																													 SseConnection.@NonNull HandshakeFailureReason reason,
+																													 SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 																													 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -585,7 +585,7 @@ public interface LifecycleObserver {
 	 * Called before an SSE connection is terminated.
 	 */
 	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull StreamTermination termination) {
+																											@NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 
@@ -593,7 +593,7 @@ public interface LifecycleObserver {
 	 * Called after an SSE connection is terminated.
 	 */
 	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																										 @NonNull StreamTermination termination) {
+																										 @NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 

@@ -368,7 +368,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						serverName, "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

@@ -88,7 +88,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"bounded-public-runtime-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
@@ -197,7 +197,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"typed-tool-public-runtime-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpRateLimiter requestRateLimiter = context -> {
 			Assertions.assertEquals(McpRateLimitTarget.REQUEST,
@@ -357,7 +357,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"propagation-public-runtime-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionTraceContext.set(

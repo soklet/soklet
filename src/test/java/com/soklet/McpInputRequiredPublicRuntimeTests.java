@@ -27,6 +27,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -87,7 +88,7 @@ public class McpInputRequiredPublicRuntimeTests {
 										.put("testResult", "tool")
 										.build())
 								.build())
-				.addInputRequestDeclarations(form, urlInput)
+				.inputRequestDeclarations(java.util.List.of(form, urlInput))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("input-prompt")
@@ -99,7 +100,7 @@ public class McpInputRequiredPublicRuntimeTests {
 										.put("testResult", "prompt")
 										.build())
 								.build())
-				.addInputRequestDeclarations(urlInput)
+				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriTemplateAndName("test://items/{id}", "input-resource")
@@ -110,14 +111,14 @@ public class McpInputRequiredPublicRuntimeTests {
 										.put("testResult", "resource")
 										.build())
 								.build())
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(java.util.List.of(form))
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -224,27 +225,27 @@ public class McpInputRequiredPublicRuntimeTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> inputRequired(
 						"form", form, formParams))
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(java.util.List.of(form))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("valid-url-input")
 				.handler((request, promptGet, features) -> inputRequired(
 						"url", url, urlParams))
-				.addInputRequestDeclarations(url)
+				.inputRequestDeclarations(java.util.List.of(url))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://valid-additionalForm"),
 						"valid-additionalForm-input")
 				.handler((request, read, features) -> inputRequired(
 						"additionalForm", additionalForm, additionalFormParams))
-				.addInputRequestDeclarations(additionalForm)
+				.inputRequestDeclarations(java.util.List.of(additionalForm))
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -365,7 +366,7 @@ public class McpInputRequiredPublicRuntimeTests {
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(urlInput, form)
+				.inputRequestDeclarations(java.util.List.of(urlInput, form))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("invalid-additionalForm-input")
@@ -379,7 +380,7 @@ public class McpInputRequiredPublicRuntimeTests {
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(form, additionalForm)
+				.inputRequestDeclarations(java.util.List.of(form, additionalForm))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://invalid-urlInput"),
@@ -393,14 +394,14 @@ public class McpInputRequiredPublicRuntimeTests {
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(form, urlInput)
+				.inputRequestDeclarations(java.util.List.of(form, urlInput))
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -468,7 +469,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					return inputRequired("urlInput", requiredUrlInput,
 							McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 				})
-				.addInputRequestDeclarations(requiredUrlInput)
+				.inputRequestDeclarations(java.util.List.of(requiredUrlInput))
 				.build();
 		McpToolRegistration<McpJsonObject> conditionalComplete =
 				McpToolRegistration.withName("conditional-complete")
@@ -477,7 +478,7 @@ public class McpInputRequiredPublicRuntimeTests {
 							conditionalCompleteHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("complete");
 						})
-						.addInputRequestDeclarations(conditionalUrlInput)
+						.inputRequestDeclarations(java.util.List.of(conditionalUrlInput))
 						.build();
 		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
 				.withName("conditional-input")
@@ -487,10 +488,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return inputRequired("urlInput", conditionalUrlInput,
 							McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build());
 				})
-				.addInputRequestDeclarations(conditionalUrlInput)
+				.inputRequestDeclarations(java.util.List.of(conditionalUrlInput))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTools(List.of(required, conditionalComplete, conditionalInput))
+				.toolRegistrations(java.util.List.of(required, conditionalComplete, conditionalInput))
 				.build();
 		McpServer server = server(endpoint, context -> {
 			admissionInvocations.incrementAndGet();
@@ -581,7 +582,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				})
 				.title("Caller-neutral required-form tool")
 				.description("Requires form elicitation when called")
-				.addInputRequestDeclarations(requiredForm)
+				.inputRequestDeclarations(java.util.List.of(requiredForm))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(promptName)
@@ -594,8 +595,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.description("Visible to every admitted caller")
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> McpLocalizationContext
 						.withLocale(Locale.ENGLISH, text -> {
@@ -770,9 +771,9 @@ public class McpInputRequiredPublicRuntimeTests {
 							.metadata(secretMetadata)
 							.build();
 				})
-				.addInputRequestDeclarations(urlInput)
+				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
-		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
@@ -845,9 +846,9 @@ public class McpInputRequiredPublicRuntimeTests {
 									.build())
 							.build();
 				})
-				.addInputRequestDeclarations(declared)
+				.inputRequestDeclarations(java.util.List.of(declared))
 				.build();
-		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
@@ -912,7 +913,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must-not-run");
 				})
-				.addInputRequestDeclarations(declared)
+				.inputRequestDeclarations(java.util.List.of(declared))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("interceptor-undeclared-prompt")
@@ -923,7 +924,7 @@ public class McpInputRequiredPublicRuntimeTests {
 									McpPromptMessage.fromUserContent(
 											McpTextContent.fromText("must-not-run"))));
 				})
-				.addInputRequestDeclarations(declared)
+				.inputRequestDeclarations(java.util.List.of(declared))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(resourceUri, "interceptor-undeclared-resource")
@@ -935,14 +936,14 @@ public class McpInputRequiredPublicRuntimeTests {
 											.build())
 									.build());
 				})
-				.addInputRequestDeclarations(declared)
+				.inputRequestDeclarations(java.util.List.of(declared))
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),
@@ -1026,6 +1027,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("secret", metadataSecret)
 				.build();
 		McpEndpoint.Builder endpointBuilder = endpointBuilder();
+		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (String toolName : List.of("interceptor-valid-input",
 				"interceptor-undeclared-input", "interceptor-invalid-input",
 				"interceptor-missing-capability")) {
@@ -1038,11 +1040,12 @@ public class McpInputRequiredPublicRuntimeTests {
 							});
 			if (toolName.equals("interceptor-undeclared-input")
 					|| toolName.equals("interceptor-missing-capability"))
-				toolBuilder.addInputRequestDeclarations(form);
+				toolBuilder.inputRequestDeclarations(java.util.List.of(form));
 			else
-				toolBuilder.addInputRequestDeclarations(urlInput);
-			endpointBuilder.addTool(toolBuilder.build());
+				toolBuilder.inputRequestDeclarations(java.util.List.of(urlInput));
+			toolRegistrations.add(toolBuilder.build());
 		}
+		endpointBuilder.toolRegistrations(toolRegistrations);
 		McpServer server = server(endpointBuilder.build(),
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
@@ -1164,7 +1167,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					aggregateInvocations.incrementAndGet();
 					return oversizedResult;
 				})
-				.addInputRequestDeclarations(urlInput)
+				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
 		McpToolRegistration<McpJsonObject> legalTool = McpToolRegistration
 				.withName("legal-input-request")
@@ -1173,11 +1176,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					legalInvocations.incrementAndGet();
 					return individuallyLegalResult;
 				})
-				.addInputRequestDeclarations(urlInput)
+				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(aggregateTool)
-				.addTool(legalTool)
+				.toolRegistrations(java.util.List.of(aggregateTool, legalTool))
 				.build();
 		McpServer server = server(endpoint,
 				McpAdmissionController.acceptAllInstance(),

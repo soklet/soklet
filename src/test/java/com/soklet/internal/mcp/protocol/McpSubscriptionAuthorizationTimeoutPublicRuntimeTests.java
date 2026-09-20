@@ -431,7 +431,7 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 						"subscription-authorization-timeout-test", "4.0.0")
 						.build())
 				.subscriptionConfig(subscriptions);
-		endpoint.addResource(McpResourceRegistration
+		endpoint.resourceRegistrations(java.util.List.of(McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "Authorization timeout resource")
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
@@ -439,7 +439,7 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 										McpTextResourceContents.withUriAndText(
 												read.getUri(), "test").build())
 										.build()))
-				.build());
+				.build()));
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(endpoint.build())))

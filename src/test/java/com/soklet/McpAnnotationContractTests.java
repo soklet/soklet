@@ -281,7 +281,7 @@ public class McpAnnotationContractTests {
 		@McpResourceList
 		public McpResourcePage listResources(McpResourceListContext list) {
 			return McpResourcePage.builder()
-					.addResources(list.getRegisteredResourceDescriptors())
+					.resourceDescriptors(list.getRegisteredResourceDescriptors())
 					.build();
 		}
 

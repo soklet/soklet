@@ -241,7 +241,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private TypeMirror mcpResourceListContextType;
 	private TypeMirror mcpOperationResultType;
 	private TypeMirror mcpTaskCreatedResultType;
-	private TypeMirror mcpTaskControlType;
+	private TypeMirror mcpTaskCreationContextType;
 	private TypeMirror stringType;
 	private TypeMirror optionalType;
 	private TypeMirror exceptionType;
@@ -359,10 +359,10 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement("com.soklet.McpTaskCreatedResult");
 		this.mcpTaskCreatedResultType = mcpTaskCreatedResult == null
 				? null : mcpTaskCreatedResult.asType();
-		TypeElement mcpTaskControl =
-				elements.getTypeElement("com.soklet.McpTaskControl");
-		this.mcpTaskControlType = mcpTaskControl == null
-				? null : mcpTaskControl.asType();
+		TypeElement mcpTaskCreationContext =
+				elements.getTypeElement("com.soklet.McpTaskCreationContext");
+		this.mcpTaskCreationContextType = mcpTaskCreationContext == null
+				? null : mcpTaskCreationContext.asType();
 		TypeElement string = elements.getTypeElement("java.lang.String");
 		this.stringType = string == null ? null : string.asType();
 		TypeElement optional = elements.getTypeElement("java.util.Optional");
@@ -1463,7 +1463,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		boolean invocationFeaturesSeen = false;
 		boolean cancelationTokenSeen = false;
 		boolean progressReporterSeen = false;
-		boolean taskControlSeen = false;
+		boolean taskCreationContextSeen = false;
 		int toolArgumentIndex = 0;
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror argument = findAnnotation(parameter,
@@ -1479,8 +1479,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					parameter.asType());
 			boolean bareProgressReporter = isExactType(parameter.asType(),
 					mcpProgressReporterType);
-			boolean taskControl = isExactType(parameter.asType(),
-					mcpTaskControlType);
+			boolean taskCreationContext = isExactType(parameter.asType(),
+					mcpTaskCreationContextType);
 			if (bareProgressReporter) {
 				if (argument != null)
 					mcpError(parameter,
@@ -1490,15 +1490,15 @@ public final class SokletProcessor extends AbstractProcessor {
 				continue;
 			}
 			if (!requestContext && !invocationFeatures && !cancelationToken
-					&& !progressReporter && !taskControl
+					&& !progressReporter && !taskCreationContext
 					&& !isTypeAccessibleFromGeneratedProvider(parameter.asType(),
 							providerPackage))
 				mcpError(parameter,
 						"Soklet: An @McpTool argument type must be accessible to the generated MCP endpoint provider.");
 			if (requestContext || invocationFeatures || cancelationToken
-					|| progressReporter || taskControl) {
+					|| progressReporter || taskCreationContext) {
 				if (argument != null) {
-					if (cancelationToken || progressReporter || taskControl)
+					if (cancelationToken || progressReporter || taskCreationContext)
 						mcpError(parameter,
 								"Soklet: Injectable MCP feature parameters must not also be annotated with @McpToolArgument.");
 					else
@@ -1540,13 +1540,13 @@ public final class SokletProcessor extends AbstractProcessor {
 				} else {
 					if (returnKind != McpToolReturnKind.TASK_CREATED)
 						mcpError(parameter,
-								"Soklet: McpTaskControl may be injected only into an @McpTool method that returns McpTaskCreatedResult<R>.");
-					if (taskControlSeen)
+								"Soklet: McpTaskCreationContext may be injected only into an @McpTool method that returns McpTaskCreatedResult<R>.");
+					if (taskCreationContextSeen)
 						mcpError(parameter,
-								"Soklet: An @McpTool method may inject McpTaskControl at most once.");
-					taskControlSeen = true;
+								"Soklet: An @McpTool method may inject McpTaskCreationContext at most once.");
+					taskCreationContextSeen = true;
 					bindings.add(new McpParameterBinding(
-							McpParameterBindingKind.TASK_CONTROL, null, null,
+							McpParameterBindingKind.TASK_CREATION_CONTEXT, null, null,
 							parameter.asType(), "", "", null));
 				}
 				continue;
@@ -2896,8 +2896,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			source.append("\t\t\t\t.")
 					.append(tool.returnKind() == McpToolReturnKind.TASK_CREATED
 							? "operationHandler" : "handler")
-					.append("((request, arguments, features) -> ")
-					.append("instanceResolver.apply(request).")
+					.append("((requestContext, arguments, invocationFeatures) -> ")
+					.append("instanceResolver.apply(requestContext).")
 					.append(tool.method().getSimpleName()).append('(')
 					.append(invocationArguments(tool.bindings()))
 					.append("));\n");
@@ -2916,19 +2916,19 @@ public final class SokletProcessor extends AbstractProcessor {
 					tool.requestStateMode());
 			appendAppToolMetadata(source, "toolBuilder" + index,
 					tool.appToolMetadata());
-			source.append("\t\tendpointBuilder.addTool(toolBuilder")
-					.append(index).append(".build());\n");
 		}
+		appendBuiltCollection(source, "endpointBuilder", "toolRegistrations",
+				"toolBuilder", endpoint.tools().size());
 
 		for (int index = 0; index < endpoint.prompts().size(); ++index) {
 			McpPromptModel prompt = endpoint.prompts().get(index);
 			source.append("\t\tvar promptBuilder").append(index)
 					.append(" = com.soklet.McpPromptRegistration.withName(")
 					.append(javaStringLiteral(prompt.name())).append(")\n")
-					.append("\t\t\t\t.handler((request, prompt, features) -> ");
+					.append("\t\t\t\t.handler((requestContext, promptGetContext, invocationFeatures) -> ");
 			if (prompt.promptOutputReturn())
 				source.append("com.soklet.McpCompleteResult.fromPromptOutput(");
-			source.append("instanceResolver.apply(request).")
+			source.append("instanceResolver.apply(requestContext).")
 					.append(prompt.method().getSimpleName()).append('(')
 					.append(promptInvocationArguments(prompt.bindings()))
 					.append(')');
@@ -2955,11 +2955,10 @@ public final class SokletProcessor extends AbstractProcessor {
 				appendOptionalBuilderCall(source, argumentBuilder, "description",
 						binding.description());
 				source.append("\t\t").append(argumentBuilder).append(".required(")
-						.append(binding.required()).append(");\n")
-						.append("\t\tpromptBuilder").append(index)
-						.append(".addArgument(").append(argumentBuilder)
-						.append(".build());\n");
+						.append(binding.required()).append(");\n");
 			}
+			appendBuiltCollection(source, "promptBuilder" + index, "arguments",
+					"promptArgumentBuilder" + index + "_", argumentIndex);
 			McpCompletionModel completion = endpoint.promptCompletions()
 					.get(prompt.name());
 			if (completion != null)
@@ -2973,9 +2972,9 @@ public final class SokletProcessor extends AbstractProcessor {
 					prompt.inputRequestDeclarations());
 			appendRequestStateMode(source, "promptBuilder" + index,
 					prompt.requestStateMode());
-			source.append("\t\tendpointBuilder.addPrompt(promptBuilder")
-					.append(index).append(".build());\n");
 		}
+		appendBuiltCollection(source, "endpointBuilder", "promptRegistrations",
+				"promptBuilder", endpoint.prompts().size());
 
 		for (int index = 0; index < endpoint.resources().size(); ++index) {
 			McpResourceModel resource = endpoint.resources().get(index);
@@ -2990,10 +2989,10 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(')');
 			source.append(", ").append(javaStringLiteral(resource.name()))
 					.append(")\n")
-					.append("\t\t\t\t.handler((request, resource, features) -> ");
+					.append("\t\t\t\t.handler((requestContext, resourceReadContext, invocationFeatures) -> ");
 			if (resource.resourceOutputReturn())
 				source.append("com.soklet.McpCompleteResult.fromResourceOutput(");
-			source.append("instanceResolver.apply(request).")
+			source.append("instanceResolver.apply(requestContext).")
 					.append(resource.method().getSimpleName()).append('(')
 					.append(resourceInvocationArguments(resource.bindings()))
 					.append(')');
@@ -3030,14 +3029,14 @@ public final class SokletProcessor extends AbstractProcessor {
 					resource.inputRequestDeclarations());
 			appendRequestStateMode(source, "resourceBuilder" + index,
 					resource.requestStateMode());
-			source.append("\t\tendpointBuilder.addResource(resourceBuilder")
-					.append(index).append(".build());\n");
 		}
+		appendBuiltCollection(source, "endpointBuilder", "resourceRegistrations",
+				"resourceBuilder", endpoint.resources().size());
 
 		McpResourceListModel resourceList = endpoint.resourceList();
 		if (resourceList != null) {
 			source.append("\t\tendpointBuilder.resourceListHandler(")
-					.append("(request, list, features) -> instanceResolver.apply(request).")
+					.append("(requestContext, resourceListContext, invocationFeatures) -> instanceResolver.apply(requestContext).")
 					.append(resourceList.method().getSimpleName()).append('(')
 					.append(resourceListInvocationArguments(
 							resourceList.bindings()))
@@ -3101,14 +3100,31 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(");\n");
 	}
 
+	private static void appendBuiltCollection(@NonNull StringBuilder source,
+			@NonNull String builder, @NonNull String method,
+			@NonNull String elementBuilderPrefix, int elementCount) {
+		source.append("\t\t").append(builder).append('.').append(method)
+				.append("(java.util.List.of(");
+		for (int index = 0; index < elementCount; ++index) {
+			if (index > 0)
+				source.append(", ");
+			source.append(elementBuilderPrefix).append(index).append(".build()");
+		}
+		source.append("));\n");
+	}
+
 	private static void appendInputRequestDeclarations(
 			@NonNull StringBuilder source, @NonNull String builder,
 			@NonNull List<@NonNull McpInputRequestModel> declarations) {
-		for (McpInputRequestModel declaration : declarations)
-			source.append("\t\t").append(builder)
-					.append(".addInputRequestDeclaration(")
-					.append(inputRequestDeclarationExpression(declaration))
-					.append(");\n");
+		// Typed-complete tool builders deliberately do not expose this property.
+		if (declarations.isEmpty())
+			return;
+		source.append("\t\t").append(builder)
+				.append(".inputRequestDeclarations(java.util.List.of(")
+				.append(declarations.stream()
+						.map(SokletProcessor::inputRequestDeclarationExpression)
+						.collect(Collectors.joining(", ")))
+				.append("));\n");
 	}
 
 	private static void appendRequestStateMode(@NonNull StringBuilder source,
@@ -3159,14 +3175,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
-				case REQUEST_CONTEXT -> "request";
-				case INVOCATION_FEATURES -> "features";
+				case REQUEST_CONTEXT -> "requestContext";
+				case INVOCATION_FEATURES -> "invocationFeatures";
 				case CANCELATION_TOKEN ->
-						"features.getCancelationToken()";
+						"invocationFeatures.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.getProgressReporter()";
-				case TASK_CONTROL ->
-						"features.getTaskControl().orElseThrow()";
+						"invocationFeatures.getProgressReporter()";
+				case TASK_CREATION_CONTEXT ->
+						"invocationFeatures.getTaskCreationContext().orElseThrow()";
 				case TOOL_ARGUMENT -> "arguments.getConvertedArguments()."
 						+ binding.carrierName() + "()";
 			});
@@ -3180,17 +3196,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpPromptParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
-				case REQUEST_CONTEXT -> "request";
-				case INVOCATION_FEATURES -> "features";
+				case REQUEST_CONTEXT -> "requestContext";
+				case INVOCATION_FEATURES -> "invocationFeatures";
 				case CANCELATION_TOKEN ->
-						"features.getCancelationToken()";
+						"invocationFeatures.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.getProgressReporter()";
+						"invocationFeatures.getProgressReporter()";
 				case PROMPT_ARGUMENT -> binding.required()
-						? "prompt.findArgument("
+						? "promptGetContext.findArgument("
 								+ javaStringLiteral(binding.publishedName())
 								+ ").orElseThrow()"
-						: "prompt.findArgument("
+						: "promptGetContext.findArgument("
 								+ javaStringLiteral(binding.publishedName()) + ")";
 			});
 		}
@@ -3203,15 +3219,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpResourceParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
-				case REQUEST_CONTEXT -> "request";
-				case INVOCATION_FEATURES -> "features";
+				case REQUEST_CONTEXT -> "requestContext";
+				case INVOCATION_FEATURES -> "invocationFeatures";
 				case CANCELATION_TOKEN ->
-						"features.getCancelationToken()";
+						"invocationFeatures.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.getProgressReporter()";
-				case RESOURCE_READ_CONTEXT -> "resource";
+						"invocationFeatures.getProgressReporter()";
+				case RESOURCE_READ_CONTEXT -> "resourceReadContext";
 				case URI_PARAMETER -> "java.util.Objects.requireNonNull("
-						+ "resource.getUriTemplateVariables().get("
+						+ "resourceReadContext.getUriTemplateVariables().get("
 						+ javaStringLiteral(requireNonNull(binding.variableName())) + "))";
 			});
 		}
@@ -3224,13 +3240,13 @@ public final class SokletProcessor extends AbstractProcessor {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpResourceListParameterBinding binding : bindings) {
 			arguments.add(switch (binding) {
-				case REQUEST_CONTEXT -> "request";
-				case INVOCATION_FEATURES -> "features";
+				case REQUEST_CONTEXT -> "requestContext";
+				case INVOCATION_FEATURES -> "invocationFeatures";
 				case CANCELATION_TOKEN ->
-						"features.getCancelationToken()";
+						"invocationFeatures.getCancelationToken()";
 				case PROGRESS_REPORTER ->
-						"features.getProgressReporter()";
-				case RESOURCE_LIST_CONTEXT -> "list";
+						"invocationFeatures.getProgressReporter()";
+				case RESOURCE_LIST_CONTEXT -> "resourceListContext";
 			});
 		}
 		return String.join(", ", arguments);
@@ -4774,7 +4790,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		INVOCATION_FEATURES,
 		CANCELATION_TOKEN,
 		PROGRESS_REPORTER,
-		TASK_CONTROL,
+		TASK_CREATION_CONTEXT,
 		TOOL_ARGUMENT
 	}
 

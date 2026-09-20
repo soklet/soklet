@@ -138,19 +138,19 @@ public interface McpInvocationFeatures {
 	}
 
 	/**
-	 * Returns the control for durably creating an MCP task from this invocation.
+	 * Returns the context for durably creating an MCP task from this invocation.
 	 *
-	 * <p>The control is present only when the current operation supports task
+	 * <p>The context is present only when the current operation supports task
 	 * augmentation and the client declared the MCP Tasks extension capability on
 	 * this request. Presence does not mean that the client prefers or requires a
 	 * task; the server remains the sole per-request decision maker. An absent
-	 * control requires inline completion.
+	 * task creation context requires inline completion.
 	 *
-	 * @return invocation task control, if task creation is permitted
+	 * @return invocation task creation context, if task creation is permitted
 	 */
 	@NonNull
-	default Optional<@NonNull McpTaskControl> getTaskControl() {
-		return find(McpTaskControl.class);
+	default Optional<@NonNull McpTaskCreationContext> getTaskCreationContext() {
+		return find(McpTaskCreationContext.class);
 	}
 
 	/**

@@ -103,19 +103,19 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		Assertions.assertTrue(generatedSource.contains(
 				".sizeInBytes(7L)"), generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"resource.getUriTemplateVariables().get(\"identifier\")"),
+				"resourceReadContext.getUriTemplateVariables().get(\"identifier\")"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"resource.getUriTemplateVariables().get(\"section\")"),
+				"resourceReadContext.getUriTemplateVariables().get(\"section\")"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"exactResource(resource, features.getCancelationToken(), features.getProgressReporter(), features)"),
+				"exactResource(resourceReadContext, invocationFeatures.getCancelationToken(), invocationFeatures.getProgressReporter(), invocationFeatures)"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"templateResource(request, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"identifier\")), resource, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"section\")), features.getCancelationToken(), features.getProgressReporter(), features)"),
+				"templateResource(requestContext, java.util.Objects.requireNonNull(resourceReadContext.getUriTemplateVariables().get(\"identifier\")), resourceReadContext, java.util.Objects.requireNonNull(resourceReadContext.getUriTemplateVariables().get(\"section\")), invocationFeatures.getCancelationToken(), invocationFeatures.getProgressReporter(), invocationFeatures)"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"resources(features, features.getCancelationToken(), list, features.getProgressReporter(), request)"),
+				"resources(invocationFeatures, invocationFeatures.getCancelationToken(), resourceListContext, invocationFeatures.getProgressReporter(), requestContext)"),
 				generatedSource);
 
 		try (URLClassLoader classLoader = new URLClassLoader(
@@ -151,9 +151,9 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 					.getResourceTemplateListCachePolicy().getTimeToLive());
 			Assertions.assertEquals(McpCacheScope.PRIVATE, endpoint
 					.getResourceTemplateListCachePolicy().getScope());
-			Assertions.assertEquals(2, endpoint.getResources().size());
+			Assertions.assertEquals(2, endpoint.getResourceRegistrations().size());
 
-			McpResourceRegistration exact = endpoint.getResources().stream()
+			McpResourceRegistration exact = endpoint.getResourceRegistrations().stream()
 					.filter(resource -> resource.getAddressType()
 							== McpResourceAddressType.URI)
 					.findFirst().orElseThrow();
@@ -167,7 +167,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			Assertions.assertEquals(McpCacheScope.PUBLIC,
 					exact.getCachePolicy().getScope());
 
-			McpResourceRegistration template = endpoint.getResources().stream()
+			McpResourceRegistration template = endpoint.getResourceRegistrations().stream()
 					.filter(resource -> resource.getAddressType()
 							== McpResourceAddressType.URI_TEMPLATE)
 					.findFirst().orElseThrow();
@@ -593,7 +593,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				            != features.require(McpProgressReporter.class))
 				      throw new IllegalStateException("Missing injected context");
 				    return McpResourcePage.builder()
-				        .addResources(list.getRegisteredResourceDescriptors())
+				        .resourceDescriptors(list.getRegisteredResourceDescriptors())
 				        .nextCursor(list.getCursor().orElse("missing") + "-next")
 				        .cacheTimeToLiveOverride(Duration.ofMillis(25))
 				        .build();

@@ -119,10 +119,10 @@ public final class McpConformanceFixtureContractTest {
 		for (String scenario : List.of("completion-complete", "tools-list",
 				"server-stateless", "tasks-lifecycle")) {
 			McpEndpoint endpoint = McpConformanceFixture.endpointForScenario(scenario);
-			McpCompletionHandler prompt = endpoint.getPrompts().stream()
+			McpCompletionHandler prompt = endpoint.getPromptRegistrations().stream()
 					.filter(value -> value.getName().equals("test_prompt_with_arguments"))
 					.findFirst().orElseThrow().getCompletionHandler().orElseThrow();
-			McpCompletionHandler resource = endpoint.getResources().stream()
+			McpCompletionHandler resource = endpoint.getResourceRegistrations().stream()
 					.filter(value -> value.getUriTemplate().orElse("")
 							.equals("test://template/{id}/data"))
 					.findFirst().orElseThrow().getCompletionHandler().orElseThrow();
@@ -158,7 +158,7 @@ public final class McpConformanceFixtureContractTest {
 		for (String scenario : TASK_SCENARIOS) {
 			McpEndpoint endpoint = McpConformanceFixture
 					.endpointForScenario(scenario);
-			Set<String> taskTools = endpoint.getTools().stream()
+			Set<String> taskTools = endpoint.getToolRegistrations().stream()
 					.map(McpToolRegistration::getName)
 					.filter(TASK_TOOL_NAMES::contains)
 					.collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -168,7 +168,7 @@ public final class McpConformanceFixtureContractTest {
 
 		McpEndpoint phase5 = McpConformanceFixture.endpointForScenario(
 				"input-required-result-basic-elicitation");
-		assertEquals(0L, phase5.getTools().stream()
+		assertEquals(0L, phase5.getToolRegistrations().stream()
 				.filter(tool -> TASK_TOOL_NAMES.contains(tool.getName())).count(),
 				"Tasks tools leaked into the reviewed non-Tasks catalog");
 
@@ -191,7 +191,7 @@ public final class McpConformanceFixtureContractTest {
 		for (String scenario : PHASE_5_SCENARIOS) {
 			McpEndpoint endpoint = McpConformanceFixture
 					.endpointForScenario(scenario);
-			long phase5Tools = endpoint.getTools().stream()
+			long phase5Tools = endpoint.getToolRegistrations().stream()
 					.filter(tool -> PHASE_5_TOOL_NAMES.contains(tool.getName()))
 					.count();
 			String expectedTool = SCENARIO_TO_TOOL.get(scenario);
@@ -201,7 +201,7 @@ public final class McpConformanceFixtureContractTest {
 				assertEquals(expectedTool, tool(endpoint, expectedTool).getName(),
 						"Wrong tool for " + scenario);
 
-			long phase5Prompts = endpoint.getPrompts().stream()
+			long phase5Prompts = endpoint.getPromptRegistrations().stream()
 					.filter(prompt -> PROMPT.equals(prompt.getName()))
 					.count();
 			assertEquals("input-required-result-non-tool-request".equals(scenario)
@@ -210,10 +210,10 @@ public final class McpConformanceFixtureContractTest {
 		}
 
 		McpEndpoint phase4 = McpConformanceFixture.endpointForScenario("tools-list");
-		assertEquals(0L, phase4.getTools().stream()
+		assertEquals(0L, phase4.getToolRegistrations().stream()
 				.filter(tool -> PHASE_5_TOOL_NAMES.contains(tool.getName())).count(),
 				"Phase 5 tools leaked into the reviewed Phase 4 catalog");
-		assertEquals(0L, phase4.getPrompts().stream()
+		assertEquals(0L, phase4.getPromptRegistrations().stream()
 				.filter(prompt -> PROMPT.equals(prompt.getName())).count(),
 				"The Phase 5 prompt leaked into the reviewed Phase 4 catalog");
 
@@ -285,7 +285,7 @@ public final class McpConformanceFixtureContractTest {
 			throws Exception {
 		McpEndpoint endpoint = McpConformanceFixture.endpointForScenario(
 				"input-required-result-non-tool-request");
-		McpPromptRegistration registration = endpoint.getPrompts().stream()
+		McpPromptRegistration registration = endpoint.getPromptRegistrations().stream()
 				.filter(prompt -> PROMPT.equals(prompt.getName()))
 				.findFirst().orElseThrow();
 		McpInputRequiredResult initial = assertInputRequired(
@@ -317,7 +317,7 @@ public final class McpConformanceFixtureContractTest {
 	@SuppressWarnings("unchecked")
 	private static McpToolRegistration<McpJsonObject> tool(McpEndpoint endpoint,
 			String name) {
-		return (McpToolRegistration<McpJsonObject>) endpoint.getTools().stream()
+		return (McpToolRegistration<McpJsonObject>) endpoint.getToolRegistrations().stream()
 				.filter(tool -> name.equals(tool.getName()))
 				.findFirst().orElseThrow();
 	}

@@ -67,7 +67,7 @@ import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
 import com.soklet.ShutdownComponentDisposition;
 import com.soklet.McpTask;
-import com.soklet.McpTaskControl;
+import com.soklet.McpTaskCreationContext;
 import com.soklet.McpTaskCreatedResult;
 import com.soklet.McpTaskEventPublisher;
 import com.soklet.McpTaskManager;
@@ -341,16 +341,16 @@ public final class McpConformanceFixture {
 						.description("Soklet MCP conformance fixture")
 						.build())
 				.serverInfoIncluded(true)
-				.addTools(tools(scenario))
-				.addPrompts(prompts(scenario))
-				.addResources(resources())
+				.toolRegistrations(tools(scenario))
+				.promptRegistrations(prompts(scenario))
+				.resourceRegistrations(resources())
 				.resourceListHandler((request, list, features) -> {
 					if (list.getCursor().isPresent())
 						throw new McpJsonRpcException(
 								McpJsonRpcError.fromInvalidParameters(
 										"The resource-list cursor is invalid."));
 					return McpResourcePage.builder()
-							.addResources(list.getRegisteredResourceDescriptors())
+							.resourceDescriptors(list.getRegisteredResourceDescriptors())
 							.build();
 				})
 				.resourceListCachePolicy(CACHE_POLICY)
@@ -437,7 +437,7 @@ public final class McpConformanceFixture {
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText(
 									"Form elicitation capability was declared."))
-					.addInputRequestDeclarations(elicitation)
+					.inputRequestDeclarations(java.util.List.of(elicitation))
 					.description("Requires the form elicitation capability.")
 					.build());
 			tools.add(McpToolRegistration.withName("test_streaming_elicitation")
@@ -448,7 +448,7 @@ public final class McpConformanceFixture {
 													elicitation,
 													elicitationParameters))
 									.build())
-					.addInputRequestDeclarations(elicitation)
+					.inputRequestDeclarations(java.util.List.of(elicitation))
 					.description("Returns one embedded elicitation input request.")
 					.build());
 			tools.add(rawTool("test_logging_tool",
@@ -480,11 +480,11 @@ public final class McpConformanceFixture {
 							"seconds", 0L);
 					String label = stringArgument(arguments.getConvertedArguments(),
 							"label", "complete");
-					Optional<McpTaskControl> taskControl = features.getTaskControl();
-					if (taskControl.isEmpty())
+					Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
+					if (taskCreationContext.isEmpty())
 						return McpCompleteResult.fromToolText(
 								"Computed " + label + " synchronously.");
-					McpTask task = TASK_MANAGER.createTask(taskControl.orElseThrow());
+					McpTask task = TASK_MANAGER.createTask(taskCreationContext.orElseThrow());
 					TASK_MANAGER.completeAfter(task.getTaskId(),
 							Duration.ofSeconds(seconds), McpCompleteResult.fromToolText(
 									"Computed " + label + "."));
@@ -496,7 +496,7 @@ public final class McpConformanceFixture {
 				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					McpTask task = TASK_MANAGER.createTask(
-							features.getTaskControl().orElseThrow());
+							features.getTaskCreationContext().orElseThrow());
 					TASK_MANAGER.completeAfter(task.getTaskId(),
 							Duration.ofMillis(25), McpCompleteResult.fromToolErrorText(
 									"The task fixture intentionally failed."));
@@ -508,7 +508,7 @@ public final class McpConformanceFixture {
 				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					McpTask task = TASK_MANAGER.createTask(
-							features.getTaskControl().orElseThrow());
+							features.getTaskCreationContext().orElseThrow());
 					TASK_MANAGER.failAfter(task.getTaskId(), Duration.ofMillis(25),
 							McpJsonRpcError.fromApplication(50001,
 									"Task fixture protocol failure."));
@@ -519,36 +519,36 @@ public final class McpConformanceFixture {
 		tools.add(McpToolRegistration.withName("confirm_delete")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
-					Optional<McpTaskControl> taskControl = features.getTaskControl();
-					if (taskControl.isEmpty())
+					Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
+					if (taskCreationContext.isEmpty())
 						return McpCompleteResult.fromToolText(
 								"Tasks were not negotiated.");
 					McpTask task = TASK_MANAGER.createTask(
-							taskControl.orElseThrow());
+							taskCreationContext.orElseThrow());
 					TASK_MANAGER.requestTaskInput(task.getTaskId(), Map.of(
 							"confirmation", formInput("Confirm deletion", "confirm",
 									"boolean")));
 					return McpTaskCreatedResult.<String>fromTaskId(task.getTaskId());
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Waits for one task-scoped elicitation response.")
 				.build());
 		tools.add(McpToolRegistration.withName("multi_input")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
-					Optional<McpTaskControl> taskControl = features.getTaskControl();
-					if (taskControl.isEmpty())
+					Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
+					if (taskCreationContext.isEmpty())
 						return McpCompleteResult.fromToolText(
 								"Tasks were not negotiated.");
 					McpTask task = TASK_MANAGER.createTask(
-							taskControl.orElseThrow());
+							taskCreationContext.orElseThrow());
 					TASK_MANAGER.requestTaskInput(task.getTaskId(), Map.of(
 							"first", formInput("First task input", "name", "string"),
 							"second", formInput("Second task input", "confirm",
 									"boolean")));
 					return McpTaskCreatedResult.<String>fromTaskId(task.getTaskId());
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Waits for two task-scoped elicitation responses.")
 				.build());
 		tools.add(McpToolRegistration.withName("test_tool_with_task")
@@ -559,7 +559,7 @@ public final class McpConformanceFixture {
 								formInput("What is your name?", "name", "string"))
 								.build();
 					McpTask task = TASK_MANAGER.createTask(
-							features.getTaskControl().orElseThrow());
+							features.getTaskCreationContext().orElseThrow());
 					TASK_MANAGER.completeNow(task.getTaskId(),
 							McpCompleteResult.fromToolStructuredContent(
 									McpJsonObject.builder()
@@ -567,7 +567,7 @@ public final class McpConformanceFixture {
 											.build()));
 					return McpTaskCreatedResult.<TaskOutput>fromTaskId(task.getTaskId());
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Composes an MRTR response with task creation.")
 				.build());
 	}
@@ -613,7 +613,7 @@ public final class McpConformanceFixture {
 									"What is your name?", "name", "string"))
 							.build();
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Collects a user name through embedded elicitation.")
 				.build();
 	}
@@ -633,7 +633,7 @@ public final class McpConformanceFixture {
 							.frameworkRequestState(McpJsonString.fromValue("request-state"))
 							.build();
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Verifies protected request-state round trips.")
 				.build();
@@ -661,7 +661,7 @@ public final class McpConformanceFixture {
 							.frameworkRequestState(McpJsonString.fromValue("round-1"))
 							.build();
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Collects input over two protected rounds.")
 				.build();
@@ -681,7 +681,7 @@ public final class McpConformanceFixture {
 							.frameworkRequestState(McpJsonString.fromValue("tamper-check"))
 							.build();
 				})
-				.addInputRequestDeclarations(FORM_INPUT)
+				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.description("Rejects modified protected request state.")
 				.build();
@@ -728,19 +728,17 @@ public final class McpConformanceFixture {
 
 	private static McpCompleteResult mixedContentResult() {
 		return McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-				.addContent(McpTextContent.fromText("Multiple content types test:"))
-				.addContent(McpImageContent.withDataAndMimeType(
-						PNG_BYTES, "image/png").build())
-				.addContent(embeddedTextResource(
+				.content(java.util.List.of(McpTextContent.fromText("Multiple content types test:"), McpImageContent.withDataAndMimeType(
+						PNG_BYTES, "image/png").build(), embeddedTextResource(
 						URI.create("test://mixed-content-resource"),
-						"application/json", "{\"test\":\"data\",\"value\":123}"))
+						"application/json", "{\"test\":\"data\",\"value\":123}")))
 				.build());
 	}
 
 	private static McpCompleteResult completeToolOutput(
 			McpContentBlock content) {
 		return McpCompleteResult.fromToolOutput(
-				McpToolOutput.builder().addContent(content).build());
+				McpToolOutput.builder().content(java.util.List.of(content)).build());
 	}
 
 	private static McpEmbeddedResource embeddedTextResource(URI uri,
@@ -769,10 +767,9 @@ public final class McpConformanceFixture {
 												+ prompt.findArgument("arg2").orElseThrow()
 												+ "'"))))
 						.description("Substitutes two required string arguments.")
-						.addArgument(requiredPromptArgument("arg1",
-								"First test argument"))
-						.addArgument(requiredPromptArgument("arg2",
-								"Second test argument"))
+						.arguments(java.util.List.of(requiredPromptArgument("arg1",
+								"First test argument"), requiredPromptArgument("arg2",
+								"Second test argument")))
 						.completionHandler((request, completion, features) ->
 								completeArgument(List.of("test-one", "test-two"),
 										completion.getArgumentValue()))
@@ -791,8 +788,8 @@ public final class McpConformanceFixture {
 													"Please process the embedded resource above.")));
 						})
 						.description("Embeds the requested text resource.")
-						.addArgument(requiredPromptArgument("resourceUri",
-								"URI of the resource to embed"))
+						.arguments(java.util.List.of(requiredPromptArgument("resourceUri",
+								"URI of the resource to embed")))
 						.build(),
 				McpPromptRegistration.withName("test_prompt_with_image")
 						.handler((request, prompt, features) -> completePrompt(
@@ -817,7 +814,7 @@ public final class McpConformanceFixture {
 										"context", "string"))
 								.build();
 					})
-					.addInputRequestDeclarations(FORM_INPUT)
+					.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 					.description("Collects context before rendering a prompt.")
 					.build());
 		return List.copyOf(prompts);
@@ -933,15 +930,15 @@ public final class McpConformanceFixture {
 		private final McpTaskEventPublisher eventPublisher =
 				McpTaskEventPublisher.fromInMemoryDefaults();
 
-		private synchronized McpTask createTask(McpTaskControl taskControl) {
-			McpRequestContext requestContext = taskControl.getRequestContext();
+		private synchronized McpTask createTask(McpTaskCreationContext taskCreationContext) {
+			McpRequestContext requestContext = taskCreationContext.getRequestContext();
 			McpTask task;
 			String taskId;
 			do {
 				taskId = UUID.randomUUID().toString();
 			} while (this.entries.containsKey(taskId));
 			Instant now = Instant.now();
-			task = taskBuilder(taskId, taskControl.getTaskOrigin(),
+			task = taskBuilder(taskId, taskCreationContext.getTaskOrigin(),
 					McpTaskStatus.WORKING, now, now).build();
 			this.entries.put(taskId, new Entry(task,
 					requestContext.getEndpoint().getPath(), requestContext

@@ -491,15 +491,15 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didFailToEstablishSseConnection(@NonNull Request request,
 																													@Nullable ResourceMethod resourceMethod,
-																													SseConnection.@NonNull HandshakeFailureReason reason,
+																													SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 																													@Nullable Throwable throwable) {
 		requireNonNull(request);
-		requireNonNull(reason);
+		requireNonNull(connectionHandshakeFailureReason);
 
 		RouteContext routeContext = routeFor(resourceMethod);
 
 		counterFor(this.sseHandshakesRejectedByRouteAndReason,
-				new SseEventRouteHandshakeFailureKey(routeContext.getRouteType(), routeContext.getRoute(), reason))
+				new SseEventRouteHandshakeFailureKey(routeContext.getRouteType(), routeContext.getRoute(), connectionHandshakeFailureReason))
 				.increment();
 	}
 
@@ -715,41 +715,41 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
-	public void didBroadcastSseEvent(@NonNull ResourcePathDeclaration route,
+	public void didBroadcastSseEvent(@NonNull ResourcePathDeclaration resourcePathDeclaration,
 																					@NonNull Integer attempted,
 																					@NonNull Integer enqueued,
 																					@NonNull Integer dropped) {
-		requireNonNull(route);
+		requireNonNull(resourcePathDeclaration);
 		requireNonNull(attempted);
 		requireNonNull(enqueued);
 		requireNonNull(dropped);
 
 		if (attempted > 0) {
 			counterFor(this.sseEventEnqueueOutcomesByRoute,
-					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, SseEventEnqueueOutcome.ATTEMPTED))
+					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, SseEventEnqueueOutcome.ATTEMPTED))
 					.add(attempted);
 		}
 
 		if (enqueued > 0) {
 			counterFor(this.sseEventEnqueueOutcomesByRoute,
-					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, SseEventEnqueueOutcome.ENQUEUED))
+					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, SseEventEnqueueOutcome.ENQUEUED))
 					.add(enqueued);
 		}
 
 		if (dropped > 0) {
 			counterFor(this.sseEventEnqueueOutcomesByRoute,
-					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, SseEventEnqueueOutcome.DROPPED))
+					new SseEventRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, SseEventEnqueueOutcome.DROPPED))
 					.add(dropped);
 		}
 	}
 
 	@Override
-	public void didBroadcastSseComment(@NonNull ResourcePathDeclaration route,
+	public void didBroadcastSseComment(@NonNull ResourcePathDeclaration resourcePathDeclaration,
 																								 SseComment.@NonNull CommentType commentType,
 																								 @NonNull Integer attempted,
 																								 @NonNull Integer enqueued,
 																								 @NonNull Integer dropped) {
-		requireNonNull(route);
+		requireNonNull(resourcePathDeclaration);
 		requireNonNull(commentType);
 		requireNonNull(attempted);
 		requireNonNull(enqueued);
@@ -757,28 +757,28 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		if (attempted > 0) {
 			counterFor(this.sseCommentEnqueueOutcomesByRoute,
-					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, SseEventEnqueueOutcome.ATTEMPTED))
+					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, commentType, SseEventEnqueueOutcome.ATTEMPTED))
 					.add(attempted);
 		}
 
 		if (enqueued > 0) {
 			counterFor(this.sseCommentEnqueueOutcomesByRoute,
-					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, SseEventEnqueueOutcome.ENQUEUED))
+					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, commentType, SseEventEnqueueOutcome.ENQUEUED))
 					.add(enqueued);
 		}
 
 		if (dropped > 0) {
 			counterFor(this.sseCommentEnqueueOutcomesByRoute,
-					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, SseEventEnqueueOutcome.DROPPED))
+					new SseCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, resourcePathDeclaration, commentType, SseEventEnqueueOutcome.DROPPED))
 					.add(dropped);
 		}
 	}
 
 	@Override
 	public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																			@NonNull StreamTermination termination) {
+																			@NonNull StreamTermination streamTermination) {
 		requireNonNull(sseConnection);
-		requireNonNull(termination);
+		requireNonNull(streamTermination);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.remove(
 				new IdentityKey<>(sseConnection));
@@ -788,7 +788,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.activeSseStreams.decrement();
 
 		SseStreamRouteTerminationKey key = new SseStreamRouteTerminationKey(
-				state.getRouteType(), state.getRoute(), termination.getReason());
+				state.getRouteType(), state.getRoute(), streamTermination.getReason());
 
 		histogramFor(this.sseStreamDurationByRouteAndReason, key, SSE_STREAM_DURATION_BUCKETS_NANOS)
 				.record(elapsedNanosSince(state.getEstablishedAtNanos()));
@@ -1867,7 +1867,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
 		labels.put("method", key.getHttpMethod().name());
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("status_class", key.getStatusClass());
 		return new LabelSet(labels);
 	}
@@ -1878,7 +1878,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
 		labels.put("method", key.getHttpMethod().name());
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		return new LabelSet(labels);
 	}
 
@@ -1999,7 +1999,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		return new LabelSet(labels);
 	}
 
@@ -2008,7 +2008,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("outcome", key.getOutcome().name());
 		return new LabelSet(labels);
 	}
@@ -2018,9 +2018,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("comment_type", key.getCommentType().name());
-		labels.put("outcome", key.getOutcome().name());
+		labels.put("outcome", key.getEventEnqueueOutcome().name());
 		return new LabelSet(labels);
 	}
 
@@ -2029,7 +2029,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("drop_reason", key.getDropReason().name());
 		return new LabelSet(labels);
 	}
@@ -2039,9 +2039,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("comment_type", key.getCommentType().name());
-		labels.put("drop_reason", key.getDropReason().name());
+		labels.put("drop_reason", key.getEventDropReason().name());
 		return new LabelSet(labels);
 	}
 
@@ -2050,7 +2050,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("handshake_failure_reason",
 				key.getHandshakeFailureReason().name());
 		return new LabelSet(labels);
@@ -2061,7 +2061,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("comment_type", key.getCommentType().name());
 		return new LabelSet(labels);
 	}
@@ -2071,7 +2071,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("route", routeLabel(key.getRouteType(), key.getRoute()));
+		labels.put("route", routeLabel(key.getRouteType(), key.getResourcePathDeclaration()));
 		labels.put("termination_reason", key.getTerminationReason().name());
 		return new LabelSet(labels);
 	}

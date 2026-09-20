@@ -65,7 +65,7 @@ Before changing any node:
    Prefer deploying durable configuration with the new key verification-only
    before live activation.
 6. Capture a baseline from every node with
-   `McpServer.getProtectionControl().getKeyringSnapshot()`. The optional must
+   `McpServer.getProtectionKeyringManager().getKeyringSnapshot()`. The optional must
    be present and every node must agree on active ID, sorted verification IDs,
    fingerprint version/profile, and fingerprint value.
 
@@ -78,7 +78,7 @@ provenance, node identity, readiness, or reservation drain.
 On each node, call:
 
 ```java
-McpProtectionControl control = server.getProtectionControl();
+McpProtectionKeyringManager control = server.getProtectionKeyringManager();
 control.stageVerificationKey(newKey);
 ```
 

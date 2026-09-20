@@ -68,12 +68,12 @@ public class McpMultiEndpointPublicRuntimeTests {
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-first", "1.0").build())
 				.instructions("Instructions for the first endpoint.")
-				.addTool(firstTool)
+				.toolRegistrations(java.util.List.of(firstTool))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-second", "2.0").build())
 				.instructions("Instructions for the second endpoint.")
-				.addTool(secondTool)
+				.toolRegistrations(java.util.List.of(secondTool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))
@@ -164,15 +164,15 @@ public class McpMultiEndpointPublicRuntimeTests {
 		List<McpEndpoint> toolLimitedEndpoints = new CopyOnWriteArrayList<>();
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-policy-first", "1.0").build())
-				.addTool(tool("First policy tool", "First policy tool",
+				.toolRegistrations(java.util.List.of(tool("First policy tool", "First policy tool",
 						"first-policy-result", new AtomicInteger(),
-						new AtomicReference<>()))
+						new AtomicReference<>())))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-endpoint-policy-second", "1.0").build())
-				.addTool(tool("Second policy tool", "Second policy tool",
+				.toolRegistrations(java.util.List.of(tool("Second policy tool", "Second policy tool",
 						"second-policy-result", new AtomicInteger(),
-						new AtomicReference<>()))
+						new AtomicReference<>())))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint))).admissionController(context -> {
@@ -238,13 +238,13 @@ public class McpMultiEndpointPublicRuntimeTests {
 				"second-resource-result", secondResourceEndpoint);
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
 						"multi-capability-first", "1.0").build())
-				.addPrompt(firstPrompt)
-				.addResource(firstResource)
+				.promptRegistrations(java.util.List.of(firstPrompt))
+				.resourceRegistrations(java.util.List.of(firstResource))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
 						"multi-capability-second", "1.0").build())
-				.addPrompt(secondPrompt)
-				.addResource(secondResource)
+				.promptRegistrations(java.util.List.of(secondPrompt))
+				.resourceRegistrations(java.util.List.of(secondResource))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))

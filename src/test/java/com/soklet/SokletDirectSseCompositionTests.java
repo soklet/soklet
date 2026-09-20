@@ -419,7 +419,7 @@ final class SokletDirectSseCompositionTests {
 			this.attachments.add(name);
 			this.configurations.put(name, context.getSokletConfig());
 			this.startupContexts.put(name, startupContext);
-			this.signals.put(name, context.getTerminationSignal());
+			this.signals.put(name, context.getTransportTerminationSignal());
 		}
 
 		private void proofObserved(@NonNull String name) {
@@ -536,7 +536,7 @@ final class SokletDirectSseCompositionTests {
 				@NonNull StartupContext startupContext) {
 			this.probe.attached(this.name, context, startupContext);
 			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
-			this.signal.set(context.getTerminationSignal());
+			this.signal.set(context.getTransportTerminationSignal());
 			TransportRuntime attachedRuntime = new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {
@@ -677,7 +677,7 @@ final class SokletDirectSseCompositionTests {
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			this.probe.attached(this.name, context, startupContext);
-			this.signal.set(context.getTerminationSignal());
+			this.signal.set(context.getTransportTerminationSignal());
 			TransportDelegateAttachment attachment =
 					context.attachTerminationOwningDelegate(this.delegate,
 							wrappedHandler(context.getAdmissionFencedRequestHandler()));

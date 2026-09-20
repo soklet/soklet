@@ -63,8 +63,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						.add("one").add("two").build())
 				.build();
 		McpToolOutput original = McpToolOutput.builder()
-				.addContent(first)
-				.addContent(second)
+				.content(java.util.List.of(first, second))
 				.structuredContent(structured)
 				.error(false)
 				.build();
@@ -194,7 +193,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		int wideContentCount = (McpJsonLimits.productionDefaults()
 				.maximumNodeCount() - 6) / 3 + 1;
 		McpToolOutput wideOutput = McpToolOutput.builder()
-				.addContents(Collections.nCopies(wideContentCount,
+				.content(Collections.nCopies(wideContentCount,
 						McpTextContent.fromText(wideCanary)))
 				.build();
 
@@ -275,7 +274,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				case "valid-replacement" -> McpToolOutput
 						.fromStructuredContent(validReplacement);
 				case "valid-with-content" -> McpToolOutput.builder()
-						.addContent(McpTextContent.fromText("SANITIZED-PRIMARY-CONTENT"))
+						.content(java.util.List.of(McpTextContent.fromText("SANITIZED-PRIMARY-CONTENT")))
 						.structuredContent(validReplacement)
 						.build();
 				case "valid-error" -> McpToolOutput.builder()
@@ -447,7 +446,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"sanitizer-public-runtime-test",
 						"4.0.0").build())
-				.addTools(tools)
+				.toolRegistrations(tools)
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)

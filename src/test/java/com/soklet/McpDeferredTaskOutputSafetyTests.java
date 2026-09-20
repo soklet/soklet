@@ -542,7 +542,7 @@ public class McpDeferredTaskOutputSafetyTests {
 					stages.add("handler");
 					Assertions.assertEquals("retained-at-origin",
 							arguments.getConvertedArguments().request());
-					McpTaskOrigin taskOrigin = features.getTaskControl()
+					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					taskManager.taskOrigin = Optional.of(taskOrigin);
 					taskManager.task = Optional.of(McpTask.withTaskId(TASK_ID,
@@ -683,7 +683,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"deferred-task-output-safety-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

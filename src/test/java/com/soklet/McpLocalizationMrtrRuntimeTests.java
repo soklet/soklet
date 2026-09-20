@@ -228,12 +228,12 @@ class McpLocalizationMrtrRuntimeTests {
 							.orElse("none");
 					return McpCompleteResult.fromToolText("locale:" + tag);
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-mrtr", "1.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

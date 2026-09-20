@@ -1379,7 +1379,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 							.getMembers().get("taskId");
 					if (!(taskIdValue instanceof McpJsonString taskId))
 						throw new IllegalArgumentException("taskId must be a string");
-					McpTaskOrigin taskOrigin = features.getTaskControl()
+					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					String authorizationPartition = request.getAdmissionIdentity()
 							.getAuthorizationPartitionKey().orElseThrow();
@@ -1388,14 +1388,14 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId.getValue());
 				})
-				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
+				.inputRequestDeclarations(java.util.List.of(ELICITATION_URL_DECLARATION))
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(path,
 				McpImplementation.withNameAndVersion(
 						"task-subscription-public-runtime-test", "4.0.0")
 						.build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

@@ -883,7 +883,7 @@ public class McpShutdownObservabilityTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"shutdown-observability-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(HOST)

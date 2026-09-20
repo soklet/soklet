@@ -49,14 +49,14 @@ public interface McpResourceListHandler {
 	/**
 	 * Produces one complete, application-authorized resource-list page.
 	 *
-	 * @param request request metadata
-	 * @param list pagination input and registered-descriptor convenience data
-	 * @param features invocation-scoped optional features
+	 * @param requestContext request metadata
+	 * @param resourceListContext pagination input and registered-descriptor convenience data
+	 * @param invocationFeatures invocation-scoped optional features
 	 * @return non-null resource page
 	 * @throws Exception if application handling fails
 	 */
 	@NonNull
-	McpResourcePage handle(@NonNull McpRequestContext request,
-			@NonNull McpResourceListContext list,
-			@NonNull McpInvocationFeatures features) throws Exception;
+	McpResourcePage handle(@NonNull McpRequestContext requestContext,
+			@NonNull McpResourceListContext resourceListContext,
+			@NonNull McpInvocationFeatures invocationFeatures) throws Exception;
 }

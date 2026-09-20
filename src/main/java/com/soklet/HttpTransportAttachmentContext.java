@@ -81,7 +81,7 @@ public final class HttpTransportAttachmentContext {
 	 * @return this member's termination signal
 	 */
 	@NonNull
-	public TransportTerminationSignal getTerminationSignal() {
+	public TransportTerminationSignal getTransportTerminationSignal() {
 		return this.internalContext.terminationSignal().publicSignal();
 	}
 

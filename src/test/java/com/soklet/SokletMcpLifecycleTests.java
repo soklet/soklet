@@ -91,7 +91,7 @@ public class SokletMcpLifecycleTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"residual-lifecycle-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(host)
@@ -652,7 +652,7 @@ public class SokletMcpLifecycleTests {
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			TransportTerminationSignal terminationSignal =
-					context.getTerminationSignal();
+					context.getTransportTerminationSignal();
 			AtomicBoolean terminationSignalled = new AtomicBoolean();
 			return new TransportRuntime() {
 				@Override
@@ -713,7 +713,7 @@ public class SokletMcpLifecycleTests {
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			TransportTerminationSignal terminationSignal =
-					context.getTerminationSignal();
+					context.getTransportTerminationSignal();
 			AtomicBoolean terminationSignalled = new AtomicBoolean();
 			return new TransportRuntime() {
 				@Override

@@ -59,7 +59,7 @@ class McpResourceRegistrationTests {
 				.title("Catalog item")
 				.description("One catalog item")
 				.mimeType("application/json")
-				.addIcon(icon)
+				.icons(List.of(icon))
 				.annotations(annotations)
 				.sizeInBytes(42L)
 				.cachePolicy(cachePolicy)
@@ -171,7 +171,7 @@ class McpResourceRegistrationTests {
 				.put("catalogRevision", "one")
 				.build();
 		McpResourcePage page = McpResourcePage.builder()
-				.addResources(mutable)
+				.resourceDescriptors(mutable)
 				.nextCursor("")
 				.cacheTimeToLiveOverride(Duration.ofMillis(250))
 				.metadata(pageMetadata)
@@ -185,13 +185,13 @@ class McpResourceRegistrationTests {
 				descriptor.getDescription().orElseThrow());
 		assertEquals("text/plain", descriptor.getMimeType().orElseThrow());
 		assertEquals(Long.valueOf(128), descriptor.getSizeInBytes().orElseThrow());
-		assertEquals(List.of(descriptor), page.getResources());
+		assertEquals(List.of(descriptor), page.getResourceDescriptors());
 		assertEquals("", page.getNextCursor().orElseThrow());
 		assertEquals(Duration.ofMillis(250),
 				page.getCacheTimeToLiveOverride().orElseThrow());
 		assertSame(pageMetadata, page.getMetadata());
 		assertThrows(UnsupportedOperationException.class,
-				() -> page.getResources().clear());
+				() -> page.getResourceDescriptors().clear());
 	}
 
 	@Test
@@ -259,7 +259,7 @@ class McpResourceRegistrationTests {
 				.build();
 		McpResourceListHandler listHandler = (request, list, features) ->
 				McpResourcePage.builder()
-						.addResources(list.getRegisteredResourceDescriptors())
+						.resourceDescriptors(list.getRegisteredResourceDescriptors())
 						.build();
 		McpResourceListHandler replacementListHandler =
 				(request, list, features) -> McpResourcePage.builder().build();
@@ -268,20 +268,19 @@ class McpResourceRegistrationTests {
 		McpCachePolicy templatePolicy = McpCachePolicy.fromPublicTimeToLive(
 				Duration.ofMinutes(1));
 		McpEndpoint endpoint = endpointBuilder()
-				.addResource(exact)
-				.addResources(List.of(template))
+				.resourceRegistrations(java.util.List.of(exact, template))
 				.resourceListHandler(listHandler)
 				.resourceListCachePolicy(listPolicy)
 				.resourceTemplateListCachePolicy(templatePolicy)
 				.build();
 
-		assertEquals(List.of(exact, template), endpoint.getResources());
+		assertEquals(List.of(exact, template), endpoint.getResourceRegistrations());
 		assertSame(listHandler, endpoint.getResourceListHandler().orElseThrow());
 		assertSame(listPolicy, endpoint.getResourceListCachePolicy());
 		assertSame(templatePolicy,
 				endpoint.getResourceTemplateListCachePolicy());
 		assertThrows(UnsupportedOperationException.class,
-				() -> endpoint.getResources().clear());
+				() -> endpoint.getResourceRegistrations().clear());
 		McpEndpoint replaced = endpointBuilder()
 				.resourceListHandler(listHandler)
 				.resourceListHandler(replacementListHandler)
@@ -317,9 +316,9 @@ class McpResourceRegistrationTests {
 				.handler(resourceHandler()).build();
 
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.addResource(firstExact).addResource(secondExact).build());
+				.resourceRegistrations(java.util.List.of(firstExact, secondExact)).build());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.addResource(firstTemplate).addResource(secondTemplate).build());
+				.resourceRegistrations(java.util.List.of(firstTemplate, secondTemplate)).build());
 	}
 
 	@Test

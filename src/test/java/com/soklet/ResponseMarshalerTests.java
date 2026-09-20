@@ -186,7 +186,7 @@ class ResponseMarshalerTests {
 				Assertions.assertTrue(response.getHeaders().isEmpty());
 				Assertions.assertTrue(response.getCookies().isEmpty());
 				Assertions.assertTrue(response.getBody().isEmpty());
-				Assertions.assertTrue(response.getStream().isEmpty());
+				Assertions.assertTrue(response.getStreamingResponseBody().isEmpty());
 			});
 		}
 	}

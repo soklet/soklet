@@ -30,7 +30,7 @@ const EXPECTED_ROW_COUNT = 263;
 const EXPECTED_ROW_IDS_SHA256 =
   'd7a55f3218e4ea8d18e2f6295f56d9b9b70ecdba9deb8be5a624bae3a9b647b0';
 const EXPECTED_ROW_ATTRIBUTIONS_SHA256 =
-  'd32e23861c4e2157236c39d56bd9dc78c26c4798481369ab6c644537f30c76d5';
+  '7fca3f133c3323993da50a371811f989dc45dc2701cee4e2596f4dcddbbdc0cc';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ROW_ID_PATTERN = /^(?:MCP-[A-Z0-9]+-\d{3}|SOK-[A-Z0-9]+-\d{3}|AMB-\d{3})$/;
 const DISPOSITIONS = Object.freeze([
@@ -131,7 +131,7 @@ const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json
 const EXPECTED_FINITE_BOUND_SEMANTICS_SHA256 =
   '8b415ad021c9ecad2589ce9facb86ced0133847132eb25d3da414b290783f0e0';
 const EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256 =
-  'e163b4624f489f61e3d9b11f7e75aed4d22b88730486c977a644b070f49f3e9a';
+  'e9b7ae9898e0fc5a311521ea8294c8aad24d40bd25154c56b51e1011e9e28394';
 const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
   'bounds',
   'formatVersion',
@@ -234,7 +234,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  '01b10777ddb2981a177c36dc7846ed20ef7cde5ac9c939ace726547c3abb0d7d';
+  'a71344faab2b73538d496d2104989de9533c90d54fe37bf507061f5607e920f4';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -416,7 +416,7 @@ const PRIVACY_NON_THROWABLE_ERROR_TYPES = new Set([
 const RESIDUAL_EVIDENCE_PATH =
   'release/mcp-residual-closure-evidence.json';
 const EXPECTED_RESIDUAL_SEMANTICS_SHA256 =
-  '37d333ed185acfe423d4fd1aeee13b46a82911e7098ef4b7ba68e051e14be2fb';
+  '81409035cc1d187b679bcee22b42eb06bff33029c389d97df73ae4d2ae755906';
 const RESIDUAL_TOP_LEVEL_KEYS = Object.freeze([
   'formatVersion',
   'protocolVersion',
@@ -461,7 +461,7 @@ const RESIDUAL_ROW_CONTRACTS = Object.freeze([
       'release/README.md',
     ]),
     evidencePaths: Object.freeze([
-      'src/main/java/com/soklet/DefaultMcpSecurityControls.java',
+      'src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java',
       'src/test/java/com/soklet/McpSecurityControlsTests.java',
     ]),
     releaseGates: Object.freeze([]),
@@ -473,7 +473,7 @@ const RESIDUAL_ROW_CONTRACTS = Object.freeze([
       'release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md',
     ]),
     evidencePaths: Object.freeze([
-      'src/main/java/com/soklet/DefaultMcpSecurityControls.java',
+      'src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java',
       'src/test/java/com/soklet/McpSecurityControlsTests.java',
     ]),
     releaseGates: Object.freeze([]),

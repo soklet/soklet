@@ -337,7 +337,7 @@ final class SokletDirectCompositionIsolationTests {
 		public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {
@@ -451,7 +451,7 @@ final class SokletDirectCompositionIsolationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			TransportTerminationSignal rootSignal =
-					context.getTerminationSignal();
+					context.getTransportTerminationSignal();
 			TransportDelegateAttachment attachment = context
 					.attachTerminationOwningDelegate(this.delegate,
 							context.getAdmissionFencedRequestHandler());
@@ -545,7 +545,7 @@ final class SokletDirectCompositionIsolationTests {
 		public TransportRuntime attach(
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

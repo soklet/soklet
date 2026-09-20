@@ -26,7 +26,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -81,7 +80,7 @@ public final class McpToolRegistration<A> {
 	@Nullable
 	private final McpRuntimeTypedSchemaBridge<?> outputSchemaBridge;
 	@Nullable
-	private final McpToolAnnotations annotations;
+	private final McpToolAnnotations toolAnnotations;
 	@Nullable
 	private final McpAppToolMetadata appToolMetadata;
 	@Nullable
@@ -133,7 +132,7 @@ public final class McpToolRegistration<A> {
 		this.outputType = state.outputType;
 		this.outputSchema = state.outputSchema;
 		this.outputSchemaBridge = state.outputSchemaBridge;
-		this.annotations = state.annotations;
+		this.toolAnnotations = state.toolAnnotations;
 		this.appToolMetadata = state.appToolMetadata;
 		this.rateLimiterName = state.rateLimiterName;
 		this.rateLimiter = state.rateLimiter;
@@ -211,8 +210,8 @@ public final class McpToolRegistration<A> {
 
 	/** @return advisory tool annotations, if configured */
 	@NonNull
-	public Optional<@NonNull McpToolAnnotations> getAnnotations() {
-		return Optional.ofNullable(this.annotations);
+	public Optional<@NonNull McpToolAnnotations> getToolAnnotations() {
+		return Optional.ofNullable(this.toolAnnotations);
 	}
 
 	/**
@@ -695,7 +694,7 @@ public final class McpToolRegistration<A> {
 	 *
 	 * <p>This path does not statically require Tasks because a handler may choose
 	 * an inline result. A handler that conditionally creates a task must first
-	 * check {@link McpInvocationFeatures#getTaskControl()}. To declare that every
+	 * check {@link McpInvocationFeatures#getTaskCreationContext()}. To declare that every
 	 * invocation requires Tasks while retaining a typed eventual output schema,
 	 * use {@link CompleteHandlerStage#operationHandler(McpToolHandler)}.
 	 *
@@ -731,7 +730,7 @@ public final class McpToolRegistration<A> {
 		 *
 		 * <p>This dynamic path is not preflighted as task-required. Before creating
 		 * durable work, a handler that may return {@link McpTaskCreatedResult} must
-		 * require or inspect {@link McpInvocationFeatures#getTaskControl()}.
+		 * require or inspect {@link McpInvocationFeatures#getTaskCreationContext()}.
 		 *
 		 * @param handler advanced handler
 		 * @return optional-metadata builder
@@ -780,23 +779,28 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
-		 * Appends one icon descriptor.
+		 * Replaces icon descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param icon icon descriptor
+		 * @param icons icon descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public OperationBuilder<@NonNull A> addIcon(@NonNull McpIcon icon) {
-			this.state.icons.add(requireNonNull(icon));
+		public OperationBuilder<@NonNull A> icons(
+				@Nullable List<@NonNull McpIcon> icons) {
+			this.state.icons = icons == null ? List.of()
+					: List.copyOf(icons);
 			return this;
 		}
 
-		/** @param annotations advisory tool annotations
+		/** @param toolAnnotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public OperationBuilder<@NonNull A> annotations(
-				@NonNull McpToolAnnotations annotations) {
-			this.state.annotations = requireNonNull(annotations);
+		public OperationBuilder<@NonNull A> toolAnnotations(
+				@NonNull McpToolAnnotations toolAnnotations) {
+			this.state.toolAnnotations = requireNonNull(toolAnnotations);
 			return this;
 		}
 
@@ -878,38 +882,19 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
-		 * Appends one input-request declaration for this advanced operation.
+		 * Replaces input-request declarations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param inputRequestDeclaration declaration to append
+		 * @param inputRequestDeclarations input-request declarations, or null to clear
 		 * @return this builder
-		 * @throws NullPointerException if the declaration is null
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public OperationBuilder<@NonNull A> addInputRequestDeclaration(
-				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
-			this.state.inputRequestDeclarations.add(
-					requireNonNull(inputRequestDeclaration));
-			return this;
-		}
-
-		/**
-		 * Appends input-request declarations for this advanced operation.
-		 *
-		 * <p>Repeated calls append declarations in order.
-		 *
-		 * @param declarations declarations to append
-		 * @return this builder
-		 * @throws NullPointerException if the array or a declaration is null
-		 */
-		@NonNull
-		public OperationBuilder<@NonNull A> addInputRequestDeclarations(
-				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
-			requireNonNull(declarations);
-			List<McpInputRequestDeclaration> copiedDeclarations =
-					new ArrayList<>(declarations.length);
-			for (McpInputRequestDeclaration declaration : declarations)
-				copiedDeclarations.add(requireNonNull(declaration));
-			this.state.inputRequestDeclarations.addAll(copiedDeclarations);
+		public OperationBuilder<@NonNull A> inputRequestDeclarations(
+				@Nullable List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations) {
+			this.state.inputRequestDeclarations = inputRequestDeclarations == null ? List.of()
+					: List.copyOf(inputRequestDeclarations);
 			return this;
 		}
 
@@ -984,23 +969,28 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
-		 * Appends one icon descriptor.
+		 * Replaces icon descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param icon icon descriptor
+		 * @param icons icon descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public CompleteBuilder<@NonNull A> addIcon(@NonNull McpIcon icon) {
-			this.state.icons.add(requireNonNull(icon));
+		public CompleteBuilder<@NonNull A> icons(
+				@Nullable List<@NonNull McpIcon> icons) {
+			this.state.icons = icons == null ? List.of()
+					: List.copyOf(icons);
 			return this;
 		}
 
-		/** @param annotations advisory tool annotations
+		/** @param toolAnnotations advisory tool annotations
 		 * @return this builder */
 		@NonNull
-		public CompleteBuilder<@NonNull A> annotations(
-				@NonNull McpToolAnnotations annotations) {
-			this.state.annotations = requireNonNull(annotations);
+		public CompleteBuilder<@NonNull A> toolAnnotations(
+				@NonNull McpToolAnnotations toolAnnotations) {
+			this.state.toolAnnotations = requireNonNull(toolAnnotations);
 			return this;
 		}
 
@@ -1172,9 +1162,9 @@ public final class McpToolRegistration<A> {
 		@Nullable
 		private String description;
 		@NonNull
-		private final List<@NonNull McpIcon> icons = new ArrayList<>();
+		private List<@NonNull McpIcon> icons = List.of();
 		@Nullable
-		private McpToolAnnotations annotations;
+		private McpToolAnnotations toolAnnotations;
 		@Nullable
 		private McpAppToolMetadata appToolMetadata;
 		@Nullable
@@ -1184,8 +1174,8 @@ public final class McpToolRegistration<A> {
 		private boolean structuredContentMirroredAsText = true;
 		private final boolean taskRequired;
 		@NonNull
-		private final List<@NonNull McpInputRequestDeclaration>
-				inputRequestDeclarations = new ArrayList<>();
+		private List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = List.of();
 		@NonNull
 		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull

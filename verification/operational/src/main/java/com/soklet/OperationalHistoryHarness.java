@@ -245,7 +245,7 @@ public final class OperationalHistoryHarness {
         .build();
     McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
             "soklet-operational-history", "4.0.0").build())
-        .addTool(tool)
+        .toolRegistrations(java.util.List.of(tool))
         .build();
     McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
         .host(HOST)
@@ -413,7 +413,7 @@ public final class OperationalHistoryHarness {
         .build();
     McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
             "soklet-operational-self-test", "4.0.0").build())
-        .addTool(tool)
+        .toolRegistrations(java.util.List.of(tool))
         .build();
     byte[] traceKeyBytes = new byte[32];
     for (int index = 0; index < traceKeyBytes.length; ++index)
@@ -1494,8 +1494,8 @@ public final class OperationalHistoryHarness {
         MetricsCollector.HttpServerRouteStatusKey key = entry.getKey();
         if (key.getHttpMethod() == HttpMethod.GET
             && key.getRouteType() == MetricsCollector.RouteType.MATCHED
-            && key.getRoute() != null
-            && key.getRoute().getPath().equals(HTTP_PATH)
+            && key.getResourcePathDeclaration() != null
+            && key.getResourcePathDeclaration().getPath().equals(HTTP_PATH)
             && key.getStatusClass().equals("2xx")) {
           count = Math.addExact(count, entry.getValue().getCount());
         }
@@ -1523,8 +1523,8 @@ public final class OperationalHistoryHarness {
           : snapshot.getSseHandshakesAccepted().entrySet()) {
         MetricsCollector.SseEventRouteKey key = entry.getKey();
         if (key.getRouteType() == MetricsCollector.RouteType.MATCHED
-            && key.getRoute() != null
-            && key.getRoute().getPath().equals(REALTIME_ROUTE)) {
+            && key.getResourcePathDeclaration() != null
+            && key.getResourcePathDeclaration().getPath().equals(REALTIME_ROUTE)) {
           count = Math.addExact(count, entry.getValue());
         }
       }

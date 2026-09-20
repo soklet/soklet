@@ -2564,7 +2564,7 @@
         "api/mcp/README.md",
         "release/MCP_REQUEST_STATE_SECURITY_PROFILE.md",
         "release/README.md",
-        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "releaseGates": [],
@@ -2611,7 +2611,7 @@
       "disposition": "CORE_COMPLETE",
       "evidence": [
         "release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md",
-        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "releaseGates": [],

@@ -98,7 +98,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					"java.util.function.Function<com.soklet.McpRequestContext, example.CatalogEndpoint> instanceResolver"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"instanceResolver.apply(request).search("), generatedSource);
+					"instanceResolver.apply(requestContext).search("), generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
 					"public String[] schemaDigests()"), generatedSource);
 			Assertions.assertFalse(generatedSource.contains("InternalMarker"),
@@ -126,10 +126,10 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					"@com.soklet.annotation.McpHeader(name = \"Tenant\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"search(request, features.getCancelationToken(), arguments.getConvertedArguments().argument0(), arguments.getConvertedArguments().argument1(), features.getProgressReporter(), features)"),
+					"search(requestContext, invocationFeatures.getCancelationToken(), arguments.getConvertedArguments().argument0(), arguments.getConvertedArguments().argument1(), invocationFeatures.getProgressReporter(), invocationFeatures)"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"compose(request, features.getCancelationToken(), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.getProgressReporter(), features)"),
+					"compose(requestContext, invocationFeatures.getCancelationToken(), promptGetContext.findArgument(\"subject\").orElseThrow(), promptGetContext.findArgument(\"tone\"), invocationFeatures.getProgressReporter(), invocationFeatures)"),
 					generatedSource);
 
 			try (URLClassLoader classLoader = new URLClassLoader(
@@ -158,7 +158,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
 				Assertions.assertEquals(0, providedInstances.get());
 				McpEndpoint endpoint = registry.getEndpoints().get(0);
-				McpPromptRegistration prompt = endpoint.getPrompts().get(0);
+				McpPromptRegistration prompt = endpoint.getPromptRegistrations().get(0);
 				Assertions.assertEquals("catalog.compose", prompt.getName());
 				Assertions.assertEquals("Catalog composer",
 						prompt.getTitle().orElseThrow());
@@ -179,7 +179,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				Assertions.assertEquals("catalog-endpoint", endpoint
 						.getToolRateLimiterName().orElseThrow());
 
-				McpToolRegistration<?> tool = endpoint.getTools().get(0);
+				McpToolRegistration<?> tool = endpoint.getToolRegistrations().get(0);
 				Assertions.assertEquals("catalog.search", tool.getName());
 				Assertions.assertEquals("Catalog search",
 						tool.getTitle().orElseThrow());

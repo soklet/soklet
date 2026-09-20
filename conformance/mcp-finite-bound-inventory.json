@@ -2802,21 +2802,21 @@
   "releaseTarget": "4.0.0",
   "reviewedExclusions": [
     {
-      "file": "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+      "file": "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
       "id": "FINITE-EX-001",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityControls.java#com.soklet.DefaultMcpSecurityControls#MAXIMUM_INVOCATIONS_PER_EPOCH",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#MAXIMUM_INVOCATIONS_PER_EPOCH",
       "matcherRuleId": "FINITE-MATCH-001",
       "member": "MAXIMUM_INVOCATIONS_PER_EPOCH",
-      "owner": "com.soklet.DefaultMcpSecurityControls",
+      "owner": "com.soklet.DefaultMcpSecurityKeyManagers",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
-      "file": "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+      "file": "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
       "id": "FINITE-EX-002",
-      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityControls.java#com.soklet.DefaultMcpSecurityControls.OwnedSecretKey#MINIMUM_KEY_BYTES",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers.OwnedSecretKey#MINIMUM_KEY_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
       "member": "MINIMUM_KEY_BYTES",
-      "owner": "com.soklet.DefaultMcpSecurityControls.OwnedSecretKey",
+      "owner": "com.soklet.DefaultMcpSecurityKeyManagers.OwnedSecretKey",
       "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {

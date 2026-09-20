@@ -78,7 +78,7 @@ Their nested final variants remain public for typed pattern matching and expose
 only conventional getters; applications do not invoke variant constructors.
 Metric aggregate keys use `fromDimensions(...)` and dimension getters. The
 trace-correlation fingerprint is returned by
-`McpTraceCorrelationControl.getFingerprint()` and
+`McpTraceCorrelationKeyManager.getFingerprint()` and
 `McpServerDiagnostics.getTraceCorrelationFingerprint()`, and exposes
 `getValue()`; applications do not construct it.
 
@@ -282,7 +282,7 @@ For 4.0.0, `@McpTool` declarations cannot publish tool icons or the
 `readOnly`, `destructive`, `idempotent`, and `openWorld` behavioral hints.
 Those values are intentionally deferred on the annotation surface until 4.1.
 When a client needs them for presentation or approval policy, declare that
-tool with `McpToolRegistration`, which supports `addIcon(...)` and
+tool with `McpToolRegistration`, which supports `icons(List)` and
 `annotations(...)`, and add the registration to a programmatic endpoint.
 Annotations on inherited methods are not MCP operations: place each MCP
 operation annotation directly on a method declared by the endpoint class.
@@ -300,9 +300,13 @@ combination is required. An annotation-native equivalent is deferred to 4.1.
 ### Programmatic registration
 
 Programmatic endpoints use the same immutable runtime model. Start with
-`McpEndpoint.withPath(path, implementation)`, append tool, prompt, and resource
-registrations with `addTool(...)`, `addPrompt(...)`, and `addResource(...)`,
+`McpEndpoint.withPath(path, implementation)`, supply complete ordered lists with
+`toolRegistrations(...)`, `promptRegistrations(...)`, and `resourceRegistrations(...)`,
 and pass the built endpoints to `McpEndpointRegistry.fromEndpoints(...)`.
+
+These setters replace, rather than append to, the previous list. Optional list
+properties accept `null` or an empty list to clear; each successful call snapshots
+the supplied list, and a null element leaves the previous value unchanged.
 
 Registration order is discovery order. Names and resource addresses must be
 unique within one endpoint. The advertised capability set is derived from the
@@ -620,7 +624,7 @@ kept private with a zero TTL; HTTP remains `no-store` in every case.
 Tools, prompt gets, and resource reads may return `McpInputRequiredResult`
 when they need a supported client request, state for a later retry, or both.
 Programmatic operations declare every possible `McpInputRequestDeclaration`
-with `addInputRequestDeclaration(...)`; annotated operations use
+with `inputRequestDeclarations(List)`; annotated operations use
 `@McpMayRequestInput`. For an annotated operation, `type` derives both the
 JSON-RPC method and its base client capability:
 
@@ -716,7 +720,7 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
     return McpCompleteResult.fromToolText(((McpJsonString)
       state.find("phase").orElseThrow()).getValue());
   })
-  .addInputRequestDeclaration(form)
+  .inputRequestDeclarations(List.of(form))
   .requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
   .build();
 ```
@@ -766,7 +770,7 @@ Choose framework protection explicitly:
 
 An initial `McpProtectionKeyring` exposes only the non-secret
 `getActiveKeyId()` and `getVerificationKeyIds()` views. Live server-owned state
-is inspected through `McpProtectionControl.getKeyringSnapshot()` and changed
+is inspected through `McpProtectionKeyringManager.getKeyringSnapshot()` and changed
 through stage, activate, `rotateActiveKey(...)`, and remove operations; no
 public keyring view exposes key material.
 
@@ -880,16 +884,16 @@ other operations, and Soklet deliberately rejects the obsolete request-level
 An annotated tool that always creates a task returns
 [`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html),
 where `R` is the eventual typed output. It may receive one unannotated
-[`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html)
+[`McpTaskCreationContext`](https://javadoc.soklet.com/com/soklet/McpTaskCreationContext.html)
 parameter:
 
 ```java
 @McpTool(name = "reports.generate")
 public McpTaskCreatedResult<GeneratedReport> generateReport(
     @McpToolArgument(name = "accountId") String accountId,
-    McpTaskControl taskControl) {
-  String ownerKey = ownerKey(taskControl.getRequestContext());
-  String persistedOrigin = taskControl.getTaskOrigin().toPersistedString();
+    McpTaskCreationContext taskCreationContext) {
+  String ownerKey = ownerKey(taskCreationContext.getRequestContext());
+  String persistedOrigin = taskCreationContext.getTaskOrigin().toPersistedString();
   String taskId = reportJobs.persistAndPublish(
       accountId, ownerKey, persistedOrigin);
   return McpTaskCreatedResult.fromTaskId(taskId);
@@ -961,7 +965,7 @@ when the same typed-output tool always completes inline but needs to return
 explicit content or an `isError` tool result. An advanced handler that may
 complete inline or create a task uses the ordinary operation-result handler
 and first inspects
-[`McpInvocationFeatures::getTaskControl`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getTaskControl()>).
+[`McpInvocationFeatures::getTaskCreationContext`](<https://javadoc.soklet.com/com/soklet/McpInvocationFeatures.html#getTaskCreationContext()>).
 
 ### Manager and state contract
 
@@ -1035,7 +1039,7 @@ applications:
 McpInMemoryTaskManager taskManager =
     McpTaskManager.fromInMemoryDefaults();
 
-McpTask task = taskManager.createTask(taskControl);
+McpTask task = taskManager.createTask(taskCreationContext);
 // Application-owned test or development work runs separately.
 taskManager.completeTask(
     task.getTaskId(),
@@ -1103,7 +1107,7 @@ Clients must continue to treat `tasks/get` polling as authoritative.
 | Concern | Public API |
 | --- | --- |
 | Server configuration and production authority | [`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>), [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html) |
-| Handler-side creation | [`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html), [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html), [`McpTaskCreatedResult`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html) |
+| Handler-side creation | [`McpTaskCreationContext`](https://javadoc.soklet.com/com/soklet/McpTaskCreationContext.html), [`McpTaskOrigin`](https://javadoc.soklet.com/com/soklet/McpTaskOrigin.html), [`McpTaskCreatedResult`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html) |
 | Durable snapshots | [`McpTask`](https://javadoc.soklet.com/com/soklet/McpTask.html), [`McpTask.Builder`](https://javadoc.soklet.com/com/soklet/McpTask.Builder.html), [`McpTaskStatus`](https://javadoc.soklet.com/com/soklet/McpTaskStatus.html) |
 | Manager request inputs and neutral absence | [`McpTaskRequestContext`](https://javadoc.soklet.com/com/soklet/McpTaskRequestContext.html), [`McpTaskUpdateContext`](https://javadoc.soklet.com/com/soklet/McpTaskUpdateContext.html), [`McpTaskNotFoundException`](https://javadoc.soklet.com/com/soklet/McpTaskNotFoundException.html) |
 | Explicit in-memory development backend | [`McpInMemoryTaskManager`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.html), [`McpInMemoryTaskManager.Builder`](https://javadoc.soklet.com/com/soklet/McpInMemoryTaskManager.Builder.html) |

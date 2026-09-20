@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Exactly one key is initially active for sealing. Other entries are initially
  * verification-only. Building a server copies the complete ring, including
  * key material, into independent server-owned live state. Runtime rotation is
- * available only through that server's {@link McpProtectionControl}.
+ * available only through that server's {@link McpProtectionKeyringManager}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -69,18 +69,18 @@ public class McpTaskInputUpdateRuntimeTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpTask task = taskManager.createTask(
-							features.getTaskControl().orElseThrow());
+							features.getTaskCreationContext().orElseThrow());
 					createdTaskId.set(task.getTaskId());
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(task.getTaskId());
 				})
-				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
+				.inputRequestDeclarations(java.util.List.of(ELICITATION_URL_DECLARATION))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"task-input-update-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpAdmissionIdentity identity = McpAdmissionIdentity
 				.withRateLimitPartitionKey("task-input-rate")

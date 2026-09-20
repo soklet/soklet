@@ -397,7 +397,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		} else {
 			MarshaledResponse.Copier responseCopier = getMethodMarshaledResponse.copy()
 					.withoutBody()
-					.withoutStream()
+					.withoutStreamingResponseBody()
 					.cookies(getMethodMarshaledResponse.getCookies());
 
 			if (getMethodMarshaledResponse.isStreaming()) {

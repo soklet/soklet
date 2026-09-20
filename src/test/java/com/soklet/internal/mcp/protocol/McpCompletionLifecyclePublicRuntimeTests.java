@@ -92,7 +92,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 			assertEquals(McpOperationType.COMPLETION_COMPLETE,
 					request.getOperationType());
 			assertEquals("completion/complete", request.getJsonRpcMethod());
-			assertTrue(features.find(com.soklet.McpTaskControl.class).isEmpty());
+			assertTrue(features.find(com.soklet.McpTaskCreationContext.class).isEmpty());
 			if (features.find(McpProgressReporter.class).isPresent()) {
 				features.require(McpProgressReporter.class).report(
 						McpProgressUpdate.withProgress(1.0).build());
@@ -385,9 +385,9 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 		McpPromptRegistration prompt = McpPromptRegistration.withName("suggest")
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-								.addMessage(McpPromptMessage.fromUserContent(
-										McpTextContent.fromText("unused"))).build()))
-				.addArgument(McpPromptArgumentDeclaration.withName("term").build())
+								.messages(java.util.List.of(McpPromptMessage.fromUserContent(
+										McpTextContent.fromText("unused")))).build()))
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("term").build()))
 				.completionHandler(completionHandler).build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriTemplateAndName(TEMPLATE, "Items")
@@ -402,7 +402,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 				McpImplementation.withNameAndVersion("completion-lifecycle", "1.0")
 						.build())
 				.serverInfoIncluded(false)
-				.addPrompt(prompt).addResource(resource).build();
+				.promptRegistrations(java.util.List.of(prompt)).resourceRegistrations(java.util.List.of(resource)).build();
 		McpServer.Builder builder = McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())

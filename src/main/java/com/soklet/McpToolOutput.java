@@ -21,8 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -56,7 +54,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public static McpToolOutput fromText(@NonNull String text) {
-		return builder().addContent(McpTextContent.fromText(text)).build();
+		return builder().content(List.of(McpTextContent.fromText(text))).build();
 	}
 
 	/**
@@ -79,7 +77,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public static McpToolOutput fromErrorText(@NonNull String text) {
-		return builder().addContent(McpTextContent.fromText(text))
+		return builder().content(List.of(McpTextContent.fromText(text)))
 				.error(true).build();
 	}
 
@@ -119,7 +117,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	 */
 	@NonNull
 	public Builder toBuilder() {
-		Builder builder = builder().addContents(this.content).error(this.error);
+		Builder builder = builder().content(this.content).error(this.error);
 		if (this.structuredContent != null)
 			builder.structuredContent(this.structuredContent);
 		return builder;
@@ -152,7 +150,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
-		private final List<@NonNull McpContentBlock> content = new ArrayList<>();
+		private List<@NonNull McpContentBlock> content = List.of();
 		@Nullable
 		private McpJsonValue structuredContent;
 		private boolean error;
@@ -161,28 +159,19 @@ public final class McpToolOutput implements McpCompletePayload {
 		}
 
 		/**
-		 * Appends one content block.
+		 * Replaces content blocks in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param content content block
+		 * @param content content blocks, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addContent(@NonNull McpContentBlock content) {
-			this.content.add(requireNonNull(content));
-			return this;
-		}
-
-		/**
-		 * Appends content blocks in iteration order.
-		 *
-		 * @param contents content blocks
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addContents(
-				@NonNull Collection<? extends @NonNull McpContentBlock> contents) {
-			requireNonNull(contents);
-			contents.forEach(this::addContent);
+		public Builder content(
+				@Nullable List<? extends @NonNull McpContentBlock> content) {
+			this.content = content == null ? List.of()
+					: List.copyOf(content);
 			return this;
 		}
 

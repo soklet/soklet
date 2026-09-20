@@ -654,7 +654,7 @@ final class SokletDirectTerminationPrecedenceTests {
 		@Override @NonNull public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.phase.install(context.getTerminationSignal());
+			this.phase.install(context.getTransportTerminationSignal());
 			return this.phase.runtime();
 		}
 	}
@@ -680,7 +680,7 @@ final class SokletDirectTerminationPrecedenceTests {
 		@Override @NonNull public TransportRuntime attach(
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.phase.install(context.getTerminationSignal());
+			this.phase.install(context.getTransportTerminationSignal());
 			return this.phase.runtime();
 		}
 		@Override @NonNull public Optional<? extends SseBroadcaster> acquireBroadcaster(

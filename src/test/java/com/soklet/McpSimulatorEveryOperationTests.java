@@ -593,9 +593,9 @@ public class McpSimulatorEveryOperationTests {
 					this.handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 							.description("Matrix prompt")
-							.addMessage(McpPromptMessage.fromUserContent(
+							.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 									McpTextContent.fromText(
-											"matrix prompt complete")))
+											"matrix prompt complete"))))
 							.build());
 				}).build();
 			McpResourceRegistration exact = McpResourceRegistration
@@ -618,10 +618,9 @@ public class McpSimulatorEveryOperationTests {
 						"simulator-every-operation-test",
 						"4.0.0").build())
 				.serverInfoIncluded(this.serverInformationIncluded)
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(exact)
-				.addResource(template)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(exact, template))
 				.subscriptionConfig(subscriptions)
 				.build();
 			McpEndpointRegistry endpointRegistry =

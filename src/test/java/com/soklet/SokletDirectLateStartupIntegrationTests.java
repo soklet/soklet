@@ -1231,11 +1231,11 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			if (this.pendingEvent == PendingEvent.PROOF)
-				context.getTerminationSignal().signalTerminated();
+				context.getTransportTerminationSignal().signalTerminated();
 			else
-				context.getTerminationSignal().signalTerminationFailure(
+				context.getTransportTerminationSignal().signalTerminationFailure(
 						java.util.Objects.requireNonNull(this.pendingFailure));
 			this.attachEntered.countDown();
 			awaitIgnoringInterrupts(this.releaseAttach);
@@ -1264,7 +1264,7 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			return this.runtime;
 		}
 	}
@@ -1383,11 +1383,11 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			if (this.pendingEvent == PendingEvent.PROOF)
-				context.getTerminationSignal().signalTerminated();
+				context.getTransportTerminationSignal().signalTerminated();
 			else
-				context.getTerminationSignal().signalTerminationFailure(
+				context.getTransportTerminationSignal().signalTerminationFailure(
 						java.util.Objects.requireNonNull(this.pendingFailure));
 
 			return switch (this.attachFailure) {
@@ -1415,7 +1415,7 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			return this.runtime;
 		}
 	}
@@ -1431,7 +1431,7 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			return this.runtime;
 		}
 	}
@@ -1507,7 +1507,7 @@ final class SokletDirectLateStartupIntegrationTests {
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
-			this.runtime.install(context.getTerminationSignal());
+			this.runtime.install(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

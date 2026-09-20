@@ -202,7 +202,7 @@ public final class TransportCompositionFixture {
 			this.requestHandler.set(requireNonNull(context)
 					.getAdmissionFencedRequestHandler());
 			return new LeafRuntime("http-leaf", this.probe,
-					context.getTerminationSignal());
+					context.getTransportTerminationSignal());
 		}
 
 		/** Dispatches one request through every installed handler wrapper. */
@@ -243,7 +243,7 @@ public final class TransportCompositionFixture {
 			this.requestHandler.set(requireNonNull(context)
 					.getAdmissionFencedRequestHandler());
 			return new LeafRuntime("sse-leaf", this.probe,
-					context.getTerminationSignal());
+					context.getTransportTerminationSignal());
 		}
 
 		@Override
@@ -364,7 +364,7 @@ public final class TransportCompositionFixture {
 			TransportDelegateAttachment attachment =
 					context.attachTerminationOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
-					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
+					attachment.getTransportRuntime(), context.getTransportTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
 			return runtime;
 		}
@@ -399,7 +399,7 @@ public final class TransportCompositionFixture {
 			TransportDelegateAttachment attachment =
 					context.attachTerminationOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
-					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
+					attachment.getTransportRuntime(), context.getTransportTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
 			return runtime;
 		}

@@ -366,18 +366,17 @@ class McpTasksFleetPublicRuntimeTests {
 				.argumentAndOutputTypes(FleetArguments.class, outputType)
 				.operationHandler((request, arguments, features) -> {
 					String taskId = arguments.getConvertedArguments().taskId();
-					taskManager.createCompletedTask(features.getTaskControl()
+					taskManager.createCompletedTask(features.getTaskCreationContext()
 							.orElseThrow(), taskId, outputMember, node);
 					return McpTaskCreatedResult.<O>fromTaskId(taskId);
 				})
 				.structuredContentMirroredAsText(false);
-		for (McpInputRequestDeclaration declaration : declarations)
-			toolBuilder.addInputRequestDeclaration(declaration);
+		toolBuilder.inputRequestDeclarations(declarations);
 		McpToolRegistration<FleetArguments> tool = toolBuilder.build();
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
 				McpImplementation.withNameAndVersion(node, "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		return server(node, taskManager, mainEndpoint);
 	}
@@ -650,11 +649,11 @@ class McpTasksFleetPublicRuntimeTests {
 		@NonNull
 		private final AtomicInteger cancelInvocations = new AtomicInteger();
 
-		private void createCompletedTask(@NonNull McpTaskControl taskControl,
+		private void createCompletedTask(@NonNull McpTaskCreationContext taskCreationContext,
 				@NonNull String taskId, @NonNull String outputMember,
 				@NonNull String outputValue) {
-			McpRequestContext requestContext = taskControl.getRequestContext();
-			String durableOrigin = taskControl.getTaskOrigin()
+			McpRequestContext requestContext = taskCreationContext.getRequestContext();
+			String durableOrigin = taskCreationContext.getTaskOrigin()
 					.toPersistedString();
 			McpTaskOrigin restoredOrigin = McpTaskOrigin.fromPersistedString(
 					durableOrigin);

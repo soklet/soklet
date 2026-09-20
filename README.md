@@ -651,7 +651,7 @@ public MarshaledResponse tokens(TokenService tokenService) {
       "Content-Type", Set.of("text/plain; charset=UTF-8"),
       "Cache-Control", Set.of("no-transform")
     ))
-    .stream(StreamingResponseBody.fromWriter((output, context) -> {
+    .streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
       try (AutoCloseable ignored = context.onCancel(tokenService::stop)) {
         tokenService.generate(token -> {
           context.throwIfCanceled();
@@ -869,7 +869,7 @@ builder and install a server-wide request limiter:
 ```java
 McpPromptRegistration prompt = McpPromptRegistration.withName("code_review")
   .handler(promptHandler)
-  .addArgument(McpPromptArgumentDeclaration.withName("language").build())
+  .arguments(List.of(McpPromptArgumentDeclaration.withName("language").build()))
   .completionHandler((requestContext, completionContext, invocationFeatures) ->
     McpArgumentCompletionResult.fromValues(List.of("java")))
   .build();
@@ -1034,15 +1034,15 @@ McpServer mcpServer = McpServer.withPort(8081)
 An annotated tool that always creates a task returns
 [`McpTaskCreatedResult<R>`](https://javadoc.soklet.com/com/soklet/McpTaskCreatedResult.html)
 and can accept one unannotated
-[`McpTaskControl`](https://javadoc.soklet.com/com/soklet/McpTaskControl.html):
+[`McpTaskCreationContext`](https://javadoc.soklet.com/com/soklet/McpTaskCreationContext.html):
 
 ```java
 @McpTool(name = "reports.generate")
 public McpTaskCreatedResult<GeneratedReport> generateReport(
-    McpTaskControl taskControl) {
-  String ownerKey = deriveTaskOwnerKey(taskControl.getRequestContext());
+    McpTaskCreationContext taskCreationContext) {
+  String ownerKey = deriveTaskOwnerKey(taskCreationContext.getRequestContext());
   String taskId = reportJobs.persistAndPublish(
-      ownerKey, taskControl.getTaskOrigin());
+      ownerKey, taskCreationContext.getTaskOrigin());
   return McpTaskCreatedResult.fromTaskId(taskId);
 }
 ```

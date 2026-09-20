@@ -73,7 +73,7 @@ public class McpTaskCancelationLifecycleTests {
 			requestCancelation.set(cancelationToken);
 			cancelationToken.onCancel(requestCancelationCallbacks::incrementAndGet);
 			McpTask task = taskManager.createTask(
-					features.getTaskControl().orElseThrow());
+					features.getTaskCreationContext().orElseThrow());
 			createdTask.set(task);
 			taskCreated.countDown();
 			if (!releaseHandler.await(10, TimeUnit.SECONDS))
@@ -151,7 +151,7 @@ public class McpTaskCancelationLifecycleTests {
 			requestCancelation.set(cancelationToken);
 			cancelationToken.onCancel(requestCanceled::countDown);
 			McpTask task = taskManager.createTask(
-					features.getTaskControl().orElseThrow());
+					features.getTaskCreationContext().orElseThrow());
 			createdTask.set(task);
 			taskCreated.countDown();
 			try {
@@ -222,7 +222,7 @@ public class McpTaskCancelationLifecycleTests {
 		AtomicReference<McpTask> createdTask = new AtomicReference<>();
 		McpToolHandler<McpJsonObject> handler = (request, arguments, features) -> {
 			McpTask task = taskManager.createTask(
-					features.getTaskControl().orElseThrow());
+					features.getTaskCreationContext().orElseThrow());
 			createdTask.set(task);
 			return McpTaskCreatedResult.<McpJsonObject>fromTaskId(task.getTaskId());
 		};
@@ -314,7 +314,7 @@ public class McpTaskCancelationLifecycleTests {
 			requestCancelation.set(cancelationToken);
 			cancelationToken.onCancel(requestCanceled::countDown);
 			McpTask task = taskManager.createTask(
-					features.getTaskControl().orElseThrow());
+					features.getTaskCreationContext().orElseThrow());
 			createdTask.set(task);
 			taskCreated.countDown();
 			try {
@@ -374,7 +374,7 @@ public class McpTaskCancelationLifecycleTests {
 		AtomicReference<McpTask> createdTask = new AtomicReference<>();
 		McpToolHandler<McpJsonObject> handler = (request, arguments, features) -> {
 			McpTask task = taskManager.createTask(
-					features.getTaskControl().orElseThrow());
+					features.getTaskCreationContext().orElseThrow());
 			createdTask.set(task);
 			return McpTaskCreatedResult.<McpJsonObject>fromTaskId(task.getTaskId());
 		};
@@ -432,7 +432,7 @@ public class McpTaskCancelationLifecycleTests {
 				McpImplementation.withNameAndVersion(
 						"task-cancelation-lifecycle-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

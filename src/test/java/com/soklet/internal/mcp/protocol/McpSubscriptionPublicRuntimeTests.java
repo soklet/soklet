@@ -214,16 +214,16 @@ public class McpSubscriptionPublicRuntimeTests {
 						McpImplementation.withNameAndVersion(
 								"catalog-subscription-runtime-test", "4.0.0")
 								.build())
-				.addTool(McpToolRegistration.withName("catalog.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.tool")
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
-						.build())
-				.addPrompt(McpPromptRegistration.withName("catalog.prompt")
+						.build()))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.prompt")
 						.handler((request, prompt, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
-						.build())
+						.build()))
 				.subscriptionConfig(subscriptions)
 				.build();
 		AtomicReference<McpSubscriptionAuthorizationContext> authorizationContext =
@@ -1425,8 +1425,9 @@ public class McpSubscriptionPublicRuntimeTests {
 						"subscription-public-runtime-test",
 						"4.0.0").build())
 				.subscriptionConfig(subscriptions);
+		List<McpResourceRegistration> resourceRegistrations = new ArrayList<>();
 		for (URI resourceUri : resourceUris) {
-			builder.addResource(McpResourceRegistration
+			resourceRegistrations.add(McpResourceRegistration
 					.withUriAndName(resourceUri,
 							"Subscription test resource")
 					.handler((request, read, features) ->
@@ -1437,7 +1438,7 @@ public class McpSubscriptionPublicRuntimeTests {
 											.build()))
 					.build());
 		}
-		return builder.build();
+		return builder.resourceRegistrations(resourceRegistrations).build();
 	}
 
 	private static int boundPort(McpServer server) {

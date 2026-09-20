@@ -494,19 +494,19 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.jsonObjectArguments()
 					.handler((request, arguments, features) -> {
 						McpTask task = this.taskManager.createTask(
-								features.getTaskControl().orElseThrow());
+								features.getTaskCreationContext().orElseThrow());
 						this.createdTaskId.set(task.getTaskId());
 						return McpTaskCreatedResult
 								.<McpJsonObject>fromTaskId(task.getTaskId());
 					})
-					.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
+					.inputRequestDeclarations(java.util.List.of(ELICITATION_URL_DECLARATION))
 					.structuredContentMirroredAsText(false)
 					.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
 							"tasks-simulator-test", "4.0.0").build())
 					.serverInfoIncluded(false)
-					.addTool(tool)
+					.toolRegistrations(java.util.List.of(tool))
 					.build();
 			this.sourceServer = McpServer.withPort(0)
 					.endpointRegistry(McpEndpointRegistry.fromEndpoints(

@@ -832,8 +832,9 @@ class McpLocalizationFleetPublicRuntimeTests {
 							.title("Canonical server title")
 							.description("Canonical server description")
 							.build());
+			List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 			for (String toolName : List.of(SHARED_TOOL, ALPHA_TOOL, BETA_TOOL))
-				endpointBuilder.addTool(McpToolRegistration.withName(toolName)
+				toolRegistrations.add(McpToolRegistration.withName(toolName)
 							.jsonObjectArguments()
 							.handler((request, arguments, features) ->
 									McpCompleteResult.fromToolText("unused"))
@@ -841,7 +842,8 @@ class McpLocalizationFleetPublicRuntimeTests {
 							.description("Canonical " + toolName + " description")
 							.build());
 			McpEndpoint endpoint = endpointBuilder
-					.addResource(McpResourceRegistration.withUriAndName(
+					.toolRegistrations(toolRegistrations)
+					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 							URI.create("fleet://resource"), "fleet-resource")
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
@@ -850,7 +852,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 																	resource.getUri(), "unused")
 															.build())
 													.build()))
-							.build())
+							.build()))
 					.subscriptionConfig(McpSubscriptionConfig
 							.withEventPublisherAndNotificationTypes(
 									this.publisher,

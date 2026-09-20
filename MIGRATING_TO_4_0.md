@@ -60,12 +60,16 @@ which is always `OPTIONS`.
 
 The thirteen HTTP/SSE/transport `MetricsCollector` key types are final classes
 instead of records. Replace record-component accessors with bean-style getters:
-`method()` becomes `getHttpMethod()`, `route()` becomes `getRoute()`,
+`method()` becomes `getHttpMethod()`, `route()` becomes `getResourcePathDeclaration()`,
 `routeType()` becomes `getRouteType()`, `serverType()` becomes `getServerType()`,
 and `reason()` becomes `getReason()`. Likewise, use `getStatusClass()`,
 `getCommentType()`, `getOutcome()`, `getDropReason()`, or
 `getTerminationReason()` for those former components.
 Record deconstruction patterns no longer apply.
+
+For comment-route keys specifically, use `getEventEnqueueOutcome()` and
+`getEventDropReason()`; event-route keys retain `getOutcome()` and
+`getDropReason()`. These Java API changes do not rename metric wire labels.
 
 The affected types are `TransportFailureKey`, `RequestReadFailureKey`,
 `RequestRejectionKey`, `HttpServerRouteKey`, `HttpServerRouteStatusKey`,
@@ -73,6 +77,33 @@ The affected types are `TransportFailureKey`, `RequestReadFailureKey`,
 `SseEventRouteEnqueueOutcomeKey`, `SseCommentRouteEnqueueOutcomeKey`,
 `SseEventRouteDropKey`, `SseCommentRouteDropKey`, and
 `SseStreamRouteTerminationKey`, all nested in `MetricsCollector`.
+
+### Naming and collection replacements
+
+The remaining 4.0 naming cleanup removes the old names without aliases:
+
+| Previous API | Replacement |
+| --- | --- |
+| `MarshaledResponse.stream(...)`, `getStream()`, `withoutStream()` | `streamingResponseBody(...)`, `getStreamingResponseBody()`, `withoutStreamingResponseBody()` (builder/copier where applicable) |
+| HTTP/SSE attachment `getTerminationSignal()` | `getTransportTerminationSignal()` |
+| `ResourcePathDeclaration.Component.with(...)` | `fromValueAndType(...)` |
+| Servlet response `fromRequest(HttpServletRequest)` | `fromHttpServletRequest(HttpServletRequest)`; the Soklet `Request` + `ServletContext` overload stays `fromRequest(...)` |
+| `McpProtectionControl`, `getProtectionControl()` | `McpProtectionKeyringManager`, `getProtectionKeyringManager()` |
+| `McpTraceCorrelationControl`, `getTraceCorrelationControl()` | `McpTraceCorrelationKeyManager`, `getTraceCorrelationKeyManager()` |
+| `McpTaskControl`, `getTaskControl()` | `McpTaskCreationContext`, `getTaskCreationContext()` |
+| Endpoint `addTool(s)`, `addPrompt(s)`, `addResource(s)` | `toolRegistrations(List)`, `promptRegistrations(List)`, `resourceRegistrations(List)` and matching full-name getters |
+| Resource-page `addResource(s)`, `getResources()` | `resourceDescriptors(List)`, `getResourceDescriptors()` |
+| Registration `addIcon`, `addInputRequestDeclaration(s)`; prompt `addArgument` | `icons(List)`, `inputRequestDeclarations(List)`, `arguments(List)` |
+| Tool-output `addContent(s)`; prompt-output `addMessage(s)` | `content(List)`, `messages(List)` |
+| Icon `sizes(String...)` | `sizes(List)` |
+| Tool-registration `annotations(...)`, `getAnnotations()` | `toolAnnotations(...)`, `getToolAnnotations()`; resource/content annotations stay unchanged |
+
+Replacement setters snapshot complete lists. Optional lists clear on `null` or
+empty; null elements fail atomically. Replace `.addTool(a).addTool(b)` with
+`.toolRegistrations(List.of(a, b))`, not two calls to the replacing setter.
+Loops should collect values first. Required resource-output contents and
+subscription notification sets remain nonempty. Resource-descriptor/link
+`addIcon(...)` and `McpJsonArray.Builder.add(...)` are unchanged.
 
 ### SSE broadcast callback counts
 

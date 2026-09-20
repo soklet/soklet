@@ -163,11 +163,11 @@ public class MarshaledResponseTests {
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
 				.body(new byte[]{1, 2, 3})
-				.stream(stream)
+				.streamingResponseBody(stream)
 				.build());
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
-				.stream(stream)
+				.streamingResponseBody(stream)
 				.body(new byte[]{1, 2, 3})
 				.build());
 	}
@@ -181,11 +181,11 @@ public class MarshaledResponseTests {
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 				.body(new byte[]{1, 2, 3})
 				.withoutBody()
-				.stream(stream)
+				.streamingResponseBody(stream)
 				.build();
 
 		Assertions.assertTrue(response.getBody().isEmpty());
-		Assertions.assertSame(stream, response.getStream().orElseThrow());
+		Assertions.assertSame(stream, response.getStreamingResponseBody().orElseThrow());
 		Assertions.assertTrue(response.isStreaming());
 		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
 	}
@@ -197,12 +197,12 @@ public class MarshaledResponseTests {
 		});
 
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-				.stream(stream)
-				.withoutStream()
+				.streamingResponseBody(stream)
+				.withoutStreamingResponseBody()
 				.body(new byte[]{1, 2, 3})
 				.build();
 
-		Assertions.assertTrue(response.getStream().isEmpty());
+		Assertions.assertTrue(response.getStreamingResponseBody().isEmpty());
 		Assertions.assertTrue(response.getBody().isPresent());
 		Assertions.assertFalse(response.isStreaming());
 		Assertions.assertEquals(Long.valueOf(3), response.getBodyLength());
@@ -216,19 +216,19 @@ public class MarshaledResponseTests {
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Content-Length", Set.of("10")))
-				.stream(stream)
+				.streamingResponseBody(stream)
 				.build());
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
-				.stream(stream)
+				.streamingResponseBody(stream)
 				.build());
 	}
 
 	@Test
 	public void streaming_response_rejects_bodyless_status_code() {
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
-				.stream(StreamingResponseBody.fromWriter((output, context) -> {
+				.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 					// No-op
 				}))
 				.build());
@@ -449,13 +449,13 @@ public class MarshaledResponseTests {
 	public void default_head_response_omits_content_length_for_streaming_body() {
 		MarshaledResponse getResponse = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.stream(StreamingResponseBody.fromWriter((output, context) -> output.write(new byte[]{1, 2, 3})))
+				.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> output.write(new byte[]{1, 2, 3})))
 				.build();
 		MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(
 				Request.withPath(HttpMethod.HEAD, "/stream").build(), getResponse);
 
 		Assertions.assertTrue(headResponse.getBody().isEmpty());
-		Assertions.assertTrue(headResponse.getStream().isEmpty());
+		Assertions.assertTrue(headResponse.getStreamingResponseBody().isEmpty());
 		Assertions.assertFalse(headResponse.getHeaders().containsKey("Content-Length"));
 		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), headResponse.getHeaders().get("Content-Type"));
 	}

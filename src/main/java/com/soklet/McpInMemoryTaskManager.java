@@ -151,26 +151,26 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	/**
 	 * Creates a working task for the current task-capable tool invocation.
 	 * <p>
-	 * The control supplies Soklet's immutable task origin and the current
+	 * The task creation context supplies Soklet's immutable task origin and the current
 	 * endpoint and authorization partition. The manager copies those values and
-	 * never retains the control, request context, principal, or application
+	 * never retains the task creation context, request context, principal, or application
 	 * context. The returned task is immediately available through both trusted
 	 * and appropriately authorized protocol lookup.
 	 *
-	 * @param taskControl current task control
+	 * @param taskCreationContext current task creation context
 	 * @return newly created working task
-	 * @throws NullPointerException if the control or either of its required
+	 * @throws NullPointerException if the task creation context or either of its required
 	 *                              values is null
 	 * @throws IllegalStateException if the finite task capacity is exhausted
 	 */
 	@NonNull
-	public McpTask createTask(@NonNull McpTaskControl taskControl) {
-		requireNonNull(taskControl);
+	public McpTask createTask(@NonNull McpTaskCreationContext taskCreationContext) {
+		requireNonNull(taskCreationContext);
 		McpRequestContext requestContext = requireNonNull(
-				taskControl.getRequestContext(),
-				"taskControl.getRequestContext()");
-		McpTaskOrigin taskOrigin = requireNonNull(taskControl.getTaskOrigin(),
-				"taskControl.getTaskOrigin()");
+				taskCreationContext.getRequestContext(),
+				"taskCreationContext.getRequestContext()");
+		McpTaskOrigin taskOrigin = requireNonNull(taskCreationContext.getTaskOrigin(),
+				"taskCreationContext.getTaskOrigin()");
 		String endpointPath = requestContext.getEndpoint().getPath();
 		Optional<String> authorizationPartitionKey = requestContext
 				.getAdmissionIdentity().getAuthorizationPartitionKey();

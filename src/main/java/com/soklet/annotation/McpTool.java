@@ -39,7 +39,7 @@ import java.lang.annotation.Target;
  * and output records.
  *
  * <p>A statically task-only method may accept one unannotated
- * {@link com.soklet.McpTaskControl} parameter directly. The same control remains
+ * {@link com.soklet.McpTaskCreationContext} parameter directly. The same context remains
  * available through {@link com.soklet.McpInvocationFeatures} for dynamic
  * handlers. A task-control parameter must not be annotated with
  * {@link McpToolArgument}.

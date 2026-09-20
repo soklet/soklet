@@ -27,7 +27,7 @@
       "targetDisposition": "CORE_COMPLETE",
       "owningPackage": "MCP-C",
       "evidencePaths": [
-        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "documentationPaths": [
@@ -46,7 +46,7 @@
       "targetDisposition": "CORE_COMPLETE",
       "owningPackage": "MCP-C",
       "evidencePaths": [
-        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "documentationPaths": [

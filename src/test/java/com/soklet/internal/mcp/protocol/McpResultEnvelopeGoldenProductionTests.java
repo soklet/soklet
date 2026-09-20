@@ -303,9 +303,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 		McpEndpoint discoveryEndpoint = endpointBuilder(
 				"result-envelope-complete")
 				.serverInfoIncluded(true)
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer discoveryServer = serverBuilder(discoveryEndpoint).build();
 		Soklet discoveryOwner = managedSoklet(discoveryServer);
@@ -319,9 +319,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 			discoveryOwner.close();
 		}
 		McpEndpoint endpoint = endpointBuilder("result-envelope-complete")
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -383,11 +383,11 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.build();
 		McpEndpoint customListEndpoint = endpointBuilder(
 				"result-envelope-custom-list")
-				.addResource(listedResource)
+				.resourceRegistrations(java.util.List.of(listedResource))
 				.resourceListHandler((request, list, features) -> {
 					listHandlerInvocations.incrementAndGet();
 					return McpResourcePage.builder()
-							.addResources(list.getRegisteredResourceDescriptors())
+							.resourceDescriptors(list.getRegisteredResourceDescriptors())
 							.metadata(metadata("custom-resource-list"))
 							.build();
 				})
@@ -450,7 +450,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 					return completeTool("tool input retry complete",
 							"tool-input-retry");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(INPUT_PROMPT_NAME)
@@ -490,13 +490,13 @@ public class McpResultEnvelopeGoldenProductionTests {
 							"resource combined retry complete",
 							"resource-combined-retry");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-input")
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		DeterministicProtector protector = new DeterministicProtector();
 		McpServer server = serverBuilder(endpoint)
@@ -576,11 +576,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 							McpProgressUpdate.withProgress(1.0d).build());
 					return inputRequiredRoots(roots, "request-sse-input", false);
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-sse")
-				.addTool(complete)
-				.addTool(input)
+				.toolRegistrations(java.util.List.of(complete, input))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
@@ -624,7 +623,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		McpEndpoint subscriptionEndpoint = endpointBuilder(
 				"result-envelope-subscription")
 				.serverInfoIncluded(true)
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer subscriptionServer = serverBuilder(subscriptionEndpoint).build();
@@ -634,7 +633,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		McpEndpoint localizedSubscriptionEndpoint = localizedEndpointBuilder(
 				"result-envelope-localized-subscription")
 				.serverInfoIncluded(true)
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
@@ -670,7 +669,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("result-envelope-typed")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.toolResultSanitizer((request, toolName, rawArguments, completeResult) -> {

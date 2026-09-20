@@ -119,7 +119,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 					toolSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
 					deferCallerAwareCatalogResponseBounds
-							|| endpoint.getTools().stream().anyMatch(tool ->
+							|| endpoint.getToolRegistrations().stream().anyMatch(tool ->
 									McpAppMetadataSupport.effectiveToolMetadata(
 											tool.getMetadata(), tool.getAppToolMetadata()
 													.orElse(null)).isPresent()));
@@ -218,8 +218,8 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
-		for (int index = 0; index < endpoint.getTools().size(); ++index) {
-			McpToolRegistration<?> tool = endpoint.getTools().get(index);
+		for (int index = 0; index < endpoint.getToolRegistrations().size(); ++index) {
+			McpToolRegistration<?> tool = endpoint.getToolRegistrations().get(index);
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "tools", Integer.toString(index));
 			tool.getTitle().ifPresent(text -> addOwnerIfNonblank(slots, catalog,
@@ -228,7 +228,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			tool.getDescription().ifPresent(text -> addOwnerIfNonblank(slots, catalog,
 					endpoint.getPath(), McpTextOwnerType.TOOL,
 					tool.getName(), "/description", target + "/description", text));
-			tool.getAnnotations().flatMap(McpToolAnnotations::getTitle)
+			tool.getToolAnnotations().flatMap(McpToolAnnotations::getTitle)
 					.ifPresent(text -> addOwnerIfNonblank(slots, catalog,
 							endpoint.getPath(), McpTextOwnerType.TOOL,
 							tool.getName(), "/annotations/title",
@@ -263,8 +263,8 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		for (int promptIndex = 0;
-				promptIndex < endpoint.getPrompts().size(); ++promptIndex) {
-			McpPromptRegistration prompt = endpoint.getPrompts().get(promptIndex);
+				promptIndex < endpoint.getPromptRegistrations().size(); ++promptIndex) {
+			McpPromptRegistration prompt = endpoint.getPromptRegistrations().get(promptIndex);
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "prompts", Integer.toString(promptIndex));
 			prompt.getTitle().ifPresent(text -> addOwnerIfNonblank(slots, catalog,
@@ -304,7 +304,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			return List.of();
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		int exactIndex = 0;
-		for (McpResourceRegistration resource : endpoint.getResources()) {
+		for (McpResourceRegistration resource : endpoint.getResourceRegistrations()) {
 			if (resource.getAddressType() != McpResourceAddressType.URI)
 				continue;
 			String subject = resource.getUri().orElseThrow().toString();
@@ -326,7 +326,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		int templateIndex = 0;
-		for (McpResourceRegistration resource : endpoint.getResources()) {
+		for (McpResourceRegistration resource : endpoint.getResourceRegistrations()) {
 			if (resource.getAddressType()
 					!= McpResourceAddressType.URI_TEMPLATE)
 				continue;

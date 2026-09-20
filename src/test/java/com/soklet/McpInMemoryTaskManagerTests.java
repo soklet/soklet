@@ -106,7 +106,7 @@ public class McpInMemoryTaskManagerTests {
 		McpSubscriptionEventRegistration failing = publisher.subscribe(taskId -> {
 			throw new IllegalStateException("optional listener failure");
 		});
-		McpTaskControl control = control("/one", "owner", "origin");
+		McpTaskCreationContext control = control("/one", "owner", "origin");
 
 		try {
 			McpTask task = manager.createTask(control);
@@ -147,7 +147,7 @@ public class McpInMemoryTaskManagerTests {
 		MutableTime time = new MutableTime(1_000L, 10L);
 		McpInMemoryTaskManager manager = manager(1, Duration.ofSeconds(2),
 				time);
-		McpTaskControl control = control("/one", "owner", "first");
+		McpTaskCreationContext control = control("/one", "owner", "first");
 
 		McpTask first = manager.createTask(control);
 		UUID taskUuid = UUID.fromString(first.getTaskId());
@@ -182,7 +182,7 @@ public class McpInMemoryTaskManagerTests {
 	}
 
 	@Test
-	public void malformedTaskControlFailsBeforeCapacityIsConsumed() {
+	public void malformedTaskCreationContextFailsBeforeCapacityIsConsumed() {
 		McpInMemoryTaskManager manager = McpInMemoryTaskManager.builder()
 				.maximumRetainedTasks(1)
 				.build();
@@ -191,12 +191,12 @@ public class McpInMemoryTaskManagerTests {
 		NullPointerException missingRequestContext = Assertions.assertThrows(
 				NullPointerException.class,
 				() -> manager.createTask(malformedControl(null, null)));
-		Assertions.assertEquals("taskControl.getRequestContext()",
+		Assertions.assertEquals("taskCreationContext.getRequestContext()",
 				missingRequestContext.getMessage());
 		NullPointerException missingOrigin = Assertions.assertThrows(
 				NullPointerException.class,
 				() -> manager.createTask(malformedControl(requestContext, null)));
-		Assertions.assertEquals("taskControl.getTaskOrigin()",
+		Assertions.assertEquals("taskCreationContext.getTaskOrigin()",
 				missingOrigin.getMessage());
 
 		McpTask validTask = manager.createTask(
@@ -209,7 +209,7 @@ public class McpInMemoryTaskManagerTests {
 			throws Exception {
 		McpInMemoryTaskManager manager =
 				McpInMemoryTaskManager.builder().build();
-		McpTaskControl ownerControl = control("/one", "owner", "origin");
+		McpTaskCreationContext ownerControl = control("/one", "owner", "origin");
 		McpTask task = manager.createTask(ownerControl);
 
 		McpRequestContext sameOwnerNewRequest = requestContext("/one", "owner");
@@ -269,7 +269,7 @@ public class McpInMemoryTaskManagerTests {
 			throws Exception {
 		McpInMemoryTaskManager manager =
 				McpInMemoryTaskManager.builder().build();
-		McpTaskControl control = control("/one", "owner", "origin");
+		McpTaskCreationContext control = control("/one", "owner", "origin");
 		McpTask task = manager.createTask(control);
 		McpInputRequest firstRequest = inputRequest("first");
 		McpInputRequest secondRequest = inputRequest("second");
@@ -368,7 +368,7 @@ public class McpInMemoryTaskManagerTests {
 			throws Exception {
 		MutableTime time = new MutableTime(100L, 200L);
 		McpInMemoryTaskManager manager = manager(2, Duration.ofMinutes(1), time);
-		McpTaskControl control = control("/one", "owner", "origin");
+		McpTaskCreationContext control = control("/one", "owner", "origin");
 		McpTask task = manager.createTask(control);
 		manager.requestTaskInput(task.getTaskId(),
 				Map.of("answer", inputRequest("answer")), "Waiting");
@@ -398,7 +398,7 @@ public class McpInMemoryTaskManagerTests {
 			throws Exception {
 		MutableTime time = new MutableTime(100L, 200L);
 		McpInMemoryTaskManager manager = manager(8, Duration.ofMinutes(1), time);
-		McpTaskControl control = control("/one", "owner", "origin");
+		McpTaskCreationContext control = control("/one", "owner", "origin");
 		McpTask task = manager.createTask(control);
 
 		time.advance(Duration.ofMillis(5));
@@ -446,7 +446,7 @@ public class McpInMemoryTaskManagerTests {
 			throws Exception {
 		McpInMemoryTaskManager manager =
 				McpInMemoryTaskManager.builder().build();
-		McpTaskControl control = control("/one", "owner", "origin");
+		McpTaskCreationContext control = control("/one", "owner", "origin");
 		McpTask task = manager.createTask(control);
 		McpTaskRequestContext requestContext = requestContext(
 				control.getRequestContext(), task.getTaskId());
@@ -540,14 +540,14 @@ public class McpInMemoryTaskManagerTests {
 	}
 
 	@NonNull
-	private static McpTaskControl control(@NonNull String endpointPath,
+	private static McpTaskCreationContext control(@NonNull String endpointPath,
 			@Nullable String authorizationPartitionKey,
 			@NonNull String originValue) {
 		McpRequestContext requestContext = requestContext(endpointPath,
 				authorizationPartitionKey);
 		McpTaskOrigin taskOrigin = McpTaskOrigin.fromPersistedState(
 				McpJsonObject.builder().put("origin", originValue).build());
-		return new McpTaskControl() {
+		return new McpTaskCreationContext() {
 			@Override
 			@NonNull
 			public McpRequestContext getRequestContext() {
@@ -563,16 +563,16 @@ public class McpInMemoryTaskManagerTests {
 	}
 
 	@NonNull
-	private static McpTaskControl malformedControl(
+	private static McpTaskCreationContext malformedControl(
 			@Nullable McpRequestContext requestContext,
 			@Nullable McpTaskOrigin taskOrigin) {
-		return (McpTaskControl) Proxy.newProxyInstance(
-				McpTaskControl.class.getClassLoader(),
-				new Class<?>[]{McpTaskControl.class},
+		return (McpTaskCreationContext) Proxy.newProxyInstance(
+				McpTaskCreationContext.class.getClassLoader(),
+				new Class<?>[]{McpTaskCreationContext.class},
 				(proxy, method, arguments) -> switch (method.getName()) {
 					case "getRequestContext" -> requestContext;
 					case "getTaskOrigin" -> taskOrigin;
-					case "toString" -> "MalformedMcpTaskControlTestFixture";
+					case "toString" -> "MalformedMcpTaskCreationContextTestFixture";
 					case "hashCode" -> System.identityHashCode(proxy);
 					case "equals" -> proxy == arguments[0];
 					default -> throw new UnsupportedOperationException(

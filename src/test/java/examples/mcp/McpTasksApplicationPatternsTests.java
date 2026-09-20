@@ -33,7 +33,7 @@ import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationResponse;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpTask;
-import com.soklet.McpTaskControl;
+import com.soklet.McpTaskCreationContext;
 import com.soklet.McpTaskCreatedResult;
 import com.soklet.McpTaskManager;
 import com.soklet.McpTaskNotFoundException;
@@ -141,7 +141,7 @@ public class McpTasksApplicationPatternsTests {
 				.operationHandler((request, arguments, features) -> {
 					String taskId = taskManager.createAndEnqueue(
 							arguments.getConvertedArguments(),
-							features.getTaskControl().orElseThrow());
+							features.getTaskCreationContext().orElseThrow());
 					return McpTaskCreatedResult
 							.<GeneratedReport>fromTaskId(taskId);
 				})
@@ -150,7 +150,7 @@ public class McpTasksApplicationPatternsTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-application-pattern", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
@@ -249,12 +249,12 @@ public class McpTasksApplicationPatternsTests {
 
 		@NonNull
 		private String createAndEnqueue(@NonNull ReportArguments arguments,
-				@NonNull McpTaskControl taskControl) {
-			McpRequestContext request = taskControl.getRequestContext();
+				@NonNull McpTaskCreationContext taskCreationContext) {
+			McpRequestContext request = taskCreationContext.getRequestContext();
 			String taskId = UUID.randomUUID().toString();
 			Instant now = Instant.now();
 			McpTask task = McpTask.withTaskId(taskId,
-					taskControl.getTaskOrigin(), McpTaskStatus.WORKING, now, now)
+					taskCreationContext.getTaskOrigin(), McpTaskStatus.WORKING, now, now)
 					.pollInterval(Duration.ofSeconds(2))
 					.timeToLive(Duration.ofDays(7))
 					.build();

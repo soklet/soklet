@@ -356,9 +356,9 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 					type = ComponentType.PLACEHOLDER;
 				}
 
-				return Component.with(inner, type);
+				return Component.fromValueAndType(inner, type);
 			} else {
-				return Component.with(part, ComponentType.LITERAL);
+				return Component.fromValueAndType(part, ComponentType.LITERAL);
 			}
 		}).collect(toList());
 	}
@@ -428,7 +428,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	 *   <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
 	 * </ul>
 	 * <p>
-	 * You may obtain instances via the {@link #with(String, ComponentType)} factory method.
+	 * You may obtain instances via the {@link #fromValueAndType(String, ComponentType)} factory method.
 	 * <p>
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
@@ -450,7 +450,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 		 * @return a {@link Component} instance
 		 */
 		@NonNull
-		public static Component with(@NonNull String value,
+		public static Component fromValueAndType(@NonNull String value,
 																 @NonNull ComponentType type) {
 			requireNonNull(value);
 			requireNonNull(type);

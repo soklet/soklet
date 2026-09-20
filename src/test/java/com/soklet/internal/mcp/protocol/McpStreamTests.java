@@ -103,7 +103,7 @@ public class McpStreamTests {
 									roots, com.soklet.McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 							.build();
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.build();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 				.withEventPublisherAndNotificationTypes(publisher, Set.of(
@@ -120,8 +120,8 @@ public class McpStreamTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"stream-test", "4.0.0").build())
-				.addTool(tool)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

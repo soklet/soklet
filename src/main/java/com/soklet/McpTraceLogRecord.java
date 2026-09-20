@@ -39,12 +39,12 @@ final class McpTraceLogRecord {
 	static final int MAXIMUM_LOG_MESSAGE_CHARACTERS = 184;
 	private static final int TOKEN_CHARACTERS = 22;
 	private static final int TRACE_ID_CHARACTERS = 32;
-	private final DefaultMcpSecurityControls.@Nullable TraceCorrelationToken
+	private final DefaultMcpSecurityKeyManagers.@Nullable TraceCorrelationToken
 			correlationToken;
 	private final @Nullable String rawValidatedTraceId;
 
 	private McpTraceLogRecord(
-			DefaultMcpSecurityControls.@Nullable TraceCorrelationToken
+			DefaultMcpSecurityKeyManagers.@Nullable TraceCorrelationToken
 					correlationToken,
 			@Nullable String rawValidatedTraceId) {
 		if (correlationToken == null && rawValidatedTraceId == null)
@@ -60,7 +60,7 @@ final class McpTraceLogRecord {
 
 	@NonNull
 	static Optional<@NonNull McpTraceLogRecord> capture(
-			@NonNull Optional<DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
+			@NonNull Optional<DefaultMcpSecurityKeyManagers.@NonNull TraceCorrelationToken>
 					correlationToken,
 			@NonNull Optional<@NonNull String> rawValidatedTraceId) {
 		requireNonNull(correlationToken);
@@ -92,7 +92,7 @@ final class McpTraceLogRecord {
 	}
 
 	private static void validateCorrelationToken(
-			DefaultMcpSecurityControls.@NonNull TraceCorrelationToken token) {
+			DefaultMcpSecurityKeyManagers.@NonNull TraceCorrelationToken token) {
 		requireNonNull(token);
 		McpKeyIdValidator.validate(token.keyId(),
 				"MCP trace-correlation log key ID");

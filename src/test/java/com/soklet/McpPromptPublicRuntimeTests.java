@@ -70,37 +70,34 @@ public class McpPromptPublicRuntimeTests {
 							.build();
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 							.description("Rendered prompt")
-							.addMessage(McpPromptMessage.fromUserContent(
+							.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 									McpTextContent.fromText("subject="
 											+ promptGet.findArgument("subject")
 													.orElseThrow()
 											+ ";tone="
 											+ promptGet.findArgument("tone")
-													.orElse("<absent>"))))
-							.addMessage(McpPromptMessage.fromAssistantContent(
+													.orElse("<absent>"))), McpPromptMessage.fromAssistantContent(
 									McpImageContent.withDataAndMimeType(
 											new byte[] { 1, 2, 3 }, "image/png")
-											.build()))
-							.addMessage(McpPromptMessage.fromAssistantContent(
-									McpEmbeddedResource.withResource(resource).build()))
+											.build()), McpPromptMessage.fromAssistantContent(
+									McpEmbeddedResource.withResource(resource).build())))
 							.build()).toBuilder().metadata(McpJsonObject.builder()
 							.put("renderedBy", "test").build()).build();
 				})
 				.title("Compose catalog prompt")
 				.description("Builds a deterministic catalog prompt")
-				.addArgument(McpPromptArgumentDeclaration.withName("subject")
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject")
 						.title("Subject")
 						.description("Subject to discuss")
 						.required(true)
-						.build())
-				.addArgument(McpPromptArgumentDeclaration.withName("tone")
+						.build(), McpPromptArgumentDeclaration.withName("tone")
 						.description("Optional tone")
-						.build())
+						.build()))
 				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"prompt-public-runtime-test", "4.0.0").build())
-				.addPrompt(prompt)
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					stages.add("admission:"

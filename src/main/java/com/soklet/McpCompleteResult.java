@@ -77,37 +77,37 @@ public final class McpCompleteResult implements McpOperationResult {
 	/**
 	 * Wraps explicit tool output.
 	 *
-	 * @param output tool output
+	 * @param toolOutput tool output
 	 * @return complete tool result
 	 */
 	@NonNull
 	public static McpCompleteResult fromToolOutput(
-			@NonNull McpToolOutput output) {
-		return new McpCompleteResult(output, McpJsonObject.emptyInstance());
+			@NonNull McpToolOutput toolOutput) {
+		return new McpCompleteResult(toolOutput, McpJsonObject.emptyInstance());
 	}
 
 	/**
 	 * Wraps explicit prompt output.
 	 *
-	 * @param output prompt output
+	 * @param promptOutput prompt output
 	 * @return complete prompt result
 	 */
 	@NonNull
 	public static McpCompleteResult fromPromptOutput(
-			@NonNull McpPromptOutput output) {
-		return new McpCompleteResult(output, McpJsonObject.emptyInstance());
+			@NonNull McpPromptOutput promptOutput) {
+		return new McpCompleteResult(promptOutput, McpJsonObject.emptyInstance());
 	}
 
 	/**
 	 * Wraps explicit resource output.
 	 *
-	 * @param output resource output
+	 * @param resourceOutput resource output
 	 * @return complete resource result
 	 */
 	@NonNull
 	public static McpCompleteResult fromResourceOutput(
-			@NonNull McpResourceOutput output) {
-		return new McpCompleteResult(output, McpJsonObject.emptyInstance());
+			@NonNull McpResourceOutput resourceOutput) {
+		return new McpCompleteResult(resourceOutput, McpJsonObject.emptyInstance());
 	}
 
 	/**

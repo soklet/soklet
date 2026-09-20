@@ -370,9 +370,9 @@ public class McpTaskPublicApiTests {
 	}
 
 	@Test
-	public void taskControlIsDiscoverableOnlyAsAnOptionalInvocationFeature() {
+	public void taskCreationContextIsDiscoverableOnlyAsAnOptionalInvocationFeature() {
 		McpTaskOrigin origin = origin();
-		McpTaskControl taskControl = new McpTaskControl() {
+		McpTaskCreationContext taskCreationContext = new McpTaskCreationContext() {
 			@Override
 			public McpRequestContext getRequestContext() {
 				throw new UnsupportedOperationException();
@@ -384,13 +384,17 @@ public class McpTaskPublicApiTests {
 			}
 		};
 		McpInvocationFeatures present = McpInvocationFeatures.fromFeatures(
-				Map.of(McpTaskControl.class, taskControl));
+				Map.of(McpTaskCreationContext.class, taskCreationContext));
 		McpInvocationFeatures absent =
 				McpInvocationFeatures.fromFeatures(Map.of());
 
-		Assertions.assertSame(taskControl,
-				present.getTaskControl().orElseThrow());
-		Assertions.assertTrue(absent.getTaskControl().isEmpty());
+		Assertions.assertSame(taskCreationContext,
+				present.getTaskCreationContext().orElseThrow());
+		Assertions.assertSame(taskCreationContext,
+				present.find(McpTaskCreationContext.class).orElseThrow());
+		Assertions.assertSame(taskCreationContext,
+				present.require(McpTaskCreationContext.class));
+		Assertions.assertTrue(absent.getTaskCreationContext().isEmpty());
 	}
 
 	@Test

@@ -48,7 +48,7 @@ It changes no public descriptor or freeze owner: a test-only registry seam is pa
 The public protection API is reconciled with the exact runtime contract in the
 [request-state security profile](../../release/MCP_REQUEST_STATE_SECURITY_PROFILE.md)
 and [key-rotation runbook](../../release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md).
-Those documents bind `McpProtectionConfig`, `McpProtectionControl`, and
+Those documents bind `McpProtectionConfig`, `McpProtectionKeyringManager`, and
 `McpRequestStateProtectionContext` to the production crypto vectors,
 rejection tests, and node-local publication/race tests without adding an API
 owner or changing a frozen descriptor.
@@ -116,17 +116,41 @@ claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `6434cdf66c56327eabf9071576d795d0c940ab1224ff3dde734c65e911dedfa1`,
-`bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
+`17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
-`be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`.
+`b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
 The provisional MCP Tasks include inventory has SHA-256
-`11a1c54a5dbaac19303fe816c6c9fd5df9d79cf853a96abc3dee9bbd87b1f0d8`.
+`ee87d92db2ee80694af5888955e132886f148c3c6a7b62f2031b166b37493908`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
 It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-20 N0 naming and collection replacements (not a refreeze)
+
+Current-source owners replace `McpProtectionControl`,
+`McpTraceCorrelationControl`, and `McpTaskControl` one-for-one with
+`McpProtectionKeyringManager`, `McpTraceCorrelationKeyManager`, and
+`McpTaskCreationContext`. Their existing Phase 5, Phase 6, and provisional
+ownership remains unchanged. `McpLocalizationCatalogInvalidator` and
+`McpSubscriptionReconciler` already use their approved names.
+
+Endpoint registrations, resource-page descriptors, registration icons,
+prompt arguments, input-request declarations, output collections, and icon
+sizes now use atomic whole-list replacement setters. Null or empty clears
+these optional properties; invalid elements leave the prior value intact.
+Endpoint/page getters name their registration/descriptor values, and tool
+annotations use `toolAnnotations`/`getToolAnnotations`. Resource-content
+annotations retain their existing names. Removed additive methods have no
+compatibility aliases. Existing endpoint/argument uniqueness validation
+remains a final-construction invariant.
+
+This updates active ownership only. The phase/provisional signature ledgers,
+`current-incompatibilities.jsonl`, and ledger-derived metadata-builder inventory
+remain at their reviewed historical snapshots until the explicit MCP-G2
+refreeze; N0 does not make the aggregate API-freeze gate green.
 
 ### 2026-09-19 P3 complete-result sanitizer and builders (not host qualification or a refreeze)
 

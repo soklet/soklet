@@ -85,7 +85,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					handlerContexts.put(TOOL_NAME, request);
 					return McpCompleteResult.fromToolText("tool retry complete");
 				})
-				.addInputRequestDeclarations(form, roots)
+				.inputRequestDeclarations(java.util.List.of(form, roots))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(PROMPT_NAME)
@@ -100,7 +100,7 @@ public class McpInputResponsesPublicRuntimeTests {
 											McpTextContent.fromText(
 													"prompt retry complete"))));
 				})
-				.addInputRequestDeclarations(form, roots)
+				.inputRequestDeclarations(java.util.List.of(form, roots))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "retry resource")
@@ -115,14 +115,14 @@ public class McpInputResponsesPublicRuntimeTests {
 											.build())
 									.build());
 				})
-				.addInputRequestDeclarations(form, roots)
+				.inputRequestDeclarations(java.util.List.of(form, roots))
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -239,8 +239,8 @@ public class McpInputResponsesPublicRuntimeTests {
 		Assertions.assertEquals(McpRequestStateMode.NONE,
 				resource.getRequestStateMode());
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
@@ -306,9 +306,9 @@ public class McpInputResponsesPublicRuntimeTests {
 							.find("ignored-extra").isPresent());
 					return McpCompleteResult.fromToolText("accepted");
 				})
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(java.util.List.of(form))
 				.build();
-		McpEndpoint endpoint = endpointBuilder().addTool(tool).build();
+		McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
 
@@ -359,8 +359,8 @@ public class McpInputResponsesPublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(McpInputRequestDeclaration.fromElicitationUrl(
-						McpInputRequirement.REQUIRED))
+				.inputRequestDeclarations(java.util.List.of(McpInputRequestDeclaration.fromElicitationUrl(
+						McpInputRequirement.REQUIRED)))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName(PROMPT_NAME)
@@ -381,9 +381,9 @@ public class McpInputResponsesPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {

@@ -89,11 +89,11 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 280;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"64c3b490e6bab09ef8e26ee574c21c94ee8b005214a57fc9c7a9c948a6da6aa8";
+			"8f74e0bd871af61a5ddbb41d120f8bf33dc093daaf6bcc5ffc58df5d3583a765";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0";
+			"a90379f987dd745bf305b11668b7da224c88990373f749a2fe6644003ea80226";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"e22c399269061efd7fc48e52559699610adcb555ad43f58d05bfc914a5b97da9";
+			"6aeebc1d4904a9c8d035a03cbd0a719acd3aca9e577f876f671ddf04e617a54c";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -358,9 +358,9 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpStreamTerminationReason",
 				"com.soklet.McpTextCoordinate",
 				"com.soklet.McpTextOwnerType",
-				"com.soklet.McpTraceCorrelationControl",
 				"com.soklet.McpTraceCorrelationFingerprint",
 				"com.soklet.McpTraceCorrelationKey",
+				"com.soklet.McpTraceCorrelationKeyManager",
 				"com.soklet.Simulator");
 		Path phaseSixIncludes = Path.of("api/mcp/phase-6.includes");
 		List<String> actualPhaseSixTypes = includeTypeNames(phaseSixIncludes);
@@ -448,6 +448,7 @@ public class McpPublicApiReflectionContractTests {
 						"timeToLive"),
 				McpEndpoint.Builder.class, Set.of(
 						"serverInfoIncluded", "instructions",
+						"toolRegistrations", "promptRegistrations", "resourceRegistrations",
 						"resourceListCachePolicy", "resourceListHandler",
 						"resourceTemplateListCachePolicy", "subscriptionConfig",
 						"toolRateLimiter", "toolRateLimiterName"),
@@ -471,6 +472,21 @@ public class McpPublicApiReflectionContractTests {
 		expectedNullableBuilderMethods.put(
 				McpSubscriptionAuthorization.Allowed.Builder.class,
 				Set.of("applicationContext"));
+		expectedNullableBuilderMethods.put(McpIcon.Builder.class, Set.of("sizes"));
+		expectedNullableBuilderMethods.put(McpToolOutput.Builder.class, Set.of("content"));
+		expectedNullableBuilderMethods.put(McpPromptOutput.Builder.class, Set.of("messages"));
+		expectedNullableBuilderMethods.put(McpResourcePage.Builder.class,
+				Set.of("resourceDescriptors"));
+		expectedNullableBuilderMethods.put(McpToolRegistration.OperationBuilder.class,
+				Set.of("icons", "inputRequestDeclarations"));
+		expectedNullableBuilderMethods.put(McpToolRegistration.CompleteBuilder.class,
+				Set.of("icons"));
+		expectedNullableBuilderMethods.put(McpPromptRegistration.Builder.class,
+				Set.of("icons", "arguments", "inputRequestDeclarations"));
+		expectedNullableBuilderMethods.put(McpResourceRegistration.ExactBuilder.class,
+				Set.of("icons", "inputRequestDeclarations"));
+		expectedNullableBuilderMethods.put(McpResourceRegistration.TemplateBuilder.class,
+				Set.of("icons", "inputRequestDeclarations"));
 		Set<Class<?>> actualNullableBuilderTypes = publicMcpTypes().stream()
 				.filter(type -> type.getSimpleName().endsWith("Builder"))
 				.filter(type -> Arrays.stream(type.getDeclaredMethods())
@@ -909,31 +925,63 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
+	public void roleSpecificManagersAndTaskCreationContextHaveNoControlAliases()
+			throws Exception {
+		Assertions.assertEquals(McpProtectionKeyringManager.class,
+				McpServer.class.getMethod("getProtectionKeyringManager").getReturnType());
+		Assertions.assertEquals(McpTraceCorrelationKeyManager.class,
+				McpServer.class.getMethod("getTraceCorrelationKeyManager").getReturnType());
+		Method taskCreationContext = McpInvocationFeatures.class.getMethod(
+				"getTaskCreationContext");
+		Assertions.assertTrue(taskCreationContext.isDefault());
+		assertParameterizedType(taskCreationContext.getGenericReturnType(), null,
+				Optional.class, McpTaskCreationContext.class);
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpServer.class.getMethod("getProtectionControl"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpServer.class.getMethod("getTraceCorrelationControl"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpInvocationFeatures.class.getMethod("getTaskControl"));
+		for (String oldType : List.of("McpProtectionControl",
+				"McpTraceCorrelationControl", "McpTaskControl"))
+			Assertions.assertThrows(ClassNotFoundException.class,
+					() -> Class.forName("com.soklet." + oldType));
+	}
+
+	@Test
 	public void extensionPointParameterNamesRetainTheirDocumentedOrder()
 			throws Exception {
 		assertParameterNames(McpToolHandler.class.getMethod("handle",
 				McpRequestContext.class, McpToolArguments.class,
-				McpInvocationFeatures.class), "request", "arguments", "features");
+				McpInvocationFeatures.class), "requestContext", "arguments", "invocationFeatures");
 		assertParameterNames(McpCompleteToolHandler.class.getMethod("handle",
 				McpRequestContext.class, McpToolArguments.class,
-				McpInvocationFeatures.class), "request", "arguments", "features");
+				McpInvocationFeatures.class), "requestContext", "arguments", "invocationFeatures");
 		assertParameterNames(McpPromptHandler.class.getMethod("handle",
 				McpRequestContext.class, McpPromptGetContext.class,
-				McpInvocationFeatures.class), "request", "prompt", "features");
+				McpInvocationFeatures.class), "requestContext", "promptGetContext", "invocationFeatures");
 		assertParameterNames(McpCompletionHandler.class.getMethod("handle",
 				McpRequestContext.class, McpCompletionContext.class,
 				McpInvocationFeatures.class), "requestContext",
 				"completionContext", "invocationFeatures");
 		assertParameterNames(McpResourceReadHandler.class.getMethod("handle",
 				McpRequestContext.class, McpResourceReadContext.class,
-				McpInvocationFeatures.class), "request", "resource", "features");
+				McpInvocationFeatures.class), "requestContext", "resourceReadContext", "invocationFeatures");
 		assertParameterNames(McpResourceListHandler.class.getMethod("handle",
 				McpRequestContext.class, McpResourceListContext.class,
-				McpInvocationFeatures.class), "request", "list", "features");
+				McpInvocationFeatures.class), "requestContext", "resourceListContext", "invocationFeatures");
 		assertParameterNames(McpHandlerInterceptor.class.getMethod(
 				"interceptHandler", McpRequestContext.class,
 				McpInvocationFeatures.class, McpHandlerContinuation.class),
-				"context", "features", "continuation");
+				"requestContext", "invocationFeatures", "continuation");
+		assertParameterNames(McpCompleteResult.class.getMethod("fromToolOutput",
+				McpToolOutput.class), "toolOutput");
+		assertParameterNames(McpCompleteResult.class.getMethod("fromPromptOutput",
+				McpPromptOutput.class), "promptOutput");
+		assertParameterNames(McpCompleteResult.class.getMethod("fromResourceOutput",
+				McpResourceOutput.class), "resourceOutput");
+		assertParameterNames(McpInMemoryTaskManager.class.getMethod("createTask",
+				McpTaskCreationContext.class), "taskCreationContext");
 		assertParameterNames(McpAdmissionController.class.getMethod("admit",
 				McpAdmissionContext.class), "context");
 		assertParameterNames(McpRateLimiter.class.getMethod("acquire",
@@ -978,14 +1026,14 @@ public class McpPublicApiReflectionContractTests {
 				"subscriptionAuthorizationContext", "invocationFeatures");
 		assertParameterNames(McpProgressReporter.class.getMethod("report",
 				McpProgressUpdate.class), "update");
-		assertParameterNames(McpProtectionControl.class.getMethod(
+		assertParameterNames(McpProtectionKeyringManager.class.getMethod(
 				"stageVerificationKey", McpProtectionKey.class),
 				"verificationKey");
-		assertParameterNames(McpProtectionControl.class.getMethod(
+		assertParameterNames(McpProtectionKeyringManager.class.getMethod(
 				"activateStagedKey", String.class), "keyId");
-		assertParameterNames(McpProtectionControl.class.getMethod("rotateActiveKey",
+		assertParameterNames(McpProtectionKeyringManager.class.getMethod("rotateActiveKey",
 				McpProtectionKey.class), "activeKey");
-		assertParameterNames(McpProtectionControl.class.getMethod(
+		assertParameterNames(McpProtectionKeyringManager.class.getMethod(
 				"removeVerificationKey", String.class), "keyId");
 		assertParameterNames(McpRequestStateProtector.class.getMethod("seal",
 				McpRequestStateProtectionContext.class, byte[].class),
@@ -1354,10 +1402,10 @@ public class McpPublicApiReflectionContractTests {
 		assertMrtrAnnotationDefaults(McpResource.class);
 
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.class,
-				"getProtectionControl", McpProtectionControl.class,
+				"getProtectionKeyringManager", McpProtectionKeyringManager.class,
 				MethodShape.ABSTRACT, false));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.class,
-				"getTraceCorrelationControl", McpTraceCorrelationControl.class,
+				"getTraceCorrelationKeyManager", McpTraceCorrelationKeyManager.class,
 				MethodShape.ABSTRACT, false));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"protectionConfig", McpServer.Builder.class,
@@ -1407,24 +1455,12 @@ public class McpPublicApiReflectionContractTests {
 
 		Type toolBuilderVariable =
 				McpToolRegistration.OperationBuilder.class.getTypeParameters()[0];
-		Method toolInputRequestDeclarations = assertInstanceMethod(
-				McpToolRegistration.OperationBuilder.class, "addInputRequestDeclarations",
-				McpToolRegistration.OperationBuilder.class, MethodShape.CONCRETE, true,
-				McpInputRequestDeclaration[].class);
+		Method toolInputRequestDeclarations = assertInputRequestDeclarationsSetter(
+				McpToolRegistration.OperationBuilder.class);
 		assertParameterizedType(
 				toolInputRequestDeclarations.getGenericReturnType(),
 				McpToolRegistration.class, McpToolRegistration.OperationBuilder.class,
 				toolBuilderVariable);
-		assertNoGenericParameterChanges(toolInputRequestDeclarations);
-		Method toolInputRequestDeclaration = assertInstanceMethod(
-				McpToolRegistration.OperationBuilder.class, "addInputRequestDeclaration",
-				McpToolRegistration.OperationBuilder.class, MethodShape.CONCRETE, false,
-				McpInputRequestDeclaration.class);
-		assertParameterizedType(
-				toolInputRequestDeclaration.getGenericReturnType(),
-				McpToolRegistration.class, McpToolRegistration.OperationBuilder.class,
-				toolBuilderVariable);
-		assertNoGenericParameterChanges(toolInputRequestDeclaration);
 		Method toolRequestStateMode = assertInstanceMethod(
 				McpToolRegistration.OperationBuilder.class, "requestStateMode",
 				McpToolRegistration.OperationBuilder.class, MethodShape.CONCRETE, false,
@@ -1438,14 +1474,9 @@ public class McpPublicApiReflectionContractTests {
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpPromptRegistration.class, "getRequestStateMode",
 				McpRequestStateMode.class, MethodShape.CONCRETE, false));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpPromptRegistration.Builder.class, "addInputRequestDeclaration",
-				McpPromptRegistration.Builder.class, MethodShape.CONCRETE, false,
-				McpInputRequestDeclaration.class));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpPromptRegistration.Builder.class, "addInputRequestDeclarations",
-				McpPromptRegistration.Builder.class, MethodShape.CONCRETE, true,
-				McpInputRequestDeclaration[].class));
+		Assertions.assertEquals(McpPromptRegistration.Builder.class,
+				assertInputRequestDeclarationsSetter(McpPromptRegistration.Builder.class)
+						.getGenericReturnType());
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpPromptRegistration.Builder.class, "requestStateMode",
 				McpPromptRegistration.Builder.class, MethodShape.CONCRETE, false,
@@ -1455,39 +1486,37 @@ public class McpPublicApiReflectionContractTests {
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpResourceRegistration.class, "getRequestStateMode",
 				McpRequestStateMode.class, MethodShape.CONCRETE, false));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpResourceRegistration.ExactBuilder.class,
-				"addInputRequestDeclaration",
-				McpResourceRegistration.ExactBuilder.class,
-				MethodShape.CONCRETE, false,
-				McpInputRequestDeclaration.class));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpResourceRegistration.ExactBuilder.class,
-				"addInputRequestDeclarations",
-				McpResourceRegistration.ExactBuilder.class,
-				MethodShape.CONCRETE, true,
-				McpInputRequestDeclaration[].class));
+		Assertions.assertEquals(McpResourceRegistration.ExactBuilder.class,
+				assertInputRequestDeclarationsSetter(McpResourceRegistration.ExactBuilder.class)
+						.getGenericReturnType());
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpResourceRegistration.ExactBuilder.class, "requestStateMode",
 				McpResourceRegistration.ExactBuilder.class,
 				MethodShape.CONCRETE, false, McpRequestStateMode.class));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpResourceRegistration.TemplateBuilder.class,
-				"addInputRequestDeclaration",
-				McpResourceRegistration.TemplateBuilder.class,
-				MethodShape.CONCRETE, false,
-				McpInputRequestDeclaration.class));
-		assertErasedGenericSignature(assertInstanceMethod(
-				McpResourceRegistration.TemplateBuilder.class,
-				"addInputRequestDeclarations",
-				McpResourceRegistration.TemplateBuilder.class,
-				MethodShape.CONCRETE, true,
-				McpInputRequestDeclaration[].class));
+		Assertions.assertEquals(McpResourceRegistration.TemplateBuilder.class,
+				assertInputRequestDeclarationsSetter(McpResourceRegistration.TemplateBuilder.class)
+						.getGenericReturnType());
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpResourceRegistration.TemplateBuilder.class,
 				"requestStateMode",
 				McpResourceRegistration.TemplateBuilder.class,
 				MethodShape.CONCRETE, false, McpRequestStateMode.class));
+	}
+
+	private static Method assertInputRequestDeclarationsSetter(Class<?> owner)
+			throws Exception {
+		Method method = assertInstanceMethod(owner, "inputRequestDeclarations",
+				owner, MethodShape.CONCRETE, false, List.class);
+		assertParameterizedType(method.getGenericParameterTypes()[0], null,
+				List.class, McpInputRequestDeclaration.class);
+		assertParameterNames(method, "inputRequestDeclarations");
+		Assertions.assertTrue(method.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class));
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				owner.getMethod("addInputRequestDeclaration", McpInputRequestDeclaration.class));
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				owner.getMethod("addInputRequestDeclarations", McpInputRequestDeclaration[].class));
+		return method;
 	}
 
 	private static void assertInputRequestDeclarationsGetter(Class<?> owner)

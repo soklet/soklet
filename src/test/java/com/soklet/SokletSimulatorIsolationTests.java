@@ -1558,7 +1558,7 @@ public class SokletSimulatorIsolationTests {
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"isolated-simulator-test", "4.0.0").build())
-				.addTools(tools)
+				.toolRegistrations(tools)
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}
@@ -1803,7 +1803,7 @@ public class SokletSimulatorIsolationTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
-			TransportTerminationSignal signal = context.getTerminationSignal();
+			TransportTerminationSignal signal = context.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {
 				}

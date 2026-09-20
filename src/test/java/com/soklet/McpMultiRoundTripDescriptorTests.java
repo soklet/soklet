@@ -360,13 +360,13 @@ class McpMultiRoundTripDescriptorTests {
 						.handler(resourceHandler());
 
 		assertThrows(NullPointerException.class, () ->
-				toolBuilder.addInputRequestDeclarations(approval, null));
+				toolBuilder.inputRequestDeclarations(java.util.Arrays.asList(approval, null)));
 		assertThrows(NullPointerException.class, () ->
-				promptBuilder.addInputRequestDeclarations(approval, null));
+				promptBuilder.inputRequestDeclarations(java.util.Arrays.asList(approval, null)));
 		assertThrows(NullPointerException.class, () ->
-				exactBuilder.addInputRequestDeclarations(approval, null));
+				exactBuilder.inputRequestDeclarations(java.util.Arrays.asList(approval, null)));
 		assertThrows(NullPointerException.class, () ->
-				templateBuilder.addInputRequestDeclarations(approval, null));
+				templateBuilder.inputRequestDeclarations(java.util.Arrays.asList(approval, null)));
 
 		assertTrue(toolBuilder.build().getInputRequestDeclarations().isEmpty());
 		assertTrue(promptBuilder.build().getInputRequestDeclarations().isEmpty());
@@ -383,37 +383,37 @@ class McpMultiRoundTripDescriptorTests {
 		McpInputRequestDeclaration roots =
 				McpInputRequestDeclaration.fromElicitationUrl(
 						McpInputRequirement.CONDITIONAL);
-		McpInputRequestDeclaration[] mutableDeclarations = {approval};
+		List<McpInputRequestDeclaration> mutableDeclarations =
+				new ArrayList<>(List.of(approval, roots));
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("catalog.delete")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
-				.addInputRequestDeclarations(mutableDeclarations)
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(mutableDeclarations)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
-		mutableDeclarations[0] = roots;
+		mutableDeclarations.set(0, roots);
 
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("confirm")
 				.handler((request, get, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
-				.addInputRequestDeclarations(approval)
+				.inputRequestDeclarations(java.util.List.of(approval))
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpResourceRegistration exact = McpResourceRegistration
 				.withUriAndName(URI.create("catalog://item/42"), "item")
 				.handler(resourceHandler())
-				.addInputRequestDeclarations(approval)
+				.inputRequestDeclarations(java.util.List.of(approval))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
 				.withUriTemplateAndName("catalog://item/{itemId}", "item")
 				.handler(resourceHandler())
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 

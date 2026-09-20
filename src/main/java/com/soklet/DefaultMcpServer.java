@@ -194,7 +194,7 @@ final class DefaultMcpServer implements McpServer {
 	@Nullable
 	private final McpCanonicalLocalizationPlan localizationPlan;
 	@NonNull
-	private final DefaultMcpSecurityControls securityControls;
+	private final DefaultMcpSecurityKeyManagers securityKeyManagers;
 	@NonNull
 	private final McpLocalizationCatalogInvalidator localizationCatalogInvalidator;
 	@NonNull
@@ -318,7 +318,7 @@ final class DefaultMcpServer implements McpServer {
 						endpointRegistry,
 						localizer.getMaximumLocalizableTextCountPerResponse(),
 						catalogAccessPolicyExplicitlyConfigured);
-		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
+		this.securityKeyManagers = new DefaultMcpSecurityKeyManagers(protectionConfig,
 				traceCorrelationKey);
 		this.localizationCatalogInvalidator =
 				new DefaultMcpLocalizationCatalogInvalidator(
@@ -543,7 +543,7 @@ final class DefaultMcpServer implements McpServer {
 					@Override
 					public void validateStructure(@NonNull String protectedState)
 							throws McpRequestStateProtectionException {
-						securityControls.validateRequestStateStructure(
+						securityKeyManagers.validateRequestStateStructure(
 								protectedState);
 					}
 
@@ -552,7 +552,7 @@ final class DefaultMcpServer implements McpServer {
 					public String seal(@NonNull RequestStateProtectionInput input,
 							byte @NonNull [] canonicalPlaintext)
 							throws McpRequestStateProtectionException {
-						return securityControls.sealRequestState(
+						return securityKeyManagers.sealRequestState(
 								protectionContext(input), canonicalPlaintext);
 					}
 
@@ -561,7 +561,7 @@ final class DefaultMcpServer implements McpServer {
 							@NonNull RequestStateProtectionInput input,
 							@NonNull String protectedState)
 							throws McpRequestStateProtectionException {
-						return securityControls.openRequestState(
+						return securityKeyManagers.openRequestState(
 								protectionContext(input), protectedState);
 					}
 				};
@@ -618,23 +618,23 @@ final class DefaultMcpServer implements McpServer {
 	private EndpointPlan toEndpointPlan(@NonNull McpEndpoint endpoint) {
 		requireEndpointCatalogsFitJsonNodeBudget(endpoint,
 				!this.catalogAccessPolicyExplicitlyConfigured);
-		List<ToolPlan> toolPlans = endpoint.getTools().stream()
+		List<ToolPlan> toolPlans = endpoint.getToolRegistrations().stream()
 				.map(tool -> toToolPlan(endpoint, tool))
 				.toList();
-		List<PromptPlan> promptPlans = endpoint.getPrompts().stream()
+		List<PromptPlan> promptPlans = endpoint.getPromptRegistrations().stream()
 				.map(this::toPromptPlan)
 				.toList();
-		List<ResourcePlan> resourcePlans = endpoint.getResources().stream()
+		List<ResourcePlan> resourcePlans = endpoint.getResourceRegistrations().stream()
 				.map(this::toResourcePlan)
 				.toList();
 		List<CompletionPlan> completionPlans = new ArrayList<>();
-		for (McpPromptRegistration prompt : endpoint.getPrompts())
+		for (McpPromptRegistration prompt : endpoint.getPromptRegistrations())
 			if (prompt.getCompletionHandler().isPresent())
 				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.PROMPT,
 					prompt.getName(), prompt.getArguments().stream()
 							.map(McpPromptArgumentDeclaration::getName).toList(),
 					invocation -> invokeCompletion(prompt, invocation)));
-		for (McpResourceRegistration resource : endpoint.getResources())
+		for (McpResourceRegistration resource : endpoint.getResourceRegistrations())
 			if (resource.getAddressType() == McpResourceAddressType.URI_TEMPLATE
 					&& resource.getCompletionHandler().isPresent())
 				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.RESOURCE,
@@ -642,7 +642,7 @@ final class DefaultMcpServer implements McpServer {
 					resourceTemplateVariableNames(resource.getUriTemplate().orElseThrow()),
 					invocation -> invokeCompletion(resource, invocation)));
 		List<McpResourceDescriptor> registeredResourceDescriptors = endpoint
-				.getResources().stream()
+				.getResourceRegistrations().stream()
 				.filter(resource -> resource.getAddressType()
 						== McpResourceAddressType.URI)
 				.map(DefaultMcpServer::toResourceDescriptor)
@@ -686,10 +686,10 @@ final class DefaultMcpServer implements McpServer {
 			return Optional.empty();
 
 		Map<String, McpToolRegistration<?>> toolsByName = new LinkedHashMap<>();
-		for (McpToolRegistration<?> tool : requireNonNull(endpoint).getTools())
+		for (McpToolRegistration<?> tool : requireNonNull(endpoint).getToolRegistrations())
 			toolsByName.put(tool.getName(), tool);
 		Map<String, McpPromptRegistration> promptsByName = new LinkedHashMap<>();
-		for (McpPromptRegistration prompt : endpoint.getPrompts())
+		for (McpPromptRegistration prompt : endpoint.getPromptRegistrations())
 			promptsByName.put(prompt.getName(), prompt);
 		Map<String, McpToolRegistration<?>> tools = Map.copyOf(toolsByName);
 		Map<String, McpPromptRegistration> prompts = Map.copyOf(promptsByName);
@@ -1225,7 +1225,7 @@ final class DefaultMcpServer implements McpServer {
 				this.runtimeBridge.prepareLifecycleStart(lifecycleGeneration);
 			}
 
-			if (this.securityControls.getProtectionMode()
+			if (this.securityKeyManagers.getProtectionMode()
 					== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
 				safelyLogStartupDiagnostic(
 						DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
@@ -1365,14 +1365,14 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
-	public McpProtectionControl getProtectionControl() {
-		return this.securityControls;
+	public McpProtectionKeyringManager getProtectionKeyringManager() {
+		return this.securityKeyManagers;
 	}
 
 	@Override
 	@NonNull
-	public McpTraceCorrelationControl getTraceCorrelationControl() {
-		return this.securityControls;
+	public McpTraceCorrelationKeyManager getTraceCorrelationKeyManager() {
+		return this.securityKeyManagers;
 	}
 
 	@Override
@@ -1484,8 +1484,8 @@ final class DefaultMcpServer implements McpServer {
 		synchronized (this.lifecycleLock) {
 			DiagnosticsState runtimeState = this.runtimeBridge
 					.getDiagnosticsState();
-			DefaultMcpSecurityControls.SecurityDiagnosticsState securityState =
-					this.securityControls.getDiagnosticsState();
+			DefaultMcpSecurityKeyManagers.SecurityDiagnosticsState securityState =
+					this.securityKeyManagers.getDiagnosticsState();
 			McpServerStatus status = mcpServerStatus(runtimeState);
 			return new DefaultMcpServerDiagnostics(status,
 					runtimeState.boundAddress(),
@@ -1655,16 +1655,16 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull ToolInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
-		Optional<DefaultMcpTaskControl<A>> taskControl = taskControl(tool,
+		Optional<DefaultMcpTaskCreationContext<A>> taskCreationContext = taskCreationContext(tool,
 				requestContext, invocation.rawArguments());
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
 				invocation.cancelationToken(), invocation.progressEmitter(),
 				invocation.pastDeadline(), invocation.continuationLocale(),
 				invocation.selectedLocaleSlot(), Optional.empty(),
-				taskControl.map(control -> (McpTaskControl) control),
+				taskCreationContext.map(context -> (McpTaskCreationContext) context),
 				invocation.localizationContext());
-		taskControl.ifPresent(control -> control.pinSelectedLocale(
+		taskCreationContext.ifPresent(context -> context.pinSelectedLocale(
 				invocation.selectedLocaleSlot().get()));
 		McpOperationResult result;
 		try {
@@ -1672,9 +1672,9 @@ final class DefaultMcpServer implements McpServer {
 					invocation.handlerEntryGuard(), invocationFeatures,
 					() -> {
 						try {
-							return taskControl.isPresent()
+							return taskCreationContext.isPresent()
 									? tool.invokeDecoded(requestContext,
-											taskControl.orElseThrow().decodedArguments(),
+											taskCreationContext.orElseThrow().decodedArguments(),
 											invocationFeatures)
 									: tool.invoke(requestContext,
 											invocation.rawArguments(), invocationFeatures);
@@ -1697,12 +1697,12 @@ final class DefaultMcpServer implements McpServer {
 			if (configuredTaskManager == null)
 				throw new IllegalArgumentException(
 						"An MCP task result requires a configured task manager.");
-			if (taskControl.isEmpty())
+			if (taskCreationContext.isEmpty())
 				return ToolInvocationResult.taskCapabilityRequired();
-			DefaultMcpTaskControl<A> control = taskControl.orElseThrow();
+			DefaultMcpTaskCreationContext<A> defaultTaskCreationContext = taskCreationContext.orElseThrow();
 			McpTaskOrigin taskOrigin;
 			try {
-				taskOrigin = control.getTaskOrigin();
+				taskOrigin = defaultTaskCreationContext.getTaskOrigin();
 			} catch (McpInvalidToolArgumentsException
 					| McpTaskOriginBoundaryException exception) {
 				return ToolInvocationResult.invalidInput();
@@ -1807,7 +1807,7 @@ final class DefaultMcpServer implements McpServer {
 			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
 					false);
 
-		boolean currentlyRegistered = requireNonNull(endpoint).getTools().stream()
+		boolean currentlyRegistered = requireNonNull(endpoint).getToolRegistrations().stream()
 				.anyMatch(tool -> tool.getName().equals(origin.toolName()));
 		if (!currentlyRegistered)
 			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
@@ -2361,7 +2361,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Optional<@NonNull String> continuationLocale,
 			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 			@NonNull Optional<@NonNull String> resourceListCursor,
-			@NonNull Optional<@NonNull McpTaskControl> taskControl,
+			@NonNull Optional<@NonNull McpTaskCreationContext> taskCreationContext,
 			@NonNull Optional<@NonNull McpLocalizationContext>
 					localizationContext) {
 		requireNonNull(requestContext);
@@ -2377,8 +2377,8 @@ final class DefaultMcpServer implements McpServer {
 		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
 				new DefaultMcpProgressReporter(token, value,
 						endpointPath, boundedMethod)));
-		requireNonNull(taskControl).ifPresent(value ->
-				features.put(McpTaskControl.class, value));
+		requireNonNull(taskCreationContext).ifPresent(value ->
+				features.put(McpTaskCreationContext.class, value));
 		// Created after queue admission and the handler slot, immediately before
 		// the interceptor, so rejected/dequeued work never calls the provider.
 		requireNonNull(localizationContext).or(() ->
@@ -2390,7 +2390,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private <A> Optional<@NonNull DefaultMcpTaskControl<A>> taskControl(
+	private <A> Optional<@NonNull DefaultMcpTaskCreationContext<A>> taskCreationContext(
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull McpRequestContext requestContext,
 			@NonNull McpJsonObject rawArguments) {
@@ -2398,7 +2398,7 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(requestContext);
 		requireNonNull(rawArguments);
 		if (this.taskManager == null
-				|| !isTaskControlEligible(requestContext))
+				|| !isTaskCreationContextEligible(requestContext))
 			return Optional.empty();
 
 		McpJsonObject.Builder persistedState = McpJsonObject.builder()
@@ -2416,7 +2416,7 @@ final class DefaultMcpServer implements McpServer {
 				tool.isStructuredContentMirroredAsText());
 		persistedState.put("inputRequestDeclarations",
 				taskInputRequestDeclarations(tool.getInputRequestDeclarations()));
-		return Optional.of(new DefaultMcpTaskControl<>(requestContext, tool,
+		return Optional.of(new DefaultMcpTaskCreationContext<>(requestContext, tool,
 				rawArguments, persistedState.build()));
 	}
 
@@ -2462,7 +2462,7 @@ final class DefaultMcpServer implements McpServer {
 		};
 	}
 
-	private boolean isTaskControlEligible(
+	private boolean isTaskCreationContextEligible(
 			@NonNull McpRequestContext requestContext) {
 		requireNonNull(requestContext);
 		return this.taskManager != null
@@ -2478,8 +2478,8 @@ final class DefaultMcpServer implements McpServer {
 	 * serializing an origin for a task-eligible invocation that completes inline.
 	 */
 	@ThreadSafe
-	private static final class DefaultMcpTaskControl<A>
-			implements McpTaskControl {
+	private static final class DefaultMcpTaskCreationContext<A>
+			implements McpTaskCreationContext {
 		@NonNull
 		private final McpRequestContext requestContext;
 		@NonNull
@@ -2498,7 +2498,7 @@ final class DefaultMcpServer implements McpServer {
 		private volatile boolean selectedLocalePinned;
 		private volatile boolean taskOriginEncodingFailed;
 
-		private DefaultMcpTaskControl(
+		private DefaultMcpTaskCreationContext(
 				@NonNull McpRequestContext requestContext,
 				@NonNull McpToolRegistration<A> tool,
 				@NonNull McpJsonObject rawArguments,
@@ -2828,19 +2828,19 @@ final class DefaultMcpServer implements McpServer {
 		if (validateToolAndPromptCatalogs) {
 			// Apps visibility and fallback metadata depend on the current request;
 			// the runtime bounds that exact projection, not the configured superset.
-			boolean appsProjection = endpoint.getTools().stream().anyMatch(tool ->
+			boolean appsProjection = endpoint.getToolRegistrations().stream().anyMatch(tool ->
 					McpAppMetadataSupport.effectiveToolMetadata(tool.getMetadata(),
 							tool.getAppToolMetadata().orElse(null)).isPresent());
 			if (!appsProjection) {
 				JsonNodeBudget toolBudget = new JsonNodeBudget(
 						"MCP tool catalog", 8L);
-				for (McpToolRegistration<?> tool : endpoint.getTools())
+				for (McpToolRegistration<?> tool : endpoint.getToolRegistrations())
 					addToolCatalogNodes(toolBudget, tool);
 			}
 
 			JsonNodeBudget promptBudget = new JsonNodeBudget(
 					"MCP prompt catalog", 8L);
-			for (McpPromptRegistration prompt : endpoint.getPrompts())
+			for (McpPromptRegistration prompt : endpoint.getPromptRegistrations())
 				addPromptCatalogNodes(promptBudget, prompt);
 		}
 
@@ -2848,7 +2848,7 @@ final class DefaultMcpServer implements McpServer {
 				"MCP resource-template catalog", 8L);
 		JsonNodeBudget exactResourceBudget = endpoint.getResourceListHandler()
 				.isEmpty() ? new JsonNodeBudget("MCP resource catalog", 8L) : null;
-		for (McpResourceRegistration resource : endpoint.getResources()) {
+		for (McpResourceRegistration resource : endpoint.getResourceRegistrations()) {
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				if (exactResourceBudget != null)
 					addResourceCatalogNodes(exactResourceBudget, resource);
@@ -2869,7 +2869,7 @@ final class DefaultMcpServer implements McpServer {
 		budget.add(tool.getTitle().isPresent() ? 1L : 0L);
 		budget.add(tool.getDescription().isPresent() ? 1L : 0L);
 		addIconsNodes(budget, tool.getIcons());
-		tool.getAnnotations().ifPresent(annotations ->
+		tool.getToolAnnotations().ifPresent(annotations ->
 				addToolAnnotationNodes(budget, annotations));
 		addMetadataNodes(budget, McpAppMetadataSupport.toolMetadata(
 				tool.getMetadata(), tool.getAppToolMetadata().orElse(null), true));
@@ -2944,7 +2944,7 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(page);
 		JsonNodeBudget budget = new JsonNodeBudget(
 				"MCP resource-list result", 8L);
-		for (McpResourceDescriptor resource : page.getResources())
+		for (McpResourceDescriptor resource : page.getResourceDescriptors())
 			addResourceDescriptorNodes(budget, resource);
 		budget.add(page.getNextCursor().isPresent() ? 1L : 0L);
 		addMetadataNodes(budget, page.getMetadata());
@@ -3120,7 +3120,7 @@ final class DefaultMcpServer implements McpServer {
 					.map(DefaultMcpServer::iconToJson)
 					.toList()));
 		}
-		tool.getAnnotations().ifPresent(value ->
+		tool.getToolAnnotations().ifPresent(value ->
 				fields.put("annotations", toolAnnotationsToJson(value)));
 		return McpJsonObject.fromMembers(fields);
 	}
@@ -3297,10 +3297,10 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private static McpJsonObject resourcePageFields(@NonNull McpResourcePage page) {
 		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
-				page.getResources().size(),
+				page.getResourceDescriptors().size(),
 				3, 2, "MCP resource-list page");
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("resources", McpJsonArray.fromElements(page.getResources().stream()
+		fields.put("resources", McpJsonArray.fromElements(page.getResourceDescriptors().stream()
 				.map(DefaultMcpServer::resourceDescriptorToJson)
 				.toList()));
 		page.getNextCursor().ifPresent(value ->
@@ -3532,7 +3532,7 @@ final class DefaultMcpServer implements McpServer {
 	private RequestObservation didStartRequestObservation(
 			@NonNull RequestObservationInput input) {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
-				requireNonNull(input), this.securityControls,
+				requireNonNull(input), this.securityKeyManagers,
 				this.instanceProvider);
 		String metricEndpointPath = input.endpoint().getPath();
 		String metricJsonRpcMethod = metricMethod(input.jsonRpcMethod());
@@ -4181,7 +4181,7 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	private final List<@NonNull String> acceptLanguageValues;
 	@NonNull
 	private final Optional<
-			DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
+			DefaultMcpSecurityKeyManagers.@NonNull TraceCorrelationToken>
 			traceCorrelationToken;
 	@NonNull
 	private final InstanceProvider instanceProvider;
@@ -4243,26 +4243,26 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	}
 
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input,
-			@NonNull DefaultMcpSecurityControls securityControls) {
-		this(input, Optional.of(requireNonNull(securityControls)));
+			@NonNull DefaultMcpSecurityKeyManagers securityKeyManagers) {
+		this(input, Optional.of(requireNonNull(securityKeyManagers)));
 	}
 
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input,
-			@NonNull DefaultMcpSecurityControls securityControls,
+			@NonNull DefaultMcpSecurityKeyManagers securityKeyManagers,
 			@NonNull InstanceProvider instanceProvider) {
-		this(input, Optional.of(requireNonNull(securityControls)),
+		this(input, Optional.of(requireNonNull(securityKeyManagers)),
 				requireNonNull(instanceProvider));
 	}
 
 	private DefaultMcpRequestContext(@NonNull RequestObservationInput input,
-			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
-					securityControls) {
-		this(input, securityControls, InstanceProvider.defaultInstance());
+			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
+					securityKeyManagers) {
+		this(input, securityKeyManagers, InstanceProvider.defaultInstance());
 	}
 
 	private DefaultMcpRequestContext(@NonNull RequestObservationInput input,
-			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
-					securityControls,
+			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
+					securityKeyManagers,
 			@NonNull InstanceProvider instanceProvider) {
 		this(requireNonNull(input).request(), input.endpoint(),
 				input.endpointPathParameters(), input.jsonRpcMethod(),
@@ -4271,7 +4271,7 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				input.requestMetadata(), input.inputResponses(),
 				input.frameworkRequestState(), input.applicationRequestState(),
 				input.admissionIdentity(), input.acceptLanguageValues(),
-				requireNonNull(securityControls), requireNonNull(instanceProvider));
+				requireNonNull(securityKeyManagers), requireNonNull(instanceProvider));
 	}
 
 	private DefaultMcpRequestContext(@NonNull Request request,
@@ -4288,13 +4288,13 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 			@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
 			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
-			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
-					securityControls) {
+			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
+					securityKeyManagers) {
 		this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
 				clientCapabilitiesJson, requestMetadata, inputResponses,
 				frameworkRequestState, applicationRequestState,
-				admissionIdentity, acceptLanguageValues(request), securityControls,
+				admissionIdentity, acceptLanguageValues(request), securityKeyManagers,
 				InstanceProvider.defaultInstance());
 	}
 
@@ -4314,13 +4314,13 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull List<@NonNull String> acceptLanguageValues,
-			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
-					securityControls) {
+			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
+					securityKeyManagers) {
 		this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
 				clientCapabilitiesJson, requestMetadata, inputResponses,
 				frameworkRequestState, applicationRequestState, admissionIdentity,
-				acceptLanguageValues, securityControls,
+				acceptLanguageValues, securityKeyManagers,
 				InstanceProvider.defaultInstance());
 	}
 
@@ -4339,8 +4339,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull List<@NonNull String> acceptLanguageValues,
-			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
-					securityControls,
+			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
+					securityKeyManagers,
 			@NonNull InstanceProvider instanceProvider) {
 		this.request = requireNonNull(request);
 		this.endpoint = requireNonNull(endpoint);
@@ -4366,9 +4366,9 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				clientCapabilitiesJson);
 		this.requestPropagation = McpRequestPropagation.fromMetadata(
 				requestMetadata);
-		this.traceCorrelationToken = requireNonNull(securityControls)
-				.flatMap(controls -> this.requestPropagation.traceContext()
-						.flatMap(controls::deriveTraceCorrelationToken));
+		this.traceCorrelationToken = requireNonNull(securityKeyManagers)
+				.flatMap(keyManagers -> this.requestPropagation.traceContext()
+						.flatMap(keyManagers::deriveTraceCorrelationToken));
 		this.instanceProvider = requireNonNull(instanceProvider);
 	}
 
@@ -4431,7 +4431,7 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 		return this.requestPropagation.traceContext();
 	}
 	@NonNull
-	Optional<DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
+	Optional<DefaultMcpSecurityKeyManagers.@NonNull TraceCorrelationToken>
 	traceCorrelationToken() {
 		return this.traceCorrelationToken;
 	}

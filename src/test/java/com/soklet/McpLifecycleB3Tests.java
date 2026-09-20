@@ -2273,7 +2273,7 @@ class McpLifecycleB3Tests {
 	private static McpEndpoint endpoint(@NonNull String path,
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
 		return McpEndpoint.withPath(path, implementation("b3-lifecycle"))
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

@@ -181,13 +181,13 @@ class McpAppToolAttachmentTests {
 		for (String mime : List.of("text/html;profile=mcp-app",
 				" TEXT / HTML ; PROFILE = \"mcp-app\" ")) {
 			McpResourceRegistration resource = resource(mime);
-			McpEndpoint endpoint = endpointBuilder().addTool(tool).addResource(resource)
+			McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource))
 					.resourceListHandler((request, list, features) -> {
 						throw new AssertionError("Must not invoke the resource-list handler.");
 					}).build();
-			assertSame(tool, endpoint.getTools().get(0));
-			assertSame(resource, endpoint.getResources().get(0));
-			assertDoesNotThrow(() -> endpointBuilder().addResource(resource).addTool(tool).build());
+			assertSame(tool, endpoint.getToolRegistrations().get(0));
+			assertSame(resource, endpoint.getResourceRegistrations().get(0));
+			assertDoesNotThrow(() -> endpointBuilder().resourceRegistrations(java.util.List.of(resource)).toolRegistrations(java.util.List.of(tool)).build());
 		}
 	}
 
@@ -200,22 +200,22 @@ class McpAppToolAttachmentTests {
 				"text/html;profile=mcp-app;PROFILE=mcp-app",
 				"private-invalid-mime", "text/html;profile=\"private-unclosed")) {
 			IllegalStateException failure = assertThrows(IllegalStateException.class,
-					() -> endpointBuilder().addTool(tool).addResource(resource(mime)).build());
+					() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource(mime))).build());
 			assertFalse(failure.getMessage().contains("private"));
 			assertTrue(failure.getCause() == null);
 		}
-		assertThrows(IllegalStateException.class, () -> endpointBuilder().addTool(tool)
-				.addResource(McpResourceRegistration.withUriAndName(UI_URI, "view")
-						.handler(resourceHandler()).build()).build());
+		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI, "view")
+						.handler(resourceHandler()).build())).build());
 	}
 
 	@Test
 	void missingAssociationCanBeRecoveredByAddingAnEligibleRegistration() {
-		McpEndpoint.Builder builder = endpointBuilder().addTool(operationBuilder()
-				.appToolMetadata(appMetadata()).build());
+		McpEndpoint.Builder builder = endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder()
+				.appToolMetadata(appMetadata()).build()));
 		IllegalStateException failure = assertThrows(IllegalStateException.class, builder::build);
 		assertFalse(failure.getMessage().contains(UI_URI.toString()));
-		assertDoesNotThrow(() -> builder.addResource(resource("text/html;profile=mcp-app")).build());
+		assertDoesNotThrow(() -> builder.resourceRegistrations(java.util.List.of(resource("text/html;profile=mcp-app"))).build());
 	}
 
 	@Test
@@ -226,32 +226,32 @@ class McpAppToolAttachmentTests {
 				.withUriTemplateAndName("ui://private-catalog/{view}", "view")
 				.handler(resourceHandler()).mimeType("text/html;profile=mcp-app").build();
 		assertThrows(IllegalStateException.class,
-				() -> endpointBuilder().addTool(tool).addResource(template).build());
+				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(template)).build());
 		assertThrows(IllegalStateException.class,
-				() -> endpointBuilder().addTool(tool)
+				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
 						.resourceListHandler((request, list, features) -> {
 							throw new AssertionError("Must not ask custom listing to establish eligibility.");
 						}).build());
 		assertThrows(IllegalStateException.class,
-				() -> endpointBuilder().addTool(tool).addResource(template)
+				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(template))
 						.resourceListHandler((request, list, features) -> McpResourcePage.builder()
-								.addResource(McpResourceDescriptor.withUriAndName(UI_URI, "view")
-										.mimeType("text/html;profile=mcp-app").build()).build()).build());
+								.resourceDescriptors(java.util.List.of(McpResourceDescriptor.withUriAndName(UI_URI, "view")
+										.mimeType("text/html;profile=mcp-app").build())).build()).build());
 	}
 
 	@Test
 	void anotherEndpointOrSimilarUriDoesNotEstablishEligibility() {
 		McpEndpoint separate = endpointBuilder()
-				.addResource(resource("text/html;profile=mcp-app")).build();
-		assertEquals(1, separate.getResources().size());
+				.resourceRegistrations(java.util.List.of(resource("text/html;profile=mcp-app"))).build();
+		assertEquals(1, separate.getResourceRegistrations().size());
 		McpToolRegistration<McpJsonObject> tool = operationBuilder()
 				.appToolMetadata(appMetadata()).build();
 		assertThrows(IllegalStateException.class, () -> McpEndpoint
-				.withPath("/other", separate.getServerInfo()).addTool(tool).build());
-		assertThrows(IllegalStateException.class, () -> endpointBuilder().addTool(tool)
-				.addResource(McpResourceRegistration.withUriAndName(
+				.withPath("/other", separate.getServerInfo()).toolRegistrations(java.util.List.of(tool)).build());
+		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("ui://private-catalog/dashboard-other"), "view")
-						.handler(resourceHandler()).mimeType("text/html;profile=mcp-app").build())
+						.handler(resourceHandler()).mimeType("text/html;profile=mcp-app").build()))
 				.build());
 	}
 
@@ -262,11 +262,11 @@ class McpAppToolAttachmentTests {
 		McpToolRegistration<McpJsonObject> tool = operationBuilder().metadata(raw).build();
 		assertTrue(tool.getAppToolMetadata().isEmpty());
 		assertSame(raw, tool.getMetadata());
-		assertThrows(IllegalStateException.class, () -> endpointBuilder().addTool(tool).build());
+		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).build());
 		assertThrows(IllegalStateException.class,
-				() -> endpointBuilder().addTool(tool).addResource(resource("text/html")).build());
-		assertDoesNotThrow(() -> endpointBuilder().addTool(tool)
-				.addResource(resource("text/html;profile=mcp-app")).build());
+				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource("text/html"))).build());
+		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
+				.resourceRegistrations(java.util.List.of(resource("text/html;profile=mcp-app"))).build());
 	}
 
 	@Test
@@ -275,21 +275,21 @@ class McpAppToolAttachmentTests {
 				Set.of(McpAppToolMetadata.Visibility.APP), Set.<McpAppToolMetadata.Visibility>of())) {
 			McpToolRegistration<McpJsonObject> tool = operationBuilder().appToolMetadata(
 					McpAppToolMetadata.builder().visibility(visibility).build()).build();
-			assertDoesNotThrow(() -> endpointBuilder().addTool(tool).build());
+			assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).build());
 			assertEquals(visibility, tool.getAppToolMetadata().orElseThrow().getVisibility());
 		}
-		assertDoesNotThrow(() -> endpointBuilder().addTool(operationBuilder().metadata(
+		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().metadata(
 				ui(McpJsonObject.builder().put("visibility", McpJsonArray.emptyInstance()).build()))
-				.build()).build());
+				.build())).build());
 	}
 
 	@Test
 	void ordinaryResourcesRetainExistingArbitraryNonblankMimeBehavior() {
-		assertDoesNotThrow(() -> endpointBuilder().addTool(operationBuilder().build())
-				.addResource(resource("private arbitrary legacy mime")).build());
-		assertDoesNotThrow(() -> endpointBuilder().addTool(operationBuilder().appToolMetadata(
-				McpAppToolMetadata.builder().build()).build())
-				.addResource(resource("private arbitrary legacy mime")).build());
+		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().build()))
+				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
+		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().appToolMetadata(
+				McpAppToolMetadata.builder().build()).build()))
+				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
 	}
 
 	private static McpAppToolMetadata appMetadata() {

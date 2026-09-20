@@ -4,6 +4,11 @@
 
 ### Breaking Changes
 
+- **Naming and collection APIs:** completed the scoped 4.0 renames for streaming
+  bodies, transport attachment signals, metric route properties, servlet response
+  factories, and MCP role types. MCP endpoint/registration/output/page builders
+  now use whole-list replacement properties without additive aliases. See
+  [Naming and collection replacements](MIGRATING_TO_4_0.md#naming-and-collection-replacements).
 - **Response compression:** replaced `ResponseGzipPolicy` and
   `HttpServer.Builder.responseGzipPolicy(...)` with `ResponseCompressor` and
   the sole `responseCompressor(...)` setting, without deprecated aliases.
@@ -23,7 +28,7 @@
 - **Metric snapshot keys:** thirteen public HTTP/SSE/transport
   `MetricsCollector` key records are now final classes with getter accessors;
   for example, `method()` becomes `getHttpMethod()` and `route()` becomes
-  `getRoute()`. Record deconstruction no longer applies. See
+  `getResourcePathDeclaration()`. Record deconstruction no longer applies. See
   [Metric snapshot keys](MIGRATING_TO_4_0.md#metric-snapshot-keys).
 - **Servlet integrations:** both javax and Jakarta adapters move to 2.0.0
   and require Soklet 4.0.0. The former 3.x compatibility baseline is removed;

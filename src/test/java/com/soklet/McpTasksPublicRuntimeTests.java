@@ -84,7 +84,7 @@ public class McpTasksPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger localizationProviderInvocations = new AtomicInteger();
-		AtomicReference<McpTaskControl> observedTaskControl =
+		AtomicReference<McpTaskCreationContext> observedTaskCreationContext =
 				new AtomicReference<>();
 
 		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
@@ -98,12 +98,12 @@ public class McpTasksPublicRuntimeTests {
 					Assertions.assertEquals(Locale.ENGLISH,
 							features.require(McpLocalizationContext.class)
 									.getLocale());
-					McpTaskControl taskControl = features.getTaskControl()
+					McpTaskCreationContext taskCreationContext = features.getTaskCreationContext()
 							.orElseThrow();
-					observedTaskControl.set(taskControl);
-					McpTaskOrigin taskOrigin = taskControl.getTaskOrigin();
+					observedTaskCreationContext.set(taskCreationContext);
+					McpTaskOrigin taskOrigin = taskCreationContext.getTaskOrigin();
 					Assertions.assertSame(taskOrigin,
-							taskControl.getTaskOrigin(),
+							taskCreationContext.getTaskOrigin(),
 							"The locale-pinned origin must be materialized once.");
 					taskManager.taskOrigin = Optional.of(taskOrigin);
 					taskManager.putTask(task("typed-required-task", taskOrigin,
@@ -111,14 +111,14 @@ public class McpTasksPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<DeferredResult>fromTaskId("typed-required-task");
 				})
-				.addInputRequestDeclaration(REQUIRED_ELICITATION_URL_DECLARATION)
+				.inputRequestDeclarations(java.util.List.of(REQUIRED_ELICITATION_URL_DECLARATION))
 				.structuredContentMirroredAsText(false)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-required-preflight-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpLocalizer localizer = McpLocalizer
 				.withFallbackLocale(Locale.ENGLISH, request -> {
@@ -204,7 +204,7 @@ public class McpTasksPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(1, localizationProviderInvocations.get());
 			Assertions.assertEquals(1, taskManager.findInvocations.get());
-			Assertions.assertNotNull(observedTaskControl.get());
+			Assertions.assertNotNull(observedTaskCreationContext.get());
 
 			McpJsonObject persistedState = taskManager.taskOrigin.orElseThrow()
 					.getPersistedState();
@@ -238,7 +238,7 @@ public class McpTasksPublicRuntimeTests {
 				.withName(toolName)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
-					McpTaskOrigin invocationOrigin = features.getTaskControl()
+					McpTaskOrigin invocationOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					McpTaskOrigin restoredOrigin = McpTaskOrigin.fromPersistedString(
 							invocationOrigin.toPersistedString());
@@ -253,7 +253,7 @@ public class McpTasksPublicRuntimeTests {
 				McpImplementation.withNameAndVersion(
 						"tasks-large-origin-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = server(endpoint, Optional.of(taskManager),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
@@ -302,7 +302,7 @@ public class McpTasksPublicRuntimeTests {
 				McpImplementation.withNameAndVersion(
 						"tasks-manager-required-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 
 		IllegalStateException exception = Assertions.assertThrows(
@@ -690,7 +690,7 @@ public class McpTasksPublicRuntimeTests {
 				McpImplementation.withNameAndVersion(
 						"tasks-typed-interceptor-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) ->
 				McpTaskCreatedResult.<String>fromTaskId("typed-task");
@@ -729,7 +729,7 @@ public class McpTasksPublicRuntimeTests {
 				.withName("tasks.sanitized")
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
-					McpTaskOrigin taskOrigin = features.getTaskControl()
+					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					taskManager.taskOrigin = Optional.of(taskOrigin);
 					McpTask completed = McpTask.withTaskId("sanitized-task",
@@ -755,7 +755,7 @@ public class McpTasksPublicRuntimeTests {
 				McpImplementation.withNameAndVersion(
 						"tasks-sanitizer-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments,
 				completeResult) -> {
@@ -833,7 +833,7 @@ public class McpTasksPublicRuntimeTests {
 					boolean completeImmediately = rawArguments.getMembers()
 							.get("completeImmediately")
 							instanceof McpJsonBoolean bool && bool.getValue();
-					McpTaskOrigin taskOrigin = features.getTaskControl()
+					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					taskManager.taskOrigin = Optional.of(taskOrigin);
 					taskManager.putTask(task(taskId, taskOrigin,
@@ -842,14 +842,14 @@ public class McpTasksPublicRuntimeTests {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId);
 				})
-				.addInputRequestDeclaration(ELICITATION_URL_DECLARATION)
+				.inputRequestDeclarations(java.util.List.of(ELICITATION_URL_DECLARATION))
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-public-runtime-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

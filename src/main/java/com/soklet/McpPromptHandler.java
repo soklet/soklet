@@ -45,14 +45,14 @@ public interface McpPromptHandler {
 	/**
 	 * Handles one structurally validated prompt invocation.
 	 *
-	 * @param request request metadata
-	 * @param prompt supplied prompt arguments
-	 * @param features invocation-scoped optional features
+	 * @param requestContext request metadata
+	 * @param promptGetContext supplied prompt arguments
+	 * @param invocationFeatures invocation-scoped optional features
 	 * @return recognized non-null operation result
 	 * @throws Exception if application handling fails
 	 */
 	@NonNull
-	McpOperationResult handle(@NonNull McpRequestContext request,
-			@NonNull McpPromptGetContext prompt,
-			@NonNull McpInvocationFeatures features) throws Exception;
+	McpOperationResult handle(@NonNull McpRequestContext requestContext,
+			@NonNull McpPromptGetContext promptGetContext,
+			@NonNull McpInvocationFeatures invocationFeatures) throws Exception;
 }

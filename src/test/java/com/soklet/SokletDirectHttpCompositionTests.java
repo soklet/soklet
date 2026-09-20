@@ -465,7 +465,7 @@ final class SokletDirectHttpCompositionTests {
 			this.attachedConfiguration.set(context.getSokletConfig());
 			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			TransportRuntime runtime = new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {
@@ -583,7 +583,7 @@ final class SokletDirectHttpCompositionTests {
 			this.attachCalls.incrementAndGet();
 			this.attachedConfiguration.set(context.getSokletConfig());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			HttpServer.RequestHandler upstreamHandler =
 					context.getAdmissionFencedRequestHandler();
 			HttpServer.RequestHandler wrappedHandler = (request, consumer) -> {
@@ -820,8 +820,8 @@ final class SokletDirectHttpCompositionTests {
 			this.attachCalls.incrementAndGet();
 			this.attachedConfiguration.set(context.getSokletConfig());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.getTerminationSignal());
-			TransportTerminationSignal rootSignal = context.getTerminationSignal();
+			this.terminationSignal.set(context.getTransportTerminationSignal());
+			TransportTerminationSignal rootSignal = context.getTransportTerminationSignal();
 			HttpServer.RequestHandler upstreamHandler =
 					context.getAdmissionFencedRequestHandler();
 			HttpServer.RequestHandler wrappedHandler = (request, consumer) -> {

@@ -347,7 +347,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				.handler(handler)
 				.build();
 		return McpEndpoint.withPath(TOOL_PATH, serverInformation())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 
@@ -379,7 +379,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 										.build()))
 				.build();
 		return McpEndpoint.withPath(SUBSCRIPTION_PATH, serverInformation())
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 	}

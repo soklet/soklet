@@ -333,8 +333,7 @@ public class McpSubscriptionCatalogOfferBoundaryTests {
 							"catalog-offer-boundary-test", "4.0.0")
 							.build())
 				.serverInfoIncluded(false)
-				.addTool(tool(STABLE_TOOL))
-				.addTool(tool(CONDITIONAL_TOOL))
+				.toolRegistrations(java.util.List.of(tool(STABLE_TOOL), tool(CONDITIONAL_TOOL)))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpCatalogAccessPolicy accessPolicy =

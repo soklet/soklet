@@ -240,7 +240,7 @@ public class McpProgressPublicRuntimeTests {
 							return McpCompleteResult.fromToolText(
 									"conditional complete");
 						})
-						.addInputRequestDeclarations(roots)
+						.inputRequestDeclarations(java.util.List.of(roots))
 						.build();
 		McpToolRegistration<McpJsonObject> input =
 				McpToolRegistration.withName("progress.conditional-input")
@@ -253,7 +253,7 @@ public class McpProgressPublicRuntimeTests {
 													McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()))
 									.build();
 						})
-						.addInputRequestDeclarations(roots)
+						.inputRequestDeclarations(java.util.List.of(roots))
 						.build();
 		McpServer server = server(List.of(complete, input));
 		Soklet soklet = managedSoklet(server);
@@ -768,7 +768,7 @@ public class McpProgressPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"progress-public-runtime-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTools(tools)
+				.toolRegistrations(tools)
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)

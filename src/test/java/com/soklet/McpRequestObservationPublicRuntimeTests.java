@@ -122,7 +122,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("tool-observation-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -184,7 +184,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("trace-retention-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
@@ -207,17 +207,17 @@ public class McpRequestObservationPublicRuntimeTests {
 			DefaultMcpRequestContext firstContext =
 					observer.startedContexts.get(0);
 			Assertions.assertSame(firstContext, handlerContexts.get(0));
-			DefaultMcpSecurityControls.TraceCorrelationToken firstToken =
+			DefaultMcpSecurityKeyManagers.TraceCorrelationToken firstToken =
 					firstContext.traceCorrelationToken().orElseThrow();
 			Assertions.assertEquals("trace-first", firstToken.keyId());
 			Assertions.assertEquals(FIRST_TRACE_TOKEN, firstToken.token());
 			Assertions.assertSame(firstToken, handlerContexts.get(0)
 					.traceCorrelationToken().orElseThrow());
 
-			server.getTraceCorrelationControl().rotateActiveKey(
+			server.getTraceCorrelationKeyManager().rotateActiveKey(
 					traceKey("trace-second", 32));
 			Assertions.assertEquals(Optional.of("trace-second"),
-					server.getTraceCorrelationControl().getActiveKeyId());
+					server.getTraceCorrelationKeyManager().getActiveKeyId());
 			Assertions.assertSame(firstToken,
 					firstContext.traceCorrelationToken().orElseThrow());
 			releaseFirstHandler.countDown();
@@ -247,7 +247,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertSame(secondContext, handlerContexts.get(1));
 			Assertions.assertSame(secondContext,
 					observer.finishedContexts.get(1));
-			DefaultMcpSecurityControls.TraceCorrelationToken secondToken =
+			DefaultMcpSecurityKeyManagers.TraceCorrelationToken secondToken =
 					secondContext.traceCorrelationToken().orElseThrow();
 			Assertions.assertEquals("trace-second", secondToken.keyId());
 			Assertions.assertEquals(SECOND_TRACE_TOKEN, secondToken.token());
@@ -282,7 +282,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("trace-source-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
@@ -322,7 +322,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			DefaultMcpRequestContext valid = observer.startedContexts.get(0);
 			Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c",
 					valid.getTraceContext().orElseThrow().getTraceId());
-			DefaultMcpSecurityControls.TraceCorrelationToken validToken =
+			DefaultMcpSecurityKeyManagers.TraceCorrelationToken validToken =
 					valid.traceCorrelationToken().orElseThrow();
 			Assertions.assertEquals("trace-first", validToken.keyId());
 			Assertions.assertEquals(FIRST_TRACE_TOKEN, validToken.token());
@@ -353,7 +353,7 @@ public class McpRequestObservationPublicRuntimeTests {
 						McpCompleteResult.fromToolText("raw-id-independent"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("raw-id-independence-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 
 		TraceRecordingLifecycleObserver defaultObserver =
@@ -422,7 +422,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					TOOL_NAME, MCP_TRACEPARENT), "tools/call",
 					Optional.of(TOOL_NAME)), "trace-enabled");
 			enabledObserver.awaitAllFinished();
-			DefaultMcpSecurityControls.TraceCorrelationToken token =
+			DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
 					enabledObserver.startedContexts.get(0)
 							.traceCorrelationToken().orElseThrow();
 			Assertions.assertEquals("trace-first", token.keyId());
@@ -458,7 +458,7 @@ public class McpRequestObservationPublicRuntimeTests {
 						McpCompleteResult.fromToolText("metric-cardinality-checked"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("metric-cardinality-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		byte[] keyMaterial = TRACE_CARDINALITY_KEY_MATERIAL.getBytes(
 				StandardCharsets.UTF_8);
@@ -576,7 +576,7 @@ public class McpRequestObservationPublicRuntimeTests {
 								.toTracestateHeaderValue().orElseThrow());
 				Assertions.assertEquals(Set.of(httpBaggage.get(index)),
 						context.getRequest().getHeaders().get("baggage"));
-				DefaultMcpSecurityControls.TraceCorrelationToken token =
+				DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
 						context.traceCorrelationToken().orElseThrow();
 				Assertions.assertEquals(TRACE_CARDINALITY_KEY_ID,
 						token.keyId());
@@ -801,7 +801,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("log-level-observation-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -844,7 +844,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = endpointBuilder("handler-failure-observation-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);

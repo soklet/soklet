@@ -223,7 +223,7 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 						"subscription-authorization-terminal-test", "4.0.0")
 						.build())
 				.subscriptionConfig(subscriptions)
-				.addResource(McpResourceRegistration
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI,
 								"Subscription authorization terminal resource")
 						.handler((request, read, features) ->
@@ -233,7 +233,7 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 														.withUriAndText(read.getUri(), "test")
 														.build())
 												.build()))
-						.build());
+						.build()));
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(endpoint.build())))

@@ -62,15 +62,15 @@ public interface McpHandlerInterceptor {
 	/**
 	 * Intercepts one application-owned MCP handler invocation.
 	 *
-	 * @param context immutable request context
-	 * @param features invocation features shared with the downstream handler
+	 * @param requestContext immutable request context
+	 * @param invocationFeatures invocation features shared with the downstream handler
 	 * @param continuation synchronous one-shot downstream continuation
 	 * @return recognized, non-null, method-compatible handler result
 	 * @throws Exception if application interception fails
 	 */
 	@NonNull
-	McpOperationResult interceptHandler(@NonNull McpRequestContext context,
-			@NonNull McpInvocationFeatures features,
+	McpOperationResult interceptHandler(@NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures invocationFeatures,
 			@NonNull McpHandlerContinuation continuation) throws Exception;
 
 	/**
@@ -102,11 +102,11 @@ final class DefaultMcpHandlerInterceptor implements McpHandlerInterceptor {
 	@Override
 	@NonNull
 	public McpOperationResult interceptHandler(
-			@NonNull McpRequestContext context,
-			@NonNull McpInvocationFeatures features,
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures invocationFeatures,
 			@NonNull McpHandlerContinuation continuation) throws Exception {
-		requireNonNull(context);
-		requireNonNull(features);
+		requireNonNull(requestContext);
+		requireNonNull(invocationFeatures);
 		return requireNonNull(requireNonNull(continuation).proceed(),
 				"The MCP handler continuation returned null.");
 	}

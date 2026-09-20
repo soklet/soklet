@@ -560,9 +560,8 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 							"catalog-projection-runtime-test", "4.0.0")
 							.build())
 				.serverInfoIncluded(false)
-				.addTool(tool(STABLE_TOOL))
-				.addTool(tool(CONDITIONAL_TOOL))
-				.addResource(McpResourceRegistration.withUriAndName(
+				.toolRegistrations(java.util.List.of(tool(STABLE_TOOL), tool(CONDITIONAL_TOOL)))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						RESOURCE_URI, "Projection resource")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -571,7 +570,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 														resource.getUri(), "unused")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.subscriptionConfig(subscriptions)
 				.build();
 		return SimulatorConfig.builder()

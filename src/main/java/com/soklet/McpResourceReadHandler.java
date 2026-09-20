@@ -49,14 +49,14 @@ public interface McpResourceReadHandler {
 	/**
 	 * Reads one routed resource under application authorization and policy.
 	 *
-	 * @param request request metadata
-	 * @param resource resolved resource URI and template variables
-	 * @param features invocation-scoped optional features
+	 * @param requestContext request metadata
+	 * @param resourceReadContext resolved resource URI and template variables
+	 * @param invocationFeatures invocation-scoped optional features
 	 * @return recognized non-null operation result
 	 * @throws Exception if application handling fails
 	 */
 	@NonNull
-	McpOperationResult handle(@NonNull McpRequestContext request,
-			@NonNull McpResourceReadContext resource,
-			@NonNull McpInvocationFeatures features) throws Exception;
+	McpOperationResult handle(@NonNull McpRequestContext requestContext,
+			@NonNull McpResourceReadContext resourceReadContext,
+			@NonNull McpInvocationFeatures invocationFeatures) throws Exception;
 }

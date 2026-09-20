@@ -187,16 +187,10 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 						.withNameAndVersion("catalog-access-reload", "4.0.0")
 						.build())
 				.serverInfoIncluded(false)
-				.addTool(tool("reload.tool.denied-first", "Denied first tool"))
-				.addTool(tool("reload.tool.shared", "Shared tool"))
-				.addTool(tool("reload.tool.tenant-a", "Tenant tool"))
-				.addTool(tool("reload.tool.denied-last", "Denied last tool"))
-				.addPrompt(prompt("reload.prompt.denied-first",
-						"Denied first prompt"))
-				.addPrompt(prompt("reload.prompt.shared", "Shared prompt"))
-				.addPrompt(prompt("reload.prompt.tenant-a", "Tenant prompt"))
-				.addPrompt(prompt("reload.prompt.denied-last",
-						"Denied last prompt"))
+				.toolRegistrations(java.util.List.of(tool("reload.tool.denied-first", "Denied first tool"), tool("reload.tool.shared", "Shared tool"), tool("reload.tool.tenant-a", "Tenant tool"), tool("reload.tool.denied-last", "Denied last tool")))
+				.promptRegistrations(java.util.List.of(prompt("reload.prompt.denied-first",
+						"Denied first prompt"), prompt("reload.prompt.shared", "Shared prompt"), prompt("reload.prompt.tenant-a", "Tenant prompt"), prompt("reload.prompt.denied-last",
+						"Denied last prompt")))
 				.build();
 	}
 

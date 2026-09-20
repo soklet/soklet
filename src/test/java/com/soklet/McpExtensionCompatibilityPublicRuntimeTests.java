@@ -56,7 +56,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			"com.example/handler-result";
 	private static final String INTERCEPTOR_METADATA_KEY =
 			"com.example/interceptor-result";
-	private static final AtomicInteger TASK_CONTROL_ARGUMENT_CONSTRUCTIONS =
+	private static final AtomicInteger TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS =
 			new AtomicInteger();
 
 	@Test
@@ -188,7 +188,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"extension-compatibility-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			interceptorInvocations.incrementAndGet();
@@ -281,7 +281,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"tasks-compatibility-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = server(endpoint, context -> {
 			admissions.add(context);
@@ -369,11 +369,11 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 
 	@Test
 	@Timeout(120)
-	public void taskControlRequiresConfiguredManagerAndNegotiatedToolCall()
+	public void taskCreationContextRequiresConfiguredManagerAndNegotiatedToolCall()
 			throws Exception {
-		List<Optional<McpTaskControl>> observedTaskControls =
+		List<Optional<McpTaskCreationContext>> observedTaskCreationContexts =
 				new CopyOnWriteArrayList<>();
-		List<Optional<McpTaskControl>> observedPromptTaskControls =
+		List<Optional<McpTaskCreationContext>> observedPromptTaskCreationContexts =
 				new CopyOnWriteArrayList<>();
 		List<McpRequestContext> observedRequestContexts =
 				new CopyOnWriteArrayList<>();
@@ -382,7 +382,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					observedRequestContexts.add(request);
-					observedTaskControls.add(features.getTaskControl());
+					observedTaskCreationContexts.add(features.getTaskCreationContext());
 					return McpCompleteResult.fromToolText("ordinary-completion");
 				})
 				.structuredContentMirroredAsText(false)
@@ -390,21 +390,21 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("tasks.control.prompt")
 				.handler((request, arguments, features) -> {
-					observedPromptTaskControls.add(features.getTaskControl());
+					observedPromptTaskCreationContexts.add(features.getTaskCreationContext());
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-							.addMessage(McpPromptMessage.fromUserContent(
-									McpTextContent.fromText("ordinary-completion")))
+							.messages(java.util.List.of(McpPromptMessage.fromUserContent(
+									McpTextContent.fromText("ordinary-completion"))))
 							.build());
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-control-test", "4.0.0").build())
-				.addTool(tool)
-				.addPrompt(prompt)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
-		McpServer configuredServer = taskControlServer(endpoint,
+		McpServer configuredServer = taskCreationContextServer(endpoint,
 				Optional.of(taskManager));
 		Soklet configuredSoklet = managedSoklet(configuredServer);
 
@@ -413,35 +413,35 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			int port = configuredServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			Assertions.assertEquals(200,
-					callTaskControlTool(port, "capable", true).statusCode());
-			HttpResponse<String> largeInline = callLargeTaskControlTool(port,
+					callTaskCreationContextTool(port, "capable", true).statusCode());
+			HttpResponse<String> largeInline = callLargeTaskCreationContextTool(port,
 					"large-inline");
 			Assertions.assertEquals(200, largeInline.statusCode(),
 					largeInline.body());
 			Assertions.assertEquals(200,
-					callTaskControlTool(port, "incapable", false).statusCode());
+					callTaskCreationContextTool(port, "incapable", false).statusCode());
 			Assertions.assertEquals(200,
-					callTaskControlPrompt(port, "non-tool").statusCode());
+					callTaskCreationContextPrompt(port, "non-tool").statusCode());
 		} finally {
 			configuredSoklet.close();
 		}
 
-		McpServer unconfiguredServer = taskControlServer(endpoint, Optional.empty());
+		McpServer unconfiguredServer = taskCreationContextServer(endpoint, Optional.empty());
 		Soklet unconfiguredSoklet = managedSoklet(unconfiguredServer);
 		try {
 			unconfiguredSoklet.start();
 			int port = unconfiguredServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			Assertions.assertEquals(200,
-					callTaskControlTool(port, "no-manager", true).statusCode());
+					callTaskCreationContextTool(port, "no-manager", true).statusCode());
 		} finally {
 			unconfiguredSoklet.close();
 		}
 
-		Assertions.assertEquals(4, observedTaskControls.size());
-		McpTaskControl taskControl = observedTaskControls.get(0).orElseThrow();
+		Assertions.assertEquals(4, observedTaskCreationContexts.size());
+		McpTaskCreationContext taskCreationContext = observedTaskCreationContexts.get(0).orElseThrow();
 		Assertions.assertSame(observedRequestContexts.get(0),
-				taskControl.getRequestContext());
+				taskCreationContext.getRequestContext());
 		Assertions.assertEquals(McpJsonObject.builder()
 				.put("formatVersion", 1)
 				.put("protocolVersion", PROTOCOL_VERSION)
@@ -453,18 +453,18 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.putNull("outputSchema")
 				.put("structuredContentMirroredAsText", false)
 				.put("inputRequestDeclarations", McpJsonArray.emptyInstance())
-				.build(), taskControl.getTaskOrigin().getPersistedState());
-		McpTaskControl largeInlineControl = observedTaskControls.get(1)
+				.build(), taskCreationContext.getTaskOrigin().getPersistedState());
+		McpTaskCreationContext largeInlineControl = observedTaskCreationContexts.get(1)
 				.orElseThrow();
 		Field taskOriginField = largeInlineControl.getClass()
 				.getDeclaredField("taskOrigin");
 		taskOriginField.setAccessible(true);
 		Assertions.assertNull(taskOriginField.get(largeInlineControl),
 				"A task-eligible inline completion must not eagerly encode its origin.");
-		Assertions.assertTrue(observedTaskControls.get(2).isEmpty());
-		Assertions.assertTrue(observedTaskControls.get(3).isEmpty());
+		Assertions.assertTrue(observedTaskCreationContexts.get(2).isEmpty());
+		Assertions.assertTrue(observedTaskCreationContexts.get(3).isEmpty());
 		Assertions.assertEquals(List.of(Optional.empty()),
-				observedPromptTaskControls);
+				observedPromptTaskCreationContexts);
 	}
 
 	@Test
@@ -473,11 +473,11 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		String toolName = "tasks.control.typed";
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
-		List<Optional<McpTaskControl>> observedTaskControls =
+		List<Optional<McpTaskCreationContext>> observedTaskCreationContexts =
 				new CopyOnWriteArrayList<>();
-		McpToolRegistration<TaskControlArguments> tool = McpToolRegistration
+		McpToolRegistration<TaskCreationContextArguments> tool = McpToolRegistration
 				.withName(toolName)
-				.argumentType(TaskControlArguments.class)
+				.argumentType(TaskCreationContextArguments.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("ordinary-completion");
@@ -486,25 +486,25 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"tasks-typed-control-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			interceptorInvocations.incrementAndGet();
-			observedTaskControls.add(features.getTaskControl());
+			observedTaskCreationContexts.add(features.getTaskCreationContext());
 			if (context.getRequestId().orElseThrow().asString()
 					.equals(Optional.of("typed-short-circuit")))
 				return McpCompleteResult.fromToolText("intercepted");
-			Optional<McpTaskControl> taskControl = features.getTaskControl();
+			Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
 			try {
-				taskControl.ifPresent(McpTaskControl::getTaskOrigin);
+				taskCreationContext.ifPresent(McpTaskCreationContext::getTaskOrigin);
 			} catch (McpInvalidToolArgumentsException exception) {
 				Assertions.assertThrows(McpInvalidToolArgumentsException.class,
-						() -> taskControl.orElseThrow().getTaskOrigin());
+						() -> taskCreationContext.orElseThrow().getTaskOrigin());
 				throw exception;
 			}
 			return continuation.proceed();
 		};
-		McpServer server = taskControlServer(endpoint,
+		McpServer server = taskCreationContextServer(endpoint,
 				Optional.of(McpTaskManager.fromInMemoryDefaults()), interceptor);
 		Soklet soklet = managedSoklet(server);
 
@@ -512,7 +512,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
-			TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.set(0);
+			TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.set(0);
 			String capableMetadata = "{\"_meta\":{"
 					+ "\"io.modelcontextprotocol/protocolVersion\":\""
 					+ PROTOCOL_VERSION + "\","
@@ -529,9 +529,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(1, interceptorInvocations.get());
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(1,
-					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get(),
 					"Valid typed arguments must be decoded exactly once.");
-			Assertions.assertTrue(observedTaskControls.get(0).isPresent());
+			Assertions.assertTrue(observedTaskCreationContexts.get(0).isPresent());
 
 			HttpResponse<String> shortCircuited = post(port, "tools/call", toolName,
 					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-short-circuit\","
@@ -546,9 +546,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(2, interceptorInvocations.get());
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(1,
-					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get(),
 					"An inline interceptor short circuit must retain pre-validation behavior.");
-			Assertions.assertTrue(observedTaskControls.get(1).isPresent());
+			Assertions.assertTrue(observedTaskCreationContexts.get(1).isPresent());
 
 			HttpResponse<String> invalid = post(port, "tools/call", toolName,
 					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-invalid\","
@@ -564,10 +564,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get(),
 					"Invalid typed arguments must not enter the tool handler.");
 			Assertions.assertEquals(1,
-					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get(),
 					"Invalid typed arguments must not construct a partial value.");
-			Assertions.assertEquals(3, observedTaskControls.size());
-			Assertions.assertTrue(observedTaskControls.get(2).isPresent(),
+			Assertions.assertEquals(3, observedTaskCreationContexts.size());
+			Assertions.assertTrue(observedTaskCreationContexts.get(2).isPresent(),
 					"A control may be inspected, but invalid arguments must prevent its origin from being used.");
 
 			HttpResponse<String> rejectedDuringConstruction = post(port,
@@ -584,10 +584,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(4, interceptorInvocations.get());
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(2,
-					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get(),
+					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get(),
 					"A failed typed decode must not retry when task origin is accessed again.");
-			Assertions.assertEquals(4, observedTaskControls.size());
-			Assertions.assertTrue(observedTaskControls.get(3).isPresent());
+			Assertions.assertEquals(4, observedTaskCreationContexts.size());
+			Assertions.assertTrue(observedTaskCreationContexts.get(3).isPresent());
 
 			HttpResponse<String> incapableInvalid = post(port, "tools/call",
 					toolName,
@@ -604,21 +604,21 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					"Non-Tasks calls retain interceptor-before-validation ordering.");
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(2,
-					TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.get());
+					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get());
 			Assertions.assertEquals(Optional.empty(),
-					observedTaskControls.get(4));
+					observedTaskCreationContexts.get(4));
 		} finally {
 			soklet.close();
 		}
 	}
 
-	private static McpServer taskControlServer(@NonNull McpEndpoint endpoint,
+	private static McpServer taskCreationContextServer(@NonNull McpEndpoint endpoint,
 			@NonNull Optional<@NonNull McpTaskManager> taskManager) {
-		return taskControlServer(endpoint, taskManager,
+		return taskCreationContextServer(endpoint, taskManager,
 				McpHandlerInterceptor.passThroughInstance());
 	}
 
-	private static McpServer taskControlServer(@NonNull McpEndpoint endpoint,
+	private static McpServer taskCreationContextServer(@NonNull McpEndpoint endpoint,
 			@NonNull Optional<@NonNull McpTaskManager> taskManager,
 			@NonNull McpHandlerInterceptor handlerInterceptor) {
 		McpServer.Builder builder = McpServer.withPort(0)
@@ -704,7 +704,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 						StandardCharsets.UTF_8));
 	}
 
-	private static HttpResponse<String> callTaskControlTool(int port, String id,
+	private static HttpResponse<String> callTaskCreationContextTool(int port, String id,
 			boolean tasksCapable) throws Exception {
 		String extensions = tasksCapable
 				? "{\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}}"
@@ -719,7 +719,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		return post(port, "tools/call", TOOL_NAME, body);
 	}
 
-	private static HttpResponse<String> callLargeTaskControlTool(int port,
+	private static HttpResponse<String> callLargeTaskCreationContextTool(int port,
 			String id) throws Exception {
 		String chunk = "x".repeat(900_000);
 		StringBuilder arguments = new StringBuilder(4_500_128);
@@ -741,7 +741,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		return post(port, "tools/call", TOOL_NAME, body);
 	}
 
-	private static HttpResponse<String> callTaskControlPrompt(int port, String id)
+	private static HttpResponse<String> callTaskCreationContextPrompt(int port, String id)
 			throws Exception {
 		String promptName = "tasks.control.prompt";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\","
@@ -823,10 +823,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 
-	private record TaskControlArguments(@NonNull String query,
+	private record TaskCreationContextArguments(@NonNull String query,
 			@NonNull List<@NonNull Integer> pageSizes) {
-		private TaskControlArguments {
-			TASK_CONTROL_ARGUMENT_CONSTRUCTIONS.incrementAndGet();
+		private TaskCreationContextArguments {
+			TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.incrementAndGet();
 			if ("reject".equals(query))
 				throw new IllegalArgumentException(
 						"Rejected only to exercise failed-decode memoization.");

@@ -449,9 +449,9 @@ public class McpSubscriptionConfigurationTests {
 		McpEndpoint generated = McpEndpoint.withPath("/generated", serverInformation())
 				.serverInfoIncluded(false)
 				.instructions("generated instructions")
-				.addTool(tool)
-				.addPrompt(prompt)
-				.addResource(resource)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(resource))
 				.resourceListHandler(resourceListHandler)
 				.resourceListCachePolicy(resourceListCachePolicy)
 				.resourceTemplateListCachePolicy(
@@ -496,9 +496,9 @@ public class McpSubscriptionConfigurationTests {
 				replaced.isServerInfoIncluded());
 		Assertions.assertEquals(generated.getInstructions(),
 				replaced.getInstructions());
-		Assertions.assertSame(generated.getTools(), replaced.getTools());
-		Assertions.assertSame(generated.getPrompts(), replaced.getPrompts());
-		Assertions.assertSame(generated.getResources(), replaced.getResources());
+		Assertions.assertSame(generated.getToolRegistrations(), replaced.getToolRegistrations());
+		Assertions.assertSame(generated.getPromptRegistrations(), replaced.getPromptRegistrations());
+		Assertions.assertSame(generated.getResourceRegistrations(), replaced.getResourceRegistrations());
 		Assertions.assertEquals(generated.getResourceListHandler(),
 				replaced.getResourceListHandler());
 		Assertions.assertSame(generated.getResourceListCachePolicy(),

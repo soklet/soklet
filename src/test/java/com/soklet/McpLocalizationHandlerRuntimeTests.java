@@ -156,15 +156,15 @@ class McpLocalizationHandlerRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("handler-context", "1.0").build())
-				.addPrompt(McpPromptRegistration.withName("context.prompt")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("context.prompt")
 						.handler((request, promptContext, features) -> {
 							promptObserved.set(features
 									.find(McpLocalizationContext.class).orElse(null));
 							return McpCompleteResult.fromPromptOutput(
 									McpPromptOutput.fromMessages());
 						})
-						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+						.build()))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("handler://text"), "text")
 						.handler((request, resource, features) -> {
 							resourceObserved.set(features
@@ -177,7 +177,7 @@ class McpLocalizationHandlerRuntimeTests {
 													.build())
 											.build());
 						})
-						.build())
+						.build()))
 				.build();
 
 		Capture prompt = call(endpoint, localizer, null, request("prompts/get",
@@ -244,13 +244,13 @@ class McpLocalizationHandlerRuntimeTests {
 	private static McpEndpoint endpoint(FeaturesProbe probe) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("handler-context", "1.0").build())
-				.addTool(McpToolRegistration.withName("context.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("context.tool")
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							probe.observe(features);
 							return McpCompleteResult.fromToolText("tool complete");
 						})
-						.build())
+						.build()))
 				.build();
 	}
 

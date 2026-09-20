@@ -103,8 +103,8 @@ public final class AppsFixture {
 				.permissions(Set.of()).prefersBorder(true).build();
 		this.endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion("soklet-apps-fixture", "fixture-v1").build())
-				.addTool(tool(TOOL, false)).addTool(tool(REFRESH, true))
-				.addResource(McpResourceRegistration.withUriAndName(UI_URI, "catalog_view")
+				.toolRegistrations(java.util.List.of(tool(TOOL, false), tool(REFRESH, true)))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI, "catalog_view")
 						.handler((context, resource, features) -> {
 							// Independent of listing, tool visibility, or prior tool execution.
 							if (!caller(context).allowed())
@@ -113,10 +113,10 @@ public final class AppsFixture {
 							return McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContent(
 									McpTextResourceContents.withUriAndText(UI_URI, shell).mimeType(MIME)
 											.appResourceMetadata(resourceMetadata).build()));
-						}).title("Catalog view").mimeType(MIME).build())
+						}).title("Catalog view").mimeType(MIME).build()))
 				.resourceListCachePolicy(McpCachePolicy.privateNoCacheInstance())
 				.resourceListHandler((context, list, features) -> McpResourcePage.builder()
-						.addResources(caller(context).allowed() ? List.of(descriptor) : List.of()).build())
+						.resourceDescriptors(caller(context).allowed() ? List.of(descriptor) : List.of()).build())
 				.build();
 	}
 
@@ -186,7 +186,7 @@ public final class AppsFixture {
 					String summary = ((McpJsonString) data.find("summary").orElseThrow()).getValue();
 					// Explicit allowlist for this fixture. _meta is not a secret channel.
 					return result.toBuilder().payload(McpToolOutput.builder()
-							.addContent(McpTextContent.fromText(summary)).structuredContent(data)
+							.content(java.util.List.of(McpTextContent.fromText(summary))).structuredContent(data)
 							.error(raw.isError()).build())
 							.metadata(McpJsonObject.builder().put("example/view", "catalog-v1").build()).build();
 				});
@@ -205,7 +205,7 @@ public final class AppsFixture {
 					Caller admitted = caller(context);
 					McpJsonObject data = data(admitted);
 					return McpCompleteResult.withToolOutput(McpToolOutput.builder()
-							.addContent(McpTextContent.fromText(RAW_CANARY)).structuredContent(data).build())
+							.content(java.util.List.of(McpTextContent.fromText(RAW_CANARY))).structuredContent(data).build())
 							.metadata(McpJsonObject.builder().put("example/private", RAW_CANARY)
 									.put("example/view", "catalog-v1").build()).build();
 				}).title(appOnly ? "Refresh catalog" : "Show catalog")

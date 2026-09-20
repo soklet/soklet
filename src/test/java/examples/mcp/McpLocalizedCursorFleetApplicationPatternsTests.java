@@ -507,8 +507,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 
 	private static void assertFrameworkProtectionDisabled(ApplicationNode node) {
 		assertEquals(McpProtectionMode.NONE,
-				node.server().getProtectionControl().getProtectionMode());
-		assertTrue(node.server().getProtectionControl().getKeyringSnapshot().isEmpty());
+				node.server().getProtectionKeyringManager().getProtectionMode());
+		assertTrue(node.server().getProtectionKeyringManager().getKeyringSnapshot().isEmpty());
 		assertTrue(node.server().getDiagnostics()
 				.getProtectionKeyringFingerprint().isEmpty());
 	}
@@ -663,7 +663,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		private SimulatorConfig config() {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"localized-cursor-fixture", "1.0").build())
-					.addResource(McpResourceRegistration.withUriTemplateAndName(
+					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(
 							"app-resource://catalog/{id}", "catalog-resource")
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
@@ -672,7 +672,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 																	resource.getUri(), "unused")
 															.build())
 													.build()))
-							.build())
+							.build()))
 					.resourceListHandler(this::page)
 					.build();
 			McpLocalizer localizer = McpLocalizer
@@ -828,11 +828,13 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				throw invalidCursor();
 			}
 			McpResourcePage.Builder page = McpResourcePage.builder();
+			List<McpResourceDescriptor> resourceDescriptors = new ArrayList<>();
 			for (ResourceRecord record
 					: snapshot.records().subList(claims.offset(), end))
-				page.addResource(McpResourceDescriptor.withUriAndName(record.uri(),
+				resourceDescriptors.add(McpResourceDescriptor.withUriAndName(record.uri(),
 						this.translations.localizedName(
 								localization.getLocale(), record.id())).build());
+			page.resourceDescriptors(resourceDescriptors);
 			if (end < snapshot.records().size()) {
 				String nextCursor = this.codec.issue(claims.withOffset(end), binding);
 				this.issuedCursors.add(nextCursor);

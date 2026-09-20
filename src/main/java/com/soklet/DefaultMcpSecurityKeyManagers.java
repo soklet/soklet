@@ -43,14 +43,14 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Server-owned implementation shared by the protection and trace control
+ * Server-owned implementation shared by the protection and trace key manager
  * views so cross-purpose key-material validation is atomic.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultMcpSecurityControls
-		implements McpProtectionControl, McpTraceCorrelationControl {
+final class DefaultMcpSecurityKeyManagers
+		implements McpProtectionKeyringManager, McpTraceCorrelationKeyManager {
 	/**
 	 * Immutable, secret-free projection of protection and trace-correlation
 	 * diagnostics captured at one security-control linearization point.
@@ -173,14 +173,14 @@ final class DefaultMcpSecurityControls
 	@Nullable
 	private OwnedSecretKey activeTraceCorrelationKey;
 
-	DefaultMcpSecurityControls(@Nullable McpProtectionConfig protectionConfig,
+	DefaultMcpSecurityKeyManagers(@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey) {
 		this(protectionConfig, traceCorrelationKey,
 				new SecureRandomEntropySource(),
 				MAXIMUM_INVOCATIONS_PER_EPOCH, 0L);
 	}
 
-	DefaultMcpSecurityControls(@Nullable McpProtectionConfig protectionConfig,
+	DefaultMcpSecurityKeyManagers(@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey,
 			@NonNull EntropySource entropySource,
 			long maximumInvocationsPerEpoch, long initialEpochNumber) {
@@ -287,7 +287,7 @@ final class DefaultMcpSecurityControls
 			Optional<@NonNull McpTraceCorrelationFingerprint>
 					traceCorrelationFingerprint =
 					Optional.ofNullable(this.activeTraceCorrelationKey)
-							.map(DefaultMcpSecurityControls::traceFingerprint);
+							.map(DefaultMcpSecurityKeyManagers::traceFingerprint);
 			return new SecurityDiagnosticsState(this.protectionMode,
 					this.requestStateProtector != null,
 					protectionKeyringFingerprint,
@@ -629,7 +629,7 @@ final class DefaultMcpSecurityControls
 			getFingerprint() {
 		synchronized (this.lock) {
 			return Optional.ofNullable(this.activeTraceCorrelationKey)
-					.map(DefaultMcpSecurityControls::traceFingerprint);
+					.map(DefaultMcpSecurityKeyManagers::traceFingerprint);
 		}
 	}
 
@@ -1153,7 +1153,7 @@ final class DefaultMcpSecurityControls
 					McpProtectionKeyringFingerprint.PROFILE, VERIFICATION_ROLE,
 					verificationKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
 		records.sort(Comparator.comparing(FingerprintRecord::metadata,
-				DefaultMcpSecurityControls::compareUnsigned));
+				DefaultMcpSecurityKeyManagers::compareUnsigned));
 		ByteArrayOutputStream aggregate = new ByteArrayOutputStream();
 		aggregate.writeBytes(PROTECTION_RING_DOMAIN);
 		writeUnsignedInt(aggregate, records.size());
@@ -1366,7 +1366,7 @@ final class DefaultMcpSecurityControls
 		}
 
 		private byte @NonNull [] sealerEpoch() {
-			return DefaultMcpSecurityControls.sealerEpoch(
+			return DefaultMcpSecurityKeyManagers.sealerEpoch(
 					this.activationPrefix, this.epochNumber);
 		}
 

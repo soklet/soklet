@@ -155,7 +155,7 @@ public class McpTypedInputRequestAnnotationTests {
 					false, classLoader);
 			McpEndpoint endpoint = McpEndpointRegistry.fromClasses(endpointClass)
 					.getEndpoints().get(0);
-			Map<String, McpToolRegistration<?>> tools = endpoint.getTools().stream()
+			Map<String, McpToolRegistration<?>> tools = endpoint.getToolRegistrations().stream()
 					.collect(Collectors.toMap(McpToolRegistration::getName,
 							Function.identity()));
 			McpToolRegistration<?> tool = tools.get("sample");
@@ -199,7 +199,7 @@ public class McpTypedInputRequestAnnotationTests {
 					result.getFrameworkRequestState().orElseThrow());
 			Assertions.assertEquals("sample-state", state.getValue());
 
-			Map<String, McpPromptRegistration> prompts = endpoint.getPrompts()
+			Map<String, McpPromptRegistration> prompts = endpoint.getPromptRegistrations()
 					.stream().collect(Collectors.toMap(
 							McpPromptRegistration::getName, Function.identity()));
 			assertDeclaration(prompts.get("form")
@@ -221,7 +221,7 @@ public class McpTypedInputRequestAnnotationTests {
 			Assertions.assertTrue(prompts.get("state-only-prompt")
 					.getInputRequestDeclarations().isEmpty());
 
-			Map<String, McpResourceRegistration> resources = endpoint.getResources()
+			Map<String, McpResourceRegistration> resources = endpoint.getResourceRegistrations()
 					.stream().collect(Collectors.toMap(
 							McpResourceRegistration::getName,
 							Function.identity()));

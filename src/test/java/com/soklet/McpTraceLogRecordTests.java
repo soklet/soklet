@@ -33,8 +33,8 @@ public class McpTraceLogRecordTests {
 
 	@Test
 	public void exactMachineReadableGrammarCoversIndependentFieldModes() {
-		DefaultMcpSecurityControls.TraceCorrelationToken token =
-				new DefaultMcpSecurityControls.TraceCorrelationToken(
+		DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
+				new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 						"trace-key", TOKEN);
 
 		McpTraceLogRecord tokenOnly = McpTraceLogRecord.capture(
@@ -63,7 +63,7 @@ public class McpTraceLogRecordTests {
 	public void maximumMessageIsExactAsciiAndDelimiterSafe() {
 		String keyId = "k".repeat(64);
 		McpTraceLogRecord record = McpTraceLogRecord.capture(
-				Optional.of(new DefaultMcpSecurityControls.TraceCorrelationToken(
+				Optional.of(new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 						keyId, TOKEN)), Optional.of(TRACE_ID)).orElseThrow();
 		String message = record.toLogMessage();
 
@@ -85,16 +85,16 @@ public class McpTraceLogRecordTests {
 	public void carrierRejectsValuesOutsideFrozenFieldAlphabets() {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpTraceLogRecord.capture(Optional.of(
-						new DefaultMcpSecurityControls.TraceCorrelationToken(
+						new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 								"bad;key", TOKEN)), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpTraceLogRecord.capture(Optional.of(
-						new DefaultMcpSecurityControls.TraceCorrelationToken(
+						new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 								"trace-key", TOKEN.substring(1))),
 						Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpTraceLogRecord.capture(Optional.of(
-						new DefaultMcpSecurityControls.TraceCorrelationToken(
+						new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 								"trace-key", "=" + TOKEN.substring(1))),
 						Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
@@ -115,7 +115,7 @@ public class McpTraceLogRecordTests {
 	@Test
 	public void diagnosticRenderingRedactsEveryHighCardinalityValue() {
 		McpTraceLogRecord record = McpTraceLogRecord.capture(
-				Optional.of(new DefaultMcpSecurityControls.TraceCorrelationToken(
+				Optional.of(new DefaultMcpSecurityKeyManagers.TraceCorrelationToken(
 						"trace-key", TOKEN)), Optional.of(TRACE_ID)).orElseThrow();
 
 		String rendering = record.toString();

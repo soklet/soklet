@@ -521,38 +521,37 @@ class McpLocalizationRenderingRuntimeTests {
 						.description("Canonical description")
 						.build())
 				.instructions("Endpoint instructions")
-				.addTool(McpToolRegistration.withName("render.search")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("render.search")
 						.inputSchema(inputSchema)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.description("Tool description")
-						.annotations(McpToolAnnotations.builder()
+						.toolAnnotations(McpToolAnnotations.builder()
 								.title("Annotation title").build())
-						.build())
-				.addPrompt(McpPromptRegistration.withName("render.summary")
+						.build()))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("render.summary")
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
 						.description("Prompt description")
-						.addArgument(McpPromptArgumentDeclaration.withName("topic")
+						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("topic")
 								.title("Topic title")
 								.description("Topic description")
-								.build())
-						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+								.build()))
+						.build()))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("render://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
-						.build())
-				.addResource(McpResourceRegistration.withUriTemplateAndName(
+						.build(), McpResourceRegistration.withUriTemplateAndName(
 						"render://item/{id}", "item")
 						.handler(resourceHandler)
 						.title("Template title")
 						.description("Template description")
-						.build())
+						.build()))
 				.build();
 	}
 

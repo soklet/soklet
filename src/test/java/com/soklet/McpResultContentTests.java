@@ -44,13 +44,12 @@ class McpResultContentTests {
 	void toolOutputPreservesContentInsertionOrderAndStructuredContent() {
 		McpTextContent first = McpTextContent.fromText("first");
 		McpTextContent second = McpTextContent.fromText("second");
-		List<McpContentBlock> mutable = new ArrayList<>(List.of(first));
+		List<McpContentBlock> mutable = new ArrayList<>(List.of(first, second));
 		McpJsonObject structured =
 				McpJsonObject.builder().put("ok", true).build();
 
 		McpToolOutput output = McpToolOutput.builder()
-				.addContents(mutable)
-				.addContent(second)
+				.content(mutable)
 				.structuredContent(structured)
 				.error(true)
 				.build();
@@ -183,11 +182,11 @@ class McpResultContentTests {
 
 		McpIcon firstIcon = McpIcon.withSource(
 				URI.create("https://catalog.example/icon.png"))
-				.mimeType("image/png").sizes("32x32", "64x64")
+				.mimeType("image/png").sizes(java.util.List.of("32x32", "64x64"))
 				.theme(McpIconTheme.DARK).build();
 		McpIcon secondIcon = McpIcon.withSource(
 				URI.create("https://catalog.example/icon.png"))
-				.mimeType("image/png").sizes("32x32", "64x64")
+				.mimeType("image/png").sizes(java.util.List.of("32x32", "64x64"))
 				.theme(McpIconTheme.DARK).build();
 		McpResourceLink firstLink = McpResourceLink.withUriAndName(
 				URI.create("catalog://linked"), "linked")

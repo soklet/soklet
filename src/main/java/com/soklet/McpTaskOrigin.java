@@ -27,7 +27,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable, non-wire origin of one MCP task-augmented operation.
  *
- * <p>Soklet makes an invocation-scoped {@link McpTaskControl} available before
+ * <p>Soklet makes an invocation-scoped {@link McpTaskCreationContext} available before
  * invoking a task-capable handler and derives this value only if application
  * code requests it or the invocation produces a task handle. The persisted
  * state is versioned framework data that lets a later request, potentially

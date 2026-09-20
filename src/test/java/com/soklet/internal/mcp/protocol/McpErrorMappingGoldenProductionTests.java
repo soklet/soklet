@@ -350,7 +350,7 @@ public class McpErrorMappingGoldenProductionTests {
 					state.requiredHandlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must-not-run");
 				})
-				.addInputRequestDeclarations(requiredRoots)
+				.inputRequestDeclarations(java.util.List.of(requiredRoots))
 				.build();
 		McpToolRegistration<McpJsonObject> conditional = McpToolRegistration
 				.withName(CONDITIONAL_TOOL)
@@ -364,7 +364,7 @@ public class McpErrorMappingGoldenProductionTests {
 									.put("secret", CONDITIONAL_SECRET).build())
 							.build();
 				})
-				.addInputRequestDeclarations(conditionalRoots)
+				.inputRequestDeclarations(java.util.List.of(conditionalRoots))
 				.build();
 		McpToolRegistration<McpJsonObject> hold = McpToolRegistration
 				.withName(HOLD_TOOL)
@@ -383,7 +383,7 @@ public class McpErrorMappingGoldenProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"error-mapping-golden", "4.0.0").build())
-				.addTools(List.of(regular, required, conditional, hold))
+				.toolRegistrations(java.util.List.of(regular, required, conditional, hold))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)

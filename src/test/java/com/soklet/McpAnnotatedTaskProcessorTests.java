@@ -64,7 +64,7 @@ public class McpAnnotatedTaskProcessorTests {
 		Files.writeString(source, """
 				package example;
 
-				import com.soklet.McpTaskControl;
+				import com.soklet.McpTaskCreationContext;
 				import com.soklet.McpTaskCreatedResult;
 				import com.soklet.annotation.McpServerEndpoint;
 				import com.soklet.annotation.McpTool;
@@ -74,9 +74,9 @@ public class McpAnnotatedTaskProcessorTests {
 				public final class TaskEndpoint {
 				  @McpTool(name = "reports.generate")
 				  public McpTaskCreatedResult<Report> generate(
-				      McpTaskControl taskControl) {
+				      McpTaskCreationContext taskCreationContext) {
 				    return McpTaskCreatedResult.fromTaskId(
-				        taskControl == null ? "invalid" : "durable-task");
+				        taskCreationContext == null ? "invalid" : "durable-task");
 				  }
 
 				  public record Report(List<Line> lines) {}
@@ -98,10 +98,10 @@ public class McpAnnotatedTaskProcessorTests {
 				".argumentAndOutputTypes(Tool0Arguments.class, new com.soklet.converter.TypeReference<example.TaskEndpoint.Report>() {}"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				".operationHandler((request, arguments, features) ->"),
+				".operationHandler((requestContext, arguments, invocationFeatures) ->"),
 				generatedSource);
 		Assertions.assertTrue(generatedSource.contains(
-				"generate(features.getTaskControl().orElseThrow())"),
+				"generate(invocationFeatures.getTaskCreationContext().orElseThrow())"),
 				generatedSource);
 		Assertions.assertFalse(generatedSource.contains("NO_OUTPUT_SCHEMA"),
 				generatedSource);
@@ -114,7 +114,7 @@ public class McpAnnotatedTaskProcessorTests {
 			Class<?> reportClass = Class.forName("example.TaskEndpoint$Report",
 					false, classLoader);
 			McpToolRegistration<?> untypedRegistration = McpEndpointRegistry
-					.fromClasses(endpointClass).getEndpoints().get(0).getTools().get(0);
+					.fromClasses(endpointClass).getEndpoints().get(0).getToolRegistrations().get(0);
 			Assertions.assertEquals(reportClass,
 					untypedRegistration.getOutputType().orElseThrow());
 			Assertions.assertTrue(untypedRegistration.isTaskRequired());
@@ -130,7 +130,7 @@ public class McpAnnotatedTaskProcessorTests {
 							(proxy, method, arguments) -> null);
 			McpToolRegistration<Object> registration =
 					(McpToolRegistration<Object>) untypedRegistration;
-			McpTaskControl taskControl = new McpTaskControl() {
+			McpTaskCreationContext taskCreationContext = new McpTaskCreationContext() {
 				@Override
 				public McpRequestContext getRequestContext() {
 					return requestContext;
@@ -146,7 +146,7 @@ public class McpAnnotatedTaskProcessorTests {
 					McpTaskCreatedResult.class,
 					registration.invoke(requestContext, McpJsonObject.emptyInstance(),
 							McpInvocationFeatures.fromFeatures(Map.of(
-									McpTaskControl.class, taskControl))));
+									McpTaskCreationContext.class, taskCreationContext))));
 			Assertions.assertEquals("durable-task", result.getTaskId());
 		}
 	}
@@ -244,34 +244,34 @@ public class McpAnnotatedTaskProcessorTests {
 	}
 
 	@Test
-	void validatesDirectTaskControlInjection() {
+	void validatesDirectTaskCreationContextInjection() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
-				"example.InvalidTaskControlEndpoint", """
+				"example.InvalidTaskCreationContextEndpoint", """
 						package example;
 
 						import com.soklet.McpCompleteResult;
-						import com.soklet.McpTaskControl;
+						import com.soklet.McpTaskCreationContext;
 						import com.soklet.McpTaskCreatedResult;
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 						import com.soklet.annotation.McpToolArgument;
 
 						@McpServerEndpoint(path = "/tasks", name = "tasks", version = "1")
-						public final class InvalidTaskControlEndpoint {
+						public final class InvalidTaskCreationContextEndpoint {
 						  @McpTool(name = "inline")
-						  public McpCompleteResult inline(McpTaskControl taskControl) {
+						  public McpCompleteResult inline(McpTaskCreationContext taskCreationContext) {
 						    return null;
 						  }
 
 						  @McpTool(name = "duplicate")
 						  public McpTaskCreatedResult<Report> duplicate(
-						      McpTaskControl first, McpTaskControl second) {
+						      McpTaskCreationContext first, McpTaskCreationContext second) {
 						    return null;
 						  }
 
 						  @McpTool(name = "annotated")
 						  public McpTaskCreatedResult<Report> annotated(
-						      @McpToolArgument McpTaskControl taskControl) {
+						      @McpToolArgument McpTaskCreationContext taskCreationContext) {
 						    return null;
 						  }
 
@@ -285,10 +285,10 @@ public class McpAnnotatedTaskProcessorTests {
 
 		assertThat(compilation).failed();
 		assertThat(compilation).hadErrorContaining(
-				"McpTaskControl may be injected only into an @McpTool method that returns McpTaskCreatedResult<R>")
+				"McpTaskCreationContext may be injected only into an @McpTool method that returns McpTaskCreatedResult<R>")
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"An @McpTool method may inject McpTaskControl at most once")
+				"An @McpTool method may inject McpTaskCreationContext at most once")
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
 				"Injectable MCP feature parameters must not also be annotated with @McpToolArgument")

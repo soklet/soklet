@@ -168,11 +168,11 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 				McpImplementation.withNameAndVersion(
 						"subscription-authorization-scheduling-test", "4.0.0")
 						.build())
-				.addTool(McpToolRegistration.withName("scheduling.probe")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("scheduling.probe")
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
-						.build())
+						.build()))
 				.subscriptionConfig(subscriptions)
 				.build();
 		return McpServer.withPort(0)

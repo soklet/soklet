@@ -334,7 +334,7 @@ final class SokletDirectStartClaimTruthTableTests {
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

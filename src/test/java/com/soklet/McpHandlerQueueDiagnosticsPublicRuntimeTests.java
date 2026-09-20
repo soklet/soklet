@@ -614,7 +614,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-diagnostics-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

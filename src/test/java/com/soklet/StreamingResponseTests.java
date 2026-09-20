@@ -68,10 +68,10 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
-						throwableRef.set(termination.getCause().orElse(null));
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
+						cancelationReasonRef.set(streamTermination.getReason());
+						throwableRef.set(streamTermination.getCause().orElse(null));
 						terminatedLatch.countDown();
 					}
 
@@ -162,9 +162,9 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
+						cancelationReasonRef.set(streamTermination.getReason());
 						terminatedLatch.countDown();
 					}
 
@@ -223,9 +223,9 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PublisherCancelResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
+						cancelationReasonRef.set(streamTermination.getReason());
 						terminatedLatch.countDown();
 					}
 
@@ -270,9 +270,9 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingSourceResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
+						cancelationReasonRef.set(streamTermination.getReason());
 						terminatedLatch.countDown();
 					}
 
@@ -318,17 +318,17 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void willTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																									@NonNull StreamTermination termination) {
+					public void willTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																									@NonNull StreamTermination streamTermination) {
 						lifecycleEvents.add("will");
 					}
 
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
 						lifecycleEvents.add("did");
 						streamTerminated.set(true);
-						cancelationReasonRef.set(termination.getReason());
+						cancelationReasonRef.set(streamTermination.getReason());
 					}
 				})
 				.build(), simulator -> {
@@ -368,9 +368,9 @@ public class StreamingResponseTests {
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 						.lifecycleObserver(new LifecycleObserver() {
 							@Override
-							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-															  @NonNull StreamTermination termination) {
-								cancelationReasonRef.set(termination.getReason());
+							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+															  @NonNull StreamTermination streamTermination) {
+								cancelationReasonRef.set(streamTermination.getReason());
 							}
 						})
 						.build(), simulator ->
@@ -386,9 +386,9 @@ public class StreamingResponseTests {
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 						.lifecycleObserver(new LifecycleObserver() {
 							@Override
-							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-															  @NonNull StreamTermination termination) {
-								cancelationReasonRef.set(termination.getReason());
+							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+															  @NonNull StreamTermination streamTermination) {
+								cancelationReasonRef.set(streamTermination.getReason());
 							}
 						})
 						.build(), simulator ->
@@ -448,7 +448,7 @@ public class StreamingResponseTests {
 							.lifecycleObserver(new LifecycleObserver() {
 								@Override
 								public void didTerminateResponseStream(
-										@NonNull StreamingResponseHandle streamingResponse,
+										@NonNull StreamingResponseHandle streamingResponseHandle,
 										@NonNull StreamTermination streamTermination) {
 									termination.set(streamTermination);
 								}
@@ -537,7 +537,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse writer() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 						output.write("hello ".getBytes(StandardCharsets.UTF_8));
 						output.flush();
 						output.write(ByteBuffer.wrap("world".getBytes(StandardCharsets.UTF_8)));
@@ -549,7 +549,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse inputStream() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromInputStream(() ->
+					.streamingResponseBody(StreamingResponseBody.fromInputStream(() ->
 							new ByteArrayInputStream("input stream".getBytes(StandardCharsets.UTF_8))))
 					.build();
 		}
@@ -577,7 +577,7 @@ public class StreamingResponseTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromPublisher(publisher))
+					.streamingResponseBody(StreamingResponseBody.fromPublisher(publisher))
 					.build();
 		}
 
@@ -585,7 +585,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse contextRequest(@NonNull Request request) {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 						boolean sameRequest = request.getId().equals(context.getRequest().getId());
 						output.write((sameRequest ? "same" : "missing").getBytes(StandardCharsets.UTF_8));
 					}))
@@ -596,7 +596,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse interrupt() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 						throw new InterruptedException("simulated interrupt");
 					}))
 					.build();
@@ -606,7 +606,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse cancelCallbackFailure() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 						try (AutoCloseable ignored = context.onCancel(() -> {
 							throw new IllegalStateException("callback failed");
 						})) {
@@ -628,7 +628,7 @@ public class StreamingResponseTests {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type",
 							Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
 						context.onCancel(() -> {
 							throw new IllegalStateException(
 									"Expected cancelation callback failure");
@@ -655,7 +655,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse blockingInputStream() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
-					.stream(StreamingResponseBody.fromInputStream(() ->
+					.streamingResponseBody(StreamingResponseBody.fromInputStream(() ->
 							new BlockingInputStream(inputStreamClosedLatch)))
 					.build();
 		}
@@ -664,7 +664,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse blockingReader() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromReader(() ->
+					.streamingResponseBody(StreamingResponseBody.fromReader(() ->
 									new BlockingReader(readerClosedLatch),
 							StandardCharsets.UTF_8))
 					.build();
@@ -693,7 +693,7 @@ public class StreamingResponseTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
-					.stream(StreamingResponseBody.fromPublisher(publisher))
+					.streamingResponseBody(StreamingResponseBody.fromPublisher(publisher))
 					.build();
 		}
 	}
@@ -711,9 +711,9 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingSourceResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
+					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+																  @NonNull StreamTermination streamTermination) {
+						cancelationReasonRef.set(streamTermination.getReason());
 						terminatedLatch.countDown();
 					}
 

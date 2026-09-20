@@ -136,8 +136,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 						.withNameAndVersion("catalog-localization-budget", "1")
 						.build())
 				.serverInfoIncluded(false)
-				.addTool(tool("budget.visible", "Visible title"))
-				.addTool(tool("budget.hidden", "Hidden title"))
+				.toolRegistrations(java.util.List.of(tool("budget.visible", "Visible title"), tool("budget.hidden", "Hidden title")))
 				.build();
 		AtomicInteger providerCalls = new AtomicInteger();
 		AtomicInteger lookupCalls = new AtomicInteger();
@@ -309,18 +308,12 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 		return McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("catalog-access-localization", "1")
 						.build())
-				.addTool(tool("tool.alpha", "Alpha tool"))
-				.addTool(tool("tool.neutral", null))
-				.addTool(tool("tool.shared", "Shared tool"))
-				.addTool(tool("tool.beta", "Beta tool"))
-				.addPrompt(prompt("prompt.alpha", "Alpha prompt", List.of(
-						argument("alpha", "Alpha argument"))))
-				.addPrompt(prompt("prompt.neutral", null, List.of()))
-				.addPrompt(prompt("prompt.shared", "Shared prompt", List.of(
+				.toolRegistrations(java.util.List.of(tool("tool.alpha", "Alpha tool"), tool("tool.neutral", null), tool("tool.shared", "Shared tool"), tool("tool.beta", "Beta tool")))
+				.promptRegistrations(java.util.List.of(prompt("prompt.alpha", "Alpha prompt", List.of(
+						argument("alpha", "Alpha argument"))), prompt("prompt.neutral", null, List.of()), prompt("prompt.shared", "Shared prompt", List.of(
 						argument("first", "First argument"),
-						argument("second", "Second argument"))))
-				.addPrompt(prompt("prompt.beta", "Beta prompt", List.of(
-						argument("beta", "Beta argument"))))
+						argument("second", "Second argument"))), prompt("prompt.beta", "Beta prompt", List.of(
+						argument("beta", "Beta argument")))))
 				.build();
 	}
 
@@ -344,8 +337,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 								McpPromptOutput.fromMessages()));
 		if (title != null)
 			builder.title(title);
-		for (McpPromptArgumentDeclaration argument : arguments)
-			builder.addArgument(argument);
+		builder.arguments(arguments);
 		return builder.build();
 	}
 

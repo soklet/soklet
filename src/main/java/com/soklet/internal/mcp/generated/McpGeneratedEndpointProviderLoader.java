@@ -401,7 +401,7 @@ public final class McpGeneratedEndpointProviderLoader {
 			McpGeneratedEndpointProviderIndex.@NonNull Entry entry,
 			@NonNull McpEndpoint endpoint,
 			String @NonNull [] schemaDigests) {
-		List<McpToolRegistration<?>> tools = endpoint.getTools();
+		List<McpToolRegistration<?>> tools = endpoint.getToolRegistrations();
 		if (schemaDigests.length != tools.size() * 3)
 			throw schemaMismatch(entry);
 

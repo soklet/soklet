@@ -157,7 +157,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
@@ -242,34 +242,32 @@ public class McpFinalTagGoldenWireProductionTests {
 				.handler((request, promptGet, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 								.description("Canonical rendered prompt")
-								.addMessage(McpPromptMessage.fromUserContent(
+								.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 										McpTextContent.fromText("subject="
 												+ promptGet.findArgument("subject")
 														.orElseThrow()
 												+ ";tone="
 												+ promptGet.findArgument("tone")
-														.orElse("<absent>"))))
-								.addMessage(McpPromptMessage.fromAssistantContent(
-										McpTextContent.fromText("ready")))
+														.orElse("<absent>"))), McpPromptMessage.fromAssistantContent(
+										McpTextContent.fromText("ready"))))
 								.build()).toBuilder().metadata(com.soklet.McpJsonObject.builder()
 									.put("fixture", "phase-4-result").build()).build())
 				.title("Golden composition")
 				.description("Renders a canonical prompt")
-				.addArgument(McpPromptArgumentDeclaration.withName("subject")
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject")
 						.title("Subject")
 						.description("Subject to render")
 						.required(true)
-						.build())
-				.addArgument(McpPromptArgumentDeclaration.withName("tone")
+						.build(), McpPromptArgumentDeclaration.withName("tone")
 						.description("Optional tone")
-						.build())
+						.build()))
 				.metadata(com.soklet.McpJsonObject.builder()
 						.put("fixture", "phase-4").build())
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addPrompt(prompt)
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
@@ -346,9 +344,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addResource(textResource)
-				.addResource(blobResource)
-				.addResource(recordTemplate)
+				.resourceRegistrations(java.util.List.of(textResource, blobResource, recordTemplate))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
@@ -406,7 +402,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
@@ -501,7 +497,7 @@ public class McpFinalTagGoldenWireProductionTests {
 										.put("fixture", "phase-5-input-required")
 										.build())
 								.build())
-				.addInputRequestDeclarations(form, url)
+				.inputRequestDeclarations(java.util.List.of(form, url))
 				.build();
 		McpToolRegistration<McpJsonObject> inputResponsesTool = McpToolRegistration
 				.withName("golden.input-responses")
@@ -523,13 +519,12 @@ public class McpFinalTagGoldenWireProductionTests {
 					return McpCompleteResult.fromToolText(
 							"input responses accepted");
 				})
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(java.util.List.of(form))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
-				.addTool(inputResponsesTool)
+				.toolRegistrations(java.util.List.of(tool, inputResponsesTool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
@@ -583,11 +578,11 @@ public class McpFinalTagGoldenWireProductionTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("unexpected handler execution");
 				})
-				.addInputRequestDeclarations(form, url)
+				.inputRequestDeclarations(java.util.List.of(form, url))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					admissionInvocations.incrementAndGet();
@@ -651,7 +646,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")
@@ -720,7 +715,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -852,13 +847,13 @@ public class McpFinalTagGoldenWireProductionTests {
 					return McpCompleteResult.fromToolText(
 							"protected request state accepted");
 				})
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(java.util.List.of(form))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")

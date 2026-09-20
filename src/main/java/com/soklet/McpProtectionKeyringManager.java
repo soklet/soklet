@@ -43,7 +43,7 @@ import java.util.Optional;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpProtectionControl {
+public interface McpProtectionKeyringManager {
 	/** @return this server's effective protection mode */
 	@NonNull
 	McpProtectionMode getProtectionMode();

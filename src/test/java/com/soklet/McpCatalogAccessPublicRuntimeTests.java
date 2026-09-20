@@ -76,8 +76,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.toList();
 		McpEndpoint.Builder endpointBuilder = endpointBuilder(
 				"catalog-access-list-runtime-test");
-		tools.forEach(endpointBuilder::addTool);
-		prompts.forEach(endpointBuilder::addPrompt);
+		endpointBuilder.toolRegistrations(new java.util.ArrayList<>(tools));
+		endpointBuilder.promptRegistrations(prompts);
 		McpEndpoint endpoint = endpointBuilder.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> visibleToCaller(
@@ -133,8 +133,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-empty-runtime-test")
-				.addTool(tool("empty.hidden-tool", handlerInvocations))
-				.addPrompt(prompt("empty.hidden-prompt", handlerInvocations))
+				.toolRegistrations(java.util.List.of(tool("empty.hidden-tool", handlerInvocations)))
+				.promptRegistrations(java.util.List.of(prompt("empty.hidden-prompt", handlerInvocations)))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -189,8 +189,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-deadline-runtime-test")
-				.addTool(tool("deadline.first", handlerInvocations))
-				.addTool(tool("deadline.second", handlerInvocations))
+				.toolRegistrations(java.util.List.of(tool("deadline.first", handlerInvocations), tool("deadline.second", handlerInvocations)))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -253,18 +252,18 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger lookupInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-explicit-allow-all-runtime-test")
-				.addTool(McpToolRegistration.withName("allow-all.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("allow-all.tool")
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Canonical tool title")
-						.build())
-				.addPrompt(McpPromptRegistration.withName("allow-all.prompt")
+						.build()))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("allow-all.prompt")
 						.handler((request, promptGet, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Canonical prompt title")
-						.build())
+						.build()))
 				.build();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
 				request -> {
@@ -345,8 +344,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-order-runtime-test")
-				.addTool(tool)
-				.addPrompt(prompt)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -436,7 +435,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-null-tool-limiter-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -523,8 +522,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-context-runtime-test")
-				.addTool(tool)
-				.addPrompt(prompt)
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -601,7 +600,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-neutral-runtime-test")
-				.addTool(hidden)
+				.toolRegistrations(java.util.List.of(hidden))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -688,7 +687,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-prompt-neutral-runtime-test")
-				.addPrompt(hidden)
+				.promptRegistrations(java.util.List.of(hidden))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> true,
@@ -759,8 +758,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-request-limit-runtime-test")
-				.addTool(tool("limited.registered-tool", handlerInvocations))
-				.addPrompt(prompt("limited.registered-prompt", handlerInvocations))
+				.toolRegistrations(java.util.List.of(tool("limited.registered-tool", handlerInvocations)))
+				.promptRegistrations(java.util.List.of(prompt("limited.registered-prompt", handlerInvocations)))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -829,10 +828,8 @@ public class McpCatalogAccessPublicRuntimeTests {
 		List<String> promptEvaluations = new CopyOnWriteArrayList<>();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-failure-runtime-test")
-				.addTool(tool("failure.tool.first", handlerInvocations))
-				.addTool(tool("failure.tool.second", handlerInvocations))
-				.addPrompt(prompt("failure.prompt.first", handlerInvocations))
-				.addPrompt(prompt("failure.prompt.second", handlerInvocations))
+				.toolRegistrations(java.util.List.of(tool("failure.tool.first", handlerInvocations), tool("failure.tool.second", handlerInvocations)))
+				.promptRegistrations(java.util.List.of(prompt("failure.prompt.first", handlerInvocations), prompt("failure.prompt.second", handlerInvocations)))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {

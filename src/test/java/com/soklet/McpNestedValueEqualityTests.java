@@ -128,7 +128,7 @@ class McpNestedValueEqualityTests {
 	private static McpIcon icon(URI source, String size) {
 		return McpIcon.withSource(source)
 				.mimeType("image/png")
-				.sizes(size)
+				.sizes(java.util.List.of(size))
 				.theme(McpIconTheme.DARK)
 				.build();
 	}

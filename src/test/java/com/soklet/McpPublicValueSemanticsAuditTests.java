@@ -299,7 +299,7 @@ class McpPublicValueSemanticsAuditTests {
 	private static McpIcon icon(String size) {
 		return McpIcon.withSource(URI.create("https://example.com/icon.png"))
 				.mimeType("image/png")
-				.sizes(size)
+				.sizes(java.util.List.of(size))
 				.theme(McpIconTheme.DARK)
 				.build();
 	}
@@ -338,7 +338,7 @@ class McpPublicValueSemanticsAuditTests {
 	private static McpResourcePage page(McpResourceDescriptor resource,
 			String nextCursor) {
 		return McpResourcePage.builder()
-				.addResource(resource)
+				.resourceDescriptors(java.util.List.of(resource))
 				.metadata(metadata("page", "metadata"))
 				.nextCursor(nextCursor)
 				.cacheTimeToLiveOverride(Duration.ofSeconds(3))

@@ -922,7 +922,7 @@ final class DefaultSseServer implements SseServer {
 		initialize(exactContext.getSokletConfig(),
 				exactContext.getAdmissionFencedRequestHandler());
 		return getLifecycleAdapter().delegatedRuntime(
-				exactContext.getTerminationSignal(), DefaultSseServer.this::start);
+				exactContext.getTransportTerminationSignal(), DefaultSseServer.this::start);
 	}
 
 	public void initialize(@NonNull SokletConfig sokletConfig,

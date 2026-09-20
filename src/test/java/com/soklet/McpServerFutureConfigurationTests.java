@@ -122,7 +122,7 @@ class McpServerFutureConfigurationTests {
 		assertEquals(Duration.ofSeconds(12),
 				configured.maximumSubscriptionDuration());
 		assertTrue(configured.logRawValidatedTraceIds());
-		assertFalse(configured.getTraceCorrelationControl().isEnabled());
+		assertFalse(configured.getTraceCorrelationKeyManager().isEnabled());
 
 		assertEquals(defaults.streamQueueCapacity(), reset.streamQueueCapacity());
 		assertEquals(defaults.requestHeaderTimeout(),
@@ -209,17 +209,17 @@ class McpServerFutureConfigurationTests {
 		McpServer server = serverBuilder().build();
 
 		assertEquals(McpProtectionMode.NONE,
-				server.getProtectionControl().getProtectionMode());
-		assertSame(server.getProtectionControl(), server.getTraceCorrelationControl());
+				server.getProtectionKeyringManager().getProtectionMode());
+		assertSame(server.getProtectionKeyringManager(), server.getTraceCorrelationKeyManager());
 		assertTrue(((DefaultMcpServer) server).protectionConfig().isEmpty());
-		assertTrue(server.getProtectionControl().getKeyringSnapshot().isEmpty());
-		assertFalse(server.getTraceCorrelationControl().isEnabled());
-		assertTrue(server.getTraceCorrelationControl().getActiveKeyId().isEmpty());
+		assertTrue(server.getProtectionKeyringManager().getKeyringSnapshot().isEmpty());
+		assertFalse(server.getTraceCorrelationKeyManager().isEnabled());
+		assertTrue(server.getTraceCorrelationKeyManager().getActiveKeyId().isEmpty());
 		assertThrows(IllegalStateException.class,
-				() -> server.getProtectionControl().stageVerificationKey(
+				() -> server.getProtectionKeyringManager().stageVerificationKey(
 						protectionKey("disabled", 1)));
 		assertThrows(IllegalStateException.class,
-				() -> server.getTraceCorrelationControl().rotateActiveKey(
+				() -> server.getTraceCorrelationKeyManager().rotateActiveKey(
 						traceKey("disabled", 2)));
 	}
 
@@ -238,23 +238,23 @@ class McpServerFutureConfigurationTests {
 
 		assertSame(protectionConfig,
 				((DefaultMcpServer) first).protectionConfig().orElseThrow());
-		assertNotSame(first.getProtectionControl(),
-				second.getProtectionControl());
-		assertEquals("active-a", first.getProtectionControl()
+		assertNotSame(first.getProtectionKeyringManager(),
+				second.getProtectionKeyringManager());
+		assertEquals("active-a", first.getProtectionKeyringManager()
 				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-c", first.getTraceCorrelationControl()
+		assertEquals("trace-c", first.getTraceCorrelationKeyManager()
 				.getActiveKeyId().orElseThrow());
 
-		first.getProtectionControl().rotateActiveKey(protectionKey("active-d", 4));
-		first.getTraceCorrelationControl().rotateActiveKey(traceKey("trace-e", 5));
+		first.getProtectionKeyringManager().rotateActiveKey(protectionKey("active-d", 4));
+		first.getTraceCorrelationKeyManager().rotateActiveKey(traceKey("trace-e", 5));
 
-		assertEquals("active-d", first.getProtectionControl()
+		assertEquals("active-d", first.getProtectionKeyringManager()
 				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-e", first.getTraceCorrelationControl()
+		assertEquals("trace-e", first.getTraceCorrelationKeyManager()
 				.getActiveKeyId().orElseThrow());
-		assertEquals("active-a", second.getProtectionControl()
+		assertEquals("active-a", second.getProtectionKeyringManager()
 				.getKeyringSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-c", second.getTraceCorrelationControl()
+		assertEquals("trace-c", second.getTraceCorrelationKeyManager()
 				.getActiveKeyId().orElseThrow());
 	}
 
@@ -275,7 +275,7 @@ class McpServerFutureConfigurationTests {
 				.build();
 
 		assertTrue(((DefaultMcpServer) cleared).protectionConfig().isEmpty());
-		assertFalse(cleared.getTraceCorrelationControl().isEnabled());
+		assertFalse(cleared.getTraceCorrelationKeyManager().isEnabled());
 
 		assertThrows(IllegalArgumentException.class, () -> serverBuilder()
 				.protectionConfig(protectionConfig)

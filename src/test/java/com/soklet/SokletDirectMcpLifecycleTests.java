@@ -431,7 +431,7 @@ final class SokletDirectMcpLifecycleTests {
 					}
 				}).build();
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH, implementation("direct-handler-self-stop"))
-				.addTool(tool).build();
+				.toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = serverBuilder(endpoint).build();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override

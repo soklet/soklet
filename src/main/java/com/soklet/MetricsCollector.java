@@ -320,12 +320,12 @@ public interface MetricsCollector {
 	/**
 	 * Called if an SSE connection fails to establish.
 	 *
-	 * @param reason    the handshake failure reason
+	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
 	 */
 	default void didFailToEstablishSseConnection(@NonNull Request request,
 																													 @Nullable ResourceMethod resourceMethod,
-																													 SseConnection.@NonNull HandshakeFailureReason reason,
+																													 SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 																													 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -334,7 +334,7 @@ public interface MetricsCollector {
 	 * Called before an SSE connection is terminated.
 	 */
 	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull StreamTermination termination) {
+																											@NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 
@@ -342,7 +342,7 @@ public interface MetricsCollector {
 	 * Called after an SSE connection is terminated.
 	 */
 	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																										 @NonNull StreamTermination termination) {
+																										 @NonNull StreamTermination streamTermination) {
 		// No-op by default
 	}
 
@@ -480,12 +480,12 @@ public interface MetricsCollector {
 	 * Called after a broadcast attempt for a Server-Sent Event payload.
 	 * All counts are non-null, including zero when no connections were targeted.
 	 *
-	 * @param route     the route declaration that was broadcast to
+	 * @param resourcePathDeclaration     the route declaration that was broadcast to
 	 * @param attempted number of connections targeted
 	 * @param enqueued  number of connections for which enqueue succeeded
 	 * @param dropped   number of connections for which enqueue failed
 	 */
-	default void didBroadcastSseEvent(@NonNull ResourcePathDeclaration route,
+	default void didBroadcastSseEvent(@NonNull ResourcePathDeclaration resourcePathDeclaration,
 																					 @NonNull Integer attempted,
 																					 @NonNull Integer enqueued,
 																					 @NonNull Integer dropped) {
@@ -496,13 +496,13 @@ public interface MetricsCollector {
 	 * Called after a broadcast attempt for a Server-Sent Event comment payload.
 	 * All counts are non-null, including zero when no connections were targeted.
 	 *
-	 * @param route       the route declaration that was broadcast to
+	 * @param resourcePathDeclaration       the route declaration that was broadcast to
 	 * @param commentType the comment type
 	 * @param attempted   number of connections targeted
 	 * @param enqueued    number of connections for which enqueue succeeded
 	 * @param dropped     number of connections for which enqueue failed
 	 */
-	default void didBroadcastSseComment(@NonNull ResourcePathDeclaration route,
+	default void didBroadcastSseComment(@NonNull ResourcePathDeclaration resourcePathDeclaration,
 																									SseComment.@NonNull CommentType commentType,
 																									@NonNull Integer attempted,
 																									@NonNull Integer enqueued,
@@ -2420,22 +2420,22 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 
 		/**
 		 * Creates an HTTP route key.
 		 *
 		 * @param method HTTP method
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 */
 		public HttpServerRouteKey(@NonNull HttpMethod method,
 				@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route) {
+				@Nullable ResourcePathDeclaration resourcePathDeclaration) {
 			this.method = requireNonNull(method);
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 		}
 
 		/** @return HTTP method */
@@ -2452,8 +2452,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return whether all HTTP route dimensions are equal */
@@ -2464,13 +2464,13 @@ public interface MetricsCollector {
 			if (!(other instanceof HttpServerRouteKey key))
 				return false;
 			return this.method == key.method && this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route);
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration);
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.method, this.routeType, this.route);
+			return Objects.hash(this.method, this.routeType, this.resourcePathDeclaration);
 		}
 
 		/** @return diagnostic rendering of the HTTP route dimensions */
@@ -2478,7 +2478,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "HttpServerRouteKey{method=" + this.method + ", routeType="
-					+ this.routeType + ", route=" + this.route + "}";
+					+ this.routeType + ", route=" + this.resourcePathDeclaration + "}";
 		}
 	}
 
@@ -2494,7 +2494,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		@NonNull
 		private final String statusClass;
 
@@ -2503,17 +2503,17 @@ public interface MetricsCollector {
 		 *
 		 * @param method HTTP method
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param statusClass HTTP status class
 		 */
 		public HttpServerRouteStatusKey(@NonNull HttpMethod method,
 				@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				@NonNull String statusClass) {
 			this.method = requireNonNull(method);
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.statusClass = requireNonNull(statusClass);
 		}
 
@@ -2531,8 +2531,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return HTTP status class */
@@ -2549,14 +2549,14 @@ public interface MetricsCollector {
 			if (!(other instanceof HttpServerRouteStatusKey key))
 				return false;
 			return this.method == key.method && this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.statusClass.equals(key.statusClass);
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.method, this.routeType, this.route,
+			return Objects.hash(this.method, this.routeType, this.resourcePathDeclaration,
 					this.statusClass);
 		}
 
@@ -2565,7 +2565,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "HttpServerRouteStatusKey{method=" + this.method
-					+ ", routeType=" + this.routeType + ", route=" + this.route
+					+ ", routeType=" + this.routeType + ", route=" + this.resourcePathDeclaration
 					+ ", statusClass=" + this.statusClass + "}";
 		}
 	}
@@ -2580,22 +2580,22 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		private final SseComment.@NonNull CommentType commentType;
 
 		/**
 		 * Creates an SSE comment route key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param commentType SSE comment type
 		 */
 		public SseCommentRouteKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				SseComment.@NonNull CommentType commentType) {
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.commentType = requireNonNull(commentType);
 		}
 
@@ -2607,8 +2607,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return SSE comment type */
@@ -2624,14 +2624,14 @@ public interface MetricsCollector {
 			if (!(other instanceof SseCommentRouteKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.commentType == key.commentType;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route, this.commentType);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration, this.commentType);
 		}
 
 		/** @return diagnostic rendering of the SSE comment route dimensions */
@@ -2639,7 +2639,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseCommentRouteKey{routeType=" + this.routeType + ", route="
-					+ this.route + ", commentType=" + this.commentType + "}";
+					+ this.resourcePathDeclaration + ", commentType=" + this.commentType + "}";
 		}
 	}
 
@@ -2653,19 +2653,19 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 
 		/**
 		 * Creates an SSE event route key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 */
 		public SseEventRouteKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route) {
-			validateRouteDimensions(routeType, route);
+				@Nullable ResourcePathDeclaration resourcePathDeclaration) {
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 		}
 
 		/** @return whether a route matched */
@@ -2676,8 +2676,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return whether both SSE event route dimensions are equal */
@@ -2688,13 +2688,13 @@ public interface MetricsCollector {
 			if (!(other instanceof SseEventRouteKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route);
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration);
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration);
 		}
 
 		/** @return diagnostic rendering of the SSE event route dimensions */
@@ -2702,7 +2702,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseEventRouteKey{routeType=" + this.routeType + ", route="
-					+ this.route + "}";
+					+ this.resourcePathDeclaration + "}";
 		}
 	}
 
@@ -2716,7 +2716,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		private final SseConnection.@NonNull HandshakeFailureReason
 				handshakeFailureReason;
 
@@ -2724,16 +2724,16 @@ public interface MetricsCollector {
 		 * Creates an SSE handshake failure key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param handshakeFailureReason fixed handshake failure reason
 		 */
 		public SseEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				SseConnection.@NonNull HandshakeFailureReason
 						handshakeFailureReason) {
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.handshakeFailureReason = requireNonNull(handshakeFailureReason);
 		}
 
@@ -2745,8 +2745,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return fixed handshake failure reason */
@@ -2763,14 +2763,14 @@ public interface MetricsCollector {
 			if (!(other instanceof SseEventRouteHandshakeFailureKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.handshakeFailureReason == key.handshakeFailureReason;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route,
+			return Objects.hash(this.routeType, this.resourcePathDeclaration,
 					this.handshakeFailureReason);
 		}
 
@@ -2779,7 +2779,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseEventRouteHandshakeFailureKey{routeType="
-					+ this.routeType + ", route=" + this.route
+					+ this.routeType + ", route=" + this.resourcePathDeclaration
 					+ ", handshakeFailureReason=" + this.handshakeFailureReason
 					+ "}";
 		}
@@ -2795,7 +2795,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		@NonNull
 		private final SseEventEnqueueOutcome outcome;
 
@@ -2803,15 +2803,15 @@ public interface MetricsCollector {
 		 * Creates an SSE enqueue outcome key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param outcome fixed enqueue outcome
 		 */
 		public SseEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				@NonNull SseEventEnqueueOutcome outcome) {
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.outcome = requireNonNull(outcome);
 		}
 
@@ -2823,8 +2823,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return fixed enqueue outcome */
@@ -2841,14 +2841,14 @@ public interface MetricsCollector {
 			if (!(other instanceof SseEventRouteEnqueueOutcomeKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.outcome == key.outcome;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route, this.outcome);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration, this.outcome);
 		}
 
 		/** @return diagnostic rendering of the SSE enqueue-outcome dimensions */
@@ -2856,7 +2856,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseEventRouteEnqueueOutcomeKey{routeType="
-					+ this.routeType + ", route=" + this.route + ", outcome="
+					+ this.routeType + ", route=" + this.resourcePathDeclaration + ", outcome="
 					+ this.outcome + "}";
 		}
 	}
@@ -2871,29 +2871,29 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		private final SseComment.@NonNull CommentType commentType;
 		@NonNull
-		private final SseEventEnqueueOutcome outcome;
+		private final SseEventEnqueueOutcome eventEnqueueOutcome;
 
 		/**
 		 * Creates an SSE comment enqueue outcome key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param commentType SSE comment type
-		 * @param outcome fixed enqueue outcome
+		 * @param eventEnqueueOutcome fixed enqueue outcome
 		 */
 		public SseCommentRouteEnqueueOutcomeKey(
 				@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				SseComment.@NonNull CommentType commentType,
-				@NonNull SseEventEnqueueOutcome outcome) {
-			validateRouteDimensions(routeType, route);
+				@NonNull SseEventEnqueueOutcome eventEnqueueOutcome) {
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.commentType = requireNonNull(commentType);
-			this.outcome = requireNonNull(outcome);
+			this.eventEnqueueOutcome = requireNonNull(eventEnqueueOutcome);
 		}
 
 		/** @return whether a route matched */
@@ -2904,8 +2904,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return SSE comment type */
@@ -2915,8 +2915,8 @@ public interface MetricsCollector {
 
 		/** @return fixed enqueue outcome */
 		@NonNull
-		public SseEventEnqueueOutcome getOutcome() {
-			return this.outcome;
+		public SseEventEnqueueOutcome getEventEnqueueOutcome() {
+			return this.eventEnqueueOutcome;
 		}
 
 		/** @return whether all SSE comment enqueue dimensions are equal */
@@ -2927,16 +2927,16 @@ public interface MetricsCollector {
 			if (!(other instanceof SseCommentRouteEnqueueOutcomeKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.commentType == key.commentType
-					&& this.outcome == key.outcome;
+					&& this.eventEnqueueOutcome == key.eventEnqueueOutcome;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route, this.commentType,
-					this.outcome);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration, this.commentType,
+					this.eventEnqueueOutcome);
 		}
 
 		/** @return diagnostic rendering of the SSE comment enqueue dimensions */
@@ -2944,8 +2944,8 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseCommentRouteEnqueueOutcomeKey{routeType="
-					+ this.routeType + ", route=" + this.route + ", commentType="
-					+ this.commentType + ", outcome=" + this.outcome + "}";
+					+ this.routeType + ", route=" + this.resourcePathDeclaration + ", commentType="
+					+ this.commentType + ", outcome=" + this.eventEnqueueOutcome + "}";
 		}
 	}
 
@@ -2959,7 +2959,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		@NonNull
 		private final SseEventDropReason dropReason;
 
@@ -2967,15 +2967,15 @@ public interface MetricsCollector {
 		 * Creates an SSE event drop key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param dropReason fixed drop reason
 		 */
 		public SseEventRouteDropKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				@NonNull SseEventDropReason dropReason) {
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.dropReason = requireNonNull(dropReason);
 		}
 
@@ -2987,8 +2987,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return fixed drop reason */
@@ -3005,14 +3005,14 @@ public interface MetricsCollector {
 			if (!(other instanceof SseEventRouteDropKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.dropReason == key.dropReason;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route, this.dropReason);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration, this.dropReason);
 		}
 
 		/** @return diagnostic rendering of the SSE event-drop dimensions */
@@ -3020,7 +3020,7 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseEventRouteDropKey{routeType=" + this.routeType
-					+ ", route=" + this.route + ", dropReason="
+					+ ", route=" + this.resourcePathDeclaration + ", dropReason="
 					+ this.dropReason + "}";
 		}
 	}
@@ -3035,28 +3035,28 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		private final SseComment.@NonNull CommentType commentType;
 		@NonNull
-		private final SseEventDropReason dropReason;
+		private final SseEventDropReason eventDropReason;
 
 		/**
 		 * Creates an SSE comment drop key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param commentType SSE comment type
-		 * @param dropReason fixed drop reason
+		 * @param eventDropReason fixed drop reason
 		 */
 		public SseCommentRouteDropKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				SseComment.@NonNull CommentType commentType,
-				@NonNull SseEventDropReason dropReason) {
-			validateRouteDimensions(routeType, route);
+				@NonNull SseEventDropReason eventDropReason) {
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.commentType = requireNonNull(commentType);
-			this.dropReason = requireNonNull(dropReason);
+			this.eventDropReason = requireNonNull(eventDropReason);
 		}
 
 		/** @return whether a route matched */
@@ -3067,8 +3067,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return SSE comment type */
@@ -3078,8 +3078,8 @@ public interface MetricsCollector {
 
 		/** @return fixed drop reason */
 		@NonNull
-		public SseEventDropReason getDropReason() {
-			return this.dropReason;
+		public SseEventDropReason getEventDropReason() {
+			return this.eventDropReason;
 		}
 
 		/** @return whether all SSE comment-drop dimensions are equal */
@@ -3090,16 +3090,16 @@ public interface MetricsCollector {
 			if (!(other instanceof SseCommentRouteDropKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.commentType == key.commentType
-					&& this.dropReason == key.dropReason;
+					&& this.eventDropReason == key.eventDropReason;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route, this.commentType,
-					this.dropReason);
+			return Objects.hash(this.routeType, this.resourcePathDeclaration, this.commentType,
+					this.eventDropReason);
 		}
 
 		/** @return diagnostic rendering of the SSE comment-drop dimensions */
@@ -3107,8 +3107,8 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseCommentRouteDropKey{routeType=" + this.routeType
-					+ ", route=" + this.route + ", commentType="
-					+ this.commentType + ", dropReason=" + this.dropReason + "}";
+					+ ", route=" + this.resourcePathDeclaration + ", commentType="
+					+ this.commentType + ", dropReason=" + this.eventDropReason + "}";
 		}
 	}
 
@@ -3122,7 +3122,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final RouteType routeType;
 		@Nullable
-		private final ResourcePathDeclaration route;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		@NonNull
 		private final StreamTerminationReason terminationReason;
 
@@ -3130,15 +3130,15 @@ public interface MetricsCollector {
 		 * Creates an SSE stream termination key.
 		 *
 		 * @param routeType whether a route matched
-		 * @param route matched route, or {@code null} when unmatched
+		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
 		 * @param terminationReason fixed stream termination reason
 		 */
 		public SseStreamRouteTerminationKey(@NonNull RouteType routeType,
-				@Nullable ResourcePathDeclaration route,
+				@Nullable ResourcePathDeclaration resourcePathDeclaration,
 				@NonNull StreamTerminationReason terminationReason) {
-			validateRouteDimensions(routeType, route);
+			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
-			this.route = route;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.terminationReason = requireNonNull(terminationReason);
 		}
 
@@ -3150,8 +3150,8 @@ public interface MetricsCollector {
 
 		/** @return matched route, or {@code null} when unmatched */
 		@Nullable
-		public ResourcePathDeclaration getRoute() {
-			return this.route;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		/** @return fixed stream termination reason */
@@ -3168,14 +3168,14 @@ public interface MetricsCollector {
 			if (!(other instanceof SseStreamRouteTerminationKey key))
 				return false;
 			return this.routeType == key.routeType
-					&& Objects.equals(this.route, key.route)
+					&& Objects.equals(this.resourcePathDeclaration, key.resourcePathDeclaration)
 					&& this.terminationReason == key.terminationReason;
 		}
 
 		/** @return value-based hash code */
 		@Override
 		public int hashCode() {
-			return Objects.hash(this.routeType, this.route,
+			return Objects.hash(this.routeType, this.resourcePathDeclaration,
 					this.terminationReason);
 		}
 
@@ -3184,18 +3184,18 @@ public interface MetricsCollector {
 		@NonNull
 		public String toString() {
 			return "SseStreamRouteTerminationKey{routeType=" + this.routeType
-					+ ", route=" + this.route + ", terminationReason="
+					+ ", route=" + this.resourcePathDeclaration + ", terminationReason="
 					+ this.terminationReason + "}";
 		}
 	}
 
 	private static void validateRouteDimensions(@NonNull RouteType routeType,
-			@Nullable ResourcePathDeclaration route) {
+			@Nullable ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(routeType);
-		if (routeType == RouteType.MATCHED && route == null)
+		if (routeType == RouteType.MATCHED && resourcePathDeclaration == null)
 			throw new IllegalArgumentException(
 					"Route must be provided when RouteType is MATCHED");
-		if (routeType == RouteType.UNMATCHED && route != null)
+		if (routeType == RouteType.UNMATCHED && resourcePathDeclaration != null)
 			throw new IllegalArgumentException(
 					"Route must be null when RouteType is UNMATCHED");
 	}

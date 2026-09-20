@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * <p>The declaration connects the emitted request to the capability and
  * registration metadata that permits it. Applications should reuse a
  * declaration registered through the operation's
- * {@code addInputRequestDeclaration}
+ * {@code inputRequestDeclarations}
  * configuration. For a durable task, Soklet includes those declarations in
  * the task origin for the application to persist, then validates that
  * relationship before it emits the containing task snapshot.

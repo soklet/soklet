@@ -784,7 +784,7 @@ public class SokletTests {
 		public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			TransportTerminationSignal signal = context.getTerminationSignal();
+			TransportTerminationSignal signal = context.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {
 					started.set(true);
@@ -833,7 +833,7 @@ public class SokletTests {
 		public TransportRuntime attach(
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			TransportTerminationSignal signal = context.getTerminationSignal();
+			TransportTerminationSignal signal = context.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {
 					throw new IllegalStateException("boom");

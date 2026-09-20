@@ -1152,7 +1152,7 @@ final class SokletDirectLifecycleRaceTests {
 				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
 			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			this.attachAction.get().run();
 			return new TransportRuntime() {
 				@Override
@@ -1213,7 +1213,7 @@ final class SokletDirectLifecycleRaceTests {
 		public TransportRuntime attach(
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

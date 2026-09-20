@@ -61,7 +61,7 @@ com.soklet.McpSimulationStreamItemType
 com.soklet.McpStreamTerminationReason
 com.soklet.McpTextCoordinate
 com.soklet.McpTextOwnerType
-com.soklet.McpTraceCorrelationControl
 com.soklet.McpTraceCorrelationFingerprint
 com.soklet.McpTraceCorrelationKey
+com.soklet.McpTraceCorrelationKeyManager
 com.soklet.Simulator

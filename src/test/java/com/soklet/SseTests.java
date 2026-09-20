@@ -2223,9 +2223,9 @@ public class SseTests {
 					public void didFailToEstablishSseConnection(
 							@NonNull Request request,
 							@Nullable ResourceMethod resourceMethod,
-							SseConnection.@NonNull HandshakeFailureReason reason,
+							SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 							@Nullable Throwable throwable) {
-						failures.add(reason);
+						failures.add(connectionHandshakeFailureReason);
 					}
 				})
 				.metricsCollector(metricsCollector)
@@ -4041,8 +4041,8 @@ public class SseTests {
 
 		@Override
 		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull StreamTermination termination) {
-			this.reason.compareAndSet(null, termination.getReason());
+																											@NonNull StreamTermination streamTermination) {
+			this.reason.compareAndSet(null, streamTermination.getReason());
 			this.terminatedLatch.countDown();
 		}
 
@@ -4076,8 +4076,8 @@ public class SseTests {
 
 		@Override
 		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull StreamTermination termination) {
-			this.reason.compareAndSet(null, termination.getReason());
+																											@NonNull StreamTermination streamTermination) {
+			this.reason.compareAndSet(null, streamTermination.getReason());
 			this.terminatedLatch.countDown();
 		}
 
@@ -4159,8 +4159,8 @@ public class SseTests {
 
 		@Override
 		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull StreamTermination termination) {
-			this.reason.compareAndSet(null, termination.getReason());
+																											@NonNull StreamTermination streamTermination) {
+			this.reason.compareAndSet(null, streamTermination.getReason());
 			this.terminatedLatch.countDown();
 		}
 
@@ -4236,9 +4236,9 @@ public class SseTests {
 		@Override
 		public void didFailToEstablishSseConnection(@NonNull Request request,
 				@Nullable ResourceMethod resourceMethod,
-				SseConnection.@NonNull HandshakeFailureReason reason,
+				SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 				@Nullable Throwable throwable) {
-			if (reason != SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT)
+			if (connectionHandshakeFailureReason != SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT)
 				return;
 			this.entered.countDown();
 			awaitUninterruptibly(this.release);

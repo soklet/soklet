@@ -127,7 +127,7 @@ public class McpAppToolAnnotationProcessorTests {
 				}
 				""")) {
 			McpEndpoint endpoint = compiled.endpoint();
-			Map<String, McpToolRegistration<?>> tools = endpoint.getTools().stream()
+			Map<String, McpToolRegistration<?>> tools = endpoint.getToolRegistrations().stream()
 					.collect(Collectors.toMap(McpToolRegistration::getName,
 							Function.identity()));
 			Assertions.assertEquals(7, tools.size());
@@ -145,7 +145,7 @@ public class McpAppToolAnnotationProcessorTests {
 					.visibility(Set.of(MODEL)).build());
 			assertMetadata(tools.get("omitted"), McpAppToolMetadata.builder().build());
 			Assertions.assertEquals(URI.create("ui://orders/dashboard"),
-					endpoint.getResources().get(0).getUri().orElseThrow());
+					endpoint.getResourceRegistrations().get(0).getUri().orElseThrow());
 			Assertions.assertNotNull(compiled.endpointClass().getMethod("defaults")
 					.getAnnotation(McpAppTool.class));
 
@@ -192,7 +192,7 @@ public class McpAppToolAnnotationProcessorTests {
 		}
 		try (CompiledEndpoint compiled = compileEndpoint(temporaryDirectory,
 				"AcceptedAppUris", endpointSource("AcceptedAppUris", methods.toString()))) {
-			Map<String, McpToolRegistration<?>> tools = compiled.endpoint().getTools()
+			Map<String, McpToolRegistration<?>> tools = compiled.endpoint().getToolRegistrations()
 					.stream().collect(Collectors.toMap(McpToolRegistration::getName,
 							Function.identity()));
 			for (int index = 0; index < uris.size(); ++index)

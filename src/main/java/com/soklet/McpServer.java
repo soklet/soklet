@@ -165,26 +165,26 @@ public sealed interface McpServer permits DefaultMcpServer {
 	@NonNull Integer getMaximumCursorSizeInBytes();
 
 	/**
-	 * Returns this server's request-state protection control plane.
+	 * Returns this server's request-state protection keyring manager.
 	 * <p>
-	 * The control never exposes configured key material. Mutation methods reject
+	 * The manager never exposes configured key material. Mutation methods reject
 	 * calls unless this server was built with a production keyring.
 	 *
-	 * @return server-owned protection control
+	 * @return server-owned protection keyring manager
 	 */
 	@NonNull
-	McpProtectionControl getProtectionControl();
+	McpProtectionKeyringManager getProtectionKeyringManager();
 
 	/**
-	 * Returns this server's trace-correlation control plane.
+	 * Returns this server's trace-correlation key manager.
 	 * <p>
-	 * The control reports disabled state when no trace-correlation key was
+	 * The manager reports disabled state when no trace-correlation key was
 	 * supplied during construction.
 	 *
-	 * @return server-owned trace-correlation control
+	 * @return server-owned trace-correlation key manager
 	 */
 	@NonNull
-	McpTraceCorrelationControl getTraceCorrelationControl();
+	McpTraceCorrelationKeyManager getTraceCorrelationKeyManager();
 
 	/**
 	 * Returns this server's localization catalog invalidator.
@@ -1365,7 +1365,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Configures framework request-state protection. Omission leaves framework
 		 * protection unconfigured. A production keyring is copied into independent
 		 * server-owned live state; runtime rotation is available only through
-		 * {@link McpServer#getProtectionControl()}.
+		 * {@link McpServer#getProtectionKeyringManager()}.
 		 *
 		 * @param protectionConfig initial protection configuration, or null to
 		 *                         disable framework request-state protection
@@ -1435,7 +1435,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 					? McpEndpointRegistry.fromClasspathIntrospection()
 					: this.endpointRegistry;
 			boolean toolsPresent = endpointRegistry.getEndpoints().stream()
-					.anyMatch(endpoint -> !endpoint.getTools().isEmpty());
+					.anyMatch(endpoint -> !endpoint.getToolRegistrations().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
 				throw new IllegalStateException(
 						"An MCP tool rate limiter must be configured when tools are registered.");
@@ -1443,7 +1443,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 				endpoint.getToolRateLimiterName().ifPresent(name ->
 						requireRegisteredLimiter(name,
 								"endpoint " + endpoint.getPath()));
-				for (McpToolRegistration<?> tool : endpoint.getTools())
+				for (McpToolRegistration<?> tool : endpoint.getToolRegistrations())
 					tool.getRateLimiterName().ifPresent(name ->
 							requireRegisteredLimiter(name,
 									"tool " + tool.getName()));

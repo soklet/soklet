@@ -602,10 +602,10 @@ public class McpDurableHandlePromptApplicationPatternsTests {
 			validateOutput(rendered);
 			return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 					.description(PROMPT_DESCRIPTION)
-					.addMessage(McpPromptMessage.fromUserContent(
+					.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 							McpTextContent.fromText(renderedPromptText(
 									rendered.userData(),
-									rendered.referenceData()))))
+									rendered.referenceData())))))
 					.build());
 		}
 

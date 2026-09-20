@@ -617,7 +617,7 @@ public final class McpTaskNotificationSocketDriver {
 							.getMembers().get("taskId");
 					if (!(taskIdValue instanceof McpJsonString taskId))
 						throw new IllegalArgumentException("taskId must be a string");
-					McpTaskOrigin taskOrigin = features.getTaskControl()
+					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
 							.orElseThrow().getTaskOrigin();
 					String authorizationPartition = request.getAdmissionIdentity()
 							.getAuthorizationPartitionKey().orElseThrow();
@@ -626,14 +626,14 @@ public final class McpTaskNotificationSocketDriver {
 					return McpTaskCreatedResult
 							.<McpJsonObject>fromTaskId(taskId.getValue());
 				})
-				.addInputRequestDeclaration(FORM_DECLARATION)
+				.inputRequestDeclarations(java.util.List.of(FORM_DECLARATION))
 				.structuredContentMirroredAsText(false)
 				.build();
 		return McpEndpoint.withPath(path,
 				McpImplementation.withNameAndVersion(
 						"task-subscription-public-runtime-test", "4.0.0")
 						.build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

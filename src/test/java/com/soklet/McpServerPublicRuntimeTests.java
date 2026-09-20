@@ -680,7 +680,7 @@ public class McpServerPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("phase-five-subscriptions", "1.0")
 						.build())
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,

@@ -241,10 +241,10 @@ class McpLocalizationHttpBoundaryTests {
 						.fromPublicTimeToLive(Duration.ofSeconds(60)))
 				.resourceListHandler((listRequest, list, features) ->
 						McpResourcePage.builder()
-								.addResources(list.getRegisteredResourceDescriptors())
+								.resourceDescriptors(list.getRegisteredResourceDescriptors())
 								.cacheTimeToLiveOverride(Duration.ofSeconds(75))
 								.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/text"), "text")
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -256,8 +256,7 @@ class McpLocalizationHttpBoundaryTests {
 												.build()))
 						.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 								Duration.ofSeconds(45)))
-						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+						.build(), McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/dynamic"), "dynamic")
 						.handler((resourceRequest, resource, features) -> {
 							Locale locale = features
@@ -275,8 +274,7 @@ class McpLocalizationHttpBoundaryTests {
 													.build())
 											.build());
 						})
-						.build())
-				.addResource(McpResourceRegistration.withUriTemplateAndName(
+						.build(), McpResourceRegistration.withUriTemplateAndName(
 						"http://cache/item/{id}", "item")
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -286,12 +284,12 @@ class McpLocalizationHttpBoundaryTests {
 																"unused")
 														.build())
 												.build()))
-						.build())
-				.addTool(McpToolRegistration.withName("cache.tool")
+						.build()))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("cache.tool")
 						.jsonObjectArguments()
 						.handler((toolRequest, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
-						.build())
+						.build()))
 				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 

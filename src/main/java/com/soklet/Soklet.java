@@ -909,7 +909,7 @@ public final class Soklet implements AutoCloseable {
 			response = Response.withStatusCode(204).build();
 		} else if (responseObject instanceof MarshaledResponse) {
 			MarshaledResponse marshaledResponse = (MarshaledResponse) responseObject;
-			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStream().isPresent());
+			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStreamingResponseBody().isPresent());
 
 			return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 					.resourceMethod(resourceMethod)
@@ -932,7 +932,7 @@ public final class Soklet implements AutoCloseable {
 
 		MarshaledResponse marshaledResponse = responseMarshaler.forResourceMethod(request, response, resourceMethod);
 
-		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStream().isPresent());
+		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStreamingResponseBody().isPresent());
 
 		return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
@@ -1533,7 +1533,7 @@ public final class Soklet implements AutoCloseable {
 			if (requestResult == null)
 				throw new IllegalStateException("No HTTP request result was produced by the simulator");
 
-			StreamingResponseBody stream = requestResult.getMarshaledResponse().getStream().orElse(null);
+			StreamingResponseBody stream = requestResult.getMarshaledResponse().getStreamingResponseBody().orElse(null);
 
 			if (stream == null)
 				return requestResult;
@@ -1567,7 +1567,7 @@ public final class Soklet implements AutoCloseable {
 			}
 
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse().copy()
-					.withoutStream()
+					.withoutStreamingResponseBody()
 					.body(bytes)
 					.finish();
 
@@ -2261,7 +2261,7 @@ public final class Soklet implements AutoCloseable {
 					attachmentContext);
 			initialize(exactContext.getSokletConfig(),
 					exactContext.getAdmissionFencedRequestHandler());
-			TransportTerminationSignal signal = exactContext.getTerminationSignal();
+			TransportTerminationSignal signal = exactContext.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {
@@ -2690,7 +2690,7 @@ public final class Soklet implements AutoCloseable {
 					attachmentContext);
 			initialize(exactContext.getSokletConfig(),
 					exactContext.getAdmissionFencedRequestHandler());
-			TransportTerminationSignal signal = exactContext.getTerminationSignal();
+			TransportTerminationSignal signal = exactContext.getTransportTerminationSignal();
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

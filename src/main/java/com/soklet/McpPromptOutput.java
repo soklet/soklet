@@ -21,8 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -56,7 +54,7 @@ public final class McpPromptOutput implements McpCompletePayload {
 	@NonNull
 	public static McpPromptOutput fromMessages(
 			@NonNull McpPromptMessage @NonNull... messages) {
-		return builder().addMessages(List.of(messages)).build();
+		return builder().messages(List.of(messages)).build();
 	}
 
 	private McpPromptOutput(@NonNull Builder builder) {
@@ -103,8 +101,8 @@ public final class McpPromptOutput implements McpCompletePayload {
 		@Nullable
 		private String description;
 		@NonNull
-		private final List<@NonNull McpPromptMessage> messages =
-				new ArrayList<>();
+		private List<@NonNull McpPromptMessage> messages =
+				List.of();
 
 		private Builder() {
 		}
@@ -118,28 +116,19 @@ public final class McpPromptOutput implements McpCompletePayload {
 		}
 
 		/**
-		 * Appends one prompt message.
+		 * Replaces prompt messages in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param message prompt message
+		 * @param messages prompt messages, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addMessage(@NonNull McpPromptMessage message) {
-			this.messages.add(requireNonNull(message));
-			return this;
-		}
-
-		/**
-		 * Appends prompt messages in iteration order.
-		 *
-		 * @param messages prompt messages
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addMessages(
-				@NonNull Collection<@NonNull McpPromptMessage> messages) {
-			requireNonNull(messages);
-			messages.forEach(this::addMessage);
+		public Builder messages(
+				@Nullable List<@NonNull McpPromptMessage> messages) {
+			this.messages = messages == null ? List.of()
+					: List.copyOf(messages);
 			return this;
 		}
 

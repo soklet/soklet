@@ -443,8 +443,7 @@ public class McpHttpContractGoldenProductionTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"http-contract-golden", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
-				.addTool(typedTool)
+				.toolRegistrations(java.util.List.of(tool, typedTool))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {
 					String caseName = state.caseName(context.getRequest());

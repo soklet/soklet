@@ -240,7 +240,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 						.title("Canonical title")
 						.description("Canonical description")
 						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						java.net.URI.create("subscription://text"), "text")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -250,7 +250,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 																"unused")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),

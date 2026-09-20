@@ -391,7 +391,7 @@ final class SokletDirectWaitSemanticsTests {
 		public TransportRuntime attach(
 				@NonNull HttpTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
-			this.terminationSignal.set(context.getTerminationSignal());
+			this.terminationSignal.set(context.getTransportTerminationSignal());
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {}

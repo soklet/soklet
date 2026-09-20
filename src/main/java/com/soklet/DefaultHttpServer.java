@@ -451,7 +451,7 @@ final class DefaultHttpServer implements HttpServer {
 		initialize(exactContext.getSokletConfig(),
 				exactContext.getAdmissionFencedRequestHandler());
 		return getLifecycleAdapter().delegatedRuntime(
-				exactContext.getTerminationSignal(), DefaultHttpServer.this::start);
+				exactContext.getTransportTerminationSignal(), DefaultHttpServer.this::start);
 	}
 
 	public void start() {
@@ -1142,7 +1142,7 @@ final class DefaultHttpServer implements HttpServer {
 			@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
-		if (marshaledResponse.getStream().isPresent())
+		if (marshaledResponse.getStreamingResponseBody().isPresent())
 			throw new IllegalArgumentException(
 					"Unparsed-request responses may not stream a body.");
 
@@ -1467,7 +1467,7 @@ final class DefaultHttpServer implements HttpServer {
 		headers.sort(Comparator.comparing(Header::name));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
-		StreamingResponseBody stream = marshaledResponse.getStream().orElse(null);
+		StreamingResponseBody stream = marshaledResponse.getStreamingResponseBody().orElse(null);
 
 		if (stream != null) {
 			Request streamingRequest = requireNonNull(request);

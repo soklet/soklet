@@ -229,13 +229,13 @@ class McpLocalizationAdversarialTests {
 						.title("Canonical title")
 						.build())
 				.instructions("Canonical instructions.")
-				.addTool(McpToolRegistration.withName("adversarial.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("adversarial.tool")
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
-						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+						.build()))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						java.net.URI.create("adversarial://text"), "text")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -245,7 +245,7 @@ class McpLocalizationAdversarialTests {
 																"unused")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}

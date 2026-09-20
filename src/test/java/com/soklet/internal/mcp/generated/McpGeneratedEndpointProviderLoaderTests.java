@@ -167,7 +167,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 						.fromClasspathIntrospection();
 				assertEquals(List.of("/a", "/b"), endpointPaths(registry));
 				registry.getEndpoints().forEach(endpoint -> {
-					endpoint.getTools().forEach(tool -> {
+					endpoint.getToolRegistrations().forEach(tool -> {
 						tool.getInputSchema().getDocument();
 						tool.getOutputSchema().orElseThrow().getDocument();
 					});
@@ -608,7 +608,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				McpEndpointRegistry registry = McpEndpointRegistry
 						.fromClasspathIntrospection();
 				McpToolRegistration<?> tool = registry.getEndpoints().get(0)
-						.getTools().get(0);
+						.getToolRegistrations().get(0);
 
 				Class<?> argumentsClass = Class.forName(
 						ENDPOINT_A + "$Arguments", true, classLoader);
@@ -777,7 +777,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				              .build();
 				      return McpEndpoint.withPath("/a", McpImplementation
 				              .withNameAndVersion("endpoint-a", "1").build())
-				          .addTool(tool)
+				          .toolRegistrations(java.util.List.of(tool))
 				          .build();
 				    }
 				    public String[] schemaDigests() {
@@ -798,7 +798,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				              .build();
 				      return McpEndpoint.withPath("/b", McpImplementation
 				              .withNameAndVersion("endpoint-b", "1").build())
-				          .addTool(tool)
+				          .toolRegistrations(java.util.List.of(tool))
 				          .build();
 				    }
 				    public String[] schemaDigests() {
@@ -838,7 +838,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				      McpEndpoint original = new ProviderB().endpoint(instanceResolver);
 				      return McpEndpoint.withPath("/a", McpImplementation
 				              .withNameAndVersion("endpoint-b", "1").build())
-				          .addTool(original.getTools().get(0))
+				          .toolRegistrations(java.util.List.of(original.getToolRegistrations().get(0)))
 				          .build();
 				    }
 				    public String[] schemaDigests() {

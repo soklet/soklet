@@ -118,8 +118,8 @@ class McpLocalizationCatalogExtractionTests {
 		assertSame(inputTitle, texts.stream()
 				.filter(inputTitle::equals).findFirst().orElseThrow());
 
-		assertSame(endpoint.getTools().get(0).getInputSchema().getDocument(),
-				endpoint.getTools().get(0).getInputSchema().getDocument());
+		assertSame(endpoint.getToolRegistrations().get(0).getInputSchema().getDocument(),
+				endpoint.getToolRegistrations().get(0).getInputSchema().getDocument());
 		assertEquals("Input title", schemaProperty(endpoint, "query/text")
 				.find("title").map(McpJsonString.class::cast)
 				.map(McpJsonString::getValue).orElseThrow());
@@ -245,7 +245,7 @@ class McpLocalizationCatalogExtractionTests {
 						.title("Subscribed title")
 						.description("Subscribed description")
 						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://subscribed"), "subscribed")
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
@@ -255,7 +255,7 @@ class McpLocalizationCatalogExtractionTests {
 																"unused")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.subscriptionConfig(subscriptions)
 				.build();
 		McpCanonicalLocalizationPlan plan =
@@ -282,25 +282,25 @@ class McpLocalizationCatalogExtractionTests {
 								.description("Generated description")
 								.build())
 						.instructions("Generated instructions")
-						.addTool(McpToolRegistration.withName("generated.search")
+						.toolRegistrations(java.util.List.of(McpToolRegistration.withName("generated.search")
 								.argumentType(GeneratedArguments.class)
 								.handler((request, arguments, features) ->
 										McpCompleteResult.fromToolText("unused"))
 								.title("Generated tool")
 								.description("Generated tool description")
-								.build())
-						.addPrompt(McpPromptRegistration.withName("generated.prompt")
+								.build()))
+						.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("generated.prompt")
 								.handler((request, prompt, features) ->
 										McpCompleteResult.fromPromptOutput(
 												McpPromptOutput.fromMessages()))
 								.title("Generated prompt")
 								.description("Generated prompt description")
-								.addArgument(McpPromptArgumentDeclaration.withName("topic")
+								.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("topic")
 										.title("Generated topic")
 										.description("Generated topic description")
 										.required(true)
-										.build())
-								.build())
+										.build()))
+								.build()))
 						.build()));
 
 		assertEquals(DefaultMcpLocalizationCatalogExtractor.extract(programmatic),
@@ -628,37 +628,36 @@ class McpLocalizationCatalogExtractionTests {
 						.description("Catalog server description")
 						.build())
 				.instructions("Use catalog.search.")
-				.addTool(McpToolRegistration.withName("catalog.search")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.search")
 						.argumentAndOutputTypes(ParityArguments.class, ParityResult.class)
 						.handler((request, arguments, features) ->
 								new ParityResult("unused"))
 						.title("Catalog search")
 						.description("Searches the catalog")
-						.build())
-				.addPrompt(McpPromptRegistration.withName("catalog.compose")
+						.build()))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.compose")
 						.handler((request, prompt, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Catalog composer")
 						.description("Builds a catalog prompt")
-						.addArgument(McpPromptArgumentDeclaration.withName("subject")
+						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject")
 								.title("Prompt subject")
 								.description("Subject to discuss")
 								.required(true)
-								.build())
-						.build())
-				.addResource(McpResourceRegistration.withUriAndName(
+								.build()))
+						.build()))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Catalog summary")
 						.description("Summary contents")
-						.build())
-				.addResource(McpResourceRegistration.withUriTemplateAndName(
+						.build(), McpResourceRegistration.withUriTemplateAndName(
 						"catalog://items/{id}", "item")
 						.handler(resourceHandler)
 						.title("Catalog item")
 						.description("Item contents")
-						.build())
+						.build()))
 				.build();
 	}
 
@@ -667,22 +666,20 @@ class McpLocalizationCatalogExtractionTests {
 				McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages());
 		return McpEndpoint.withPath("/prompt-remapping", McpImplementation
 						.withNameAndVersion("prompt-remapping", "1").build())
-				.addPrompt(McpPromptRegistration.withName("hidden.prompt")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("hidden.prompt")
 						.handler(handler)
 						.title("Hidden prompt title")
-						.build())
-				.addPrompt(McpPromptRegistration.withName("visible.prompt")
+						.build(), McpPromptRegistration.withName("visible.prompt")
 						.handler(handler)
 						.title("Visible prompt title")
-						.addArgument(McpPromptArgumentDeclaration.withName("first")
+						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("first")
 								.title("First argument title")
 								.description("First argument description")
-								.build())
-						.addArgument(McpPromptArgumentDeclaration.withName("second")
+								.build(), McpPromptArgumentDeclaration.withName("second")
 								.title("Second argument title")
 								.description("Second argument description")
-								.build())
-						.build())
+								.build()))
+						.build()))
 				.build();
 	}
 
@@ -833,7 +830,7 @@ class McpLocalizationCatalogExtractionTests {
 						McpCompleteResult.fromToolText("unused"))
 				.title("Tool title")
 				.description("Tool description")
-				.annotations(McpToolAnnotations.builder()
+				.toolAnnotations(McpToolAnnotations.builder()
 						.title("Annotation title").build())
 				.build();
 		McpToolRegistration<EmptyArguments> outputTool = McpToolRegistration
@@ -849,10 +846,10 @@ class McpLocalizationCatalogExtractionTests {
 								McpPromptOutput.fromMessages()))
 				.title("Prompt title")
 				.description("Prompt description")
-				.addArgument(McpPromptArgumentDeclaration.withName("topic")
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("topic")
 						.title("Topic title")
 						.description("Topic description")
-						.build())
+						.build()))
 				.build();
 		McpResourceReadHandler resourceHandler = (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(
@@ -867,21 +864,19 @@ class McpLocalizationCatalogExtractionTests {
 						.description("Server description")
 						.build())
 				.instructions("Endpoint instructions")
-				.addTool(tool)
-				.addTool(outputTool)
-				.addPrompt(prompt)
-				.addResource(McpResourceRegistration.withUriAndName(
+				.toolRegistrations(java.util.List.of(tool, outputTool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("catalog://summary"), "summary")
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
-						.build())
-				.addResource(McpResourceRegistration.withUriTemplateAndName(
+						.build(), McpResourceRegistration.withUriTemplateAndName(
 						"catalog://item/{id}", "item")
 						.handler(resourceHandler)
 						.title("Template title")
 						.description("Template description")
-						.build());
+						.build()));
 		if (customResourceList)
 			builder.resourceListHandler((request, list, features) ->
 					McpResourcePage.builder().build());
@@ -890,7 +885,7 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpJsonObject schemaProperty(McpEndpoint endpoint,
 			String property) {
-		McpJsonObject properties = (McpJsonObject) endpoint.getTools().get(0)
+		McpJsonObject properties = (McpJsonObject) endpoint.getToolRegistrations().get(0)
 				.getInputSchema().getDocument().find("properties").orElseThrow();
 		return (McpJsonObject) properties.find(property).orElseThrow();
 	}

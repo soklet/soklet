@@ -1276,7 +1276,7 @@ public class McpHandlerMetricsObservabilityTests {
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
 						"handler-metrics-test", "4.0.0").build())
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
 

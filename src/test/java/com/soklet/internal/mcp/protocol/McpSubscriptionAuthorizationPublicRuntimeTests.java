@@ -146,7 +146,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 			Assertions.assertNotNull(features);
 			Assertions.assertNotNull(features.getCancelationToken());
 			Assertions.assertTrue(features.getProgressReporter().isEmpty());
-			Assertions.assertTrue(features.getTaskControl().isEmpty());
+			Assertions.assertTrue(features.getTaskCreationContext().isEmpty());
 			Assertions.assertTrue(features.find(McpLocalizationContext.class)
 					.isEmpty());
 			McpRequestContext initialRequest = context.getInitialRequestContext();
@@ -1048,8 +1048,9 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 						"subscription-authorization-runtime-test", "4.0.0")
 						.build())
 				.subscriptionConfig(subscriptions);
-		addResource(endpoint, FIRST_RESOURCE_URI);
-		addResource(endpoint, SECOND_RESOURCE_URI);
+		endpoint.resourceRegistrations(List.of(resource(FIRST_RESOURCE_URI),
+				resource(SECOND_RESOURCE_URI)));
+		Assertions.assertEquals(2, endpoint.build().getResourceRegistrations().size());
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(endpoint.build())))
@@ -1076,9 +1077,9 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				.build();
 	}
 
-	private static void addResource(McpEndpoint.@NonNull Builder endpoint,
-			@NonNull URI resourceUri) {
-		endpoint.addResource(McpResourceRegistration
+	@NonNull
+	private static McpResourceRegistration resource(@NonNull URI resourceUri) {
+		return McpResourceRegistration
 				.withUriAndName(resourceUri, "Subscription authorization resource")
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
@@ -1086,7 +1087,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 										McpTextResourceContents.withUriAndText(
 												read.getUri(), "test").build())
 										.build()))
-				.build());
+				.build();
 	}
 
 	@NonNull

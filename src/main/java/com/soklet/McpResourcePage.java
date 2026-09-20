@@ -22,8 +22,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -44,7 +42,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class McpResourcePage implements McpOperationResult {
 	@NonNull
-	private final List<@NonNull McpResourceDescriptor> resources;
+	private final List<@NonNull McpResourceDescriptor> resourceDescriptors;
 	@NonNull
 	private final McpJsonObject metadata;
 	@Nullable
@@ -59,7 +57,7 @@ public final class McpResourcePage implements McpOperationResult {
 	}
 
 	private McpResourcePage(@NonNull Builder builder) {
-		this.resources = List.copyOf(builder.resources);
+		this.resourceDescriptors = List.copyOf(builder.resourceDescriptors);
 		this.metadata = builder.metadata;
 		this.nextCursor = builder.nextCursor;
 		this.cacheTimeToLiveOverride = builder.cacheTimeToLiveOverride;
@@ -67,8 +65,8 @@ public final class McpResourcePage implements McpOperationResult {
 
 	/** @return immutable resource descriptors in insertion order */
 	@NonNull
-	public List<@NonNull McpResourceDescriptor> getResources() {
-		return this.resources;
+	public List<@NonNull McpResourceDescriptor> getResourceDescriptors() {
+		return this.resourceDescriptors;
 	}
 
 	/** @return immutable result-level protocol extension metadata */
@@ -109,7 +107,7 @@ public final class McpResourcePage implements McpOperationResult {
 			return true;
 		if (!(other instanceof McpResourcePage page))
 			return false;
-		return this.resources.equals(page.resources)
+		return this.resourceDescriptors.equals(page.resourceDescriptors)
 				&& this.metadata.equals(page.metadata)
 				&& Objects.equals(this.nextCursor, page.nextCursor)
 				&& Objects.equals(this.cacheTimeToLiveOverride,
@@ -119,7 +117,7 @@ public final class McpResourcePage implements McpOperationResult {
 	/** @return structural page hash code */
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.resources, this.metadata, this.nextCursor,
+		return Objects.hash(this.resourceDescriptors, this.metadata, this.nextCursor,
 				this.cacheTimeToLiveOverride);
 	}
 
@@ -131,8 +129,8 @@ public final class McpResourcePage implements McpOperationResult {
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
-		private final List<@NonNull McpResourceDescriptor> resources =
-				new ArrayList<>();
+		private List<@NonNull McpResourceDescriptor> resourceDescriptors =
+				List.of();
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 		@Nullable
@@ -144,28 +142,19 @@ public final class McpResourcePage implements McpOperationResult {
 		}
 
 		/**
-		 * Appends one resource descriptor.
+		 * Replaces resource descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param resource resource descriptor
+		 * @param resourceDescriptors resource descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addResource(@NonNull McpResourceDescriptor resource) {
-			this.resources.add(requireNonNull(resource));
-			return this;
-		}
-
-		/**
-		 * Appends resource descriptors in iteration order.
-		 *
-		 * @param resources resource descriptors
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addResources(
-				@NonNull Collection<? extends @NonNull McpResourceDescriptor> resources) {
-			requireNonNull(resources);
-			resources.forEach(this::addResource);
+		public Builder resourceDescriptors(
+				@Nullable List<@NonNull McpResourceDescriptor> resourceDescriptors) {
+			this.resourceDescriptors = resourceDescriptors == null ? List.of()
+					: List.copyOf(resourceDescriptors);
 			return this;
 		}
 

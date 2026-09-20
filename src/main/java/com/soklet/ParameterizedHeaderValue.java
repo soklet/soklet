@@ -73,9 +73,9 @@ public final class ParameterizedHeaderValue {
 	private final List<@NonNull Parameter> parameters;
 
 	@NonNull
-	public static Builder withName(@NonNull String value) {
-		requireNonNull(value);
-		return new Builder(value);
+	public static Builder withName(@NonNull String name) {
+		requireNonNull(name);
+		return new Builder(name);
 	}
 
 	private ParameterizedHeaderValue(@NonNull Builder builder) {

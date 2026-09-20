@@ -177,9 +177,9 @@ public class McpAppResourceRuntimeTests {
 
 	private static McpEndpoint endpoint(java.util.function.Supplier<McpResourceOutput> output) {
 		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("apps-test", "test").build())
-				.addResource(McpResourceRegistration.withUriAndName(URI_VALUE, "view")
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(URI_VALUE, "view")
 						.handler((request, resource, features) ->
-								McpCompleteResult.fromResourceOutput(output.get())).mimeType(MIME).build()).build();
+								McpCompleteResult.fromResourceOutput(output.get())).mimeType(MIME).build())).build();
 	}
 
 	private static McpServer.Builder configure(McpServer.Builder builder, McpEndpoint endpoint) {

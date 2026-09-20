@@ -1086,6 +1086,44 @@
       ],
       "rationale": "This separately identified local Apps render/refresh experiment uses the unchanged candidate-backed public fixture/proxy/shell with the exact one-file isolated Inspector auth patch; it does not change the original released-host profile or its FAILED evidence. It retains the original external-host compilation/fixture/host 120-second and browser 90-second process bounds, two-MiB output limit, ten-second identity/readiness probes, 1.5-second host API and five-second direct authentication limits. The normal and failure paths both use three-second browser/host graceful exits, six-second fixture EOF shutdown and independent two-second TERM/KILL fallback. Fallible identity/source snapshots precede private state and signal listeners; private creation is cleanup-covered and only owned state is removed. UI phases have fifteen-second deadlines; a fixed six-second post-refresh window requires zero browser exceptions or unexpected traffic. Child iframe targets are paused until recursive interception; shared CDP and finite request/frame/context/session limits remain. Intentional close keeps late requests counted/classified but paused and consumes only exact pending CDP_CLOSED errors. Exception diagnostics retain at most eight structural observations with eight bounded numeric/source-enum stack locations, never raw messages/URLs. The unchanged proxy bounds total exchanges to 32, request/response to 64-KiB/one-MiB and exchanges to fifteen seconds. The stricter experimental verdict requires exactly eight successful MCP exchanges and one to eight exact denied subscription retries, at most sixteen rows, zero gate/OAuth rejections and post-shutdown trace sealing. Candidate/shell/original/patched/browser/source/class-tree/config identities and clean process/private-state removal are mandatory. This is a narrow dirty-candidate experimental observation, not a settled V4 release gate, ordinary JUnit scope, immutable candidate receipt, general Apps security proof or released-host qualification; these discovery candidates receive no synthetic JUnit guard.",
       "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
+      "id": "CLASS-APPS-DISABLED-HOST",
+      "paths": [
+        "verification/interoperability/apps-disabled-host/browser-probe.mjs",
+        "verification/interoperability/apps-disabled-host/run.mjs",
+        "verification/interoperability/apps-disabled-host/trace-self-test.mjs",
+        "verification/interoperability/apps-disabled-host/trace.mjs"
+      ],
+      "rationale": "This separate Apps-disabled negative-capability development profile uses the unchanged public candidate fixture and exact isolated Inspector auth patch; existing positive, ordinary Inspector and failed released-host evidence remain unchanged. Compilation/fixture/host processes retain 120-second deadlines, the browser 90 seconds, dependency audit 60 seconds, identity/readiness ten seconds, host API 1.5 seconds, and captured child output two MiB. Four separate direct capability/resource controls have five-second abort deadlines and one-MiB streaming response bounds; they never count as browser actions. Fifteen-second DOM phases establish a real ordinary tool call, followed by six seconds of repeated connected-DOM absence checks. Continuous frame/session tracking rejects App/sandbox/child frames and Apps URLs; browser requests are capped at 256 with the shared finite CDP/context/frame/session bounds. Late intentional-close requests remain classified and counted but paused; only exact pending CDP_CLOSED errors are consumed. The proxy caps transport requests/connections at 32, request/response bytes at 64 KiB/one MiB, complete exchanges at fifteen seconds and headers/upstream waits at ten seconds. The accepted trace is narrower: six exact ordinary successes plus one to eight individually validated policy denials, at most fourteen rows; every request omits Apps and Skills, with no UI read, app-only helper call, OAuth or other gate rejection. Normal and failed shutdown use three-second browser/host grace, six-second fixture EOF grace and separate two-second TERM/KILL fallbacks. Input snapshots precede private state/listeners; cleanup removes only owned private state, and post-shutdown trace sealing, source/candidate/POM/shell/class-tree/original/patched/browser/config rechecks and no interruption are mandatory. Self-tests use finite loopback requests and bounded socket waits. Apps OFF removes tool UI hints and the app-only helper but is not resource authorization: discovery and ordinary authorized resource access remain available. This dirty-candidate experiment is not an ordinary JUnit scope, settled lifecycle harness, immutable release receipt, general Apps security proof or released-host qualification; these broad discovery candidates receive no synthetic JUnit guard.",
+      "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
+      "id": "CLASS-APPS-MIME-BOUNDARY",
+      "paths": [
+        "verification/interoperability/apps-mime-boundary/README.md",
+        "verification/interoperability/apps-mime-boundary/run.mjs"
+      ],
+      "rationale": "This separate Apps MIME boundary development profile uses the unchanged public-API fixture on a real loopback Soklet listener with the exact prior candidate and static shell; it starts no browser, Inspector or bridge and installs or patches no dependencies. Twelve fixed capability profiles execute 54 matrix requests across three fresh fixtures, with eighteen matrix requests and two admission controls per fixture, at most nineteen admitted requests within the unchanged capacity-twenty request bucket. Capabilities vary per request under one credential per batch; malformed or unsupported MIME shapes must not expose the app-only tool, while ordinary authorized UI resource access remains distinct from capability negotiation. Each matrix request has a five-second abort deadline, 64-KiB request limit and one-MiB response limit; each matrix batch has a sixty-second deadline. Admission controls have five-second deadlines and 64-KiB response limits. There are no automatic retries. Compilation and fixture processes have 120-second bounds, dependency analysis sixty seconds, identity subprocesses and fixture readiness ten seconds, and captured child output two MiB. Every fixture receives EOF with six-second graceful-exit allowance followed by independent two-second TERM/KILL supervision, and each fixture is fully stopped before the next starts. Cancellation aborts active HTTP work and prevents subsequent requests and fixture batches; queued signals are drained before final adjudication. Private state is exclusively created and cleanup-covered, and only invocation-owned state is removed. Candidate, POM, shell/build-receipt, source, executable and class-tree identities are checked after failures as well as success. Every fixture must exit CLEAN with complete cleanup; exact matrix and receipt gates reject absent, malformed or sparse evidence. Partial completed-response rows survive failures but contain only fixed labels, booleans, status and bounded byte counts, never runtime credentials, raw payloads or arbitrary diagnostics. The Node self-tests use fixed in-memory protocol and process-shape controls without creating Soklet lifecycle owners. This direct candidate protocol experiment is not native wrong-MIME host qualification, a general Apps security or authorization proof, an ordinary JUnit scope, settled lifecycle harness or immutable release receipt; these broad discovery candidates receive no synthetic JUnit guard.",
+      "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
+      "id": "CLASS-APPS-CSP-HOST",
+      "paths": [
+        "verification/interoperability/apps-csp-host/browser-probe-self-test.mjs",
+        "verification/interoperability/apps-csp-host/browser-probe.mjs",
+        "verification/interoperability/apps-csp-host/canary-self-test.mjs",
+        "verification/interoperability/apps-csp-host/canary.mjs",
+        "verification/interoperability/apps-csp-host/run.mjs"
+      ],
+      "rationale": "This separately labeled real-host CSP development profile preserves the exact prior public candidate fixture, static shell and isolated one-file Inspector auth patch. Real DOM catalog rendering and SDK-backed refresh precede two explicitly CDP-driver-triggered operations in the existing opaque App default context: fetch and Image, testing connect-src and img-src denial. Four successful main-frame positive controls surround the two App probes using fixed canary endpoints, fixed successful bodies, anonymous CORS, no credentials/referrer and no redirects. The App and preceding image control use the same exact image URL; only the final image control uses a fixed reviewed query alias mapped to identical server bytes and headers, avoiding browser image-memory reuse. Every owned CDP session disables browser cache, and four actual server requests remain mandatory. Each operation has a two-second deadline and a bounded event-settling interval; denial evidence requires matching trusted enforcement-mode securitypolicyviolation events, exact expected context/directive/policy/destination facts and failed operations. Interception explicitly permits these exact canary GETs and cannot supply the denial; any valid App request reaching the canary still receives HTTP 200 while failing the evidence. The independent credential-free loopback canary bounds total requests and lifetime connections to sixteen, headers to eight KiB, request/header/socket activity to five seconds and idempotent close to one second. It enforces exact monotonic phases, rejects credentials/referrers/invalid origins/hosts/methods/paths/bodies, retains at most sixteen structural rows and saturates counters at seventeen. Idle keep-alive expiration after successful controls is clean retirement, not a fabricated CSP error. Final canary evidence requires exactly one connect and image hit in each control phase, none in App/idle/sealed phases, no failures and clean sealed closure. Existing host bounds remain: compilation/fixture/host 120 seconds, browser ninety seconds, dependency audit sixty seconds, identity/readiness ten seconds, host API 1.5 seconds, direct authentication five seconds, captured child output two MiB and ordinary DOM phases fifteen seconds. The unchanged proxy caps exchanges/connections at 32, requests/responses at 64 KiB/one MiB and whole exchanges at fifteen seconds; accepted MCP traces require exactly eight successes plus one to eight exact policy denials, at most sixteen rows, with no OAuth/gate rejection. Shared finite CDP/request/context/frame/session bounds, recursively paused child interception and zero unexpected browser exceptions/traffic remain mandatory through the fixed six-second post-probe observation and real disconnect. Normal and failed shutdown use three-second browser/host grace, six-second fixture EOF grace and independent two-second TERM/KILL fallback. Input snapshots precede private state/listeners; only owned private state is removed, and source/candidate/POM/shell/class-tree/original/patched/browser/config identities and final sealed traces are checked with late interruption failing closed. Tests use bounded loopback sockets and finite event/DOM mocks. This narrow dirty-candidate observation does not qualify other CSP directives, positive App allowlists, permissions, localization, authorization, a released host or immutable release; these broad discovery candidates are not ordinary JUnit scopes or settled lifecycle harnesses and receive no synthetic JUnit guard.",
+      "requiredAction": "NONE"
     }
   ],
   "currentLegacyExclusions": [
@@ -1259,8 +1297,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 7628,
-    "candidateSha256": "5d00b587c9a26ab90282bf7d4395d4c3851bea5d30d21705c4b872751a47bbc0",
+    "candidateCount": 7677,
+    "candidateSha256": "27806ea74c7aeef35f7cdf3c87bdc5c050a0bec63f5734d5dfe1ce9c21b9bbf7",
     "candidates": [
       {
         "kinds": [
@@ -61053,6 +61091,398 @@
       },
       {
         "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 474,
+        "lineSha256": "a775aedd9f7cda28bdc3627634bd5ed3ca0b16529dfc89d3a8a79ef788b2c4a7",
+        "path": "verification/interoperability/apps-csp-host/browser-probe-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 482,
+        "lineSha256": "1d2329670745b62fa74c330c328d598eb86dc2568520eae1704aa8d731e4365b",
+        "path": "verification/interoperability/apps-csp-host/browser-probe-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 489,
+        "lineSha256": "7c39a61771340f67b1ca8b0945f104443440a0cb051a59e3fc22f05df7a1e5b8",
+        "path": "verification/interoperability/apps-csp-host/browser-probe-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 4,
+        "lineSha256": "738f2f372e5863a9cc6a9d76dfe2da2fe6ba26c1939ceb2310946d567860f8ba",
+        "path": "verification/interoperability/apps-csp-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 578,
+        "lineSha256": "e934cbb5d50d1694ec2a925263f69ddd38e5821c3173ca5378f6e354eb4ae1c7",
+        "path": "verification/interoperability/apps-csp-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 586,
+        "lineSha256": "68870da0cda2a0274fd428bcf199b035e2c53dd52f1777977f637dfa58f86d82",
+        "path": "verification/interoperability/apps-csp-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 625,
+        "lineSha256": "05887ad7b743b0a452de600a130ecb3f3f11187bf88dfc19ca9f543ad59e7c46",
+        "path": "verification/interoperability/apps-csp-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 626,
+        "lineSha256": "c0f839795bbc228662ef872d837eda759b35ec2daaa6659b3c22af79ddfb457a",
+        "path": "verification/interoperability/apps-csp-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 9,
+        "lineSha256": "4932e3933b715b0013150447e8cc082ca69c0d6e45b45363844bac0c7174c9e9",
+        "path": "verification/interoperability/apps-csp-host/canary-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 16,
+        "lineSha256": "0427b61d776a451d0f52b800ff4e061b40f53d83b53c3298bdb3d9da6c616979",
+        "path": "verification/interoperability/apps-csp-host/canary-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 217,
+        "lineSha256": "aedba1aabbd0b6a2666dcf4fcf1faa6c37d021fa317ae97101d92634852b8d5e",
+        "path": "verification/interoperability/apps-csp-host/canary-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 218,
+        "lineSha256": "4af262ca0541c212ac91b13a45fbd0bf63b9763bff03c0b456898b855264b6c8",
+        "path": "verification/interoperability/apps-csp-host/canary-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 64,
+        "lineSha256": "42c0f7964d28d22bce70e8cbd8b743ebee6744573826d5c8512b2f1d55cd6565",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 65,
+        "lineSha256": "2fbda3852a87aed606c3d348287b1985e5be35eb0fef2d131fbae1257c0275f7",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 75,
+        "lineSha256": "b034e11aba8b7bff7725a27eae6abcefe28a97930a7de4a239e134da21dcb82b",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 79,
+        "lineSha256": "dec2296656bfe7df8a96ec3e26dcb6e43df55073e884b3de56cce32fdbdf1339",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 94,
+        "lineSha256": "a4ed03e564b0a6da785f1d94abff9d1ee3f4eb2b02b43c1c2b9627f5cf9dc069",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 113,
+        "lineSha256": "494506dca62efd37a0f8b72ac48d80857b89ee220cce91f7106497dd5df316a0",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 121,
+        "lineSha256": "836abe1c385cd6aead6e119d978b040976a5431662783551eeba54d893009d0f",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 159,
+        "lineSha256": "96a356334232bfef2c74a884da54c7e0e620ae5966d2406d5012671df82afb97",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 162,
+        "lineSha256": "4d2390922586aa8d98652c8df1de67e656d786103dcc1e58cb8b9e7d1e93db22",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 163,
+        "lineSha256": "2e0e3b6498b459e9b22f9451cda3f3b31668b64648fd24f3d61da0d07c96f3ce",
+        "path": "verification/interoperability/apps-csp-host/canary.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 27,
+        "lineSha256": "570c0cd99af5081a4e8a29c05ce9003e5f03c14714fefe07d71a5294636a4ed7",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 115,
+        "lineSha256": "571060c9e81a71ba20d5dd76c8341af79558c3cb98fa7d182ed78818185bd6ac",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 116,
+        "lineSha256": "af9531402a9e352e85814d8dff7c809afc5f4f43e264471cd86c1355425c4ba6",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 123,
+        "lineSha256": "9d91c183d8e38812b418b05974f8b87d2b9fff686fbefa24dd3bdf70e6e232f0",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 124,
+        "lineSha256": "af9531402a9e352e85814d8dff7c809afc5f4f43e264471cd86c1355425c4ba6",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 130,
+        "lineSha256": "aa54e1a2587b5e8e8cc48fb96ec24944c3d744d3b765946b7eb573c85d9d6712",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 142,
+        "lineSha256": "5613bc4db322c561661a6d179afe463fbd0f2d1d889a3dd99bd659da8193c6bf",
+        "path": "verification/interoperability/apps-csp-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 4,
+        "lineSha256": "738f2f372e5863a9cc6a9d76dfe2da2fe6ba26c1939ceb2310946d567860f8ba",
+        "path": "verification/interoperability/apps-disabled-host/browser-probe.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 26,
+        "lineSha256": "570c0cd99af5081a4e8a29c05ce9003e5f03c14714fefe07d71a5294636a4ed7",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 101,
+        "lineSha256": "571060c9e81a71ba20d5dd76c8341af79558c3cb98fa7d182ed78818185bd6ac",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 102,
+        "lineSha256": "af9531402a9e352e85814d8dff7c809afc5f4f43e264471cd86c1355425c4ba6",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 109,
+        "lineSha256": "9d91c183d8e38812b418b05974f8b87d2b9fff686fbefa24dd3bdf70e6e232f0",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 110,
+        "lineSha256": "af9531402a9e352e85814d8dff7c809afc5f4f43e264471cd86c1355425c4ba6",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 116,
+        "lineSha256": "aa54e1a2587b5e8e8cc48fb96ec24944c3d744d3b765946b7eb573c85d9d6712",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 128,
+        "lineSha256": "5613bc4db322c561661a6d179afe463fbd0f2d1d889a3dd99bd659da8193c6bf",
+        "path": "verification/interoperability/apps-disabled-host/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 185,
+        "lineSha256": "1d0dad1d600f317157f96baf3bbf46f36d8c4afdf3ced0155e0768a0405cbc07",
+        "path": "verification/interoperability/apps-disabled-host/trace-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 308,
+        "lineSha256": "4b8e99b65fbb73425189b9bff11ff49cce6d795b1b2f269f064a9160325e2cca",
+        "path": "verification/interoperability/apps-disabled-host/trace-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 137,
+        "lineSha256": "8d7378990e3a4a290e13a584109e5ca79b882623c605a9648d8015d134966c94",
+        "path": "verification/interoperability/apps-disabled-host/trace.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 140,
+        "lineSha256": "0953942d00be6f0c23aa1b29a285928699ae9cb6c41f83d872badd8d7f5ff2fc",
+        "path": "verification/interoperability/apps-disabled-host/trace.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 192,
+        "lineSha256": "8c7b13e37244ab8abaa16e5647db7f54f1129393dfee35bdeed29366f4c218e9",
+        "path": "verification/interoperability/apps-disabled-host/trace.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 193,
+        "lineSha256": "f8fdcdabeaceac849d958217a9d9a1a4b8e2b495e5396fea3f90ee19565d5c6a",
+        "path": "verification/interoperability/apps-disabled-host/trace.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 197,
+        "lineSha256": "9e2ddc3076e2d9de8e3bfe6d274a537c0935f8224f7f811500e7b5142b55e448",
+        "path": "verification/interoperability/apps-disabled-host/trace.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 4,
+        "lineSha256": "84e49a5241698f1757ade52ea6929b27af6b79eda14f20b0b6eb8c0da9de4981",
+        "path": "verification/interoperability/apps-mime-boundary/README.md"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 154,
+        "lineSha256": "ed6944a1afddae6cdbd6d3285c10dde8b0738a7a4abc484d533155e0c80886b3",
+        "path": "verification/interoperability/apps-mime-boundary/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 166,
+        "lineSha256": "27d88843b51785217c1bbfabe2e00a77fd5ca0e275e4ca372076c2677e9806d2",
+        "path": "verification/interoperability/apps-mime-boundary/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 177,
+        "lineSha256": "f51a2b98a2ca3dc55167adc18b47c8d4fe4d213992daef3d325f304671d02a26",
+        "path": "verification/interoperability/apps-mime-boundary/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 178,
+        "lineSha256": "131dbf94ee750ce883b3f93d1c7cedeeec768633c7cf1ca4502867891ad21a01",
+        "path": "verification/interoperability/apps-mime-boundary/run.mjs"
+      },
+      {
+        "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
         "line": 63,
@@ -62663,12 +63093,12 @@
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 1867,
       "JUNIT_OUTER_GUARD": 363,
-      "LIFECYCLE_SIGNAL": 4342,
-      "NAMED_TIMEOUT_CANDIDATE": 1403,
+      "LIFECYCLE_SIGNAL": 4343,
+      "NAMED_TIMEOUT_CANDIDATE": 1451,
       "PROCESS_OUTER_GUARD": 12,
       "WORKFLOW_OUTER_GUARD": 14
     },
-    "pathCount": 369
+    "pathCount": 380
   },
   "formatVersion": 2,
   "javascriptGuards": [

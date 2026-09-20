@@ -193,8 +193,8 @@ public class McpCompletionAnnotationProcessorTests {
 					"example.LiveCompletionEndpoint", false, classLoader);
 			McpEndpoint endpoint = McpEndpointRegistry.fromClasses(endpointClass)
 					.getEndpoints().get(0);
-			McpPromptRegistration prompt = endpoint.getPrompts().get(0);
-			McpResourceRegistration resource = endpoint.getResources().get(0);
+			McpPromptRegistration prompt = endpoint.getPromptRegistrations().get(0);
+			McpResourceRegistration resource = endpoint.getResourceRegistrations().get(0);
 			McpRequestContext request = (McpRequestContext) Proxy.newProxyInstance(
 					classLoader, new Class<?>[] { McpRequestContext.class },
 					(proxy, method, arguments) -> null);

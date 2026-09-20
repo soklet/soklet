@@ -79,7 +79,7 @@ public final class MarshaledResponse {
 	@Nullable
 	private final MarshaledResponseBody body;
 	@Nullable
-	private final StreamingResponseBody stream;
+	private final StreamingResponseBody streamingResponseBody;
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
@@ -190,12 +190,12 @@ public final class MarshaledResponse {
 		this.cookies = builder.cookies == null ? Set.of()
 				: Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
 		this.body = builder.body;
-		this.stream = builder.stream;
+		this.streamingResponseBody = builder.streamingResponseBody;
 
-		if (getBody().isPresent() && getStream().isPresent())
+		if (getBody().isPresent() && getStreamingResponseBody().isPresent())
 			throw new IllegalStateException("A MarshaledResponse may not specify both a known-length body and a streaming response body.");
 
-		if (getStream().isPresent()) {
+		if (getStreamingResponseBody().isPresent()) {
 			if (isBodylessStatusCode(getStatusCode()))
 				throw new IllegalStateException(format("HTTP status code %d must not include a streaming response body.", getStatusCode()));
 
@@ -212,7 +212,7 @@ public final class MarshaledResponse {
 	public String toString() {
 		return format("%s{statusCode=%s, headers=<redacted>, cookies=<redacted>, body=%s}",
 				getClass().getSimpleName(), getStatusCode(),
-				getStream().isPresent() ? "<streaming>" : format("%d bytes", getBodyLength()));
+				getStreamingResponseBody().isPresent() ? "<streaming>" : format("%d bytes", getBodyLength()));
 	}
 
 	/**
@@ -305,8 +305,8 @@ public final class MarshaledResponse {
 	 * @return the streaming response body to write, or {@link Optional#empty()} if no stream should be written
 	 */
 	@NonNull
-	public Optional<@NonNull StreamingResponseBody> getStream() {
-		return Optional.ofNullable(this.stream);
+	public Optional<@NonNull StreamingResponseBody> getStreamingResponseBody() {
+		return Optional.ofNullable(this.streamingResponseBody);
 	}
 
 	/**
@@ -316,7 +316,7 @@ public final class MarshaledResponse {
 	 */
 	@NonNull
 	public Boolean isStreaming() {
-		return getStream().isPresent();
+		return getStreamingResponseBody().isPresent();
 	}
 
 	/**
@@ -360,7 +360,7 @@ public final class MarshaledResponse {
 	 * Builder used to construct instances of {@link MarshaledResponse} via {@link MarshaledResponse#withResponse(Response)} or {@link MarshaledResponse#withStatusCode(Integer)}.
 	 * <p>
 	 * Known-length bodies and streaming bodies are mutually exclusive. This builder does not automatically clear one
-	 * when the other is set; use {@link #withoutBody()} or {@link #withoutStream()} before {@link #build()} when
+	 * when the other is set; use {@link #withoutBody()} or {@link #withoutStreamingResponseBody()} before {@link #build()} when
 	 * switching body modes.
 	 * <p>
 	 * This class is intended for use by a single thread.
@@ -378,7 +378,7 @@ public final class MarshaledResponse {
 		@Nullable
 		private MarshaledResponseBody body;
 		@Nullable
-		private StreamingResponseBody stream;
+		private StreamingResponseBody streamingResponseBody;
 
 		Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
@@ -509,21 +509,21 @@ public final class MarshaledResponse {
 		}
 
 		/**
-		 * Sets a streaming response body, or removes any current stream if {@code stream} is {@code null}.
+		 * Sets a streaming response body, or removes any current stream if {@code streamingResponseBody} is {@code null}.
 		 * <p>
 		 * A response may have a known-length body or a stream, but not both. Setting a stream does not remove any
 		 * current known-length body; call {@link #withoutBody()} first if replacing a known-length body with a stream.
 		 * {@link #build()} rejects responses that still specify both.
 		 *
-		 * @param stream the streaming response body to write, or {@code null} for no stream
+		 * @param streamingResponseBody the streaming response body to write, or {@code null} for no stream
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder stream(@Nullable StreamingResponseBody stream) {
-			if (stream == null)
-				return withoutStream();
+		public Builder streamingResponseBody(@Nullable StreamingResponseBody streamingResponseBody) {
+			if (streamingResponseBody == null)
+				return withoutStreamingResponseBody();
 
-			this.stream = stream;
+			this.streamingResponseBody = streamingResponseBody;
 			return this;
 		}
 
@@ -548,8 +548,8 @@ public final class MarshaledResponse {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder withoutStream() {
-			this.stream = null;
+		public Builder withoutStreamingResponseBody() {
+			this.streamingResponseBody = null;
 			return this;
 		}
 
@@ -709,7 +709,7 @@ public final class MarshaledResponse {
 					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()));
 
 			marshaledResponse.getBody().ifPresent(this.builder::body);
-			marshaledResponse.getStream().ifPresent(this.builder::stream);
+			marshaledResponse.getStreamingResponseBody().ifPresent(this.builder::streamingResponseBody);
 		}
 
 		@NonNull
@@ -855,17 +855,17 @@ public final class MarshaledResponse {
 		}
 
 		/**
-		 * Replaces the streaming response body, or removes the current stream if {@code stream} is {@code null}.
+		 * Replaces the streaming response body, or removes the current stream if {@code streamingResponseBody} is {@code null}.
 		 * <p>
 		 * This does not remove a known-length response body; {@link #finish()} rejects a response that still specifies
 		 * both body modes.
 		 *
-		 * @param stream the streaming response body to write, or {@code null} for no stream
+		 * @param streamingResponseBody the streaming response body to write, or {@code null} for no stream
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier stream(@Nullable StreamingResponseBody stream) {
-			this.builder.stream(stream);
+		public Copier streamingResponseBody(@Nullable StreamingResponseBody streamingResponseBody) {
+			this.builder.streamingResponseBody(streamingResponseBody);
 			return this;
 		}
 
@@ -889,8 +889,8 @@ public final class MarshaledResponse {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier withoutStream() {
-			this.builder.withoutStream();
+		public Copier withoutStreamingResponseBody() {
+			this.builder.withoutStreamingResponseBody();
 			return this;
 		}
 

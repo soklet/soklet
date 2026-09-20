@@ -286,7 +286,7 @@ public class McpResourceCursorApplicationPatternsTests {
 	}
 
 	private static List<String> names(McpResourcePage page) {
-		return page.getResources().stream()
+		return page.getResourceDescriptors().stream()
 				.map(McpResourceDescriptor::getName)
 				.toList();
 	}
@@ -513,11 +513,13 @@ public class McpResourceCursorApplicationPatternsTests {
 			int end = Math.min(snapshot.records().size(),
 					Math.addExact(claims.offset(), this.pageSize));
 			McpResourcePage.Builder page = McpResourcePage.builder();
+			List<McpResourceDescriptor> resourceDescriptors = new ArrayList<>();
 			for (ResourceRecord record
 					: snapshot.records().subList(claims.offset(), end))
-				page.addResource(McpResourceDescriptor
+				resourceDescriptors.add(McpResourceDescriptor
 						.withUriAndName(record.uri(), record.name())
 						.build());
+			page.resourceDescriptors(resourceDescriptors);
 			if (end < snapshot.records().size())
 				page.nextCursor(this.codec.issue(
 						claims.withOffset(end), boundPrincipal));

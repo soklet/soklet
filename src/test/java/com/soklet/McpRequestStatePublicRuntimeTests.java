@@ -99,7 +99,7 @@ public class McpRequestStatePublicRuntimeTests {
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("application-state-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
@@ -219,11 +219,11 @@ public class McpRequestStatePublicRuntimeTests {
 					return McpCompleteResult.fromToolText(
 							"framework state accepted");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("framework-state-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
@@ -301,11 +301,11 @@ public class McpRequestStatePublicRuntimeTests {
 					return McpCompleteResult.fromToolText(
 							"cross-instance state accepted");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("cross-instance-state-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpProtectionKeyring sharedKeyring = productionKeyring(
 				"fleet-key", "0123456789abcdef0123456789abcdef");
@@ -406,11 +406,11 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("state-errors-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {
@@ -484,11 +484,11 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("state-rate-limit-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {
@@ -552,11 +552,11 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder("state-tool-rate-limit-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.admissionController(context -> {
@@ -627,12 +627,12 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
-				.addInputRequestDeclarations(roots)
+				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpEndpoint endpoint = endpointBuilder(
 				"state-tool-rate-limit-" + caseName + "-runtime-test")
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.requestRateLimiter(null)
@@ -668,8 +668,8 @@ public class McpRequestStatePublicRuntimeTests {
 	public void onlyFrameworkProtectedRegistrationsRequireProtectionConfig() {
 		McpEndpoint frameworkEndpoint = endpointBuilder(
 				"framework-config-runtime-test")
-				.addTool(noopTool("framework-config",
-						McpRequestStateMode.FRAMEWORK_PROTECTED))
+				.toolRegistrations(java.util.List.of(noopTool("framework-config",
+						McpRequestStateMode.FRAMEWORK_PROTECTED)))
 				.build();
 		IllegalStateException exception = Assertions.assertThrows(
 				IllegalStateException.class,
@@ -680,8 +680,8 @@ public class McpRequestStatePublicRuntimeTests {
 
 		McpEndpoint applicationEndpoint = endpointBuilder(
 				"application-config-runtime-test")
-				.addTool(noopTool("application-config",
-						McpRequestStateMode.APPLICATION_PROTECTED))
+				.toolRegistrations(java.util.List.of(noopTool("application-config",
+						McpRequestStateMode.APPLICATION_PROTECTED)))
 				.build();
 		McpServer applicationServer = serverBuilder(applicationEndpoint).build();
 		McpServerDiagnostics applicationDiagnostics =
@@ -722,7 +722,7 @@ public class McpRequestStatePublicRuntimeTests {
 						Duration.ofHours(1)))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("resource-state-runtime-test")
-				.addResource(resource)
+				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);

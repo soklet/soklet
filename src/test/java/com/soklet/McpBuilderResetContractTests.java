@@ -278,8 +278,8 @@ public class McpBuilderResetContractTests {
 				reset.getCorsAuthorizer());
 		Assertions.assertTrue(reset.protectionConfig().isEmpty());
 		Assertions.assertEquals(McpProtectionMode.NONE,
-				reset.getProtectionControl().getProtectionMode());
-		Assertions.assertFalse(reset.getTraceCorrelationControl().isEnabled());
+				reset.getProtectionKeyringManager().getProtectionMode());
+		Assertions.assertFalse(reset.getTraceCorrelationKeyManager().isEnabled());
 		Assertions.assertSame(McpAdmissionController.acceptAllInstance(),
 				reset.getAdmissionController());
 	}

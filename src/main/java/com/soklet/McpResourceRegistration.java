@@ -22,7 +22,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -428,14 +427,19 @@ public final class McpResourceRegistration {
 		}
 
 		/**
-		 * Appends one icon descriptor.
+		 * Replaces icon descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param icon icon descriptor
+		 * @param icons icon descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public ExactBuilder addIcon(@NonNull McpIcon icon) {
-			this.state.icons.add(requireNonNull(icon));
+		public ExactBuilder icons(
+				@Nullable List<@NonNull McpIcon> icons) {
+			this.state.icons = icons == null ? List.of()
+					: List.copyOf(icons);
 			return this;
 		}
 
@@ -475,33 +479,19 @@ public final class McpResourceRegistration {
 		}
 
 		/**
-		 * Appends one input-request declaration for this resource operation.
+		 * Replaces input-request declarations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param inputRequestDeclaration declaration to append
+		 * @param inputRequestDeclarations input-request declarations, or null to clear
 		 * @return this builder
-		 * @throws NullPointerException if the declaration is null
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public ExactBuilder addInputRequestDeclaration(
-				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
-			this.state.inputRequestDeclarations.add(
-					requireNonNull(inputRequestDeclaration));
-			return this;
-		}
-
-		/**
-		 * Appends input-request declarations for this resource operation.
-		 *
-		 * <p>Repeated calls append declarations in order.
-		 *
-		 * @param declarations declarations to append
-		 * @return this builder
-		 * @throws NullPointerException if the array or a declaration is null
-		 */
-		@NonNull
-		public ExactBuilder addInputRequestDeclarations(
-				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
-			appendInputRequestDeclarations(this.state, declarations);
+		public ExactBuilder inputRequestDeclarations(
+				@Nullable List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations) {
+			this.state.inputRequestDeclarations = inputRequestDeclarations == null ? List.of()
+					: List.copyOf(inputRequestDeclarations);
 			return this;
 		}
 
@@ -576,14 +566,19 @@ public final class McpResourceRegistration {
 		}
 
 		/**
-		 * Appends one icon descriptor.
+		 * Replaces icon descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param icon icon descriptor
+		 * @param icons icon descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public TemplateBuilder addIcon(@NonNull McpIcon icon) {
-			this.state.icons.add(requireNonNull(icon));
+		public TemplateBuilder icons(
+				@Nullable List<@NonNull McpIcon> icons) {
+			this.state.icons = icons == null ? List.of()
+					: List.copyOf(icons);
 			return this;
 		}
 
@@ -606,33 +601,19 @@ public final class McpResourceRegistration {
 		}
 
 		/**
-		 * Appends one input-request declaration for this resource operation.
+		 * Replaces input-request declarations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param inputRequestDeclaration declaration to append
+		 * @param inputRequestDeclarations input-request declarations, or null to clear
 		 * @return this builder
-		 * @throws NullPointerException if the declaration is null
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public TemplateBuilder addInputRequestDeclaration(
-				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
-			this.state.inputRequestDeclarations.add(
-					requireNonNull(inputRequestDeclaration));
-			return this;
-		}
-
-		/**
-		 * Appends input-request declarations for this resource operation.
-		 *
-		 * <p>Repeated calls append declarations in order.
-		 *
-		 * @param declarations declarations to append
-		 * @return this builder
-		 * @throws NullPointerException if the array or a declaration is null
-		 */
-		@NonNull
-		public TemplateBuilder addInputRequestDeclarations(
-				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
-			appendInputRequestDeclarations(this.state, declarations);
+		public TemplateBuilder inputRequestDeclarations(
+				@Nullable List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations) {
+			this.state.inputRequestDeclarations = inputRequestDeclarations == null ? List.of()
+					: List.copyOf(inputRequestDeclarations);
 			return this;
 		}
 
@@ -678,18 +659,6 @@ public final class McpResourceRegistration {
 		}
 	}
 
-	private static void appendInputRequestDeclarations(
-			@NonNull BuilderState state,
-			@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
-		requireNonNull(state);
-		requireNonNull(declarations);
-		List<McpInputRequestDeclaration> copiedDeclarations =
-				new ArrayList<>(declarations.length);
-		for (McpInputRequestDeclaration declaration : declarations)
-			copiedDeclarations.add(requireNonNull(declaration));
-		state.inputRequestDeclarations.addAll(copiedDeclarations);
-	}
-
 	@NotThreadSafe
 	private static final class BuilderState {
 		@NonNull
@@ -707,7 +676,7 @@ public final class McpResourceRegistration {
 		@Nullable
 		private String mimeType;
 		@NonNull
-		private final List<@NonNull McpIcon> icons = new ArrayList<>();
+		private List<@NonNull McpIcon> icons = List.of();
 		@Nullable
 		private McpContentAnnotations annotations;
 		@Nullable
@@ -716,8 +685,8 @@ public final class McpResourceRegistration {
 		private McpCachePolicy cachePolicy =
 				McpCachePolicy.privateNoCacheInstance();
 		@NonNull
-		private final List<@NonNull McpInputRequestDeclaration>
-				inputRequestDeclarations = new ArrayList<>();
+		private List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = List.of();
 		@NonNull
 		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull

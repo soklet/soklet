@@ -48,8 +48,7 @@ public class McpCompleteResultBuilderTests {
 	@Test
 	void toBuilderPreservesAllFieldsAndCreatesIndependentSnapshots() {
 		McpToolOutput payload = McpToolOutput.builder()
-				.addContent(McpTextContent.fromText("first"))
-				.addContent(McpTextContent.fromText("second"))
+				.content(java.util.List.of(McpTextContent.fromText("first"), McpTextContent.fromText("second")))
 				.structuredContent(McpJsonObject.builder().put("value", "original").build())
 				.error(true).build();
 		McpJsonObject metadata = McpJsonObject.builder().put("com.example/view", "secret").build();

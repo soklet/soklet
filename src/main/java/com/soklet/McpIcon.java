@@ -22,7 +22,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -118,7 +117,7 @@ public final class McpIcon {
 		@Nullable
 		private String mimeType;
 		@NonNull
-		private final List<@NonNull String> sizes = new ArrayList<>();
+		private List<@NonNull String> sizes = List.of();
 		@Nullable
 		private McpIconTheme theme;
 
@@ -139,18 +138,19 @@ public final class McpIcon {
 		}
 
 		/**
-		 * Replaces the advertised icon sizes.
-		 * Passing no sizes clears the advertised icon sizes.
+		 * Replaces advertised icon sizes in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param sizes size tokens such as {@code 48x48} or {@code any}
+		 * @param sizes advertised icon sizes, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder sizes(@NonNull String @NonNull... sizes) {
-			requireNonNull(sizes);
-			this.sizes.clear();
-			for (String size : sizes)
-				this.sizes.add(requireNonNull(size));
+		public Builder sizes(
+				@Nullable List<@NonNull String> sizes) {
+			this.sizes = sizes == null ? List.of()
+					: List.copyOf(sizes);
 			return this;
 		}
 

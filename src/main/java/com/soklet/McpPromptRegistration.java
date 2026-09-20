@@ -21,7 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -258,13 +257,13 @@ public final class McpPromptRegistration {
 		@Nullable
 		private String description;
 		@NonNull
-		private final List<@NonNull McpIcon> icons = new ArrayList<>();
+		private List<@NonNull McpIcon> icons = List.of();
 		@NonNull
-		private final List<@NonNull McpPromptArgumentDeclaration> arguments =
-				new ArrayList<>();
+		private List<@NonNull McpPromptArgumentDeclaration> arguments =
+				List.of();
 		@NonNull
-		private final List<@NonNull McpInputRequestDeclaration>
-				inputRequestDeclarations = new ArrayList<>();
+		private List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = List.of();
 		@NonNull
 		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull
@@ -295,63 +294,53 @@ public final class McpPromptRegistration {
 		}
 
 		/**
-		 * Appends one icon descriptor.
+		 * Replaces icon descriptors in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param icon icon descriptor
+		 * @param icons icon descriptors, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addIcon(@NonNull McpIcon icon) {
-			this.icons.add(requireNonNull(icon));
+		public Builder icons(
+				@Nullable List<@NonNull McpIcon> icons) {
+			this.icons = icons == null ? List.of()
+					: List.copyOf(icons);
 			return this;
 		}
 
 		/**
-		 * Appends one prompt-argument declaration.
+		 * Replaces prompt-argument declarations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param argument argument declaration
+		 * @param arguments prompt-argument declarations, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addArgument(
-				@NonNull McpPromptArgumentDeclaration argument) {
-			this.arguments.add(requireNonNull(argument));
+		public Builder arguments(
+				@Nullable List<@NonNull McpPromptArgumentDeclaration> arguments) {
+			this.arguments = arguments == null ? List.of()
+					: List.copyOf(arguments);
 			return this;
 		}
 
 		/**
-		 * Appends one input-request declaration for this prompt operation.
+		 * Replaces input-request declarations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param inputRequestDeclaration declaration to append
+		 * @param inputRequestDeclarations input-request declarations, or null to clear
 		 * @return this builder
-		 * @throws NullPointerException if the declaration is null
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addInputRequestDeclaration(
-				@NonNull McpInputRequestDeclaration inputRequestDeclaration) {
-			this.inputRequestDeclarations.add(
-					requireNonNull(inputRequestDeclaration));
-			return this;
-		}
-
-		/**
-		 * Appends input-request declarations for this prompt operation.
-		 *
-		 * <p>Repeated calls append declarations in order.
-		 *
-		 * @param declarations declarations to append
-		 * @return this builder
-		 * @throws NullPointerException if the array or a declaration is null
-		 */
-		@NonNull
-		public Builder addInputRequestDeclarations(
-				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
-			requireNonNull(declarations);
-			List<McpInputRequestDeclaration> copiedDeclarations =
-					new ArrayList<>(declarations.length);
-			for (McpInputRequestDeclaration declaration : declarations)
-				copiedDeclarations.add(requireNonNull(declaration));
-			this.inputRequestDeclarations.addAll(copiedDeclarations);
+		public Builder inputRequestDeclarations(
+				@Nullable List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations) {
+			this.inputRequestDeclarations = inputRequestDeclarations == null ? List.of()
+					: List.copyOf(inputRequestDeclarations);
 			return this;
 		}
 

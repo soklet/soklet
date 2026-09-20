@@ -677,7 +677,7 @@ final class SokletFrameworkSetupValidationTests {
 				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
 			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
-			TransportTerminationSignal signal = context.getTerminationSignal();
+			TransportTerminationSignal signal = context.getTransportTerminationSignal();
 			AtomicBoolean proofPublished = new AtomicBoolean();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {
@@ -743,7 +743,7 @@ final class SokletFrameworkSetupValidationTests {
 				@NonNull SseTransportAttachmentContext context,
 				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
-			TransportTerminationSignal signal = context.getTerminationSignal();
+			TransportTerminationSignal signal = context.getTransportTerminationSignal();
 			AtomicBoolean proofPublished = new AtomicBoolean();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) {

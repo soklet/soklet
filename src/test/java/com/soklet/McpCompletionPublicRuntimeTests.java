@@ -55,7 +55,7 @@ public class McpCompletionPublicRuntimeTests {
 		McpPromptRegistration prompt = prompt("visible", true,
 				(request, context, features) -> {
 					promptEntries.incrementAndGet();
-					assertTrue(features.find(McpTaskControl.class).isEmpty());
+					assertTrue(features.find(McpTaskCreationContext.class).isEmpty());
 					assertFalse(features.getCancelationToken().isCanceled());
 					promptContext.set((McpCompletionContext.Prompt) context);
 					return McpArgumentCompletionResult.withValues(List.of("α", "a"))
@@ -72,7 +72,7 @@ public class McpCompletionPublicRuntimeTests {
 				.handler((request, resource, features) -> text(resource.getUri()))
 				.completionHandler((request, context, features) -> {
 					resourceEntries.incrementAndGet();
-					assertTrue(features.find(McpTaskControl.class).isEmpty());
+					assertTrue(features.find(McpTaskCreationContext.class).isEmpty());
 					resourceContext.set((McpCompletionContext.Resource) context);
 					return McpArgumentCompletionResult.withValues(List.of("sku-1"))
 							.hasMore(false).build();
@@ -89,9 +89,8 @@ public class McpCompletionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
 						.build())
-				.addPrompt(prompt).addPrompt(noCompleter).addPrompt(hidden)
-				.addResource(template).addResource(noCompleterTemplate)
-				.addResource(exact).build();
+				.promptRegistrations(java.util.List.of(prompt, noCompleter, hidden))
+				.resourceRegistrations(java.util.List.of(template, noCompleterTemplate, exact)).build();
 		McpServer server = McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
@@ -222,9 +221,9 @@ public class McpCompletionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
 						.build())
-				.addPrompt(prompt("enabled", true,
+				.promptRegistrations(java.util.List.of(prompt("enabled", true,
 						(request, context, features) ->
-								McpArgumentCompletionResult.fromValues(List.of())))
+								McpArgumentCompletionResult.fromValues(List.of()))))
 				.build();
 		IllegalStateException error = assertThrows(IllegalStateException.class,
 				() -> McpServer.withPort(0).host(HOST)
@@ -238,7 +237,7 @@ public class McpCompletionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
 						.build())
-				.addPrompt(prompt("plain", false, null)).build();
+				.promptRegistrations(java.util.List.of(prompt("plain", false, null))).build();
 		McpServer server = McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -277,19 +276,19 @@ public class McpCompletionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
 						.build())
-				.addPrompt(prompt("visible", true,
+				.promptRegistrations(java.util.List.of(prompt("visible", true,
 						(request, context, features) -> {
 							handlerEntries.incrementAndGet();
 							return McpArgumentCompletionResult.fromValues(List.of("x"));
-						}))
+						})))
 				.build();
 		McpServer server = McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor((request, features, continuation) ->
 					McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-							.addMessage(McpPromptMessage.fromUserContent(
-									McpTextContent.fromText("wrong"))).build()))
+							.messages(java.util.List.of(McpPromptMessage.fromUserContent(
+									McpTextContent.fromText("wrong")))).build()))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST)).build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
@@ -315,10 +314,9 @@ public class McpCompletionPublicRuntimeTests {
 				.withName(name)
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-								.addMessage(McpPromptMessage.fromUserContent(
-										McpTextContent.fromText("unused"))).build()))
-				.addArgument(McpPromptArgumentDeclaration.withName("subject").build())
-				.addArgument(McpPromptArgumentDeclaration.withName("tone").build());
+								.messages(java.util.List.of(McpPromptMessage.fromUserContent(
+										McpTextContent.fromText("unused")))).build()))
+				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject").build(), McpPromptArgumentDeclaration.withName("tone").build()));
 		if (completer)
 			builder.completionHandler(handler);
 		return builder.build();

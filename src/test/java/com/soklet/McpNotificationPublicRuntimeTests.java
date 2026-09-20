@@ -80,7 +80,7 @@ public class McpNotificationPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-boundary-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(tool)
+				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		McpEndpointRegistry endpointRegistry =
@@ -219,8 +219,8 @@ public class McpNotificationPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"notification-output-test", "4.0.0").build())
 				.serverInfoIncluded(false)
-				.addTool(progressTool)
-				.addResource(McpResourceRegistration.withUriAndName(
+				.toolRegistrations(java.util.List.of(progressTool))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("https://example.com/notification-resource"),
 						"Notification resource")
 						.handler((request, read, features) ->
@@ -230,7 +230,7 @@ public class McpNotificationPublicRuntimeTests {
 																"unused")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.subscriptionConfig(subscriptions)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();

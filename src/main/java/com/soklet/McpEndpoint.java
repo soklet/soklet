@@ -24,8 +24,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,11 +52,11 @@ public final class McpEndpoint {
 	@Nullable
 	private final String instructions;
 	@NonNull
-	private final List<@NonNull McpToolRegistration<?>> tools;
+	private final List<@NonNull McpToolRegistration<?>> toolRegistrations;
 	@NonNull
-	private final List<@NonNull McpPromptRegistration> prompts;
+	private final List<@NonNull McpPromptRegistration> promptRegistrations;
 	@NonNull
-	private final List<@NonNull McpResourceRegistration> resources;
+	private final List<@NonNull McpResourceRegistration> resourceRegistrations;
 	@Nullable
 	private final McpResourceListHandler resourceListHandler;
 	@NonNull
@@ -98,9 +96,9 @@ public final class McpEndpoint {
 		this.serverInformation = builder.serverInformation;
 		this.serverInformationIncluded = builder.serverInformationIncluded;
 		this.instructions = builder.instructions;
-		this.tools = List.copyOf(builder.tools);
-		this.prompts = List.copyOf(builder.prompts);
-		this.resources = List.copyOf(builder.resources);
+		this.toolRegistrations = List.copyOf(builder.toolRegistrations);
+		this.promptRegistrations = List.copyOf(builder.promptRegistrations);
+		this.resourceRegistrations = List.copyOf(builder.resourceRegistrations);
 		this.resourceListHandler = builder.resourceListHandler;
 		this.resourceListCachePolicy = builder.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
@@ -110,20 +108,20 @@ public final class McpEndpoint {
 		this.subscriptionConfig = builder.subscriptionConfig;
 
 		Set<String> toolNames = new LinkedHashSet<>();
-		for (McpToolRegistration<?> tool : this.tools) {
+		for (McpToolRegistration<?> tool : this.toolRegistrations) {
 			if (!toolNames.add(tool.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP tool name: " + tool.getName());
 		}
 		Set<String> promptNames = new LinkedHashSet<>();
-		for (McpPromptRegistration prompt : this.prompts) {
+		for (McpPromptRegistration prompt : this.promptRegistrations) {
 			if (!promptNames.add(prompt.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP prompt name: " + prompt.getName());
 		}
 		Map<URI, McpResourceRegistration> exactResources = new LinkedHashMap<>();
 		Set<String> resourceUriTemplates = new LinkedHashSet<>();
-		for (McpResourceRegistration resource : this.resources) {
+		for (McpResourceRegistration resource : this.resourceRegistrations) {
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
 				if (exactResources.putIfAbsent(uri, resource) != null)
@@ -136,7 +134,7 @@ public final class McpEndpoint {
 							"Duplicate MCP resource URI template: " + uriTemplate);
 			}
 		}
-		for (McpToolRegistration<?> tool : this.tools) {
+		for (McpToolRegistration<?> tool : this.toolRegistrations) {
 			Optional<URI> resourceUri = McpAppMetadataSupport
 					.effectiveToolMetadata(tool.getMetadata(),
 							tool.getAppToolMetadata().orElse(null))
@@ -169,9 +167,9 @@ public final class McpEndpoint {
 		this.serverInformation = endpoint.serverInformation;
 		this.serverInformationIncluded = endpoint.serverInformationIncluded;
 		this.instructions = endpoint.instructions;
-		this.tools = endpoint.tools;
-		this.prompts = endpoint.prompts;
-		this.resources = endpoint.resources;
+		this.toolRegistrations = endpoint.toolRegistrations;
+		this.promptRegistrations = endpoint.promptRegistrations;
+		this.resourceRegistrations = endpoint.resourceRegistrations;
 		this.resourceListHandler = endpoint.resourceListHandler;
 		this.resourceListCachePolicy = endpoint.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
@@ -228,8 +226,8 @@ public final class McpEndpoint {
 	 * @return immutable tool registrations
 	 */
 	@NonNull
-	public List<@NonNull McpToolRegistration<?>> getTools() {
-		return this.tools;
+	public List<@NonNull McpToolRegistration<?>> getToolRegistrations() {
+		return this.toolRegistrations;
 	}
 
 	/**
@@ -238,8 +236,8 @@ public final class McpEndpoint {
 	 * @return immutable prompt registrations
 	 */
 	@NonNull
-	public List<@NonNull McpPromptRegistration> getPrompts() {
-		return this.prompts;
+	public List<@NonNull McpPromptRegistration> getPromptRegistrations() {
+		return this.promptRegistrations;
 	}
 
 	/**
@@ -254,8 +252,8 @@ public final class McpEndpoint {
 	 * @return immutable resource registrations
 	 */
 	@NonNull
-	public List<@NonNull McpResourceRegistration> getResources() {
-		return this.resources;
+	public List<@NonNull McpResourceRegistration> getResourceRegistrations() {
+		return this.resourceRegistrations;
 	}
 
 	/**
@@ -370,11 +368,11 @@ public final class McpEndpoint {
 		@Nullable
 		private String instructions;
 		@NonNull
-		private final List<@NonNull McpToolRegistration<?>> tools;
+		private List<@NonNull McpToolRegistration<?>> toolRegistrations;
 		@NonNull
-		private final List<@NonNull McpPromptRegistration> prompts;
+		private List<@NonNull McpPromptRegistration> promptRegistrations;
 		@NonNull
-		private final List<@NonNull McpResourceRegistration> resources;
+		private List<@NonNull McpResourceRegistration> resourceRegistrations;
 		@Nullable
 		private McpResourceListHandler resourceListHandler;
 		@NonNull
@@ -393,9 +391,9 @@ public final class McpEndpoint {
 			this.path = requireNonNull(path);
 			this.serverInformation = requireNonNull(implementation);
 			this.serverInformationIncluded = true;
-			this.tools = new ArrayList<>();
-			this.prompts = new ArrayList<>();
-			this.resources = new ArrayList<>();
+			this.toolRegistrations = List.of();
+			this.promptRegistrations = List.of();
+			this.resourceRegistrations = List.of();
 			this.resourceListCachePolicy =
 					McpCachePolicy.privateNoCacheInstance();
 			this.resourceTemplateListCachePolicy =
@@ -450,83 +448,53 @@ public final class McpEndpoint {
 		}
 
 		/**
-		 * Adds a tool registration.
+		 * Replaces tool registrations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param tool tool registration
+		 * @param toolRegistrations tool registrations, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addTool(@NonNull McpToolRegistration<?> tool) {
-			this.tools.add(requireNonNull(tool));
+		public Builder toolRegistrations(
+				@Nullable List<@NonNull McpToolRegistration<?>> toolRegistrations) {
+			this.toolRegistrations = toolRegistrations == null ? List.of()
+					: List.copyOf(toolRegistrations);
 			return this;
 		}
 
 		/**
-		 * Adds tool registrations in iteration order.
+		 * Replaces prompt registrations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param tools tool registrations
+		 * @param promptRegistrations prompt registrations, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addTools(
-				@NonNull Collection<? extends @NonNull McpToolRegistration<?>> tools) {
-			requireNonNull(tools);
-			for (McpToolRegistration<?> tool : tools)
-				addTool(tool);
+		public Builder promptRegistrations(
+				@Nullable List<@NonNull McpPromptRegistration> promptRegistrations) {
+			this.promptRegistrations = promptRegistrations == null ? List.of()
+					: List.copyOf(promptRegistrations);
 			return this;
 		}
 
 		/**
-		 * Adds a prompt registration.
+		 * Replaces resource registrations in supplied order.
+		 * Null or empty clears the property. The complete list is validated and
+		 * snapshotted before replacing the prior value.
 		 *
-		 * @param prompt prompt registration
+		 * @param resourceRegistrations resource registrations, or null to clear
 		 * @return this builder
+		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
-		public Builder addPrompt(@NonNull McpPromptRegistration prompt) {
-			this.prompts.add(requireNonNull(prompt));
-			return this;
-		}
-
-		/**
-		 * Adds prompt registrations in iteration order.
-		 *
-		 * @param prompts prompt registrations
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addPrompts(
-				@NonNull Collection<? extends @NonNull McpPromptRegistration> prompts) {
-			requireNonNull(prompts);
-			for (McpPromptRegistration prompt : prompts)
-				addPrompt(prompt);
-			return this;
-		}
-
-		/**
-		 * Adds an exact-URI or URI-template resource registration.
-		 *
-		 * @param resource resource registration
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addResource(@NonNull McpResourceRegistration resource) {
-			this.resources.add(requireNonNull(resource));
-			return this;
-		}
-
-		/**
-		 * Adds resource registrations in iteration order.
-		 *
-		 * @param resources resource registrations
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder addResources(
-				@NonNull Collection<? extends @NonNull McpResourceRegistration> resources) {
-			requireNonNull(resources);
-			for (McpResourceRegistration resource : resources)
-				addResource(resource);
+		public Builder resourceRegistrations(
+				@Nullable List<@NonNull McpResourceRegistration> resourceRegistrations) {
+			this.resourceRegistrations = resourceRegistrations == null ? List.of()
+					: List.copyOf(resourceRegistrations);
 			return this;
 		}
 

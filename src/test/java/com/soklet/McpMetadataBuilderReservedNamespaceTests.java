@@ -140,19 +140,19 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	public void nestedToolPromptAndResourceOutputRejectBeforeOutputConstruction() {
 		McpJsonObject reserved = reservedMetadata();
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpToolOutput.builder().addContent(McpEmbeddedResource.withResource(
+				McpToolOutput.builder().content(java.util.List.of(McpEmbeddedResource.withResource(
 						McpTextResourceContents.withUriAndText(
 								URI.create("test://nested/tool-text"), "secret")
-								.metadata(reserved).build()).build()).build());
+								.metadata(reserved).build()).build())).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpToolOutput.builder().addContent(McpEmbeddedResource.withResource(
+				McpToolOutput.builder().content(java.util.List.of(McpEmbeddedResource.withResource(
 						McpBlobResourceContents.withUriAndData(
 								URI.create("test://nested/tool-blob"), new byte[] { 1 })
-								.metadata(reserved).build()).build()).build());
+								.metadata(reserved).build()).build())).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpPromptOutput.builder().addMessage(
+				McpPromptOutput.builder().messages(java.util.List.of(
 						McpPromptMessage.fromAssistantContent(McpTextContent
-								.withText("secret").metadata(reserved).build())).build());
+								.withText("secret").metadata(reserved).build()))).build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpResourceOutput.withContent(McpTextResourceContents
 						.withUriAndText(RESOURCE_URI, "secret")
@@ -165,10 +165,9 @@ public class McpMetadataBuilderReservedNamespaceTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"metadata-reserved-namespace-test",
 						"4.0.0").build())
-				.addTool(invalidNestedTextTool())
-				.addTool(invalidNestedBlobTool())
-				.addPrompt(invalidPrompt())
-				.addResource(invalidResource())
+				.toolRegistrations(java.util.List.of(invalidNestedTextTool(), invalidNestedBlobTool()))
+				.promptRegistrations(java.util.List.of(invalidPrompt()))
+				.resourceRegistrations(java.util.List.of(invalidResource()))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
@@ -211,12 +210,12 @@ public class McpMetadataBuilderReservedNamespaceTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-								.addContent(McpEmbeddedResource.withResource(
+								.content(java.util.List.of(McpEmbeddedResource.withResource(
 										McpTextResourceContents.withUriAndText(
 												URI.create("test://handler/tool-text"),
 												SECRET_VALUE)
 												.metadata(reservedMetadata()).build())
-										.build()).build()))
+										.build())).build()))
 				.build();
 	}
 
@@ -225,12 +224,12 @@ public class McpMetadataBuilderReservedNamespaceTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
-								.addContent(McpEmbeddedResource.withResource(
+								.content(java.util.List.of(McpEmbeddedResource.withResource(
 										McpBlobResourceContents.withUriAndData(
 												URI.create("test://handler/tool-blob"),
 												SECRET_VALUE.getBytes(StandardCharsets.UTF_8))
 												.metadata(reservedMetadata()).build())
-										.build()).build()))
+										.build())).build()))
 				.build();
 	}
 
@@ -238,9 +237,9 @@ public class McpMetadataBuilderReservedNamespaceTests {
 		return McpPromptRegistration.withName("reserved.prompt")
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-								.addMessage(McpPromptMessage.fromAssistantContent(
+								.messages(java.util.List.of(McpPromptMessage.fromAssistantContent(
 										McpTextContent.withText(SECRET_VALUE)
-												.metadata(reservedMetadata()).build()))
+												.metadata(reservedMetadata()).build())))
 								.build()))
 				.build();
 	}

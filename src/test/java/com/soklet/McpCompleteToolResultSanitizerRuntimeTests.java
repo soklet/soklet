@@ -359,7 +359,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 		McpToolRegistration<ModeArguments> tool = McpToolRegistration.withName(TOOL)
 				.argumentAndOutputTypes(ModeArguments.class, SafeOutput.class)
 				.operationHandler((request, arguments, features) -> {
-					manager.store(features.getTaskControl().orElseThrow().getTaskOrigin(), original);
+					manager.store(features.getTaskCreationContext().orElseThrow().getTaskOrigin(), original);
 					return McpTaskCreatedResult.<SafeOutput>fromTaskId(TASK);
 				}).build();
 		run(List.of(tool), sanitizer, manager, McpHandlerInterceptor.passThroughInstance(), simulator -> {
@@ -427,7 +427,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 			McpHandlerInterceptor interceptor, LifecycleObserver observer, Consumer<Simulator> test) {
 		McpEndpoint.Builder endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion("result-sanitizer-test", "test").build()).serverInfoIncluded(false);
-		tools.forEach(endpoint::addTool);
+		endpoint.toolRegistrations(new java.util.ArrayList<>(tools));
 		McpServer.Builder server = McpServer.withPort(0).host("127.0.0.1")
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint.build())))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of("127.0.0.1"))

@@ -55,15 +55,15 @@ public class McpToolContentPublicRuntimeTests {
 			throws Exception {
 		McpToolRegistration<McpJsonObject> imageTool = tool(IMAGE_TOOL,
 				McpToolOutput.builder()
-						.addContent(McpImageContent.withDataAndMimeType(
+						.content(java.util.List.of(McpImageContent.withDataAndMimeType(
 								new byte[] { 0, 1, 2, (byte) 255 }, "image/png")
-								.build())
+								.build()))
 						.build());
 		McpToolRegistration<McpJsonObject> audioTool = tool(AUDIO_TOOL,
 				McpToolOutput.builder()
-						.addContent(McpAudioContent.withDataAndMimeType(
+						.content(java.util.List.of(McpAudioContent.withDataAndMimeType(
 								new byte[] { 'R', 'I', 'F', 'F' }, "audio/wav")
-								.build())
+								.build()))
 						.build());
 		McpTextResourceContents embeddedContents = McpTextResourceContents
 				.withUriAndText(URI.create("test://embedded/content"),
@@ -72,8 +72,8 @@ public class McpToolContentPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> embeddedResourceTool = tool(
 				EMBEDDED_RESOURCE_TOOL, McpToolOutput.builder()
-						.addContent(McpEmbeddedResource.withResource(embeddedContents)
-								.build())
+						.content(java.util.List.of(McpEmbeddedResource.withResource(embeddedContents)
+								.build()))
 						.build());
 		McpTextResourceContents mixedResource = McpTextResourceContents
 				.withUriAndText(URI.create("test://mixed/final"),
@@ -82,10 +82,8 @@ public class McpToolContentPublicRuntimeTests {
 				.build();
 		McpToolRegistration<McpJsonObject> mixedContentTool = tool(
 				MIXED_CONTENT_TOOL, McpToolOutput.builder()
-						.addContent(McpTextContent.fromText("first"))
-						.addContent(McpImageContent.withDataAndMimeType(
-								new byte[] { 9, 8, 7 }, "image/gif").build())
-						.addContent(McpEmbeddedResource.withResource(mixedResource).build())
+						.content(java.util.List.of(McpTextContent.fromText("first"), McpImageContent.withDataAndMimeType(
+								new byte[] { 9, 8, 7 }, "image/gif").build(), McpEmbeddedResource.withResource(mixedResource).build()))
 						.build());
 		McpJsonArray largeRows = McpJsonArray.fromElements(
 				Collections.nCopies(60_000,
@@ -104,12 +102,7 @@ public class McpToolContentPublicRuntimeTests {
 						.build()));
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"tool-content-public-runtime-test", "4.0.0").build())
-				.addTool(imageTool)
-				.addTool(audioTool)
-				.addTool(embeddedResourceTool)
-				.addTool(mixedContentTool)
-				.addTool(largeStructuredTool)
-				.addTool(nodeBoundaryStructuredTool)
+				.toolRegistrations(java.util.List.of(imageTool, audioTool, embeddedResourceTool, mixedContentTool, largeStructuredTool, nodeBoundaryStructuredTool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
