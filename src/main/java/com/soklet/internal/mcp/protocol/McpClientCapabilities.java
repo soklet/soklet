@@ -17,13 +17,18 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 import static java.util.Objects.requireNonNull;
 
@@ -83,14 +88,21 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 			@NonNull Set<@NonNull McpClientCapabilityRequirement> requirements) {
 		requireNonNull(requirements);
 		Builder builder = builder();
+		Map<String, Set<String>> extensionMimeTypes = new TreeMap<>();
 
 		for (McpClientCapabilityRequirement requirement : requirements) {
 			requireNonNull(requirement);
 			if (requirement instanceof McpCoreClientCapability coreCapability)
 				builder.capability(coreCapability);
 			else if (requirement instanceof McpExtensionClientCapability extension)
-				builder.extension(extension.identifier(), McpJsonObject.empty());
+				extensionMimeTypes.computeIfAbsent(extension.identifier(), ignored -> new TreeSet<>());
+			else if (requirement instanceof McpExtensionMimeTypeClientCapability extension)
+				extensionMimeTypes.computeIfAbsent(extension.identifier(), ignored -> new TreeSet<>())
+						.add(extension.mimeType());
 		}
+		extensionMimeTypes.forEach((identifier, mimeTypes) -> builder.extension(identifier,
+				mimeTypes.isEmpty() ? McpJsonObject.empty() : new McpJsonObject(Map.of("mimeTypes",
+						new McpJsonArray(mimeTypes.stream().<McpJsonValue>map(McpJsonString::new).toList())))));
 
 		return builder.build();
 	}
@@ -100,6 +112,17 @@ record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitati
 
 		if (requirement instanceof McpExtensionClientCapability extension)
 			return extensions.containsKey(extension.identifier());
+		if (requirement instanceof McpExtensionMimeTypeClientCapability extension) {
+			McpJsonObject settings = extensions.get(extension.identifier());
+			McpJsonValue advertised = settings == null ? null : settings.members().get("mimeTypes");
+			List<@Nullable String> mimeTypes = null;
+			if (advertised instanceof McpJsonArray array) {
+				mimeTypes = new ArrayList<>(array.values().size());
+				for (McpJsonValue value : array.values())
+					mimeTypes.add(value instanceof McpJsonString string ? string.value() : null);
+			}
+			return McpAppMimeType.supportsMimeType(extension.mimeType(), mimeTypes);
+		}
 
 		McpCoreClientCapability coreCapability =
 				(McpCoreClientCapability) requirement;

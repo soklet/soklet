@@ -88,7 +88,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		List<String> stages = new CopyOnWriteArrayList<>();
 		TaskManager taskManager = new TaskManager();
 		McpToolRegistration<TaskArguments> tool = tool(taskManager, stages);
-		McpToolOutputSanitizer sanitizer = sanitizer(sanitizerMode,
+		McpToolResultSanitizer sanitizer = sanitizer(sanitizerMode,
 				sanitizerInvocations);
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			stages.add("interceptor-before");
@@ -401,7 +401,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		TaskManager taskManager = new TaskManager();
 		McpToolRegistration<TaskArguments> originTool = tool(taskManager,
 				new CopyOnWriteArrayList<>());
-		McpToolOutputSanitizer sanitizer = sanitizer(sanitizerMode,
+		McpToolResultSanitizer sanitizer = sanitizer(sanitizerMode,
 				sanitizerInvocations);
 		McpServer creatorServer = server(originTool, taskManager,
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
@@ -551,31 +551,34 @@ public class McpDeferredTaskOutputSafetyTests {
 									.fromToolStructuredContent(McpJsonObject.builder()
 											.put("rawSecret", ORIGINAL_CANARY)
 											.build())
-									.withMetadata(McpJsonObject.builder()
+									.toBuilder().metadata(McpJsonObject.builder()
 											.put("deferredResultMetadata",
 													RESULT_METADATA_CANARY)
-											.build()))
+											.build()).build())
 							.build());
 					return McpTaskCreatedResult.<TaskOutput>fromTaskId(TASK_ID);
 				})
 				.build();
 	}
 
-	private static McpToolOutputSanitizer sanitizer(
+	private static McpToolResultSanitizer sanitizer(
 			@NonNull AtomicReference<SanitizerMode> mode,
 			@NonNull AtomicInteger invocations) {
-		return (request, toolName, rawArguments, output) -> {
+		return (request, toolName, rawArguments, completeResult) -> {
 			invocations.incrementAndGet();
 			Assertions.assertEquals(McpOperationType.TASKS_GET,
 					request.getOperationType());
 			Assertions.assertEquals(TOOL_NAME, toolName);
 			Assertions.assertEquals(McpJsonObject.builder()
 					.put("request", "retained-at-origin").build(), rawArguments);
-			return switch (mode.get()) {
+			SanitizerMode selectedMode = mode.get();
+			if (selectedMode == SanitizerMode.PASS_THROUGH)
+				return completeResult;
+			McpToolOutput sanitizedOutput = switch (selectedMode) {
 				case VALID -> McpToolOutput.fromStructuredContent(validOutput());
 				case ERROR -> McpToolOutput
 						.fromErrorText("DEFERRED-SAFE-ERROR");
-				case PASS_THROUGH -> output;
+				case PASS_THROUGH -> throw new AssertionError("Handled above.");
 				case SCHEMA_MISMATCH -> McpToolOutput.fromStructuredContent(
 						McpJsonObject.builder()
 								.put("message", MISMATCH_CANARY)
@@ -593,6 +596,8 @@ public class McpDeferredTaskOutputSafetyTests {
 				case SIZE_LIMIT -> McpToolOutput.fromStructuredContent(
 						sizeLimitOutput());
 			};
+			return sanitizedOutput == null ? null
+					: completeResult.toBuilder().payload(sanitizedOutput).build();
 		};
 	}
 
@@ -634,14 +639,14 @@ public class McpDeferredTaskOutputSafetyTests {
 	private static McpServer server(@NonNull McpToolRegistration<?> tool,
 			@NonNull McpTaskManager taskManager,
 			@NonNull McpHandlerInterceptor interceptor,
-			@NonNull McpToolOutputSanitizer sanitizer) {
+			@NonNull McpToolResultSanitizer sanitizer) {
 		return server(tool, taskManager, interceptor, sanitizer, null);
 	}
 
 	private static McpServer server(@NonNull McpToolRegistration<?> tool,
 			@NonNull McpTaskManager taskManager,
 			@NonNull McpHandlerInterceptor interceptor,
-			@NonNull McpToolOutputSanitizer sanitizer,
+			@NonNull McpToolResultSanitizer sanitizer,
 			@Nullable McpCatalogAccessPolicy catalogAccessPolicy) {
 		return server(tool, taskManager, interceptor, sanitizer,
 				catalogAccessPolicy, null);
@@ -650,7 +655,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	private static McpServer server(@NonNull McpToolRegistration<?> tool,
 			@NonNull McpTaskManager taskManager,
 			@NonNull McpHandlerInterceptor interceptor,
-			@NonNull McpToolOutputSanitizer sanitizer,
+			@NonNull McpToolResultSanitizer sanitizer,
 			@Nullable McpCatalogAccessPolicy catalogAccessPolicy,
 			@Nullable McpLocalizer localizer) {
 		return server(tool, taskManager, interceptor, sanitizer,
@@ -661,7 +666,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			@NonNull McpToolRegistration<?> tool,
 			@NonNull McpTaskManager taskManager,
 			@NonNull McpHandlerInterceptor interceptor,
-			@NonNull McpToolOutputSanitizer sanitizer,
+			@NonNull McpToolResultSanitizer sanitizer,
 			@NonNull McpCatalogAccessPolicy catalogAccessPolicy,
 			@NonNull Duration requestTimeout) {
 		return server(tool, taskManager, interceptor, sanitizer,
@@ -671,7 +676,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	private static McpServer server(@NonNull McpToolRegistration<?> tool,
 			@NonNull McpTaskManager taskManager,
 			@NonNull McpHandlerInterceptor interceptor,
-			@NonNull McpToolOutputSanitizer sanitizer,
+			@NonNull McpToolResultSanitizer sanitizer,
 			@Nullable McpCatalogAccessPolicy catalogAccessPolicy,
 			@Nullable McpLocalizer localizer,
 			@NonNull Duration requestTimeout) {
@@ -692,7 +697,7 @@ public class McpDeferredTaskOutputSafetyTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(interceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

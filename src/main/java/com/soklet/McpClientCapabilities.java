@@ -16,11 +16,14 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -84,6 +87,36 @@ public final class McpClientCapabilities {
 					.map(value -> value.find("url").filter(McpJsonObject.class::isInstance).isPresent())
 					.orElse(false);
 		};
+	}
+
+	/**
+	 * Determines whether the client's MCP Apps extension advertises a structurally
+	 * equivalent MIME type. Extension presence alone does not establish support.
+	 * Missing or malformed {@code settings.mimeTypes} properties, including any malformed
+	 * array member, do not establish support. Unrelated extension fields are retained.
+	 *
+	 * <p>Media type names and parameter names are ASCII case-insensitive; parameter
+	 * order and spaces around separators are ignored. Quoted parameter values are
+	 * decoded before comparison, but parameter-value case remains significant.</p>
+	 *
+	 * @param mimeType MIME type whose support is required
+	 * @return whether the client advertised support for the MIME type
+	 * @throws NullPointerException if {@code mimeType} is null
+	 * @throws IllegalArgumentException if {@code mimeType} contains malformed syntax,
+	 *                                  duplicate parameters, controls, or non-ASCII
+	 *                                  characters
+	 */
+	@NonNull
+	public Boolean supportsAppMimeType(@NonNull String mimeType) {
+		McpJsonValue advertised = findExtension("io.modelcontextprotocol/ui")
+				.flatMap(extension -> extension.find("mimeTypes")).orElse(null);
+		List<@Nullable String> mimeTypes = null;
+		if (advertised instanceof McpJsonArray array) {
+			mimeTypes = new ArrayList<>(array.getElements().size());
+			for (McpJsonValue value : array.getElements())
+				mimeTypes.add(value instanceof McpJsonString string ? string.getValue() : null);
+		}
+		return McpAppMimeType.supportsMimeType(mimeType, mimeTypes);
 	}
 
 	/**

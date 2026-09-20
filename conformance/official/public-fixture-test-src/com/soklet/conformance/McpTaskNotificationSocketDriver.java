@@ -885,9 +885,9 @@ public final class McpTaskNotificationSocketDriver {
 				.pollInterval(POLL_INTERVAL)
 				.completedResult(McpCompleteResult
 						.fromToolText(output)
-						.withMetadata(McpJsonObject.builder()
+						.toBuilder().metadata(McpJsonObject.builder()
 								.put("com.example/completed", "nested")
-								.build()))
+								.build()).build())
 				.metadata(McpJsonObject.builder()
 						.put("com.example/task-metadata", "completed")
 						.build())

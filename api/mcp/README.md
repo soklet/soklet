@@ -65,8 +65,10 @@ whose containing public type remains part of Soklet.
 
 ## 4.0 catalog compatibility boundary
 
-Without an explicitly configured `McpCatalogAccessPolicy`, static `tools/list`
-and `prompts/list` catalogs remain immutable and caller-neutral. With one,
+Without an explicitly configured `McpCatalogAccessPolicy`, ordinary `tools/list`
+catalogs without Apps tool metadata and `prompts/list` catalogs remain immutable
+and caller-neutral. Apps tool catalogs are projected against the current
+request's MIME capabilities even without an explicit access policy. With one,
 Soklet evaluates the registered superset for each admitted request, filters
 lists in registration order, and applies the same visibility boundary to
 direct tool and prompt access. Caller-specific projections bypass shared
@@ -100,20 +102,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 152 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 154 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
 | `non-mcp-public-api.allowlist` | 64 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 278-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
-exactly 342 current types. Ownership alone does not freeze a type. The phase
+The 280-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
+exactly 344 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
 the updated include inventories establish current-source ownership without
 claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`88fa573762f734713f28d8b4476552e09f36a0b884d7accf52a2b588029546ad`,
+`6434cdf66c56327eabf9071576d795d0c940ab1224ff3dde734c65e911dedfa1`,
 `bc6ca9ab5623120604cd1435d26fbcbcf525b340029458c4d820f5af03499804`,
 and
 `be6f26d19b9acfdac6d01293f7d0210285871fd5a135d94e7e850f440e6c32b1`.
@@ -125,6 +127,149 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-19 P3 complete-result sanitizer and builders (not host qualification or a refreeze)
+
+The approved `McpToolResultSanitizer` replaces the payload-only hook. The server
+setter/getter now use `toolResultSanitizer`/`getToolResultSanitizer`, and omission
+or null restores `nonSanitizingInstance()`. Immediate calls and each authorized
+detailed completed-tool-task read validate, budget, mirror, and serialize only
+the returned complete result's payload and metadata. Null, non-tool payloads,
+and thrown failures are rejected without retaining application exception data.
+Persisted task results and their durable origin contracts remain unchanged.
+
+`McpCompleteResult` adds `withToolOutput`, `withPromptOutput`, `withResourceOutput`,
+and field-preserving `toBuilder()` entry points. Its new private-constructor
+builder has nonnull `payload` and application-validated `metadata` setters.
+The instance-returning `withMetadata` method and old sanitizer API are removed;
+constructed-instance `from...` factories remain. These are deliberate approved
+development API changes, not compatibility aliases or a signature refreeze.
+Current-source ownership replaces the old sanitizer owner and adds the result
+builder. The ledger-backed metadata-builder inventory will be reconciled with
+this new builder at MCP-G2; frozen snapshots are not rewritten here.
+
+Result metadata remains application-owned out-of-band data, not a confidential
+channel or authorization grant. It is never copied into text as a non-Apps
+fallback. Task-status metadata, progress, and input-required results are outside
+this hook. Real-host qualification and P0-C/MCP-G2/MCP-G4 remain open.
+
+### 2026-09-19 P3 Apps annotation parity (not host qualification or a refreeze)
+
+The companion `@McpAppTool` method annotation attaches the same immutable Apps
+metadata as programmatic registration, without a new handler family or a second
+tool name. Its resource URI defaults to omitted, audiences default to model and
+app, duplicate audiences have set semantics, and explicit empty visibility stays
+empty. The processor rejects an orphan companion and uses the same URI validator
+as programmatic metadata, with fixed diagnostics that do not echo the URI.
+Generated typed-complete, advanced-operation, and task-created registrations
+retain the existing tool behavior and endpoint resource-eligibility validation.
+The annotation has runtime retention and explicit nonnull element/array contracts.
+
+`com.soklet.annotation.McpAppTool` is the sole new current-source owner. The
+signature ledgers remain frozen at their earlier reviewed snapshots. This slice
+does not include the approved result-sanitizer migration or real-host Apps
+qualification; P0-C, MCP-G2, and MCP-G4 remain open.
+
+### 2026-09-19 P3 Apps capability and wire runtime (not host qualification or a refreeze)
+
+The current request's `McpClientCapabilities.supportsAppMimeType(String)` uses
+the shared structural MIME parser. Invalid arguments fail explicitly; missing
+or malformed peer `mimeTypes` settings establish no support, including a valid
+entry beside an invalid entry. Internal MIME-valued requirements merge into
+canonical, sorted arrays and retain the existing missing-capability error shape.
+
+Typed and recognized raw Apps fields now compose into tool descriptors and
+resource-content metadata. Visibility, permissions, and CSP-origin arrays have
+deterministic order. Unknown extension members and permission-marker options
+remain intact; typed/raw inspection remains separate. Composed resource metadata
+participates in normal node/byte limits, with a collection-size preflight before
+allocating CSP-origin JSON arrays. Eligible exact UI reads reject any returned
+item with a mismatching URI or Apps MIME profile before emitting result content.
+
+Caller authorization precedes Apps projection. Non-Apps requests retain
+model-visible tools without known Apps presentation fields; app-only tools are
+omitted, and empty visibility is unavailable to every audience. An authorized
+app-only direct call without the required MIME capability fails with `-32021`
+without entering its handler. Hidden targets retain neutral unavailable errors.
+Per-request projections use private zero-TTL metadata and bypass shared catalog
+response/size caches. Localization and startup aggregate checks defer to the
+actual projected tool catalog, while ordinary catalogs preserve their prior
+behavior. Subscription catalog digests use the subscriber's request capabilities.
+
+Discovery advertises the canonical Apps extension setting for any Apps tool or
+eligible exact UI resource, including a standalone resource. Templates and
+custom-list-only descriptors do not establish static eligibility.
+
+The final clean JDK 26 suite passes 2,834 tests with zero failures/errors and
+four skips. The JDK 17 focused Apps/API/compatibility suite passes 214 tests
+without failures, errors, or skips. This slice adds 39 tests, including listener/
+simulator byte parity, request-local audience/capability matrices, hidden-target
+neutrality, malformed MIME settings, exact error data, deterministic metadata,
+resource mismatch rejection, and aggregate output/localization bounds. The
+existing subscription deadline-wrap test exposed an ordinary-catalog regression;
+restoring its unchanged non-Apps projection path fixed it without modifying that
+test. The internal sealed-family assertion now includes the approved MIME
+requirement. Independent review found no actionable remaining issues.
+
+No exported type owner is added; the only new public method in this slice is
+the client-capability helper. The reviewed Phase 4 nullability-layout SHA-256 is
+`9993d01e26fddbcc32c2c39153277fefd01649904cdcb6d890c6858413b846ff`.
+Frozen MCP signature/incompatibility snapshots and historical D1P evidence stay
+unchanged. This is not complete Apps support: companion annotation parity,
+the approved result-level sanitizer/result-construction work, and real-host
+qualification remain open, as do P0-C, MCP-G2, and MCP-G4. HTTP compression is
+unchanged by this slice.
+
+### 2026-09-19 P3 Apps attachment and eligibility (construction slice, not a refreeze)
+
+Both staged tool builders now accept `appToolMetadata`, and text/blob resource
+builders accept `appResourceMetadata`. The corresponding Optional getters keep
+typed configuration distinct from the original raw metadata. Resource equality,
+hash codes, reconstructed copies, and nested content comparisons retain the
+typed security fields. No new exported owner is added: the MCP partition stays
+152/45/67/14 (278 total). The reviewed Phase 4 nullability-layout SHA-256 is
+`5e1098c9634fc398c6088c8b7bf85356344abce9f37e602738cd2d3157a9c62c`.
+
+Shared validation rejects malformed raw `ui` objects, invalid recognized
+fields, closed-enum extensions, duplicate visibility/origin array entries,
+and overlapping raw/typed owned fields in either builder order. Rejected
+setters do not change the previous state. Unknown extension fields stay in
+the original immutable raw JSON. Raw permissions use object markers, not
+boolean truthiness; marker extension members are preserved rather than treated
+as a new permission. Effective raw validation views use the same ordered sets
+and origin/domain grammar as typed values.
+
+One internal structural MIME parser accepts equivalent quoted/case/space
+spellings of the exact Apps HTML profile and rejects extra profile parameters,
+duplicates, malformed quoting/tokens, and controls (including tabs). It is
+shared by endpoint eligibility and resource-content validation. Unrelated
+ordinary-resource MIME behavior is unchanged. Endpoint construction verifies
+every typed or raw tool association against an exact registration on that same
+endpoint, without invoking handlers. Templates and custom-list-only descriptors
+cannot satisfy the association; a custom list handler does not invalidate a
+configured exact registration. Resource build requires UI URI/Apps MIME when
+typed or recognized raw Apps security metadata exists. Embedded resources reject
+both forms, including explicitly empty security metadata.
+
+The clean JDK 26 full suite passes 2,795 tests with zero failures/errors and
+four skips. This slice adds 51 tests: 14 tool attachment, 16 resource attachment,
+nine raw-metadata support, and 12 MIME cases. API ownership/reflection/Javadocs
+and existing ordinary-resource/content regressions are included in that run.
+The final focused attachment/value/API suite passes 178 tests on each of JDK 17
+and JDK 26, with zero failures, errors, or skips.
+Focused JDK 21 Error Prone/NullAway checks cover all nine changed/new production
+sources with zero errors or warnings. Privacy adds 14 exact exception sites
+and four canaries; privacy, finite-bound, and release-matrix guards pass.
+
+This is deliberately a construction/validation checkpoint, **not usable Apps
+runtime support**. Typed fields are not yet composed into wire metadata or
+included in runtime output accounting; capability-sensitive catalog projection,
+negotiation, returned-content association checks, annotation parity, sanitizer
+integration, and real-host qualification remain pending. The next slice must
+wire serialization/accounting together with capability-sensitive behavior; do
+not claim that the new setters already deliver Apps metadata to clients.
+Frozen signature/incompatibility ledgers, D1P evidence, and all non-MCP HTTP
+compression behavior remain unchanged. P0-C, MCP-G2, and MCP-G4 stay open.
 
 ### 2026-09-19 P3 Apps metadata/value foundation (not runtime support or a refreeze)
 

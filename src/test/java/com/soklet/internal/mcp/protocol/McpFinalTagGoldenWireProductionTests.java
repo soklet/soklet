@@ -251,8 +251,8 @@ public class McpFinalTagGoldenWireProductionTests {
 														.orElse("<absent>"))))
 								.addMessage(McpPromptMessage.fromAssistantContent(
 										McpTextContent.fromText("ready")))
-								.build()).withMetadata(com.soklet.McpJsonObject.builder()
-									.put("fixture", "phase-4-result").build()))
+								.build()).toBuilder().metadata(com.soklet.McpJsonObject.builder()
+									.put("fixture", "phase-4-result").build()).build())
 				.title("Golden composition")
 				.description("Renders a canonical prompt")
 				.addArgument(McpPromptArgumentDeclaration.withName("subject")

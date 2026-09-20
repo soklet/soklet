@@ -38,6 +38,14 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class McpServerCapabilityRegistry {
 	@NonNull
+	static final String APPS_EXTENSION_IDENTIFIER = "io.modelcontextprotocol/ui";
+	@NonNull
+	static final String APPS_MIME_TYPE = "text/html;profile=mcp-app";
+	@NonNull
+	static final McpExtensionMimeTypeClientCapability APPS_CAPABILITY =
+			new McpExtensionMimeTypeClientCapability(
+					APPS_EXTENSION_IDENTIFIER, APPS_MIME_TYPE);
+	@NonNull
 	private final McpServerCapabilities capabilities;
 	@NonNull
 	private final List<@NonNull String> tools;
@@ -45,6 +53,10 @@ final class McpServerCapabilityRegistry {
 	private final List<@NonNull String> prompts;
 	@NonNull
 	private final List<@NonNull McpNormalizedOperation> toolOperations;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpNormalizedToolDescriptor>
+			toolDescriptors;
+	private final boolean appToolsPresent;
 	@NonNull
 	private final List<@NonNull McpNormalizedOperation> promptOperations;
 	@NonNull
@@ -124,6 +136,14 @@ final class McpServerCapabilityRegistry {
 		requireNonNull(endpoint);
 		requireNonNull(protocolProfiles);
 		this.toolOperations = List.copyOf(endpoint.tools());
+		Map<String, McpNormalizedToolDescriptor> toolDescriptors =
+				new LinkedHashMap<>();
+		for (McpNormalizedOperation tool : toolOperations)
+			toolDescriptors.put(tool.name(), tool.toolDescriptor()
+					.orElseGet(() -> McpNormalizedToolDescriptor.minimal(tool.name())));
+		this.toolDescriptors = Collections.unmodifiableMap(toolDescriptors);
+		this.appToolsPresent = toolDescriptors.values().stream()
+				.anyMatch(McpServerCapabilityRegistry::hasAppMetadata);
 		this.promptOperations = List.copyOf(endpoint.prompts());
 		this.tools = namesOf(toolOperations);
 		this.prompts = namesOf(promptOperations);
@@ -203,9 +223,16 @@ final class McpServerCapabilityRegistry {
 			resourcesCapability = Optional.empty();
 		}
 
+		Map<String, McpJsonObject> serverExtensions =
+				new LinkedHashMap<>(endpoint.serverExtensions());
+		if (appToolsPresent || exactResourceDescriptors.stream()
+				.anyMatch(McpServerCapabilityRegistry::isAppResource))
+			serverExtensions.put(APPS_EXTENSION_IDENTIFIER,
+					new McpJsonObject(Map.of("mimeTypes", new McpJsonArray(List.of(
+							new McpJsonString(APPS_MIME_TYPE))))));
 		this.capabilities = new McpServerCapabilities(
 				toolsCapability, promptsCapability, resourcesCapability,
-				endpoint.completionSupported(), endpoint.serverExtensions());
+				endpoint.completionSupported(), serverExtensions);
 
 		McpResultMetadata resultMetadata =
 				new McpResultMetadata(serverInformation, endpoint.discoveryMetadata());
@@ -327,6 +354,108 @@ final class McpServerCapabilityRegistry {
 				.toList();
 		return McpWireResult.withServerInformation(
 				toolsListResult(visible), serverInformation);
+	}
+
+	boolean hasAppTools() {
+		return appToolsPresent;
+	}
+
+	boolean hasAppTool(@NonNull String toolName) {
+		McpNormalizedToolDescriptor descriptor = toolDescriptors.get(
+				requireNonNull(toolName));
+		return descriptor != null && hasAppMetadata(descriptor);
+	}
+
+	boolean isToolAppAvailable(@NonNull String toolName) {
+		McpNormalizedToolDescriptor descriptor = toolDescriptors.get(
+				requireNonNull(toolName));
+		return descriptor == null || !hasAppMetadata(descriptor)
+				|| appVisibilityIncludes(descriptor, "model")
+				|| appVisibilityIncludes(descriptor, "app");
+	}
+
+	boolean toolRequiresAppCapability(@NonNull String toolName) {
+		McpNormalizedToolDescriptor descriptor = toolDescriptors.get(
+				requireNonNull(toolName));
+		return descriptor != null && hasAppMetadata(descriptor)
+				&& !appVisibilityIncludes(descriptor, "model")
+				&& appVisibilityIncludes(descriptor, "app");
+	}
+
+	/** Applies Apps audience projection only after the caller's accessible set. */
+	@NonNull
+	McpWireResult toolsListResult(
+			@NonNull Set<@NonNull String> accessibleToolNames,
+			boolean appsSupported) {
+		requireNonNull(accessibleToolNames);
+		if (!appToolsPresent)
+			return toolsListResult(accessibleToolNames);
+		List<McpJsonValue> descriptors = toolDescriptors.values().stream()
+				.filter(tool -> accessibleToolNames.contains(tool.name()))
+				.filter(tool -> isToolAppAvailable(tool.name()))
+				.filter(tool -> appsSupported || !toolRequiresAppCapability(tool.name()))
+				.map(tool -> appsSupported ? tool : withoutAppPresentation(tool))
+				.map(McpNormalizedToolDescriptor::toJsonObject)
+				.map(McpJsonValue.class::cast)
+				.toList();
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("tools", new McpJsonArray(descriptors));
+		fields.put("ttlMs", new McpJsonNumber(0L));
+		fields.put("cacheScope", new McpJsonString(McpCacheScope.PRIVATE.wireValue()));
+		return McpWireResult.withServerInformation(
+				McpWireResult.complete(new McpJsonObject(fields)), serverInformation);
+	}
+
+	private static boolean hasAppMetadata(McpNormalizedToolDescriptor descriptor) {
+		return descriptor.metadata().members().get("ui") instanceof McpJsonObject ui
+				&& (ui.members().containsKey("resourceUri")
+						|| ui.members().containsKey("visibility"));
+	}
+
+	private static boolean appVisibilityIncludes(
+			McpNormalizedToolDescriptor descriptor, String audience) {
+		McpJsonObject ui = (McpJsonObject) requireNonNull(
+				descriptor.metadata().members().get("ui"));
+		McpJsonValue visibility = ui.members().get("visibility");
+		return visibility == null || (visibility instanceof McpJsonArray array
+				&& array.values().contains(new McpJsonString(audience)));
+	}
+
+	@NonNull
+	private static McpNormalizedToolDescriptor withoutAppPresentation(
+			McpNormalizedToolDescriptor descriptor) {
+		if (!hasAppMetadata(descriptor))
+			return descriptor;
+		McpJsonObject ui = (McpJsonObject) requireNonNull(
+				descriptor.metadata().members().get("ui"));
+		Map<String, McpJsonValue> uiFields = new LinkedHashMap<>(ui.members());
+		uiFields.remove("resourceUri");
+		uiFields.remove("visibility");
+		Map<String, McpJsonValue> metadataFields =
+				new LinkedHashMap<>(descriptor.metadata().members());
+		if (uiFields.isEmpty())
+			metadataFields.remove("ui");
+		else
+			metadataFields.put("ui", new McpJsonObject(uiFields));
+		return new McpNormalizedToolDescriptor(descriptor.name(),
+				descriptor.inputSchemaDocument(), descriptor.outputSchemaDocument(),
+				descriptor.descriptorFields(), new McpJsonObject(metadataFields));
+	}
+
+	private static boolean isAppResource(McpNormalizedResourceDescriptor resource) {
+		URI uri = URI.create(resource.uri());
+		if (!"ui".equalsIgnoreCase(uri.getScheme()) || uri.isOpaque()
+				|| uri.getRawAuthority() == null || uri.getRawAuthority().isEmpty())
+			return false;
+		McpJsonValue mimeType = resource.descriptorFields().members().get("mimeType");
+		if (!(mimeType instanceof McpJsonString string))
+			return false;
+		try {
+			return McpAppMimeType.isAppsProfile(string.value());
+		} catch (IllegalArgumentException exception) {
+			// Ordinary resource MIME values are not otherwise restricted by Apps.
+			return false;
+		}
 	}
 
 	@NonNull

@@ -398,7 +398,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					toolLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
 				})
-				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
+				.toolResultSanitizer((request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				})

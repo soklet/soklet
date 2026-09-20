@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -25,8 +26,10 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -118,12 +121,12 @@ public final class McpEndpoint {
 				throw new IllegalStateException(
 						"Duplicate MCP prompt name: " + prompt.getName());
 		}
-		Set<URI> exactResourceUris = new LinkedHashSet<>();
+		Map<URI, McpResourceRegistration> exactResources = new LinkedHashMap<>();
 		Set<String> resourceUriTemplates = new LinkedHashSet<>();
 		for (McpResourceRegistration resource : this.resources) {
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
-				if (!exactResourceUris.add(uri))
+				if (exactResources.putIfAbsent(uri, resource) != null)
 					throw new IllegalStateException(
 							"Duplicate MCP exact resource URI: " + uri);
 			} else {
@@ -132,6 +135,30 @@ public final class McpEndpoint {
 					throw new IllegalStateException(
 							"Duplicate MCP resource URI template: " + uriTemplate);
 			}
+		}
+		for (McpToolRegistration<?> tool : this.tools) {
+			Optional<URI> resourceUri = McpAppMetadataSupport
+					.effectiveToolMetadata(tool.getMetadata(),
+							tool.getAppToolMetadata().orElse(null))
+					.flatMap(McpAppToolMetadata::getResourceUri);
+			if (resourceUri.isPresent()) {
+				McpResourceRegistration resource = exactResources.get(resourceUri.get());
+				if (resource == null || !hasAppsMimeType(resource))
+					throw new IllegalStateException(
+							"MCP Apps tool associations require an exact UI resource "
+									+ "registration with the Apps MIME profile on the same endpoint.");
+			}
+		}
+	}
+
+	private static boolean hasAppsMimeType(@NonNull McpResourceRegistration resource) {
+		String mimeType = resource.getMimeType().orElse(null);
+		if (mimeType == null)
+			return false;
+		try {
+			return McpAppMimeType.isAppsProfile(mimeType);
+		} catch (IllegalArgumentException exception) {
+			return false;
 		}
 	}
 
@@ -629,10 +656,17 @@ public final class McpEndpoint {
 		 * No tool, prompt, or resource operation is required. Tool and prompt
 		 * names must each be unique within the endpoint, as must exact resource
 		 * URIs and resource URI templates.
+		 * <p>
+		 * Every Apps tool resource association must identify an exact registration
+		 * on this endpoint whose declared MIME type is the Apps HTML profile.
+		 * Templates and custom resource-list descriptors do not establish this
+		 * eligibility. Validation does not invoke application handlers or fetch
+		 * resource contents.
 		 *
 		 * @return the endpoint
 		 * @throws IllegalStateException if a tool name, prompt name, exact resource URI,
-		 *                               or resource URI template is duplicated
+		 *                               or resource URI template is duplicated,
+		 *                               or an Apps association has no eligible resource
 		 */
 		@NonNull
 		public McpEndpoint build() {

@@ -946,7 +946,7 @@ acceptance limit.
 The type argument on `McpTaskCreatedResult<R>` is operational. Soklet retains
 the original tool's output schema and, when a later `tasks/get` observes a
 completed task, applies the configured
-[`McpToolOutputSanitizer`](https://javadoc.soklet.com/com/soklet/McpToolOutputSanitizer.html),
+[`McpToolResultSanitizer`](https://javadoc.soklet.com/com/soklet/McpToolResultSanitizer.html),
 typed schema validation, and ordinary node, depth, byte, and response limits.
 The opaque origin enables that lookup and may contain sensitive validated
 arguments; applications must protect it like the task itself and must never
@@ -1271,13 +1271,45 @@ then output sanitization and final result validation. A capacity or deadline
 rejection happens before application interception. A successful dispatch slot
 remains charged until the handler/interceptor call actually exits.
 
-`McpToolOutputSanitizer` runs at the tool-output boundary. Interceptor
-short-circuits and sanitizer replacements still undergo method compatibility,
-recognized-result, content, and structured-output validation. Application
-exceptions and unsafe outputs fail closed without reflecting secrets or raw
-exception text to the client. An `input_required` result is validated through
-its separate declaration/request-state path and does not pass through the
-complete tool-output sanitizer.
+`McpToolResultSanitizer` receives and returns the entire `McpCompleteResult`,
+including application-owned result metadata. Interceptor short-circuits and
+sanitizer replacements still undergo method compatibility, recognized-result,
+content, structured-output, and metadata-inclusive limit validation. Only the
+returned payload and metadata are written. Null returns, non-tool payloads,
+exceptions, and unsafe outputs fail closed without reflecting original/partial
+results or exception-derived details. An `input_required` result follows its
+separate declaration/request-state path and bypasses this hook.
+
+Configure it with `McpServer.Builder.toolResultSanitizer(...)`; omission or null
+restores `McpToolResultSanitizer.nonSanitizingInstance()`, which returns the same
+result without application-level redaction. Normal framework validation remains
+active. To change selected fields while preserving the rest:
+
+```java
+mcpServerBuilder.toolResultSanitizer((requestContext, toolName, rawArguments,
+    completeResult) -> completeResult.toBuilder()
+        .metadata(redactResultMetadata(requestContext, completeResult.getMetadata()))
+        .build());
+```
+
+Use `McpCompleteResult.withToolOutput(output).metadata(metadata).build()` for
+new tool results, or the corresponding `withPromptOutput`/`withResourceOutput`
+builders. Existing `from...` factories still return constructed results;
+the old instance-returning `withMetadata` method is removed.
+
+Each authorized detailed completed-task read runs this hook again with the
+current polling context and durable original tool name/arguments. It does not
+replace the persisted result with a caller's view. Implementations must be
+thread-safe and deterministic/idempotent for equivalent calls across nodes,
+without one-shot side effects. Task-status metadata, progress notifications,
+and other JSON-RPC response families are not covered by this tool-result hook.
+
+Application UI data may use an application key in result metadata, but `_meta`
+is not a secret channel: hosts may log or forward it. Content and structured
+content can be model-visible. Soklet never copies UI-directed result metadata
+into text/structured content for non-Apps clients; author a meaningful model
+response separately. Authorization, redaction, tenant policy, and translation
+of application JSON remain application responsibilities.
 
 ## Progress and cooperative cancelation
 

@@ -633,7 +633,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			toolLimiterInvocations.incrementAndGet();
 			return McpRateLimitDecision.allowed();
 		};
-		McpToolOutputSanitizer sanitizer =
+		McpToolResultSanitizer sanitizer =
 				(request, observedToolName, rawArguments, output) -> {
 			sanitizerInvocations.incrementAndGet();
 			return output;
@@ -643,7 +643,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
 				.handlerInterceptor(McpHandlerInterceptor.passThroughInstance())
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(localizer)
@@ -1246,7 +1246,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			McpAdmissionController admissionController,
 			McpRateLimiter requestRateLimiter,
 			McpRateLimiter toolRateLimiter,
-			McpToolOutputSanitizer sanitizer) {
+			McpToolResultSanitizer sanitizer) {
 		return server(endpoint, admissionController, requestRateLimiter,
 				toolRateLimiter, McpHandlerInterceptor.passThroughInstance(),
 				sanitizer);
@@ -1257,13 +1257,13 @@ public class McpInputRequiredPublicRuntimeTests {
 			McpRateLimiter requestRateLimiter,
 			McpRateLimiter toolRateLimiter,
 			McpHandlerInterceptor handlerInterceptor,
-			McpToolOutputSanitizer sanitizer) {
+			McpToolResultSanitizer sanitizer) {
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(admissionController)
 				.host(LOOPBACK)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
 				.handlerInterceptor(handlerInterceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

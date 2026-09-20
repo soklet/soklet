@@ -33,12 +33,13 @@ public class McpInterceptionConfigurationTests {
 	public void defaultHooksAreSharedAndPassThrough() throws Exception {
 		McpHandlerInterceptor interceptor =
 				McpHandlerInterceptor.passThroughInstance();
-		McpToolOutputSanitizer sanitizer =
-				McpToolOutputSanitizer.passThroughInstance();
+		McpToolResultSanitizer sanitizer =
+				McpToolResultSanitizer.nonSanitizingInstance();
 		McpRequestContext request = requestContext();
 		McpOperationResult expectedResult =
 				McpCompleteResult.fromToolText("expected");
-		McpToolOutput expectedOutput = McpToolOutput.fromText("expected");
+		McpCompleteResult expectedCompleteResult =
+				McpCompleteResult.fromToolText("expected");
 		AtomicBoolean invoked = new AtomicBoolean();
 
 		McpHandlerContinuation continuation = () -> {
@@ -49,16 +50,16 @@ public class McpInterceptionConfigurationTests {
 				java.util.Map.of());
 		McpOperationResult actualResult = interceptor.interceptHandler(request,
 				features, continuation);
-		McpToolOutput actualOutput = sanitizer.sanitize(request, "tool",
-				McpJsonObject.builder().build(), expectedOutput);
+		McpCompleteResult actualCompleteResult = sanitizer.sanitize(request,
+				"tool", McpJsonObject.builder().build(), expectedCompleteResult);
 
 		Assertions.assertTrue(invoked.get());
 		Assertions.assertSame(expectedResult, actualResult);
-		Assertions.assertSame(expectedOutput, actualOutput);
+		Assertions.assertSame(expectedCompleteResult, actualCompleteResult);
 		Assertions.assertSame(interceptor,
 				McpHandlerInterceptor.passThroughInstance());
 		Assertions.assertSame(sanitizer,
-				McpToolOutputSanitizer.passThroughInstance());
+				McpToolResultSanitizer.nonSanitizingInstance());
 	}
 
 	@Test
@@ -66,22 +67,22 @@ public class McpInterceptionConfigurationTests {
 		McpServer defaultServer = serverBuilder().build();
 		McpHandlerInterceptor interceptor = (request, features, continuation) ->
 				McpCompleteResult.fromToolText("intercepted");
-		McpToolOutputSanitizer sanitizer =
-				(request, toolName, rawArguments, output) ->
-						McpToolOutput.fromText("sanitized");
+		McpToolResultSanitizer sanitizer =
+				(request, toolName, rawArguments, completeResult) ->
+						McpCompleteResult.fromToolText("sanitized");
 		McpServer configuredServer = serverBuilder()
 				.handlerInterceptor(interceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.build();
 
 		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),
 				defaultServer.getHandlerInterceptor());
-		Assertions.assertSame(McpToolOutputSanitizer.passThroughInstance(),
-				defaultServer.getToolOutputSanitizer());
+		Assertions.assertSame(McpToolResultSanitizer.nonSanitizingInstance(),
+				defaultServer.getToolResultSanitizer());
 		Assertions.assertSame(interceptor,
 				configuredServer.getHandlerInterceptor());
 		Assertions.assertSame(sanitizer,
-				configuredServer.getToolOutputSanitizer());
+				configuredServer.getToolResultSanitizer());
 		Assertions.assertInstanceOf(McpOperationResult.class,
 				McpResourcePage.builder().build());
 	}
@@ -90,20 +91,20 @@ public class McpInterceptionConfigurationTests {
 	public void builderNullHooksRestorePassThroughDefaults() {
 		McpHandlerInterceptor interceptor = (request, features, continuation) ->
 				McpCompleteResult.fromToolText("intercepted");
-		McpToolOutputSanitizer sanitizer =
-				(request, toolName, rawArguments, output) ->
-						McpToolOutput.fromText("sanitized");
+		McpToolResultSanitizer sanitizer =
+				(request, toolName, rawArguments, completeResult) ->
+						McpCompleteResult.fromToolText("sanitized");
 		McpServer server = serverBuilder()
 				.handlerInterceptor(interceptor)
 				.handlerInterceptor(null)
-				.toolOutputSanitizer(sanitizer)
-				.toolOutputSanitizer(null)
+				.toolResultSanitizer(sanitizer)
+				.toolResultSanitizer(null)
 				.build();
 
 		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),
 				server.getHandlerInterceptor());
-		Assertions.assertSame(McpToolOutputSanitizer.passThroughInstance(),
-				server.getToolOutputSanitizer());
+		Assertions.assertSame(McpToolResultSanitizer.nonSanitizingInstance(),
+				server.getToolResultSanitizer());
 	}
 
 	private static McpServer.Builder serverBuilder() {

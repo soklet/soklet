@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCP catalog example</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; }
+    main { max-width: 34rem; margin-inline: auto; }
+    h1 { font-size: 1.25rem; }
+    #catalog-tenant { font-size: .8rem; opacity: .7; }
+    #catalog-amount { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+    time { display: block; margin-block: .75rem; }
+    button { font: inherit; padding: .5rem 1rem; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main id="catalog-root" data-state="waiting" aria-busy="true">
+    <p id="catalog-status" role="status" aria-live="polite">…</p>
+    <section id="catalog-view" hidden>
+      <p id="catalog-tenant"></p>
+      <h1 id="catalog-title"></h1>
+      <p id="catalog-summary"></p>
+      <p id="catalog-item"></p>
+      <p id="catalog-amount"></p>
+      <time id="catalog-updated"></time>
+      <button id="catalog-refresh" type="button" disabled></button>
+    </section>
+  </main>
+  <!-- SOKLET_APPS_SCRIPT -->
+</body>
+</html>

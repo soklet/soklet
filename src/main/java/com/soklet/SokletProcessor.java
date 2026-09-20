@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.McpAppTool;
 import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpPrompt;
@@ -390,6 +391,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		out.add(McpServerEndpoint.class.getCanonicalName());
 		out.add(McpTool.class.getCanonicalName());
+		out.add(McpAppTool.class.getCanonicalName());
 		out.add(McpToolArgument.class.getCanonicalName());
 		out.add(McpToolProperty.class.getCanonicalName());
 		out.add(McpHeader.class.getCanonicalName());
@@ -556,6 +558,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				McpServerEndpoint.class.getCanonicalName());
 		TypeElement toolAnnotation =
 				elements.getTypeElement(McpTool.class.getCanonicalName());
+		TypeElement appToolAnnotation =
+				elements.getTypeElement(McpAppTool.class.getCanonicalName());
 		TypeElement argumentAnnotation = elements.getTypeElement(
 				McpToolArgument.class.getCanonicalName());
 		TypeElement headerAnnotation = elements.getTypeElement(
@@ -575,6 +579,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		TypeElement listResourcesAnnotation = elements.getTypeElement(
 				McpResourceList.class.getCanonicalName());
 		if (endpointAnnotation == null || toolAnnotation == null
+				|| appToolAnnotation == null
 				|| argumentAnnotation == null || headerAnnotation == null
 				|| promptAnnotation == null
 				|| promptArgumentAnnotation == null || resourceAnnotation == null
@@ -585,7 +590,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			return;
 
 		validateMcpAnnotationPlacement(roundEnv, endpointAnnotation,
-				toolAnnotation, argumentAnnotation, headerAnnotation,
+				toolAnnotation, appToolAnnotation, argumentAnnotation, headerAnnotation,
 				promptAnnotation,
 				promptArgumentAnnotation, resourceAnnotation,
 				resourceUriParameterAnnotation, listResourcesAnnotation,
@@ -767,6 +772,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull RoundEnvironment roundEnv,
 			@NonNull TypeElement endpointAnnotation,
 			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement appToolAnnotation,
 			@NonNull TypeElement argumentAnnotation,
 			@NonNull TypeElement headerAnnotation,
 			@NonNull TypeElement promptAnnotation,
@@ -786,6 +792,18 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (findAnnotation(owner, endpointAnnotation) == null)
 				mcpError(element,
 						"Soklet: @McpTool methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				appToolAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpAppTool can only be applied to methods.");
+				continue;
+			}
+			if (findAnnotation(element, toolAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpAppTool must accompany @McpTool on the same method.");
 		}
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
@@ -1406,6 +1424,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				validateMcpInputRequestDeclarations(method, annotation);
 		String requestStateMode = annotationEnumConstantName(annotation,
 				"requestStateMode");
+		McpAppToolMetadata appToolMetadata = validateMcpAppToolMetadata(method);
 		TypeMirror returnType = method.getReturnType();
 		boolean operationResultReturn = isSubtypeOf(returnType,
 				mcpOperationResultType);
@@ -1602,10 +1621,55 @@ public final class SokletProcessor extends AbstractProcessor {
 				structuredContentMirroredAsText, returnKind,
 				structuredOutputType,
 				List.copyOf(inputRequestDeclarations), requestStateMode,
+				appToolMetadata,
 				List.copyOf(bindings),
 				sha256Hex(inputSchemaBytes), structuredOutputType == null
 						? MCP_ABSENT_OUTPUT_SCHEMA_DIGEST
 						: sha256Hex(outputSchemaBytes));
+	}
+
+	@Nullable
+	private McpAppToolMetadata validateMcpAppToolMetadata(
+			@NonNull ExecutableElement method) {
+		AnnotationMirror annotation = findAnnotation(method,
+				McpAppTool.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+		McpAppToolMetadata.Builder builder = McpAppToolMetadata.builder();
+		String resourceUri = annotationString(annotation, "resourceUri");
+		if (!resourceUri.isEmpty()) {
+			try {
+				builder.resourceUri(URI.create(resourceUri));
+			} catch (IllegalArgumentException exception) {
+				mcpError(method,
+						"Soklet: @McpAppTool resourceUri must be empty or a concrete absolute normalized hierarchical ui:// URI with an authority in ASCII RFC 3986 wire form.");
+			}
+		}
+		Set<McpAppToolMetadata.Visibility> visibility = new LinkedHashSet<>();
+		Object rawVisibility = annotationMemberWithDefaults(annotation,
+				"visibility");
+		if (rawVisibility instanceof List<?> values) {
+			for (Object value : values) {
+				if (!(value instanceof AnnotationValue annotationValue)
+						|| !(annotationValue.getValue()
+						instanceof VariableElement constant)) {
+					mcpError(method,
+							"Soklet: @McpAppTool visibility must select supported Apps audiences.");
+					continue;
+				}
+				try {
+					visibility.add(McpAppToolMetadata.Visibility.valueOf(
+							constant.getSimpleName().toString()));
+				} catch (IllegalArgumentException exception) {
+					mcpError(method,
+							"Soklet: @McpAppTool visibility must select supported Apps audiences.");
+				}
+			}
+		} else {
+			mcpError(method,
+					"Soklet: @McpAppTool visibility must select supported Apps audiences.");
+		}
+		return builder.visibility(visibility).build();
 	}
 
 	@Nullable
@@ -2850,6 +2914,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					tool.inputRequestDeclarations());
 			appendRequestStateMode(source, "toolBuilder" + index,
 					tool.requestStateMode());
+			appendAppToolMetadata(source, "toolBuilder" + index,
+					tool.appToolMetadata());
 			source.append("\t\tendpointBuilder.addTool(toolBuilder")
 					.append(index).append(".build());\n");
 		}
@@ -3051,6 +3117,23 @@ public final class SokletProcessor extends AbstractProcessor {
 			source.append("\t\t").append(builder)
 					.append(".requestStateMode(com.soklet.McpRequestStateMode.")
 					.append(requestStateMode).append(");\n");
+	}
+
+	private static void appendAppToolMetadata(@NonNull StringBuilder source,
+			@NonNull String builder, @Nullable McpAppToolMetadata metadata) {
+		if (metadata == null)
+			return;
+		source.append("\t\t").append(builder)
+				.append(".appToolMetadata(com.soklet.McpAppToolMetadata.builder()");
+		metadata.getResourceUri().ifPresent(resourceUri -> source
+				.append(".resourceUri(java.net.URI.create(")
+				.append(javaStringLiteral(resourceUri.toString())).append("))"));
+		source.append(".visibility(java.util.Set.of(")
+				.append(metadata.getVisibility().stream()
+						.map(visibility -> "com.soklet.McpAppToolMetadata.Visibility."
+								+ visibility.name())
+						.collect(Collectors.joining(", ")))
+				.append(")).build());\n");
 	}
 
 	@NonNull
@@ -4663,6 +4746,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			@Nullable TypeMirror structuredOutputType,
 			List<McpInputRequestModel> inputRequestDeclarations,
 			String requestStateMode,
+			@Nullable McpAppToolMetadata appToolMetadata,
 			List<McpParameterBinding> bindings, String inputSchemaDigest,
 			String outputSchemaDigest) {}
 

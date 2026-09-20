@@ -673,17 +673,17 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.addTool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
+				.toolResultSanitizer((request, toolName, rawArguments, completeResult) -> {
 					sanitizerInvocations.incrementAndGet();
 					String mode = Assertions.assertInstanceOf(McpJsonString.class,
 							rawArguments.find("mode").orElseThrow()).getValue();
 					if ("sanitizer-fail".equals(mode))
 						throw new IllegalStateException(
 								"RESULT-ENVELOPE-SECRET-SANITIZER");
-					return McpToolOutput.fromStructuredContent(
+					return completeResult.toBuilder().payload(McpToolOutput.fromStructuredContent(
 							McpJsonObject.builder()
 									.put("value", "sanitized-visible")
-									.build());
+									.build())).build();
 				})
 				.build();
 		Soklet owner = managedSoklet(server);
@@ -961,7 +961,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static McpCompleteResult completeTool(String text, String authority) {
 		return McpCompleteResult.fromToolText(text)
-				.withMetadata(metadata(authority));
+				.toBuilder().metadata(metadata(authority)).build();
 	}
 
 	private static McpCompleteResult completePrompt(String text,
@@ -970,7 +970,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				McpPromptOutput.fromMessages(
 						McpPromptMessage.fromUserContent(
 								McpTextContent.fromText(text))))
-				.withMetadata(metadata(authority));
+				.toBuilder().metadata(metadata(authority)).build();
 	}
 
 	private static McpCompleteResult completeResource(URI uri, String text,
@@ -981,7 +981,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 								.mimeType("text/plain")
 								.build())
 						.build())
-				.withMetadata(metadata(authority));
+				.toBuilder().metadata(metadata(authority)).build();
 	}
 
 	private static McpInputRequiredResult inputRequiredRoots(

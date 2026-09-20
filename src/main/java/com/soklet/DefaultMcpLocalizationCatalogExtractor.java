@@ -118,7 +118,11 @@ final class DefaultMcpLocalizationCatalogExtractor {
 					McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST,
 					toolSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
-					deferCallerAwareCatalogResponseBounds);
+					deferCallerAwareCatalogResponseBounds
+							|| endpoint.getTools().stream().anyMatch(tool ->
+									McpAppMetadataSupport.effectiveToolMetadata(
+											tool.getMetadata(), tool.getAppToolMetadata()
+													.orElse(null)).isPresent()));
 			addResponse(responses,
 					McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST,
 					promptSlots(endpoint, catalog),

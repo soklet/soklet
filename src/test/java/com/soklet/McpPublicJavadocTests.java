@@ -88,6 +88,7 @@ public class McpPublicJavadocTests {
 			"com.soklet.McpArgumentCompletionResult$Builder",
 			"com.soklet.McpAudioContent$Builder",
 			"com.soklet.McpBlobResourceContents$Builder",
+			"com.soklet.McpCompleteResult$Builder",
 			"com.soklet.McpContentAnnotations$Builder",
 			"com.soklet.McpEmbeddedResource$Builder",
 			"com.soklet.McpEndpoint$Builder",

@@ -181,9 +181,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 									requestMetadata.getMembers().get("mode"))
 									.getValue());
 					return McpCompleteResult.fromToolText("extension-negotiated")
-							.withMetadata(McpJsonObject.builder()
+							.toBuilder().metadata(McpJsonObject.builder()
 									.put(HANDLER_METADATA_KEY, "handler")
-									.build());
+									.build()).build();
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
@@ -200,10 +200,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					Assertions.assertInstanceOf(McpJsonString.class,
 							result.getMetadata().getMembers()
 									.get(HANDLER_METADATA_KEY)).getValue());
-			return result.withMetadata(McpJsonObject.builder()
+			return result.toBuilder().metadata(McpJsonObject.builder()
 					.put(HANDLER_METADATA_KEY, "handler")
 					.put(INTERCEPTOR_METADATA_KEY, "interceptor")
-					.build());
+					.build()).build();
 		};
 		McpServer server = server(endpoint, context -> {
 			admissions.add(context);

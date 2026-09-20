@@ -38,6 +38,10 @@ public sealed interface McpResourceContents
 	@NonNull
 	Optional<@NonNull String> getMimeType();
 
+	/** @return typed Apps policy and presentation hints, if supplied */
+	@NonNull
+	Optional<@NonNull McpAppResourceMetadata> getAppResourceMetadata();
+
 	/** @return immutable extension metadata */
 	@NonNull
 	McpJsonObject getMetadata();

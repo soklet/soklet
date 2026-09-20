@@ -93,14 +93,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpHandlerInterceptor getHandlerInterceptor();
 
 	/**
-	 * Returns the server-level tool-output sanitizer. When omitted during
+	 * Returns the server-level complete tool-result sanitizer. When omitted during
 	 * construction this is
-	 * {@link McpToolOutputSanitizer#passThroughInstance()}.
+	 * {@link McpToolResultSanitizer#nonSanitizingInstance()}.
 	 *
-	 * @return tool-output sanitizer
+	 * @return tool-result sanitizer
 	 */
 	@NonNull
-	McpToolOutputSanitizer getToolOutputSanitizer();
+	McpToolResultSanitizer getToolResultSanitizer();
 
 	/**
 	 * Returns the optional application-owned task manager.
@@ -333,7 +333,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
 		@NonNull
-		private McpToolOutputSanitizer toolOutputSanitizer;
+		private McpToolResultSanitizer toolResultSanitizer;
 		@Nullable
 		private McpTaskManager taskManager;
 		@Nullable
@@ -413,8 +413,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
 			this.handlerInterceptor = McpHandlerInterceptor.passThroughInstance();
-			this.toolOutputSanitizer =
-					McpToolOutputSanitizer.passThroughInstance();
+			this.toolResultSanitizer =
+					McpToolResultSanitizer.nonSanitizingInstance();
 		}
 
 		private Builder(@NonNull Builder source,
@@ -464,7 +464,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.subscriptionAuthorizerExplicitlyConfigured =
 					exactSource.subscriptionAuthorizerExplicitlyConfigured;
 			this.handlerInterceptor = exactSource.handlerInterceptor;
-			this.toolOutputSanitizer = exactSource.toolOutputSanitizer;
+			this.toolResultSanitizer = exactSource.toolResultSanitizer;
 			this.taskManager = exactSource.taskManager;
 			this.corsAuthorizer = exactSource.corsAuthorizer;
 			this.requestRateLimiter = exactSource.requestRateLimiter;
@@ -1125,20 +1125,22 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Configures the server-level complete tool-output sanitizer. The default
-		 * preserves output unchanged. Soklet may invoke one sanitizer instance
-		 * concurrently for independent tool calls.
+		 * Configures the server-level complete tool-result sanitizer. The default
+		 * preserves the payload and result metadata unchanged, without application
+		 * redaction. Normal framework validation and output limits still apply.
+		 * Soklet may invoke one sanitizer instance concurrently for independent
+		 * tool calls and authorized completed-task reads.
 		 *
-		 * @param toolOutputSanitizer application-owned tool-output sanitizer, or
-		 *                            null to restore pass-through behavior
+		 * @param toolResultSanitizer application-owned tool-result sanitizer, or
+		 *                            null to restore unchanged-result behavior
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolOutputSanitizer(
-				@Nullable McpToolOutputSanitizer toolOutputSanitizer) {
-			this.toolOutputSanitizer = toolOutputSanitizer == null
-					? McpToolOutputSanitizer.passThroughInstance()
-					: toolOutputSanitizer;
+		public Builder toolResultSanitizer(
+				@Nullable McpToolResultSanitizer toolResultSanitizer) {
+			this.toolResultSanitizer = toolResultSanitizer == null
+					? McpToolResultSanitizer.nonSanitizingInstance()
+					: toolResultSanitizer;
 			return this;
 		}
 
@@ -1474,7 +1476,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.subscriptionAuthorizer,
 					this.subscriptionAuthorizerExplicitlyConfigured,
 					this.handlerInterceptor,
-					this.toolOutputSanitizer, this.taskManager,
+					this.toolResultSanitizer, this.taskManager,
 					this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
 					this.unknownMirroredHeaderNameDiagnostics,

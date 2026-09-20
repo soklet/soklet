@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 
 import java.util.Objects;
@@ -109,6 +110,39 @@ public final class McpCompleteResult implements McpOperationResult {
 		return new McpCompleteResult(output, McpJsonObject.emptyInstance());
 	}
 
+	/**
+	 * Starts a builder with tool output and empty result metadata.
+	 *
+	 * @param toolOutput complete tool output
+	 * @return mutable result builder
+	 */
+	@NonNull
+	public static Builder withToolOutput(@NonNull McpToolOutput toolOutput) {
+		return new Builder(toolOutput);
+	}
+
+	/**
+	 * Starts a builder with prompt output and empty result metadata.
+	 *
+	 * @param promptOutput complete prompt output
+	 * @return mutable result builder
+	 */
+	@NonNull
+	public static Builder withPromptOutput(@NonNull McpPromptOutput promptOutput) {
+		return new Builder(promptOutput);
+	}
+
+	/**
+	 * Starts a builder with resource output and empty result metadata.
+	 *
+	 * @param resourceOutput complete resource output
+	 * @return mutable result builder
+	 */
+	@NonNull
+	public static Builder withResourceOutput(@NonNull McpResourceOutput resourceOutput) {
+		return new Builder(resourceOutput);
+	}
+
 	private McpCompleteResult(@NonNull McpCompletePayload payload,
 			@NonNull McpJsonObject metadata) {
 		this.payload = requireNonNull(payload);
@@ -116,16 +150,13 @@ public final class McpCompleteResult implements McpOperationResult {
 	}
 
 	/**
-	 * Returns a copy carrying the supplied protocol extension metadata.
+	 * Starts an independent builder preserving every field of this result.
 	 *
-	 * @param metadata immutable metadata object
-	 * @return copied complete result
-	 * @throws NullPointerException if {@code metadata} is null
-	 * @throws IllegalArgumentException if metadata uses a reserved MCP key
+	 * @return mutable result builder with the same payload and metadata
 	 */
 	@NonNull
-	public McpCompleteResult withMetadata(@NonNull McpJsonObject metadata) {
-		return new McpCompleteResult(this.payload, metadata);
+	public Builder toBuilder() {
+		return new Builder(this.payload).metadata(this.metadata);
 	}
 
 	/** @return operation-specific complete payload */
@@ -155,5 +186,56 @@ public final class McpCompleteResult implements McpOperationResult {
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.payload, this.metadata);
+	}
+
+	/**
+	 * Mutable builder for an immutable complete result.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static final class Builder {
+		@NonNull
+		private McpCompletePayload payload;
+		@NonNull
+		private McpJsonObject metadata = McpJsonObject.emptyInstance();
+
+		private Builder(@NonNull McpCompletePayload payload) {
+			this.payload = requireNonNull(payload);
+		}
+
+		/**
+		 * Replaces the operation-specific payload.
+		 *
+		 * @param payload complete tool, prompt, or resource output
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder payload(@NonNull McpCompletePayload payload) {
+			this.payload = requireNonNull(payload);
+			return this;
+		}
+
+		/**
+		 * Replaces application-owned result metadata.
+		 * Metadata is out-of-band data, not a confidential channel: hosts may log
+		 * or forward it. Application authorization and redaction remain necessary.
+		 *
+		 * @param metadata immutable metadata without reserved MCP keys
+		 * @return this builder
+		 * @throws NullPointerException if {@code metadata} is null
+		 * @throws IllegalArgumentException if metadata uses a reserved MCP key
+		 */
+		@NonNull
+		public Builder metadata(@NonNull McpJsonObject metadata) {
+			this.metadata = requireApplicationMetadata(metadata);
+			return this;
+		}
+
+		/** @return immutable snapshot of the current payload and metadata */
+		@NonNull
+		public McpCompleteResult build() {
+			return new McpCompleteResult(this.payload, this.metadata);
+		}
 	}
 }

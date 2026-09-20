@@ -430,7 +430,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				})
@@ -1743,9 +1743,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.pollInterval(POLL_INTERVAL)
 				.completedResult(McpCompleteResult
 						.fromToolText(output)
-						.withMetadata(McpJsonObject.builder()
+						.toBuilder().metadata(McpJsonObject.builder()
 								.put("com.example/completed", "nested")
-								.build()))
+								.build()).build())
 				.metadata(McpJsonObject.builder()
 						.put("com.example/task-metadata", "completed")
 						.build())

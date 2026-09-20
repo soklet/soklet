@@ -81,6 +81,7 @@ final class McpContentValueSupport {
 			return firstText.getUri().equals(secondText.getUri())
 					&& firstText.getText().equals(secondText.getText())
 					&& firstText.getMimeType().equals(secondText.getMimeType())
+					&& firstText.getAppResourceMetadata().equals(secondText.getAppResourceMetadata())
 					&& firstText.getMetadata().equals(secondText.getMetadata());
 		}
 		if (first instanceof McpBlobResourceContents firstBlob
@@ -88,6 +89,7 @@ final class McpContentValueSupport {
 			return firstBlob.getUri().equals(secondBlob.getUri())
 					&& firstBlob.dataEquals(secondBlob)
 					&& firstBlob.getMimeType().equals(secondBlob.getMimeType())
+					&& firstBlob.getAppResourceMetadata().equals(secondBlob.getAppResourceMetadata())
 					&& firstBlob.getMetadata().equals(secondBlob.getMetadata());
 		}
 		return false;
@@ -97,12 +99,13 @@ final class McpContentValueSupport {
 		requireNonNull(contents);
 		if (contents instanceof McpTextResourceContents text) {
 			return Objects.hash(McpTextResourceContents.class, text.getUri(),
-					text.getText(), text.getMimeType(), text.getMetadata());
+					text.getText(), text.getMimeType(), text.getAppResourceMetadata(),
+					text.getMetadata());
 		}
 		if (contents instanceof McpBlobResourceContents blob) {
 			return Objects.hash(McpBlobResourceContents.class, blob.getUri(),
 					blob.dataHashCode(), blob.getMimeType(),
-					blob.getMetadata());
+					blob.getAppResourceMetadata(), blob.getMetadata());
 		}
 		throw new IllegalArgumentException(
 				"Unsupported MCP resource-content implementation: "

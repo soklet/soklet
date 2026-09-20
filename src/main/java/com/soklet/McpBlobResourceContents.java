@@ -40,6 +40,8 @@ public final class McpBlobResourceContents implements McpResourceContents {
 	private final byte @NonNull [] data;
 	@Nullable
 	private final String mimeType;
+	@Nullable
+	private final McpAppResourceMetadata appResourceMetadata;
 	@NonNull
 	private final McpJsonObject metadata;
 
@@ -62,6 +64,7 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		this.uri = builder.uri;
 		this.data = Arrays.copyOf(builder.data, builder.data.length);
 		this.mimeType = builder.mimeType;
+		this.appResourceMetadata = builder.appResourceMetadata;
 		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
@@ -109,6 +112,17 @@ public final class McpBlobResourceContents implements McpResourceContents {
 	}
 
 	/**
+	 * Returns separately configured Apps policy and presentation hints.
+	 *
+	 * @return typed Apps resource metadata, if supplied
+	 */
+	@Override
+	@NonNull
+	public Optional<@NonNull McpAppResourceMetadata> getAppResourceMetadata() {
+		return Optional.ofNullable(this.appResourceMetadata);
+	}
+
+	/**
 	 * Returns protocol extension metadata associated with this resource.
 	 *
 	 * @return immutable metadata object
@@ -129,6 +143,7 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		return this.uri.equals(contents.uri)
 				&& dataEquals(contents)
 				&& java.util.Objects.equals(this.mimeType, contents.mimeType)
+				&& java.util.Objects.equals(this.appResourceMetadata, contents.appResourceMetadata)
 				&& this.metadata.equals(contents.metadata);
 	}
 
@@ -136,7 +151,7 @@ public final class McpBlobResourceContents implements McpResourceContents {
 	@Override
 	public int hashCode() {
 		return java.util.Objects.hash(McpBlobResourceContents.class, this.uri,
-				dataHashCode(), this.mimeType, this.metadata);
+				dataHashCode(), this.mimeType, this.appResourceMetadata, this.metadata);
 	}
 
 	/**
@@ -151,6 +166,8 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		private final byte @NonNull [] data;
 		@Nullable
 		private String mimeType;
+		@Nullable
+		private McpAppResourceMetadata appResourceMetadata;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
@@ -174,6 +191,26 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		}
 
 		/**
+		 * Sets Apps policy and presentation hints for a resource read.
+		 *
+		 * <p>The built contents must use a normalized ASCII {@code ui://} URI
+		 * and the {@code text/html;profile=mcp-app} MIME type. Typed Apps
+		 * metadata is kept separate from raw extension metadata; declaring
+		 * typed-owned fields in both is rejected regardless of setter order.
+		 *
+		 * @param appResourceMetadata immutable Apps resource metadata
+		 * @return this builder
+		 * @throws IllegalArgumentException if raw metadata declares a typed-owned field
+		 */
+		@NonNull
+		public Builder appResourceMetadata(@NonNull McpAppResourceMetadata appResourceMetadata) {
+			McpAppMetadataSupport.effectiveResourceMetadata(this.metadata,
+					requireNonNull(appResourceMetadata));
+			this.appResourceMetadata = appResourceMetadata;
+			return this;
+		}
+
+		/**
 		 * Sets protocol extension metadata.
 		 *
 		 * @param metadata immutable metadata object
@@ -181,13 +218,17 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		 */
 		@NonNull
 		public Builder metadata(@NonNull McpJsonObject metadata) {
-			this.metadata = requireNonNull(metadata);
+			McpAppMetadataSupport.effectiveResourceMetadata(requireNonNull(metadata),
+					this.appResourceMetadata);
+			this.metadata = metadata;
 			return this;
 		}
 
 		/** @return immutable binary resource contents */
 		@NonNull
 		public McpBlobResourceContents build() {
+			McpAppMetadataSupport.requireResourceContents(this.uri, this.mimeType,
+					this.metadata, this.appResourceMetadata);
 			return new McpBlobResourceContents(this);
 		}
 	}

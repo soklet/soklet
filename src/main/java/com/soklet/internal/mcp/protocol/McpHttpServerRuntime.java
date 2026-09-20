@@ -874,7 +874,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					profile.renderFrameworkResult(
 							McpProfileFrameworkResultKind.DISCOVERY,
 							capabilityRegistry.discoverResult().toWireResult()),
-					callerAwareCatalog ? Optional.empty() : Optional.of(
+					callerAwareCatalog || capabilityRegistry.hasAppTools()
+							? Optional.empty() : Optional.of(
 							profile.renderFrameworkResult(
 									McpProfileFrameworkResultKind.TOOLS_LIST,
 									capabilityRegistry.toolsListResult())),
@@ -944,6 +945,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				preflightFrameworkOwnedResponse(endpointRuntime.path(),
 						profile.revision(), "server/discover", responses.discovery());
 				if (endpoint.catalogAccessAdapter().isEmpty()
+						&& !capabilityRegistry.hasAppTools()
 						&& !capabilityRegistry.tools().isEmpty())
 					preflightFrameworkOwnedResponse(endpointRuntime.path(),
 							profile.revision(), "tools/list",
@@ -4782,6 +4784,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		boolean completionPromptRequest = completionRequest
 				.map(value -> value.promptReference()).orElse(false);
+		boolean appToolCall = "tools/call".equals(mappedRequest.method())
+				&& operationName.map(capabilityRegistry::hasAppTool).orElse(false);
 		boolean deferredCatalogDirectRequest = callerAwareCatalog
 				&& ("tools/call".equals(mappedRequest.method())
 						|| "prompts/get".equals(mappedRequest.method()));
@@ -4808,7 +4812,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
 			missingCapabilities.add(new McpExtensionClientCapability(
 					TASKS_EXTENSION_IDENTIFIER));
-		if (!missingCapabilities.isEmpty())
+		if (!missingCapabilities.isEmpty() && !appToolCall)
 			return profiledJsonRpcError(protocolProfile,
 					McpProfileErrorKind.OPERATION, 400, "Bad Request",
 					Optional.of(mappedRequest.id()),
@@ -5046,6 +5050,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		if (deferredCatalogDirectMissingHandler)
 			return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
+		if (appToolCall && !callerAwareCatalog) {
+			MicrohttpResponse appFailure = appToolCallFailure(capabilityRegistry,
+					protocolProfile, mappedRequest, operationName.orElseThrow(),
+					corsHeaders);
+			if (appFailure != null)
+				return appFailure;
+			if (!missingCapabilities.isEmpty())
+				return profiledJsonRpcError(protocolProfile,
+						McpProfileErrorKind.OPERATION, 400, "Bad Request",
+						Optional.of(mappedRequest.id()),
+						McpJsonRpcError.missingRequiredClientCapabilities(
+								missingCapabilities), corsHeaders);
+		}
 
 		if (callerAwareCatalog) {
 			boolean policyRequest = toolsListRequest || promptsListRequest
@@ -5132,6 +5149,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if ("tools/call".equals(mappedRequest.method())) {
+				MicrohttpResponse appFailure = appToolCallFailure(capabilityRegistry,
+						protocolProfile, mappedRequest, operationName.orElseThrow(),
+						corsHeaders);
+				if (appFailure != null)
+					return appFailure;
 				McpApplicationToolRoute resolvedRoute = toolRoute.orElse(null);
 				if (resolvedRoute != null) {
 					Optional<McpRateLimitDecision> decision;
@@ -5311,16 +5333,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		if (toolsListRequest) {
-			McpWireResult toolsResult = callerAwareCatalog
+			boolean requestSpecificProjection = callerAwareCatalog
+					|| capabilityRegistry.hasAppTools();
+			McpWireResult toolsResult = requestSpecificProjection
 					? protocolProfile.renderFrameworkResult(
 							McpProfileFrameworkResultKind.TOOLS_LIST,
-							capabilityRegistry.toolsListResult(accessibleToolNames))
+							capabilityRegistry.toolsListResult(callerAwareCatalog
+									? accessibleToolNames
+									: new LinkedHashSet<>(capabilityRegistry.tools()),
+									mappedRequest.params().metadata().clientCapabilities()
+											.supports(McpServerCapabilityRegistry.APPS_CAPABILITY)))
 					: endpointRuntime.frameworkResponses(protocolProfile).toolsList()
 							.orElseThrow();
 			return catalogResponse(toolsResult, protocolProfile,
 					McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST, mappedRequest.id(),
 					endpointPolicy, requestControl, corsHeaders, catalogAccessSession,
-					callerAwareCatalog);
+					requestSpecificProjection);
 		}
 
 		if (promptsListRequest) {
@@ -6454,6 +6482,25 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		};
 	}
 
+	@Nullable
+	private MicrohttpResponse appToolCallFailure(
+			@NonNull McpServerCapabilityRegistry capabilityRegistry,
+			@NonNull McpProtocolProfile protocolProfile,
+			McpJsonRpcMessage.@NonNull Request mappedRequest,
+			@NonNull String toolName, @NonNull List<@NonNull Header> corsHeaders) {
+		if (!capabilityRegistry.isToolAppAvailable(toolName))
+			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		if (capabilityRegistry.toolRequiresAppCapability(toolName)
+				&& !mappedRequest.params().metadata().clientCapabilities()
+						.supports(McpServerCapabilityRegistry.APPS_CAPABILITY))
+			return profiledJsonRpcError(protocolProfile,
+					McpProfileErrorKind.OPERATION, 400, "Bad Request",
+					Optional.of(mappedRequest.id()),
+					McpJsonRpcError.missingRequiredClientCapabilities(
+							Set.of(McpServerCapabilityRegistry.APPS_CAPABILITY)), corsHeaders);
+		return null;
+	}
+
 	private McpCatalogProjectionQueue.Digest projectCatalogDigest(
 			@NonNull EndpointRuntime endpointRuntime,
 			McpCatalogProjectionQueue.@NonNull Family family,
@@ -6508,7 +6555,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (family == McpCatalogProjectionQueue.Family.TOOLS) {
 			responseKind = McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST;
 			resultKind = McpProfileFrameworkResultKind.TOOLS_LIST;
-			projectedResult = capabilityRegistry.toolsListResult(visibleNames);
+			projectedResult = capabilityRegistry.hasAppTools()
+					? capabilityRegistry.toolsListResult(visibleNames,
+							requestContext.getClientCapabilities().supportsAppMimeType(
+									McpServerCapabilityRegistry.APPS_MIME_TYPE))
+					: capabilityRegistry.toolsListResult(visibleNames);
 		} else {
 			responseKind = McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST;
 			resultKind = McpProfileFrameworkResultKind.PROMPTS_LIST;

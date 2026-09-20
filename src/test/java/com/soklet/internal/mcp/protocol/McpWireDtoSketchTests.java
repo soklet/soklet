@@ -509,7 +509,7 @@ public class McpWireDtoSketchTests {
 		Assertions.assertFalse(coreRequirements.members().containsKey("extensions"),
 				"A core-only requirement must not invent an extension requirement.");
 		Assertions.assertArrayEquals(new Class<?>[] { McpCoreClientCapability.class,
-				McpExtensionClientCapability.class },
+				McpExtensionClientCapability.class, McpExtensionMimeTypeClientCapability.class },
 				McpClientCapabilityRequirement.class.getPermittedSubclasses());
 	}
 

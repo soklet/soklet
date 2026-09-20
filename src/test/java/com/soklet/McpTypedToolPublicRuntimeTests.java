@@ -227,7 +227,7 @@ public class McpTypedToolPublicRuntimeTests {
 					stages.add("interceptor-after:" + operation);
 					return result;
 				})
-				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
+				.toolResultSanitizer((request, toolName, rawArguments, output) -> {
 					stages.add("sanitizer:" + toolName);
 					return output;
 				})

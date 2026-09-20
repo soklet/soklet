@@ -289,7 +289,7 @@ public class McpTaskPublicApiTests {
 						.metadata(reservedMetadata).build());
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpCompleteResult.fromToolText("complete")
-						.withMetadata(reservedMetadata));
+						.toBuilder().metadata(reservedMetadata).build());
 	}
 
 	@Test

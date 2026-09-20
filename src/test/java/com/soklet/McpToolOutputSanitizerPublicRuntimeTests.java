@@ -34,7 +34,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Black-box real-listener coverage for MCP tool-output sanitization.
+ * Black-box real-listener coverage for MCP tool-result sanitization.
+ * The historical class name is retained for release-evidence references.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -124,10 +125,11 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			stages.add("interceptor-after:" + operation);
 			return result;
 		};
-		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
-				output) -> {
+		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments,
+				completeResult) -> {
 			stages.add("sanitizer:" + toolName);
-			return McpToolOutput.fromText("SANITIZED-" + toolName);
+			return completeResult.toBuilder()
+					.payload(McpToolOutput.fromText("SANITIZED-" + toolName)).build();
 		};
 		McpServer server = server(List.of(ordinaryTool, shortCircuitedTool),
 				interceptor, sanitizer);
@@ -202,17 +204,18 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 								deepHandlerResult)),
 				jsonTool("deep-metadata", () ->
 						McpCompleteResult.fromToolText("safe")
-								.withMetadata(deepMetadata)),
+								.toBuilder().metadata(deepMetadata).build()),
 				jsonTool("deep-sanitizer", () ->
 						McpCompleteResult.fromToolText("raw-safe")),
 				jsonTool("wide-content", () ->
 						McpCompleteResult.fromToolOutput(wideOutput)),
 				jsonTool("healthy", () ->
 						McpCompleteResult.fromToolText("HEALTHY-AFTER-BOUNDS")));
-		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
-				output) -> toolName.equals("deep-sanitizer")
-						? McpToolOutput.fromStructuredContent(deepSanitizerResult)
-						: output;
+		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments,
+				completeResult) -> toolName.equals("deep-sanitizer")
+						? completeResult.toBuilder().payload(McpToolOutput
+								.fromStructuredContent(deepSanitizerResult)).build()
+						: completeResult;
 		McpServer server = server(tools,
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
 		Soklet soklet = managedSoklet(server);
@@ -257,8 +260,8 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						new TypedResult("ORIGINAL-TYPED-VALUE"))
 				.structuredContentMirroredAsText(false)
 				.build();
-		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
-				output) -> {
+		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments,
+				completeResult) -> {
 			sanitizerInvocations.incrementAndGet();
 			McpJsonString mode = Assertions.assertInstanceOf(McpJsonString.class,
 					rawArguments.find("mode").orElseThrow());
@@ -268,7 +271,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			McpJsonObject invalidReplacement = McpJsonObject.builder()
 					.put("unexpected", "INVALID-SANITIZED-VALUE")
 					.build();
-			return switch (mode.getValue()) {
+			McpToolOutput sanitizedOutput = switch (mode.getValue()) {
 				case "valid-replacement" -> McpToolOutput
 						.fromStructuredContent(validReplacement);
 				case "valid-with-content" -> McpToolOutput.builder()
@@ -292,6 +295,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						.build();
 				default -> throw new IllegalArgumentException("Unknown test mode.");
 			};
+			return completeResult.toBuilder().payload(sanitizedOutput).build();
 		};
 		McpServer server = server(List.of(tool, toolWithoutMirror),
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
@@ -378,7 +382,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 	}
 
 	private static void assertSanitizerFailure(String suffix,
-			McpToolOutputSanitizer sanitizer) throws Exception {
+			McpToolResultSanitizer sanitizer) throws Exception {
 		String toolName = "sanitizer-failure-" + suffix;
 		String handlerSecret = "HANDLER-OUTPUT-MUST-NOT-LEAK-" + suffix;
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
@@ -439,7 +443,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 
 	private static McpServer server(List<McpToolRegistration<?>> tools,
 			McpHandlerInterceptor interceptor,
-			McpToolOutputSanitizer sanitizer) {
+			McpToolResultSanitizer sanitizer) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"sanitizer-public-runtime-test",
 						"4.0.0").build())
@@ -452,7 +456,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				.toolRateLimiter(
 						context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(interceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

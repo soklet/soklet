@@ -488,13 +488,14 @@ public class McpHttpContractGoldenProductionTests {
 						throw new IllegalStateException(INTERCEPTOR_SECRET);
 					return continuation.proceed();
 				})
-				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
+				.toolResultSanitizer((request, toolName, rawArguments, completeResult) -> {
 					String caseName = state.caseName(request.getRequest());
 					state.record(caseName, "sanitizer");
 					if ("invalid-output".equals(caseName))
-						return McpToolOutput.fromStructuredContent(
-								McpJsonObject.builder().put("wrong", OUTPUT_SECRET).build());
-					return output;
+						return completeResult.toBuilder().payload(McpToolOutput
+								.fromStructuredContent(McpJsonObject.builder()
+										.put("wrong", OUTPUT_SECRET).build())).build();
+					return completeResult;
 				})
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(
 						Set.of(ALLOWED_ORIGIN)))

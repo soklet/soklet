@@ -94,7 +94,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					stages.add("interceptor-after");
 					return result;
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					stages.add("result-sanitizer");
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -162,7 +162,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				})
@@ -254,7 +254,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					stages.add("interceptor-after");
 					return result;
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				})
@@ -310,7 +310,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					probeInterceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					probeSanitizerInvocations.incrementAndGet();
 					return output;
 				})

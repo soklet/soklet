@@ -23,6 +23,7 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.GETs;
 import com.soklet.annotation.HEAD;
 import com.soklet.annotation.HEADs;
+import com.soklet.annotation.McpAppTool;
 import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpMayRequestInput;
 import com.soklet.annotation.McpPrompt;
@@ -80,7 +81,7 @@ public class AnnotationNullnessContractTests {
 			ANNOTATION_TYPES = List.of(
 			DELETE.class, DELETEs.class, FormParameter.class,
 			GET.class, GETs.class, HEAD.class, HEADs.class,
-			McpHeader.class, McpMayRequestInput.class, McpPrompt.class,
+			McpAppTool.class, McpHeader.class, McpMayRequestInput.class, McpPrompt.class,
 			McpPromptArgument.class, McpPromptCompletion.class,
 			McpResource.class, McpResourceCompletion.class,
 			McpResourceList.class, McpResourceUriParameter.class,

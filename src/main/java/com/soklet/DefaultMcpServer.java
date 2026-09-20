@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderLoader.GeneratedInvocationContext;
+import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver.PendingMetricRecord;
@@ -173,7 +174,7 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
-	private final McpToolOutputSanitizer toolOutputSanitizer;
+	private final McpToolResultSanitizer toolResultSanitizer;
 	@Nullable
 	private final McpTaskManager taskManager;
 	@Nullable
@@ -250,7 +251,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpSubscriptionAuthorizer subscriptionAuthorizer,
 			boolean subscriptionAuthorizerExplicitlyConfigured,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
-			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
+			@NonNull McpToolResultSanitizer toolResultSanitizer,
 			@Nullable McpTaskManager taskManager,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
@@ -299,7 +300,7 @@ final class DefaultMcpServer implements McpServer {
 				catalogAccessPolicyExplicitlyConfigured;
 		this.subscriptionAuthorizer = requireNonNull(subscriptionAuthorizer);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
-		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
+		this.toolResultSanitizer = requireNonNull(toolResultSanitizer);
 		this.taskManager = taskManager;
 		this.taskEventPublisher = taskManager == null ? null
 				: requireNonNull(taskManager.getTaskEventPublisher(),
@@ -1322,8 +1323,8 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
-	public McpToolOutputSanitizer getToolOutputSanitizer() {
-		return this.toolOutputSanitizer;
+	public McpToolResultSanitizer getToolResultSanitizer() {
+		return this.toolResultSanitizer;
 	}
 
 	@Override
@@ -1534,7 +1535,8 @@ final class DefaultMcpServer implements McpServer {
 		return new ToolPlan(tool.getName(), tool.getInputSchema().getDocument(),
 				tool.getMirroredHeaderPlan(),
 				tool.getOutputSchema().map(McpToolSchema::getDocument),
-				toolDescriptorFields(tool), tool.getMetadata(),
+				toolDescriptorFields(tool), McpAppMetadataSupport.toolMetadata(
+						tool.getMetadata(), tool.getAppToolMetadata().orElse(null), true),
 				tool.isStructuredContentMirroredAsText(),
 				toRateLimitAdapter(resolvedRateLimiter),
 				tool.getInputRequestDeclarations(), tool.getRequestStateMode(),
@@ -1728,18 +1730,18 @@ final class DefaultMcpServer implements McpServer {
 			throw new IllegalArgumentException(
 					"Unsupported MCP tool result implementation: "
 							+ result.getClass().getName());
-		if (!(completeResult.getPayload() instanceof McpToolOutput output))
+		if (!(completeResult.getPayload() instanceof McpToolOutput))
 			throw new IllegalArgumentException(
 					"An MCP tool handler must return tool output.");
-		McpToolOutput sanitizedOutput = requireNonNull(
-				this.toolOutputSanitizer.sanitize(requestContext, tool.getName(),
-						invocation.rawArguments(), output),
-				"The MCP tool-output sanitizer returned null.");
+		McpCompleteResult sanitizedResult = sanitizeToolResult(requestContext,
+				tool.getName(), invocation.rawArguments(), completeResult);
+		McpToolOutput sanitizedOutput =
+				(McpToolOutput) sanitizedResult.getPayload();
 
 		Optional<McpJsonValue> structuredContent =
 				sanitizedOutput.getStructuredContent();
 		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
-				completeResult.getMetadata());
+				sanitizedResult.getMetadata());
 		if (tool.getOutputSchema().isPresent()
 				&& !sanitizedOutput.isError()
 				&& structuredContent.isEmpty())
@@ -1753,10 +1755,33 @@ final class DefaultMcpServer implements McpServer {
 				&& sanitizedOutput.getContent().isEmpty()
 				&& !sanitizedOutput.isError())
 			return ToolInvocationResult.structured(structuredContent.orElseThrow(),
-					completeResult.getMetadata());
+					sanitizedResult.getMetadata());
 
 		return ToolInvocationResult.complete(toolOutputFields(sanitizedOutput),
-				completeResult.getMetadata());
+				sanitizedResult.getMetadata());
+	}
+
+	@NonNull
+	private McpCompleteResult sanitizeToolResult(
+			@NonNull McpRequestContext requestContext, @NonNull String toolName,
+			@NonNull McpJsonObject rawArguments,
+			@NonNull McpCompleteResult completeResult) {
+		try {
+			McpCompleteResult sanitizedResult = this.toolResultSanitizer.sanitize(
+					requestContext, toolName, rawArguments, completeResult);
+			if (sanitizedResult == null
+					|| !(sanitizedResult.getPayload() instanceof McpToolOutput))
+				throw new IllegalStateException(
+						"The MCP tool-result sanitizer returned an invalid result.");
+			return sanitizedResult;
+		} catch (Throwable exception) {
+			// Application failures may contain result data in their messages,
+			// causes, or suppressed exceptions. Retain none of those objects for
+			// framework diagnostics or response generation.
+			if (exception instanceof InterruptedException)
+				Thread.currentThread().interrupt();
+			throw new IllegalStateException("The MCP tool-result sanitizer failed.");
+		}
 	}
 
 	private static void requireTaskIdMatches(@NonNull String requestedTaskId,
@@ -1796,15 +1821,15 @@ final class DefaultMcpServer implements McpServer {
 
 		McpCompleteResult completedResult = task.getCompletedResult()
 				.orElseThrow();
-		if (!(completedResult.getPayload() instanceof McpToolOutput output))
+		if (!(completedResult.getPayload() instanceof McpToolOutput))
 			throw new IllegalArgumentException(
 					"A completed MCP tool task must contain tool output.");
-		McpToolOutput sanitizedOutput = requireNonNull(
-				this.toolOutputSanitizer.sanitize(requireNonNull(requestContext),
-						origin.toolName(), origin.rawArguments(), output),
-				"The MCP tool-output sanitizer returned null.");
+		McpCompleteResult sanitizedResult = sanitizeToolResult(requestContext,
+				origin.toolName(), origin.rawArguments(), completedResult);
+		McpToolOutput sanitizedOutput =
+				(McpToolOutput) sanitizedResult.getPayload();
 		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
-				completedResult.getMetadata());
+				sanitizedResult.getMetadata());
 		Optional<McpJsonValue> structuredContent =
 				sanitizedOutput.getStructuredContent();
 		if (origin.outputSchemaBridge().isPresent()
@@ -1820,7 +1845,7 @@ final class DefaultMcpServer implements McpServer {
 					"MCP deferred structured tool output does not satisfy its output schema.");
 		return new TaskSnapshot(task,
 				Optional.of(toolOutputFields(sanitizedOutput)),
-				Optional.of(completedResult.getMetadata()),
+				Optional.of(sanitizedResult.getMetadata()),
 				origin.structuredContentMirroredAsText());
 	}
 
@@ -2153,11 +2178,41 @@ final class DefaultMcpServer implements McpServer {
 		if (!(completeResult.getPayload() instanceof McpResourceOutput output))
 			throw new IllegalArgumentException(
 					"An MCP resource handler must return resource output.");
+		requireMatchingAppResourceContents(resource, output);
 		requireResourceResultFitsJsonNodeBudget(output,
 				completeResult.getMetadata());
 
 		return ResourceInvocationResult.complete(resourceOutputFields(output),
 				completeResult.getMetadata());
+	}
+
+	private static void requireMatchingAppResourceContents(
+			@NonNull McpResourceRegistration resource,
+			@NonNull McpResourceOutput output) {
+		if (resource.getAddressType() != McpResourceAddressType.URI)
+			return;
+		URI registeredUri = resource.getUri().orElseThrow();
+		if (!"ui".equalsIgnoreCase(registeredUri.getScheme())
+				|| registeredUri.isOpaque() || registeredUri.getRawAuthority() == null
+				|| registeredUri.getRawAuthority().isEmpty()
+				|| !hasAppsMimeType(resource.getMimeType()))
+			return;
+		for (McpResourceContents contents : output.getContents()) {
+			if (!registeredUri.equals(contents.getUri())
+					|| !hasAppsMimeType(contents.getMimeType()))
+				throw new IllegalArgumentException(
+						"MCP Apps resource contents must match the registered UI URI and MIME profile.");
+		}
+	}
+
+	private static boolean hasAppsMimeType(@NonNull Optional<@NonNull String> mimeType) {
+		if (mimeType.isEmpty())
+			return false;
+		try {
+			return McpAppMimeType.isAppsProfile(mimeType.orElseThrow());
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
 	}
 
 	@NonNull
@@ -2771,10 +2826,17 @@ final class DefaultMcpServer implements McpServer {
 			boolean validateToolAndPromptCatalogs) {
 		requireNonNull(endpoint);
 		if (validateToolAndPromptCatalogs) {
-			JsonNodeBudget toolBudget = new JsonNodeBudget(
-					"MCP tool catalog", 8L);
-			for (McpToolRegistration<?> tool : endpoint.getTools())
-				addToolCatalogNodes(toolBudget, tool);
+			// Apps visibility and fallback metadata depend on the current request;
+			// the runtime bounds that exact projection, not the configured superset.
+			boolean appsProjection = endpoint.getTools().stream().anyMatch(tool ->
+					McpAppMetadataSupport.effectiveToolMetadata(tool.getMetadata(),
+							tool.getAppToolMetadata().orElse(null)).isPresent());
+			if (!appsProjection) {
+				JsonNodeBudget toolBudget = new JsonNodeBudget(
+						"MCP tool catalog", 8L);
+				for (McpToolRegistration<?> tool : endpoint.getTools())
+					addToolCatalogNodes(toolBudget, tool);
+			}
 
 			JsonNodeBudget promptBudget = new JsonNodeBudget(
 					"MCP prompt catalog", 8L);
@@ -2809,7 +2871,8 @@ final class DefaultMcpServer implements McpServer {
 		addIconsNodes(budget, tool.getIcons());
 		tool.getAnnotations().ifPresent(annotations ->
 				addToolAnnotationNodes(budget, annotations));
-		addMetadataNodes(budget, tool.getMetadata());
+		addMetadataNodes(budget, McpAppMetadataSupport.toolMetadata(
+				tool.getMetadata(), tool.getAppToolMetadata().orElse(null), true));
 	}
 
 	private static void addPromptCatalogNodes(@NonNull JsonNodeBudget budget,
@@ -2929,14 +2992,8 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(contents);
 		budget.add(3L);
 		budget.add(contents.getMimeType().isPresent() ? 1L : 0L);
-		if (contents instanceof McpTextResourceContents text)
-			addMetadataNodes(budget, text.getMetadata());
-		else if (contents instanceof McpBlobResourceContents blob)
-			addMetadataNodes(budget, blob.getMetadata());
-		else
-			throw new IllegalArgumentException(
-					"Unsupported MCP resource contents: "
-							+ contents.getClass().getName());
+		addMetadataNodes(budget, McpAppMetadataSupport.resourceMetadata(
+				contents.getMetadata(), contents.getAppResourceMetadata().orElse(null)));
 	}
 
 	private static void addResourceDescriptorNodes(@NonNull JsonNodeBudget budget,
@@ -3392,8 +3449,10 @@ final class DefaultMcpServer implements McpServer {
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource contents: "
 							+ contents.getClass().getName());
-		if (!contents.getMetadata().getMembers().isEmpty())
-			fields.put("_meta", contents.getMetadata());
+		McpJsonObject metadata = McpAppMetadataSupport.resourceMetadata(
+				contents.getMetadata(), contents.getAppResourceMetadata().orElse(null));
+		if (!metadata.getMembers().isEmpty())
+			fields.put("_meta", metadata);
 		return McpJsonObject.fromMembers(fields);
 	}
 

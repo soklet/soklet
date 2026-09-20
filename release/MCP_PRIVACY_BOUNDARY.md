@@ -110,6 +110,17 @@ sanitizers, localization hooks, request-state protection, and related MCP
 callbacks. Terminal lifecycle observation may also receive the exact ordered
 `Throwable` instances produced while handling the request.
 
+The complete-tool-result sanitizer is a deliberate exception to retaining an
+application failure object: Soklet discards a sanitizer's thrown exception,
+including its message, cause, and suppressed exceptions, and reports only a
+fixed framework failure. It also discards the original and partial result.
+Only the returned complete result's payload and metadata proceed to output
+validation and writing. The hook sees the current polling identity on each
+authorized detailed completed-task read without changing the stored result.
+Task-status metadata and progress are outside this hook. UI-directed result
+metadata is not a secret channel and is never copied into model-visible text
+as a fallback for non-Apps clients.
+
 These callback values are application-owned. Soklet does not control whether
 application code logs, transforms, exports, or retains them. Applications
 should apply their own allowlisting, redaction, access control, and retention

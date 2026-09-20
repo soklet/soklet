@@ -83,8 +83,8 @@ public class McpPromptPublicRuntimeTests {
 											.build()))
 							.addMessage(McpPromptMessage.fromAssistantContent(
 									McpEmbeddedResource.withResource(resource).build()))
-							.build()).withMetadata(McpJsonObject.builder()
-							.put("renderedBy", "test").build());
+							.build()).toBuilder().metadata(McpJsonObject.builder()
+							.put("renderedBy", "test").build()).build();
 				})
 				.title("Compose catalog prompt")
 				.description("Builds a deterministic catalog prompt")

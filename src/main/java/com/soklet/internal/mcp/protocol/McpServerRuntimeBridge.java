@@ -1122,8 +1122,13 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(endpointPlan);
 		requireNonNull(requestStateRuntime);
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
-		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
-				endpointPlan.toolPlans().size(), 4, 8, "MCP tool catalog");
+		boolean appToolProjection = endpointPlan.toolPlans().stream().anyMatch(plan ->
+				plan.metadata().getMembers().get("ui") instanceof McpJsonObject ui
+						&& (ui.getMembers().containsKey("resourceUri")
+								|| ui.getMembers().containsKey("visibility")));
+		if (!appToolProjection)
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					endpointPlan.toolPlans().size(), 4, 8, "MCP tool catalog");
 		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
 				endpointPlan.promptPlans().size(), 2, 8, "MCP prompt catalog");
 		if (endpointPlan.resourceListPlan().invoker().isEmpty()) {

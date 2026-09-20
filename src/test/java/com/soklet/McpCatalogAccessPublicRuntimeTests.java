@@ -377,7 +377,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					stages.add("interceptor-after:" + context.getJsonRpcMethod());
 					return result;
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					stages.add("sanitizer");
 					return output;
 				})
@@ -457,7 +457,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
-				.toolOutputSanitizer((request, toolName, arguments, output) -> {
+				.toolResultSanitizer((request, toolName, arguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				})

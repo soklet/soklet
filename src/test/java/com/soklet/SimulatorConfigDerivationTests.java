@@ -304,7 +304,7 @@ class SimulatorConfigDerivationTests {
 				McpAdmissionDecision.accepted();
 		McpHandlerInterceptor handlerInterceptor =
 				(context, features, continuation) -> continuation.proceed();
-		McpToolOutputSanitizer sanitizer =
+		McpToolResultSanitizer sanitizer =
 				(request, toolName, arguments, output) -> output;
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpRateLimiter requestRateLimiter = context ->
@@ -319,7 +319,7 @@ class SimulatorConfigDerivationTests {
 						McpSubscriptionAuthorizer.denyAllInstance())
 				.admissionController(sourceAdmission)
 				.handlerInterceptor(handlerInterceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.taskManager(taskManager)
 				.requestRateLimiter(requestRateLimiter)
 				.rateLimiterRegistry(limiterRegistry)
@@ -368,7 +368,7 @@ class SimulatorConfigDerivationTests {
 		Assertions.assertSame(handlerInterceptor,
 				derivedMcpServer.getHandlerInterceptor());
 		Assertions.assertSame(sanitizer,
-				derivedMcpServer.getToolOutputSanitizer());
+				derivedMcpServer.getToolResultSanitizer());
 		Assertions.assertSame(taskManager,
 				derivedMcpServer.getTaskManager().orElseThrow());
 		Assertions.assertSame(requestRateLimiter,
@@ -438,7 +438,7 @@ class SimulatorConfigDerivationTests {
 						(context, registration, features) -> true);
 		McpHandlerInterceptor handlerInterceptor =
 				(context, features, continuation) -> continuation.proceed();
-		McpToolOutputSanitizer sanitizer =
+		McpToolResultSanitizer sanitizer =
 				(request, toolName, arguments, output) -> output;
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpRateLimiter requestRateLimiter = context ->
@@ -488,7 +488,7 @@ class SimulatorConfigDerivationTests {
 				.admissionController(admissionController)
 				.catalogAccessPolicy(catalogAccessPolicy)
 				.handlerInterceptor(handlerInterceptor)
-				.toolOutputSanitizer(sanitizer)
+				.toolResultSanitizer(sanitizer)
 				.taskManager(taskManager)
 				.corsAuthorizer(corsAuthorizer)
 				.requestRateLimiter(requestRateLimiter)
@@ -745,7 +745,7 @@ class SimulatorConfigDerivationTests {
 				"subscriptionAuthorizer",
 				"subscriptionAuthorizerExplicitlyConfigured",
 				"handlerInterceptor",
-				"toolOutputSanitizer", "taskManager", "corsAuthorizer",
+				"toolResultSanitizer", "taskManager", "corsAuthorizer",
 				"requestRateLimiter",
 				"toolRateLimiter", "rateLimiterRegistry", "absentOriginPolicy",
 				"unknownMirroredHeaderPolicy", "logRawValidatedTraceIds",

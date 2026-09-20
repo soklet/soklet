@@ -125,7 +125,7 @@ public class McpBuilderResetContractTests {
 				.builder().addRateLimiter("custom", rateLimiter).build();
 		McpHandlerInterceptor handlerInterceptor =
 				(context, features, continuation) -> continuation.proceed();
-		McpToolOutputSanitizer toolOutputSanitizer =
+		McpToolResultSanitizer toolResultSanitizer =
 				(request, toolName, rawArguments, output) -> output;
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		byte[] traceKeyMaterial = new byte[32];
@@ -189,8 +189,8 @@ public class McpBuilderResetContractTests {
 				.keepAliveInterval(null)
 				.handlerInterceptor(handlerInterceptor)
 				.handlerInterceptor(null)
-				.toolOutputSanitizer(toolOutputSanitizer)
-				.toolOutputSanitizer(null)
+				.toolResultSanitizer(toolResultSanitizer)
+				.toolResultSanitizer(null)
 				.taskManager(taskManager)
 				.taskManager(null)
 				.requestRateLimiter(rateLimiter)
@@ -266,8 +266,8 @@ public class McpBuilderResetContractTests {
 				reset.logRawValidatedTraceIds());
 		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),
 				reset.getHandlerInterceptor());
-		Assertions.assertSame(McpToolOutputSanitizer.passThroughInstance(),
-				reset.getToolOutputSanitizer());
+		Assertions.assertSame(McpToolResultSanitizer.nonSanitizingInstance(),
+				reset.getToolResultSanitizer());
 		Assertions.assertTrue(defaults.getTaskManager().isEmpty());
 		Assertions.assertTrue(reset.getTaskManager().isEmpty());
 		Assertions.assertTrue(reset.getRequestRateLimiter().isEmpty());

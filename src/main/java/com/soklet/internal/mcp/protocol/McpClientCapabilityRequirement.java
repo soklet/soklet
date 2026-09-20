@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 sealed interface McpClientCapabilityRequirement permits McpCoreClientCapability,
-		McpExtensionClientCapability {
+		McpExtensionClientCapability, McpExtensionMimeTypeClientCapability {
 }
 
 /**

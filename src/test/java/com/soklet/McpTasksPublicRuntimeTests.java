@@ -739,9 +739,9 @@ public class McpTasksPublicRuntimeTests {
 							.completedResult(McpCompleteResult
 									.fromToolStructuredContent(McpJsonObject.builder()
 											.put("unsafe", "original").build())
-									.withMetadata(McpJsonObject.builder()
+									.toBuilder().metadata(McpJsonObject.builder()
 											.put("com.example/completed", "nested")
-											.build()))
+											.build()).build())
 							.metadata(McpJsonObject.builder()
 									.put("com.example/task-metadata", "completed")
 									.build())
@@ -757,8 +757,8 @@ public class McpTasksPublicRuntimeTests {
 				.serverInfoIncluded(false)
 				.addTool(tool)
 				.build();
-		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
-				output) -> {
+		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments,
+				completeResult) -> {
 			sanitizerInvocations.incrementAndGet();
 			Assertions.assertEquals(McpOperationType.TASKS_GET,
 					request.getOperationType());
@@ -766,13 +766,16 @@ public class McpTasksPublicRuntimeTests {
 			Assertions.assertEquals("tasks.sanitized", toolName);
 			Assertions.assertEquals(McpJsonObject.builder()
 					.put("originalArgument", "retained").build(), rawArguments);
+			McpToolOutput output = Assertions.assertInstanceOf(McpToolOutput.class,
+					completeResult.getPayload());
 			Assertions.assertEquals(McpJsonObject.builder()
 					.put("unsafe", "original").build(),
 					output.getStructuredContent().orElseThrow());
-			return output.toBuilder()
+			McpToolOutput sanitizedOutput = output.toBuilder()
 					.structuredContent(McpJsonObject.builder()
 							.put("safe", "sanitized").build())
 					.build();
+			return completeResult.toBuilder().payload(sanitizedOutput).build();
 		};
 		McpServer server = server(endpoint, Optional.of(taskManager),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger(),
@@ -864,14 +867,14 @@ public class McpTasksPublicRuntimeTests {
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull AtomicInteger admissions) {
 		return server(endpoint, taskManager, handlerInterceptor, admissions,
-				McpToolOutputSanitizer.passThroughInstance());
+				McpToolResultSanitizer.nonSanitizingInstance());
 	}
 
 	private static McpServer server(@NonNull McpEndpoint endpoint,
 			@NonNull Optional<@NonNull McpTaskManager> taskManager,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull AtomicInteger admissions,
-			@NonNull McpToolOutputSanitizer toolOutputSanitizer) {
+			@NonNull McpToolResultSanitizer toolResultSanitizer) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(context -> {
@@ -882,7 +885,7 @@ public class McpTasksPublicRuntimeTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(handlerInterceptor)
-				.toolOutputSanitizer(toolOutputSanitizer)
+				.toolResultSanitizer(toolResultSanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 		taskManager.ifPresent(builder::taskManager);
@@ -922,9 +925,9 @@ public class McpTasksPublicRuntimeTests {
 									McpJsonObject.builder().put("mode", "url").put("message", "Authorize access").put("url", "https://example.com/authorize").build()));
 			case COMPLETED -> builder.completedResult(
 					McpCompleteResult.fromToolText("completed-output")
-							.withMetadata(McpJsonObject.builder()
+							.toBuilder().metadata(McpJsonObject.builder()
 									.put("com.example/completed", "nested")
-									.build()));
+									.build()).build());
 			case FAILED -> builder.failure(McpJsonRpcError.fromApplication(41001,
 					"task-failure", McpJsonObject.builder()
 							.put("reason", "failure-detail").build()));

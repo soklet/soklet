@@ -275,7 +275,7 @@ class McpResultContentTests {
 				McpCompleteResult.fromToolOutput(output);
 		McpJsonObject metadata =
 				McpJsonObject.builder().put("revision", "7").build();
-		McpCompleteResult copied = original.withMetadata(metadata);
+		McpCompleteResult copied = original.toBuilder().metadata(metadata).build();
 
 		assertSame(output, original.getPayload());
 		assertSame(output, copied.getPayload());

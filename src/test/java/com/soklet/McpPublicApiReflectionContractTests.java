@@ -83,13 +83,13 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 152;
+	private static final int PHASE_FOUR_TYPE_COUNT = 154;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 278;
+	private static final int CURRENT_MCP_TYPE_COUNT = 280;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"cfb2267bf3efa2db9f4a438bd190842d6c4b85a088f0e2b6318c7aef08005de5";
+			"64c3b490e6bab09ef8e26ee574c21c94ee8b005214a57fc9c7a9c948a6da6aa8";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"99fd19692ccbf82766d7a9b4f151b0ea5e87aa1960748fb2835ba3809e5ed6a0";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -438,7 +438,7 @@ public class McpPublicApiReflectionContractTests {
 						"streamQueueCapacity", "subscriptionAuthorizationTimeout",
 						"subscriptionAuthorizer",
 						"subscriptionCatalogProjectionTimeout",
-						"taskManager", "toolOutputSanitizer", "toolRateLimiter",
+						"taskManager", "toolResultSanitizer", "toolRateLimiter",
 						"traceCorrelationKey", "unknownMirroredHeaderNameDiagnostics",
 						"unknownMirroredHeaderPolicy", "writeTimeout"),
 				McpInMemoryTaskManager.Builder.class, Set.of(
@@ -544,6 +544,20 @@ public class McpPublicApiReflectionContractTests {
 				"resourceContents");
 		Assertions.assertThrows(NoSuchMethodException.class, () ->
 				McpResourceOutput.Builder.class.getMethod("addContent", McpResourceContents.class));
+		assertRequiredFactory(McpCompleteResult.class.getMethod("withToolOutput",
+				McpToolOutput.class), McpCompleteResult.Builder.class, "toolOutput");
+		assertRequiredFactory(McpCompleteResult.class.getMethod("withPromptOutput",
+				McpPromptOutput.class), McpCompleteResult.Builder.class, "promptOutput");
+		assertRequiredFactory(McpCompleteResult.class.getMethod("withResourceOutput",
+				McpResourceOutput.class), McpCompleteResult.Builder.class, "resourceOutput");
+		assertInstanceMethod(McpCompleteResult.class, "toBuilder",
+				McpCompleteResult.Builder.class, MethodShape.CONCRETE, false);
+		assertParameterNames(McpCompleteResult.Builder.class.getMethod("payload",
+				McpCompletePayload.class), "payload");
+		assertParameterNames(McpCompleteResult.Builder.class.getMethod("metadata",
+				McpJsonObject.class), "metadata");
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				McpCompleteResult.class.getMethod("withMetadata", McpJsonObject.class));
 		Method inputRequest = McpInputRequiredResult.class.getMethod(
 				"withInputRequest", String.class, McpInputRequest.class);
 		assertRequiredFactory(inputRequest, McpInputRequiredResult.Builder.class,
@@ -924,10 +938,10 @@ public class McpPublicApiReflectionContractTests {
 				McpAdmissionContext.class), "context");
 		assertParameterNames(McpRateLimiter.class.getMethod("acquire",
 				McpRateLimitContext.class), "context");
-		assertParameterNames(McpToolOutputSanitizer.class.getMethod("sanitize",
+		assertParameterNames(McpToolResultSanitizer.class.getMethod("sanitize",
 				McpRequestContext.class, String.class, McpJsonObject.class,
-				McpToolOutput.class), "request", "toolName", "rawArguments",
-				"output");
+				McpCompleteResult.class), "requestContext", "toolName", "rawArguments",
+				"completeResult");
 
 		assertParameterNames(CorsAuthorizer.class.getMethod("authorizePreflight",
 				Request.class, CorsPreflight.class, Set.class), "request",

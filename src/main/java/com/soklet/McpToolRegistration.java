@@ -83,6 +83,8 @@ public final class McpToolRegistration<A> {
 	@Nullable
 	private final McpToolAnnotations annotations;
 	@Nullable
+	private final McpAppToolMetadata appToolMetadata;
+	@Nullable
 	private final String rateLimiterName;
 	@Nullable
 	private final McpRateLimiter rateLimiter;
@@ -132,6 +134,7 @@ public final class McpToolRegistration<A> {
 		this.outputSchema = state.outputSchema;
 		this.outputSchemaBridge = state.outputSchemaBridge;
 		this.annotations = state.annotations;
+		this.appToolMetadata = state.appToolMetadata;
 		this.rateLimiterName = state.rateLimiterName;
 		this.rateLimiter = state.rateLimiter;
 		this.structuredContentMirroredAsText =
@@ -210,6 +213,19 @@ public final class McpToolRegistration<A> {
 	@NonNull
 	public Optional<@NonNull McpToolAnnotations> getAnnotations() {
 		return Optional.ofNullable(this.annotations);
+	}
+
+	/**
+	 * Returns typed Apps association and audience metadata, if configured.
+	 *
+	 * <p>Raw application metadata remains separately available from
+	 * {@link #getMetadata()}; this accessor does not parse raw Apps fields.
+	 *
+	 * @return typed Apps tool metadata
+	 */
+	@NonNull
+	public Optional<@NonNull McpAppToolMetadata> getAppToolMetadata() {
+		return Optional.ofNullable(this.appToolMetadata);
 	}
 
 	/**
@@ -785,6 +801,29 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
+		 * Sets typed Apps association and audience metadata.
+		 *
+		 * <p>Typed configuration owns {@code ui.resourceUri} and
+		 * {@code ui.visibility}; raw declarations of either field conflict even
+		 * when their values agree. Unrelated raw metadata is retained. An
+		 * associated UI resource is checked when the endpoint is built.
+		 *
+		 * @param appToolMetadata typed Apps metadata
+		 * @return this builder
+		 * @throws NullPointerException if the metadata is null
+		 * @throws IllegalArgumentException if raw metadata declares an owned field
+		 */
+		@NonNull
+		public OperationBuilder<@NonNull A> appToolMetadata(
+				@NonNull McpAppToolMetadata appToolMetadata) {
+			requireNonNull(appToolMetadata);
+			McpAppMetadataSupport.effectiveToolMetadata(this.state.metadata,
+					appToolMetadata);
+			this.state.appToolMetadata = appToolMetadata;
+			return this;
+		}
+
+		/**
 		 * Sets a named rate-limiter override.
 		 *
 		 * <p>Named and direct setter calls are last-call-wins.
@@ -888,10 +927,15 @@ public final class McpToolRegistration<A> {
 		}
 
 		/** @param metadata protocol extension metadata
-		 * @return this builder */
+		 * @return this builder
+		 * @throws IllegalArgumentException if raw Apps metadata is malformed or
+		 * conflicts with typed Apps metadata */
 		@NonNull
 		public OperationBuilder<@NonNull A> metadata(@NonNull McpJsonObject metadata) {
-			this.state.metadata = requireNonNull(metadata);
+			requireNonNull(metadata);
+			McpAppMetadataSupport.effectiveToolMetadata(metadata,
+					this.state.appToolMetadata);
+			this.state.metadata = metadata;
 			return this;
 		}
 
@@ -961,6 +1005,29 @@ public final class McpToolRegistration<A> {
 		}
 
 		/**
+		 * Sets typed Apps association and audience metadata.
+		 *
+		 * <p>Typed configuration owns {@code ui.resourceUri} and
+		 * {@code ui.visibility}; raw declarations of either field conflict even
+		 * when their values agree. Unrelated raw metadata is retained. An
+		 * associated UI resource is checked when the endpoint is built.
+		 *
+		 * @param appToolMetadata typed Apps metadata
+		 * @return this builder
+		 * @throws NullPointerException if the metadata is null
+		 * @throws IllegalArgumentException if raw metadata declares an owned field
+		 */
+		@NonNull
+		public CompleteBuilder<@NonNull A> appToolMetadata(
+				@NonNull McpAppToolMetadata appToolMetadata) {
+			requireNonNull(appToolMetadata);
+			McpAppMetadataSupport.effectiveToolMetadata(this.state.metadata,
+					appToolMetadata);
+			this.state.appToolMetadata = appToolMetadata;
+			return this;
+		}
+
+		/**
 		 * Sets a named rate-limiter override.
 		 *
 		 * <p>Named and direct setter calls are last-call-wins.
@@ -1015,11 +1082,16 @@ public final class McpToolRegistration<A> {
 		}
 
 		/** @param metadata protocol extension metadata
-		 * @return this builder */
+		 * @return this builder
+		 * @throws IllegalArgumentException if raw Apps metadata is malformed or
+		 * conflicts with typed Apps metadata */
 		@NonNull
 		public CompleteBuilder<@NonNull A> metadata(
 				@NonNull McpJsonObject metadata) {
-			this.state.metadata = requireNonNull(metadata);
+			requireNonNull(metadata);
+			McpAppMetadataSupport.effectiveToolMetadata(metadata,
+					this.state.appToolMetadata);
+			this.state.metadata = metadata;
 			return this;
 		}
 
@@ -1103,6 +1175,8 @@ public final class McpToolRegistration<A> {
 		private final List<@NonNull McpIcon> icons = new ArrayList<>();
 		@Nullable
 		private McpToolAnnotations annotations;
+		@Nullable
+		private McpAppToolMetadata appToolMetadata;
 		@Nullable
 		private String rateLimiterName;
 		@Nullable

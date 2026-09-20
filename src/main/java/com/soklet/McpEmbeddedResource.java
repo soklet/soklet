@@ -136,9 +136,17 @@ public final class McpEmbeddedResource implements McpContentBlock {
 			return this;
 		}
 
-		/** @return immutable embedded-resource content */
+		/**
+		 * @return immutable embedded-resource content
+		 * @throws IllegalArgumentException if the contents carry Apps resource
+		 * metadata, which is valid only on resource reads
+		 */
 		@NonNull
 		public McpEmbeddedResource build() {
+			if (McpAppMetadataSupport.effectiveResourceMetadata(this.resource.getMetadata(),
+					this.resource.getAppResourceMetadata().orElse(null)).isPresent())
+				throw new IllegalArgumentException(
+						"MCP Apps resource metadata is not valid on embedded resource contents.");
 			return new McpEmbeddedResource(this);
 		}
 	}

@@ -34,6 +34,7 @@ com.soklet.McpClientCapabilities
 com.soklet.McpClientCapability
 com.soklet.McpCompletePayload
 com.soklet.McpCompleteResult
+com.soklet.McpCompleteResult$Builder
 com.soklet.McpCompleteToolHandler
 com.soklet.McpCompletionContext
 com.soklet.McpCompletionContext$Prompt
@@ -124,13 +125,13 @@ com.soklet.McpToolArguments
 com.soklet.McpToolHandler
 com.soklet.McpToolOutput
 com.soklet.McpToolOutput$Builder
-com.soklet.McpToolOutputSanitizer
 com.soklet.McpToolRegistration
 com.soklet.McpToolRegistration$ArgumentTypeStage
 com.soklet.McpToolRegistration$CompleteBuilder
 com.soklet.McpToolRegistration$CompleteHandlerStage
 com.soklet.McpToolRegistration$OperationBuilder
 com.soklet.McpToolRegistration$OperationHandlerStage
+com.soklet.McpToolResultSanitizer
 com.soklet.McpToolSchema
 com.soklet.McpUnknownMirroredHeaderPolicy
 com.soklet.MetricsCollector
@@ -138,6 +139,7 @@ com.soklet.MetricsCollector$Snapshot
 com.soklet.MetricsCollector$Snapshot$Builder
 com.soklet.SokletConfig
 com.soklet.SokletConfig$Builder
+com.soklet.annotation.McpAppTool
 com.soklet.annotation.McpHeader
 com.soklet.annotation.McpPrompt
 com.soklet.annotation.McpPromptArgument
