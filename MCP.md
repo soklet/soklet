@@ -37,6 +37,7 @@ exactly which host/tool versions were manually exercised.
 | Tools | Annotated and programmatic discovery, typed or JSON-object arguments, complete typed results, content results, rate limiting, interception, and output sanitization |
 | Prompts | Annotated and programmatic catalogs plus string-argument prompt rendering |
 | Resources | Exact URIs, bounded RFC 6570 Level 1 URI templates, reads, static catalogs, and application-owned custom listing/pagination |
+| Skills | Programmatic immutable bundles, `skills/list` and `skills/get`, authorized canonical file reads, locale groups, and application-owned pagination |
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
 | Tasks | `tools/call` task augmentation, durable application-owned task state, polling, input, cooperative cancelation, typed deferred-result validation, and optional status notifications |
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
@@ -90,6 +91,203 @@ authority when the pseudonymous token or separately opted-in raw validated MCP
 trace ID is available. It carries neither the full trace context nor request,
 throwable, method, or response objects. The simulator is a local test facility
 and does not cause Soklet to advertise a protocol capability.
+
+## Skills
+
+The development source implements the `io.modelcontextprotocol/skills`
+extension: discover manifests through `skills/list` and `skills/get`, then read
+their exact files through `resources/read`. Configure immutable bundles and
+locale groups programmatically; annotation-based Skills authoring is not provided.
+A Skills-only endpoint advertises the base Resources surface, but its files are
+not automatically added to `resources/list` or `resources/templates/list`.
+Empty groups alone do not enable Skills or Resources capabilities.
+Broader parser compatibility/fuzz and real-host qualification remain in progress.
+
+The [runnable Skills example](examples/skills/README.md) publishes authored
+Markdown, a UTF-8 CSV reference and a binary asset using only the public API.
+Its separate Inspector CLI check exercises real-client retrieval and digest/
+frontmatter verification; it does not activate or execute a Skill.
+
+Supply complete file bytes under logical bundle-relative paths, including
+`SKILL.md`. The application loads or generates those bytes; Soklet does not open
+files, fetch URLs, watch directories, or execute skill instructions.
+
+```java
+McpSkillBundle bundle = McpSkillBundle.fromFiles(files);
+McpSkillRegistration registration = McpSkillRegistration
+    .withUriAndSkillBundle(URI.create("skill://example/my-skill/SKILL.md"), bundle)
+    .build();
+McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+        McpImplementation.withNameAndVersion("example", "1.0").build())
+    .skillRegistrations(List.of(registration))
+    .build();
+```
+
+Here `files` is a `Map<String, byte[]>`, and its root document must declare
+`name: my-skill` and a valid description. Registration validates URI/name
+agreement and generates an immutable URI/digest/raw-byte-size manifest.
+Omitted locale stays absent; cache policy defaults to private with zero TTL.
+Neither locale nor cache policy grants access. Bundle, registration, and
+generated resource entries have structural equality and redacted `toString()`.
+
+To attach Skills to an annotation-generated endpoint, keep the generated registry:
+
+```java
+McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(MyEndpoint.class)
+    .withSkillRegistrations(MyEndpoint.class, List.of(registration));
+```
+
+This returns a new registry, replacing the selected endpoint's entire standalone
+Skills list while preserving generated handlers, endpoint settings, groups, and
+subscription configuration. An empty list clears standalone Skills; null is
+rejected. Selection uses the exact annotated class retained during discovery,
+not a path match or a reconstructed programmatic endpoint. Invalid replacements
+fail before publication and leave the original registry unchanged.
+
+For locale alternatives, attach a group instead:
+
+```java
+McpSkillGroup variants = McpSkillGroup.fromKeyAndSkillRegistrations(
+    "my-skill", List.of(englishRegistration, germanRegistration));
+McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(MyEndpoint.class)
+    .withSkillGroups(MyEndpoint.class, List.of(variants));
+```
+
+The registrations above contain explicitly authored bundles with the same Skill
+name, distinct locale-specific URIs, and declared locales. Configure a server
+`skillVariantSelector(...)` for this multivariant group. `withSkillGroups(...)`
+replaces the complete group list while preserving standalone registrations and
+the same generated endpoint state; an empty list clears groups, and null is
+rejected. The two registry methods preserve one another's property and perform
+the same endpoint-wide collision and representation checks. One Skill name
+cannot occupy both a standalone registration and a group.
+
+Metadata getters return the complete immutable parsed header, including unknown
+fields. Paths iterate root-first, then unsigned UTF-8 order. `findFileBytes(path)`
+copies only the requested file. Original bytes, UTF-8 BOMs, and line endings are
+preserved, and hashes are computed once from owned snapshots. Do not mutate
+inputs during construction. There is no public memory owner or lease.
+
+The construction profile permits at most 512 files and 16 MiB raw content, with
+8,192-byte NFC logical paths and a 4-MiB complete root document ceiling. The
+private YAML profile uses depth 128, 1,000,000 combined syntax/resolution nodes,
+1,048,576 UTF-16 units per scalar, 4,194,304 combined scalar units, and 50,000,000
+work units. Existing production JSON limits remain independent: 4 MiB output
+and 1,048,576 units per string/token. Individual representations may therefore
+fail before the raw bundle ceiling, including binary files above 786,432 bytes.
+
+File representation depends only on the final filename and bytes, consistently
+for a file shared by parent and nested skills. A fixed, case-insensitive suffix
+table recognizes Markdown, JSON, HTML, CSS, XML, and common text/script formats
+(`txt`, `yaml`, `yml`, `toml`, `csv`, `tsv`, `py`, `js`, `ts`, `jsx`, `tsx`, `sh`,
+`bash`, `zsh`, `sql`). These use strict UTF-8 text when valid. Malformed UTF-8
+falls back to canonical base64; a valid text value exceeding output limits is
+rejected, not reclassified. PNG/JPEG/GIF/WebP/PDF/ZIP use their fixed MIME types
+and base64; unrecognized suffixes use `application/octet-stream` and base64.
+No platform-dependent MIME lookup is used. Nested `SKILL.md` remains supporting
+content unless separately registered.
+
+Registration preflights canonical file reads, skill gets, and one-entry list
+responses, including JSON-RPC wrappers and conservative cache-field overhead.
+Endpoint construction also checks the configured server metadata and worst-case
+automatic page. Like existing startup checks, this uses request ID `0`; actual
+request IDs, caller-dependent projections, and complete final responses are
+validated again before publication.
+
+Configure standalone registrations with `McpEndpoint.Builder.skillRegistrations`
+and locale alternatives with `skillGroups`. Both replace their entire list;
+null or empty clears only that property. Endpoint getters retain the two sources
+separately. Internal owner order is standalone registrations first, then groups
+and their members in supplied order, regardless of setter order.
+`McpSkillGroup.fromKeyAndSkillRegistrations(key, registrations)` accepts an
+application-local nonblank key and ordered alternatives with one name and
+distinct URIs/locales (including at most one undeclared locale). Empty groups
+are permitted. A name occupies exactly one standalone/group listing slot;
+group keys and registration URIs must be unique across the endpoint.
+
+Each registered descendant's complete snapshot must already be present in every
+enclosing bundle; Soklet neither merges nor repairs incomplete snapshots.
+Shared files use `URI.equals` identity and require identical actual bytes and
+representation, with at most 16 owners. Their cache policy is private if any
+owner is private and uses the shortest owner TTL. Ordinary exact resources and
+matching URI templates cannot shadow these files. Template collision checks
+reuse the existing router's URI/count/work limits and reject uncertainty.
+These endpoint checks do not select a locale or authorize a read.
+
+Server configuration now accepts `skillAccessPolicy(...)` and
+`skillVariantSelector(...)`, with matching getters. A null access policy resets
+to `McpSkillAccessPolicy.allowAllInstance()`; a null selector clears it. Both
+survive simulator derivation without replacing application callback identities.
+Any declared multivariant group requires a selector at server construction,
+regardless of how many variants a caller might be allowed to see.
+
+Each list request checks access before discoverability. Hidden but accessible
+registrations remain eligible for exact lookup. Initial-page selectors receive
+only accessible, discoverable group members, the group key, and the existing
+bounded language ranges with weights/exclusions preserved. They return an exact
+supplied instance or empty, not an equal copy. Every nonempty filtered group in
+initial selection uses a configured selector, including singletons; empty groups
+do not invoke it.
+Custom selectors own language matching and fallback, including handling
+zero-weight exclusions; Soklet passes those preferences intact and does not
+apply the default singleton guard to a custom selection.
+
+Without a selector, standalone locales are descriptive, not negotiated. A
+declared-locale singleton is omitted only if its most-specific matching basic
+language range has weight zero (earliest range wins ties). An undeclared-locale
+singleton is omitted for any nonempty bounded preference list. Missing,
+malformed, or over-limit headers that collapse to the existing empty list allow
+that singleton; applications wanting stricter behavior should configure a
+selector. No implicit regional fallback is chosen.
+
+`skills/get` freshly checks only the exact registration's access, independently
+of discovery and variant selection. File reads freshly check all owners in
+canonical order under one admitted request deadline/cancelation boundary. One
+grant can allow a shared file, but any callback failure or null result fails the
+request closed. Denied and unknown targets return neutral unavailable errors;
+an earlier manifest or cached response is never an authorization grant.
+Authorized file reads pass through `McpHandlerInterceptor` with canonical
+resource output. Interceptors may add result metadata or shorten freshness, but
+cannot change the canonical URI, MIME type, bytes, or representation. Automatic
+Skills list/get results are framework-owned; custom list handlers are intercepted.
+An accessible parent necessarily exposes included child bytes even when the
+child's separate skill entry is denied. Soklet does not execute instructions or
+scripts, activate skills, or grant tool permissions; host consent remains separate.
+
+### Skills pages and cursors
+
+Every `McpSkillPage` contains at most 32 registrations, with each complete
+manifest kept together. Without `skillListHandler(...)`, an endpoint produces
+one automatic page. Endpoint construction counts every standalone registration
+plus one entry per nonempty group and checks conservative byte/node/depth limits
+with server metadata, before caller filtering. Configure a custom handler when
+that page cannot fit; pagination cannot repair an oversized individual manifest
+or file.
+
+A custom `McpSkillListHandler` returns `McpSkillPage` directly, without a
+`McpCompleteResult` wrapper. On the first page,
+`McpSkillListContext.getInitialSkillRegistrations()` is present, even for an
+empty selection. Return an ordered subsequence of those exact registration
+instances. A present cursor, including `""`, is a continuation: the initial-list
+optional is absent, and the handler restores its original selection and position.
+Soklet rechecks current access/discoverability without rerunning variant selection.
+Foreign or reconstructed registrations, duplicate page URIs, and invalid
+first-page ordering fail before publication.
+
+The application owns opaque cursor authentication, caller/endpoint binding,
+expiry, original selection/content identities, cross-page duplicate prevention,
+and retained snapshots across nodes or deployments. Soklet does not store or
+sign cursors. `McpLocalizationRequest.getSkillListCursor()` exposes the same
+Skills cursor before localization context creation; the resource-list accessor
+remains exclusive to `resources/list`.
+
+Skills caching defaults to private with zero TTL. `skillListCachePolicy(...)`
+sets the list policy; a page may override freshness but not scope. Caller/access
+policies, localization, groups/selectors, or a custom list handler conservatively
+clamp Skills responses to private zero-TTL caching. HTTP responses remain
+`Cache-Control: no-store`. `Vary: Accept-Language` is added for localization or
+group/selector language dependence, not merely for caller-dependent access.
+Localization never rewrites the authored bytes or their hashes.
 
 ## Server and request model
 

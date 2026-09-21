@@ -114,6 +114,8 @@ public class McpPublicJavadocTests {
 			"com.soklet.McpResourceRegistration$TemplateBuilder",
 			"com.soklet.McpResourceRegistration$TemplateHandlerStage",
 			"com.soklet.McpServer$Builder",
+			"com.soklet.McpSkillPage$Builder",
+			"com.soklet.McpSkillRegistration$Builder",
 			"com.soklet.McpTextContent$Builder",
 			"com.soklet.McpTextResourceContents$Builder",
 			"com.soklet.McpTokenBucketConfig$Builder",

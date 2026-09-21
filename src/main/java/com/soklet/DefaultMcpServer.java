@@ -60,6 +60,9 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProte
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskSnapshot;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
@@ -123,7 +126,7 @@ final class DefaultMcpServer implements McpServer {
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
 			"resources/read", "completion/complete", "subscriptions/listen", "notifications/cancelled",
-			"tasks/get", "tasks/update", "tasks/cancel");
+			"tasks/get", "tasks/update", "tasks/cancel", "skills/list", "skills/get");
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/tasks";
@@ -169,6 +172,11 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final McpCatalogAccessPolicy catalogAccessPolicy;
 	private final boolean catalogAccessPolicyExplicitlyConfigured;
+	@NonNull
+	private final McpSkillAccessPolicy skillAccessPolicy;
+	private final boolean skillAccessPolicyExplicitlyConfigured;
+	@Nullable
+	private final McpSkillVariantSelector skillVariantSelector;
 	@NonNull
 	private final McpSubscriptionAuthorizer subscriptionAuthorizer;
 	@NonNull
@@ -248,6 +256,9 @@ final class DefaultMcpServer implements McpServer {
 			boolean admissionControllerExplicitlyConfigured,
 			@NonNull McpCatalogAccessPolicy catalogAccessPolicy,
 			boolean catalogAccessPolicyExplicitlyConfigured,
+			@NonNull McpSkillAccessPolicy skillAccessPolicy,
+			boolean skillAccessPolicyExplicitlyConfigured,
+			@Nullable McpSkillVariantSelector skillVariantSelector,
 			@NonNull McpSubscriptionAuthorizer subscriptionAuthorizer,
 			boolean subscriptionAuthorizerExplicitlyConfigured,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
@@ -298,6 +309,9 @@ final class DefaultMcpServer implements McpServer {
 		this.catalogAccessPolicy = requireNonNull(catalogAccessPolicy);
 		this.catalogAccessPolicyExplicitlyConfigured =
 				catalogAccessPolicyExplicitlyConfigured;
+		this.skillAccessPolicy = requireNonNull(skillAccessPolicy);
+		this.skillAccessPolicyExplicitlyConfigured = skillAccessPolicyExplicitlyConfigured;
+		this.skillVariantSelector = skillVariantSelector;
 		this.subscriptionAuthorizer = requireNonNull(subscriptionAuthorizer);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolResultSanitizer = requireNonNull(toolResultSanitizer);
@@ -657,7 +671,140 @@ final class DefaultMcpServer implements McpServer {
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),
 				this.localizer != null, taskManagerAdapter(endpoint),
-				catalogAccessAdapter(endpoint), completionPlans);
+				catalogAccessAdapter(endpoint), completionPlans, skillsPlan(endpoint));
+	}
+
+	@NonNull
+	private Optional<SkillsPlan> skillsPlan(@NonNull McpEndpoint endpoint) {
+		if (endpoint.skillIndex().registrations().isEmpty()
+				&& endpoint.getSkillListHandler().isEmpty()) return Optional.empty();
+		McpSkillPolicyEvaluator evaluator = new McpSkillPolicyEvaluator(endpoint,
+				this.skillAccessPolicy, this.skillVariantSelector);
+		return Optional.of(new SkillsPlan(endpoint.skillIndex().files().stream()
+				.map(file -> new SkillFilePlan(file.uri(), effectiveSkillCachePlan(endpoint, file.cachePolicy())))
+				.toList(), endpoint.getSkillListHandler().isPresent(), this.maximumCursorSizeInBytes,
+				this.localizer != null || skillsDependOnLanguage(endpoint),
+				invocation -> invokeSkills(endpoint, evaluator, invocation)));
+	}
+
+	private boolean skillsDependOnLanguage(McpEndpoint endpoint) {
+		return this.skillVariantSelector != null || endpoint.getSkillGroups().stream()
+				.anyMatch(group -> !group.getSkillRegistrations().isEmpty());
+	}
+
+	private boolean skillsRequirePrivateCache(McpEndpoint endpoint) {
+		return this.localizer != null || this.catalogAccessPolicyExplicitlyConfigured
+				|| this.skillAccessPolicyExplicitlyConfigured || skillsDependOnLanguage(endpoint)
+				|| endpoint.getSkillListHandler().isPresent();
+	}
+
+	private CachePlan effectiveSkillCachePlan(McpEndpoint endpoint, McpCachePolicy policy) {
+		return skillsRequirePrivateCache(endpoint) ? new CachePlan(0L, CacheScope.PRIVATE) : toCachePlan(policy);
+	}
+
+	private ResourceListInvocationResult invokeSkills(McpEndpoint endpoint,
+			McpSkillPolicyEvaluator evaluator, SkillsInvocation invocation) throws Exception {
+		PromptInvocation base = invocation.base();
+		McpRequestContext request = base.requestContext();
+		List<Locale.LanguageRange> ranges = McpLocaleSupport.boundedLanguageRanges(
+				request instanceof DefaultMcpRequestContext context ? context.acceptLanguageValues()
+						: DefaultMcpRequestContext.acceptLanguageValues(request.getRequest()));
+		Optional<McpLocalizationContext> localization = applicationLocalizationContext(request,
+				base.cancelationToken(), base.pastDeadline(), base.continuationLocale(),
+				base.selectedLocaleSlot(), Optional.empty(), null, invocation.cursor(), ranges);
+		McpInvocationFeatures features = invocationFeatures(request, endpoint, base.jsonRpcMethod(),
+				base.cancelationToken(), base.progressEmitter(), base.pastDeadline(),
+				base.continuationLocale(), base.selectedLocaleSlot(), Optional.empty(), Optional.empty(), localization);
+		if (base.jsonRpcMethod().equals("skills/list")) {
+			Optional<List<McpSkillRegistration>> initial = invocation.cursor().isPresent()
+					? Optional.empty() : Optional.of(evaluator.discover(request, ranges, features, base.pastDeadline()));
+			McpSkillPage page;
+			if (endpoint.getSkillListHandler().isPresent()) {
+				McpOperationResult result;
+				try {
+					result = interceptHandler(request, base.handlerEntryGuard(), features, () -> {
+						try {
+							return requireNonNull(endpoint.getSkillListHandler().orElseThrow().handle(request,
+									McpSkillListContext.from(invocation.cursor(), initial), features),
+									"The MCP Skills-list handler returned null.");
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(exception.getError());
+						}
+					});
+				} catch (ApplicationHandlerJsonRpcException exception) {
+					McpJsonRpcError error = exception.getError();
+					return ResourceListInvocationResult.jsonRpcError(error.getCode(), error.getMessage(), error.getData());
+				}
+				if (!(result instanceof McpSkillPage skillPage))
+					throw new IllegalStateException("An MCP Skills-list handler must return a Skills page.");
+				page = skillPage;
+			} else {
+				base.handlerEntryGuard().requireEntry();
+				page = McpSkillPage.builder().skillRegistrations(initial.orElseThrow()).build();
+			}
+			evaluator.validatePage(page.getSkillRegistrations(), initial, request, features, base.pastDeadline());
+			com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.preflightPage(
+					page.getSkillRegistrations().stream().map(McpSkillRegistration::runtimeRegistration).toList(),
+					page, endpoint, base.requestId());
+			McpJsonArray.Builder entries = McpJsonArray.builder();
+			for (McpSkillRegistration registration : page.getSkillRegistrations())
+				entries.add(McpPublicJsonValueConverter.toPublic(registration.runtimeRegistration().entry()));
+			CachePlan cache = effectiveSkillCachePlan(endpoint, endpoint.getSkillListCachePolicy());
+			long ttl = skillsRequirePrivateCache(endpoint) ? 0L
+					: page.getCacheTimeToLiveOverride().map(Duration::toMillis).orElse(cache.timeToLiveMilliseconds());
+			McpJsonObject.Builder fields = McpJsonObject.builder().put("skills", entries.build())
+					.put("ttlMs", ttl).put("cacheScope", cache.scope() == CacheScope.PUBLIC ? "public" : "private");
+			page.getNextCursor().ifPresent(cursor -> fields.put("nextCursor", cursor));
+			return ResourceListInvocationResult.complete(fields.build(), page.getMetadata());
+		}
+		if (base.jsonRpcMethod().equals("skills/get")) {
+			base.handlerEntryGuard().requireEntry();
+			Optional<McpSkillRegistration> registration = evaluator.findAccessibleSkill(invocation.uri().orElseThrow(),
+					request, features, base.pastDeadline());
+			if (registration.isEmpty()) return ResourceListInvocationResult.jsonRpcError(-32602, "Skill unavailable.", Optional.empty());
+			McpSkillRegistration skill = registration.orElseThrow();
+			return skillResult(skill.runtimeRegistration().getResult(), effectiveSkillCachePlan(endpoint, skill.getCachePolicy()));
+		}
+		Optional<McpSkillEndpointIndex.File> file = evaluator.findAccessibleFile(invocation.uri().orElseThrow(),
+				request, features, base.pastDeadline());
+		if (file.isEmpty()) return ResourceListInvocationResult.jsonRpcError(-32602, "Resource unavailable.", Optional.empty());
+		McpSkillEndpointIndex.File canonicalFile = file.orElseThrow();
+		McpJsonObject canonicalFields = (McpJsonObject) McpPublicJsonValueConverter.toPublic(canonicalFile.readResult());
+		McpJsonArray canonicalContents = (McpJsonArray) canonicalFields.getMembers().get("contents");
+		McpJsonObject content = (McpJsonObject) canonicalContents.getElements().get(0);
+		String mimeType = ((McpJsonString) content.getMembers().get("mimeType")).getValue();
+		McpResourceContents contents = content.getMembers().get("text") instanceof McpJsonString text
+				? McpTextResourceContents.withUriAndText(canonicalFile.uri(), text.getValue()).mimeType(mimeType).build()
+				: McpBlobResourceContents.withUriAndData(canonicalFile.uri(), Base64.getDecoder().decode(
+						((McpJsonString) content.getMembers().get("blob")).getValue())).mimeType(mimeType).build();
+		McpCompleteResult canonical = McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContent(contents));
+		// Authorization precedes interception. A replacement cannot introduce a
+		// different file identity or representation than the published manifest.
+		McpOperationResult intercepted = interceptHandler(request, base.handlerEntryGuard(), features, () -> canonical);
+		if (!(intercepted instanceof McpCompleteResult complete)
+				|| !(complete.getPayload() instanceof McpResourceOutput output))
+			throw new IllegalStateException("An MCP Skills file interceptor must preserve the canonical resource output.");
+		requireResourceResultFitsJsonNodeBudget(output, complete.getMetadata());
+		McpJsonObject outputFields = resourceOutputFields(output);
+		if (!canonicalContents.equals(outputFields.getMembers().get("contents")))
+			throw new IllegalStateException("An MCP Skills file interceptor must preserve the canonical resource contents.");
+		CachePlan cache = effectiveSkillCachePlan(endpoint, canonicalFile.cachePolicy());
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>(outputFields.getMembers());
+		long ttl = Math.min(cache.timeToLiveMilliseconds(), output.getCacheTimeToLiveOverride()
+				.map(Duration::toMillis).orElse(cache.timeToLiveMilliseconds()));
+		fields.put("ttlMs", McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(ttl)));
+		fields.put("cacheScope", McpJsonString.fromValue(cache.scope() == CacheScope.PUBLIC ? "public" : "private"));
+		return ResourceListInvocationResult.complete(McpJsonObject.fromMembers(fields), complete.getMetadata());
+	}
+
+	private static ResourceListInvocationResult skillResult(
+			com.soklet.internal.mcp.protocol.McpJsonObject result, CachePlan cache) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>(
+				((McpJsonObject) McpPublicJsonValueConverter.toPublic(result)).getMembers());
+		fields.remove("resultType");
+		fields.put("ttlMs", McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(cache.timeToLiveMilliseconds())));
+		fields.put("cacheScope", McpJsonString.fromValue(cache.scope() == CacheScope.PUBLIC ? "public" : "private"));
+		return ResourceListInvocationResult.complete(McpJsonObject.fromMembers(fields), McpJsonObject.emptyInstance());
 	}
 
 	@NonNull
@@ -1301,6 +1448,18 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	public McpCatalogAccessPolicy getCatalogAccessPolicy() {
 		return this.catalogAccessPolicy;
+	}
+
+	@Override
+	@NonNull
+	public McpSkillAccessPolicy getSkillAccessPolicy() {
+		return this.skillAccessPolicy;
+	}
+
+	@Override
+	@NonNull
+	public Optional<@NonNull McpSkillVariantSelector> getSkillVariantSelector() {
+		return Optional.ofNullable(this.skillVariantSelector);
 	}
 
 	@Override
@@ -2658,6 +2817,19 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
 					@NonNull Optional<@NonNull String> resourceListCursor,
 					@Nullable List<@NonNull String> acceptLanguageValues) {
+		return applicationLocalizationContext(requestContext, token, pastDeadline, continuationLocale,
+				selectedLocaleSlot, resourceListCursor, acceptLanguageValues, Optional.empty(), null);
+	}
+
+	@NonNull
+	private Optional<@NonNull McpLocalizationContext> applicationLocalizationContext(
+			@NonNull McpRequestContext requestContext, @NonNull CancelationToken token,
+			@NonNull BooleanSupplier pastDeadline, @NonNull Optional<@NonNull String> continuationLocale,
+			@NonNull AtomicReference<@Nullable String> selectedLocaleSlot,
+			@NonNull Optional<@NonNull String> resourceListCursor,
+			@Nullable List<@NonNull String> acceptLanguageValues,
+			@NonNull Optional<@NonNull String> skillListCursor,
+			@Nullable List<Locale.LanguageRange> boundedLanguageRanges) {
 		McpLocalizer configuredLocalizer = this.localizer;
 
 		if (configuredLocalizer == null) {
@@ -2677,7 +2849,7 @@ final class DefaultMcpServer implements McpServer {
 
 		McpLocalizationRequest localizationRequest =
 				new DefaultMcpLocalizationRequest(requestContext,
-						McpLocaleSupport.boundedLanguageRanges(
+						boundedLanguageRanges != null ? boundedLanguageRanges : McpLocaleSupport.boundedLanguageRanges(
 								acceptLanguageValues != null
 										? acceptLanguageValues
 										: requestContext instanceof DefaultMcpRequestContext context
@@ -2687,6 +2859,7 @@ final class DefaultMcpServer implements McpServer {
 						continuationLocale.map(Locale::forLanguageTag)
 								.orElse(null),
 						resourceListCursor.orElse(null),
+						skillListCursor.orElse(null),
 						configuredLocalizer.getFallbackLocale());
 		McpLocalizationContext context;
 		String selectedLocaleTag;

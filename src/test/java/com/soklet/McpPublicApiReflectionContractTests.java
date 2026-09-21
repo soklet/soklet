@@ -83,17 +83,17 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 154;
+	private static final int PHASE_FOUR_TYPE_COUNT = 168;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 280;
+	private static final int CURRENT_MCP_TYPE_COUNT = 294;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"8f74e0bd871af61a5ddbb41d120f8bf33dc093daaf6bcc5ffc58df5d3583a765";
+			"2285d7246cdd7cb6e730af58d4b73bcd51ec58b67861d6f974dc6f93d11cb8a0";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"a90379f987dd745bf305b11668b7da224c88990373f749a2fe6644003ea80226";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"6aeebc1d4904a9c8d035a03cbd0a719acd3aca9e577f876f671ddf04e617a54c";
+			"c5583ef492ffb4b8305bb7d6e590821b27361e0dbe0a7d11c9e39e74dbbdc29b";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -124,6 +124,13 @@ public class McpPublicApiReflectionContractTests {
 							"com.soklet.McpJsonNumber",
 							"com.soklet.McpJsonObject",
 							"com.soklet.McpJsonString"),
+					"com.soklet.McpOperationResult", Set.of(
+							"com.soklet.McpCompleteResult",
+							"com.soklet.McpInputRequiredResult",
+							"com.soklet.McpTaskCreatedResult",
+							"com.soklet.McpResourcePage",
+							"com.soklet.McpArgumentCompletionResult",
+							"com.soklet.McpSkillPage"),
 					"com.soklet.McpRateLimitDecision", Set.of(
 							"com.soklet.McpRateLimitDecision$Allowed",
 							"com.soklet.McpRateLimitDecision$Denied"),
@@ -152,6 +159,7 @@ public class McpPublicApiReflectionContractTests {
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
 							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
+							"SKILLS_LIST", "SKILLS_GET",
 							"COMPLETION_COMPLETE",
 							"SUBSCRIPTIONS_LISTEN", "TASKS_GET", "TASKS_UPDATE",
 							"TASKS_CANCEL", "NOTIFICATIONS_CANCELED", "OTHER")),
@@ -282,6 +290,295 @@ public class McpPublicApiReflectionContractTests {
 	public void phaseFourSealedHierarchyRemainsExact() throws Exception {
 		assertSealedHierarchy(phaseFourTypes(), PHASE_FOUR_PERMITTED_TYPES,
 				PHASE_FOUR_NON_SEALED_TYPES, "Phase 4");
+	}
+
+	@Test
+	public void skillsConstructionAndInspectionSignaturesRemainExact() throws Exception {
+		for (Class<?> type : List.of(McpSkillBundle.class, McpSkillGroup.class, McpSkillRegistration.class,
+				McpSkillRegistration.Resource.class)) assertEncapsulatedFinalValueType(type);
+		for (Class<?> type : List.of(McpSkillBundle.class, McpSkillGroup.class, McpSkillRegistration.class,
+				McpSkillRegistration.Builder.class, McpSkillRegistration.Resource.class)) {
+			Assertions.assertTrue(Modifier.isFinal(type.getModifiers()));
+			Assertions.assertTrue(Arrays.stream(type.getDeclaredConstructors())
+					.allMatch(constructor -> Modifier.isPrivate(constructor.getModifiers())));
+		}
+		Method files = McpSkillBundle.class.getMethod("fromFiles", Map.class);
+		assertRequiredFactory(files, McpSkillBundle.class, "files");
+		assertParameterizedType(files.getGenericParameterTypes()[0], null, Map.class, String.class, byte[].class);
+		AnnotatedType[] fileTypes = ((AnnotatedParameterizedType) files.getAnnotatedParameterTypes()[0])
+				.getAnnotatedActualTypeArguments();
+		Assertions.assertTrue(hasExactNullness(fileTypes[0], NonNull.class));
+		Assertions.assertInstanceOf(AnnotatedArrayType.class, fileTypes[1]);
+		Assertions.assertTrue(hasExactNullness(fileTypes[1], NonNull.class));
+		assertGetter(McpSkillBundle.class, "getName", String.class);
+		assertGetter(McpSkillBundle.class, "getDescription", String.class);
+		assertGetter(McpSkillBundle.class, "getDocumentMetadata", McpJsonObject.class);
+		Method paths = McpSkillBundle.class.getMethod("getFilePaths");
+		assertParameterizedType(paths.getGenericReturnType(), null, Set.class, String.class);
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) paths.getAnnotatedReturnType())
+				.getAnnotatedActualTypeArguments()[0], NonNull.class));
+		Method find = McpSkillBundle.class.getMethod("findFileBytes", String.class);
+		assertNonNullOptionalPayload(find, byte[].class);
+		assertParameterNames(find, "filePath");
+		Assertions.assertTrue(hasExactNullness(find.getAnnotatedParameterTypes()[0], NonNull.class));
+
+		Method groupFactory = McpSkillGroup.class.getMethod("fromKeyAndSkillRegistrations", String.class, List.class);
+		assertRequiredFactory(groupFactory, McpSkillGroup.class, "key", "skillRegistrations");
+		assertParameterizedType(groupFactory.getGenericParameterTypes()[1], null, List.class,
+				McpSkillRegistration.class);
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) groupFactory
+				.getAnnotatedParameterTypes()[1]).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		assertGetter(McpSkillGroup.class, "getKey", String.class);
+		Method groupRegistrations = assertInstanceMethod(McpSkillGroup.class,
+				"getSkillRegistrations", List.class, MethodShape.CONCRETE, false);
+		assertParameterizedType(groupRegistrations.getGenericReturnType(), null, List.class,
+				McpSkillRegistration.class);
+		Assertions.assertTrue(hasExactNullness(groupRegistrations.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) groupRegistrations
+				.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
+
+		assertRequiredFactory(McpSkillRegistration.class.getMethod("withUriAndSkillBundle", URI.class,
+				McpSkillBundle.class), McpSkillRegistration.Builder.class, "uri", "skillBundle");
+		assertGetter(McpSkillRegistration.class, "getUri", URI.class);
+		assertGetter(McpSkillRegistration.class, "getSkillBundle", McpSkillBundle.class);
+		assertGetter(McpSkillRegistration.class, "getCachePolicy", McpCachePolicy.class);
+		assertNonNullOptionalPayload(McpSkillRegistration.class.getMethod("getLocale"), Locale.class);
+		Method resources = McpSkillRegistration.class.getMethod("getResources");
+		assertParameterizedType(resources.getGenericReturnType(), null, List.class, McpSkillRegistration.Resource.class);
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) resources.getAnnotatedReturnType())
+				.getAnnotatedActualTypeArguments()[0], NonNull.class));
+		for (String property : List.of("locale", "cachePolicy")) {
+			Class<?> valueType = property.equals("locale") ? Locale.class : McpCachePolicy.class;
+			Method setter = assertInstanceMethod(McpSkillRegistration.Builder.class, property,
+					McpSkillRegistration.Builder.class, MethodShape.CONCRETE, false, valueType);
+			assertParameterNames(setter, property);
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0], NonNull.class));
+		}
+		assertGetter(McpSkillRegistration.Builder.class, "build", McpSkillRegistration.class);
+		assertGetter(McpSkillRegistration.Resource.class, "getUri", URI.class);
+		assertGetter(McpSkillRegistration.Resource.class, "getDigest", String.class);
+		assertGetter(McpSkillRegistration.Resource.class, "getSizeInBytes", Long.class);
+	}
+
+	@Test
+	public void endpointSkillsCollectionSignaturesRemainExact() throws Exception {
+		for (String property : List.of("skillRegistrations", "skillGroups")) {
+			Class<?> element = property.equals("skillRegistrations")
+					? McpSkillRegistration.class : McpSkillGroup.class;
+			Method getter = assertInstanceMethod(McpEndpoint.class,
+					property.equals("skillRegistrations") ? "getSkillRegistrations" : "getSkillGroups",
+					List.class, MethodShape.CONCRETE, false);
+			assertParameterizedType(getter.getGenericReturnType(), null, List.class, element);
+			Assertions.assertTrue(hasExactNullness(getter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) getter
+					.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
+			Method setter = assertInstanceMethod(McpEndpoint.Builder.class, property,
+					McpEndpoint.Builder.class, MethodShape.CONCRETE, false, List.class);
+			assertParameterNames(setter, property);
+			assertParameterizedType(setter.getGenericParameterTypes()[0], null, List.class, element);
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0], Nullable.class));
+			Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) setter
+					.getAnnotatedParameterTypes()[0]).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		}
+	}
+
+	@Test
+	public void skillPolicyAndVariantSelectionSignaturesRemainExact() throws Exception {
+		for (Class<?> type : List.of(McpSkillAccessPolicy.class,
+				McpSkillVariantSelectionContext.class)) {
+			Assertions.assertTrue(Modifier.isPublic(type.getModifiers()));
+			Assertions.assertTrue(Modifier.isFinal(type.getModifiers()));
+			Assertions.assertEquals(0, type.getConstructors().length);
+			Assertions.assertTrue(Arrays.stream(type.getDeclaredConstructors())
+					.allMatch(constructor -> Modifier.isPrivate(constructor.getModifiers())));
+			Assertions.assertTrue(Arrays.stream(type.getDeclaredMethods())
+					.noneMatch(method -> method.getName().equals("equals")
+							|| method.getName().equals("hashCode")),
+					() -> type.getName() + " must retain reference identity");
+		}
+		Method policyFactory = McpSkillAccessPolicy.class.getMethod("fromEvaluators",
+				McpSkillAccessPolicy.AccessEvaluator.class,
+				McpSkillAccessPolicy.DiscoveryEvaluator.class);
+		assertRequiredFactory(policyFactory, McpSkillAccessPolicy.class,
+				"accessEvaluator", "discoveryEvaluator");
+		assertRequiredFactory(McpSkillAccessPolicy.class.getMethod("allowAllInstance"),
+				McpSkillAccessPolicy.class);
+		Assertions.assertEquals(Set.of("fromEvaluators", "allowAllInstance", "toString"),
+				Arrays.stream(McpSkillAccessPolicy.class.getDeclaredMethods())
+						.filter(method -> isPublicOrProtected(method.getModifiers()))
+						.map(Method::getName).collect(java.util.stream.Collectors.toSet()));
+		Assertions.assertEquals(Set.of("getSkillGroupKey", "getSkillRegistrations",
+				"getLanguageRanges", "toString"),
+				Arrays.stream(McpSkillVariantSelectionContext.class.getDeclaredMethods())
+						.filter(method -> isPublicOrProtected(method.getModifiers()))
+						.map(Method::getName).collect(java.util.stream.Collectors.toSet()));
+
+		for (Class<?> evaluator : List.of(McpSkillAccessPolicy.AccessEvaluator.class,
+				McpSkillAccessPolicy.DiscoveryEvaluator.class)) {
+			Assertions.assertTrue(evaluator.isInterface());
+			Assertions.assertTrue(evaluator.isAnnotationPresent(FunctionalInterface.class));
+			Assertions.assertEquals(1, evaluator.getDeclaredMethods().length);
+			String methodName = evaluator == McpSkillAccessPolicy.AccessEvaluator.class
+					? "isSkillAccessible" : "isSkillDiscoverable";
+			Method method = assertInstanceMethod(evaluator, methodName, Boolean.class,
+					MethodShape.ABSTRACT, false, McpRequestContext.class,
+					McpSkillRegistration.class, McpInvocationFeatures.class);
+			assertParameterNames(method, "requestContext", "skillRegistration", "invocationFeatures");
+			Assertions.assertTrue(hasExactNullness(method.getAnnotatedReturnType(), NonNull.class));
+			for (AnnotatedType parameter : method.getAnnotatedParameterTypes())
+				Assertions.assertTrue(hasExactNullness(parameter, NonNull.class));
+			Assertions.assertArrayEquals(new Class<?>[]{Exception.class}, method.getExceptionTypes());
+		}
+
+		Assertions.assertTrue(McpSkillVariantSelector.class.isInterface());
+		Assertions.assertTrue(McpSkillVariantSelector.class.isAnnotationPresent(FunctionalInterface.class));
+		Assertions.assertEquals(1, McpSkillVariantSelector.class.getDeclaredMethods().length);
+		Method select = assertInstanceMethod(McpSkillVariantSelector.class, "select", Optional.class,
+				MethodShape.ABSTRACT, false, McpRequestContext.class,
+				McpSkillVariantSelectionContext.class, McpInvocationFeatures.class);
+		assertParameterNames(select, "requestContext", "skillVariantSelectionContext", "invocationFeatures");
+		assertParameterizedType(select.getGenericReturnType(), null, Optional.class,
+				McpSkillRegistration.class);
+		Assertions.assertTrue(hasExactNullness(select.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) select
+				.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		for (AnnotatedType parameter : select.getAnnotatedParameterTypes())
+			Assertions.assertTrue(hasExactNullness(parameter, NonNull.class));
+		Assertions.assertArrayEquals(new Class<?>[]{Exception.class}, select.getExceptionTypes());
+
+		Method groupKey = assertInstanceMethod(McpSkillVariantSelectionContext.class,
+				"getSkillGroupKey", String.class, MethodShape.CONCRETE, false);
+		Assertions.assertTrue(hasExactNullness(groupKey.getAnnotatedReturnType(), NonNull.class));
+		for (String property : List.of("getSkillRegistrations", "getLanguageRanges")) {
+			Class<?> element = property.equals("getSkillRegistrations")
+					? McpSkillRegistration.class : Locale.LanguageRange.class;
+			Method getter = assertInstanceMethod(McpSkillVariantSelectionContext.class,
+					property, List.class, MethodShape.CONCRETE, false);
+			assertParameterizedType(getter.getGenericReturnType(), null, List.class, element);
+			Assertions.assertTrue(hasExactNullness(getter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) getter
+					.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		}
+
+		Method policyGetter = assertInstanceMethod(McpServer.class, "getSkillAccessPolicy",
+				McpSkillAccessPolicy.class, MethodShape.ABSTRACT, false);
+		Assertions.assertTrue(hasExactNullness(policyGetter.getAnnotatedReturnType(), NonNull.class));
+		Method selectorGetter = assertInstanceMethod(McpServer.class, "getSkillVariantSelector",
+				Optional.class, MethodShape.ABSTRACT, false);
+		assertParameterizedType(selectorGetter.getGenericReturnType(), null, Optional.class,
+				McpSkillVariantSelector.class);
+		Assertions.assertTrue(hasExactNullness(selectorGetter.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) selectorGetter
+				.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		for (String property : List.of("skillAccessPolicy", "skillVariantSelector")) {
+			Class<?> parameterType = property.equals("skillAccessPolicy")
+					? McpSkillAccessPolicy.class : McpSkillVariantSelector.class;
+			Method setter = assertInstanceMethod(McpServer.Builder.class, property,
+					McpServer.Builder.class, MethodShape.CONCRETE, false, parameterType);
+			assertParameterNames(setter, property);
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0], Nullable.class));
+		}
+	}
+
+	@Test
+	public void skillPaginationSignaturesAndPhaseContextRemainExact() throws Exception {
+		assertEncapsulatedFinalValueType(McpSkillPage.class);
+		for (Class<?> type : List.of(McpSkillPage.class, McpSkillPage.Builder.class, McpSkillListContext.class)) {
+			Assertions.assertTrue(Modifier.isFinal(type.getModifiers()));
+			Assertions.assertTrue(Arrays.stream(type.getDeclaredConstructors())
+					.allMatch(constructor -> Modifier.isPrivate(constructor.getModifiers())));
+		}
+		assertRequiredFactory(McpSkillPage.class.getMethod("builder"), McpSkillPage.Builder.class);
+		Assertions.assertTrue(McpOperationResult.class.isAssignableFrom(McpSkillPage.class));
+		Method registrations = assertInstanceMethod(McpSkillPage.class, "getSkillRegistrations", List.class,
+				MethodShape.CONCRETE, false);
+		assertParameterizedType(registrations.getGenericReturnType(), null, List.class, McpSkillRegistration.class);
+		Assertions.assertTrue(hasExactNullness(registrations.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) registrations.getAnnotatedReturnType())
+				.getAnnotatedActualTypeArguments()[0], NonNull.class));
+		assertGetter(McpSkillPage.class, "getMetadata", McpJsonObject.class);
+		assertNonNullOptionalPayload(McpSkillPage.class.getMethod("getNextCursor"), String.class);
+		assertNonNullOptionalPayload(McpSkillPage.class.getMethod("getCacheTimeToLiveOverride"), Duration.class);
+		assertGetter(McpSkillPage.Builder.class, "build", McpSkillPage.class);
+		for (Map.Entry<String, Class<?>> entry : Map.<String, Class<?>>of("skillRegistrations", List.class,
+				"metadata", McpJsonObject.class, "nextCursor", String.class, "cacheTimeToLiveOverride", Duration.class).entrySet()) {
+			Method setter = assertInstanceMethod(McpSkillPage.Builder.class, entry.getKey(), McpSkillPage.Builder.class,
+					MethodShape.CONCRETE, false, entry.getValue());
+			assertParameterNames(setter, entry.getKey());
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0],
+					entry.getKey().equals("skillRegistrations") ? Nullable.class : NonNull.class));
+			if (entry.getKey().equals("skillRegistrations")) {
+				assertParameterizedType(setter.getGenericParameterTypes()[0], null, List.class, McpSkillRegistration.class);
+				Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) setter.getAnnotatedParameterTypes()[0])
+						.getAnnotatedActualTypeArguments()[0], NonNull.class));
+			}
+		}
+		assertNonNullOptionalPayload(McpSkillListContext.class.getMethod("getCursor"), String.class);
+		Method initial = assertInstanceMethod(McpSkillListContext.class, "getInitialSkillRegistrations", Optional.class,
+				MethodShape.CONCRETE, false);
+		ParameterizedType initialType = Assertions.assertInstanceOf(ParameterizedType.class, initial.getGenericReturnType());
+		Assertions.assertEquals(Optional.class, initialType.getRawType());
+		assertParameterizedType(initialType.getActualTypeArguments()[0], null, List.class, McpSkillRegistration.class);
+		Assertions.assertTrue(hasExactNullness(initial.getAnnotatedReturnType(), NonNull.class));
+		AnnotatedType listType = ((AnnotatedParameterizedType) initial.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0];
+		Assertions.assertTrue(hasExactNullness(listType, NonNull.class));
+		Assertions.assertTrue(hasExactNullness(((AnnotatedParameterizedType) listType).getAnnotatedActualTypeArguments()[0], NonNull.class));
+		Assertions.assertTrue(Arrays.stream(McpSkillListContext.class.getDeclaredMethods())
+				.noneMatch(method -> method.getName().equals("equals") || method.getName().equals("hashCode")));
+		Assertions.assertTrue(McpSkillListHandler.class.isInterface());
+		Assertions.assertTrue(McpSkillListHandler.class.isAnnotationPresent(FunctionalInterface.class));
+		Assertions.assertEquals(1, McpSkillListHandler.class.getDeclaredMethods().length);
+		Method handle = assertInstanceMethod(McpSkillListHandler.class, "handle", McpSkillPage.class, MethodShape.ABSTRACT,
+				false, McpRequestContext.class, McpSkillListContext.class, McpInvocationFeatures.class);
+		assertParameterNames(handle, "requestContext", "skillListContext", "invocationFeatures");
+		Assertions.assertTrue(hasExactNullness(handle.getAnnotatedReturnType(), NonNull.class));
+		for (AnnotatedType parameter : handle.getAnnotatedParameterTypes())
+			Assertions.assertTrue(hasExactNullness(parameter, NonNull.class));
+		Assertions.assertArrayEquals(new Class<?>[]{Exception.class}, handle.getExceptionTypes());
+		assertNonNullOptionalPayload(McpEndpoint.class.getMethod("getSkillListHandler"), McpSkillListHandler.class);
+		assertGetter(McpEndpoint.class, "getSkillListCachePolicy", McpCachePolicy.class);
+		for (Map.Entry<String, Class<?>> entry : Map.<String, Class<?>>of("skillListHandler", McpSkillListHandler.class,
+				"skillListCachePolicy", McpCachePolicy.class).entrySet()) {
+			Method setter = assertInstanceMethod(McpEndpoint.Builder.class, entry.getKey(), McpEndpoint.Builder.class,
+					MethodShape.CONCRETE, false, entry.getValue());
+			assertParameterNames(setter, entry.getKey());
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedReturnType(), NonNull.class));
+			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0], Nullable.class));
+		}
+		Method cursor = assertInstanceMethod(McpLocalizationRequest.class, "getSkillListCursor", Optional.class,
+				MethodShape.ABSTRACT, false);
+		assertNonNullOptionalPayload(cursor, String.class);
+	}
+
+	@Test
+	public void skillsWrappersExposeNoExtraFactoriesOrInternalBridgeSignatures() {
+		Map<Class<?>, Set<String>> names = Map.of(
+				McpSkillBundle.class, Set.of("fromFiles", "getName", "getDescription", "getDocumentMetadata",
+						"getFilePaths", "findFileBytes", "equals", "hashCode", "toString"),
+				McpSkillGroup.class, Set.of("fromKeyAndSkillRegistrations", "getKey",
+						"getSkillRegistrations", "equals", "hashCode", "toString"),
+				McpSkillPage.class, Set.of("builder", "getSkillRegistrations", "getMetadata", "getNextCursor",
+						"getCacheTimeToLiveOverride", "equals", "hashCode", "toString"),
+				McpSkillPage.Builder.class, Set.of("skillRegistrations", "metadata", "nextCursor", "cacheTimeToLiveOverride", "build"),
+				McpSkillListContext.class, Set.of("getCursor", "getInitialSkillRegistrations", "toString"),
+				McpSkillListHandler.class, Set.of("handle"),
+				McpSkillRegistration.class, Set.of("withUriAndSkillBundle", "getUri", "getSkillBundle",
+						"getLocale", "getCachePolicy", "getResources", "equals", "hashCode", "toString"),
+				McpSkillRegistration.Builder.class, Set.of("locale", "cachePolicy", "build"),
+				McpSkillRegistration.Resource.class, Set.of("getUri", "getDigest", "getSizeInBytes",
+						"equals", "hashCode", "toString"));
+		for (Map.Entry<Class<?>, Set<String>> entry : names.entrySet()) {
+			List<Method> exported = Arrays.stream(entry.getKey().getDeclaredMethods())
+					.filter(method -> isPublicOrProtected(method.getModifiers())).toList();
+			Assertions.assertEquals(entry.getValue().size(), exported.size());
+			Assertions.assertEquals(entry.getValue(), exported.stream().map(Method::getName)
+					.collect(java.util.stream.Collectors.toSet()));
+			for (Method method : exported)
+				Assertions.assertFalse(method.toGenericString().contains("com.soklet.internal."));
+		}
 	}
 
 	@Test
@@ -424,6 +721,7 @@ public class McpPublicApiReflectionContractTests {
 						"corsAuthorizer", "endpointRegistry", "handlerInterceptor",
 						"host", "keepAliveInterval",
 						"localizer", "logRawValidatedTraceIds",
+						"skillAccessPolicy", "skillVariantSelector",
 						"maximumCursorSizeInBytes", "maximumHeaderCount",
 						"maximumHeadersSizeInBytes", "maximumRequestSizeInBytes",
 						"maximumRequestTargetLengthInBytes",
@@ -449,6 +747,8 @@ public class McpPublicApiReflectionContractTests {
 				McpEndpoint.Builder.class, Set.of(
 						"serverInfoIncluded", "instructions",
 						"toolRegistrations", "promptRegistrations", "resourceRegistrations",
+						"skillRegistrations", "skillGroups",
+						"skillListHandler", "skillListCachePolicy",
 						"resourceListCachePolicy", "resourceListHandler",
 						"resourceTemplateListCachePolicy", "subscriptionConfig",
 						"toolRateLimiter", "toolRateLimiterName"),
@@ -477,6 +777,7 @@ public class McpPublicApiReflectionContractTests {
 		expectedNullableBuilderMethods.put(McpPromptOutput.Builder.class, Set.of("messages"));
 		expectedNullableBuilderMethods.put(McpResourcePage.Builder.class,
 				Set.of("resourceDescriptors"));
+		expectedNullableBuilderMethods.put(McpSkillPage.Builder.class, Set.of("skillRegistrations"));
 		expectedNullableBuilderMethods.put(McpToolRegistration.OperationBuilder.class,
 				Set.of("icons", "inputRequestDeclarations"));
 		expectedNullableBuilderMethods.put(McpToolRegistration.CompleteBuilder.class,
@@ -1366,6 +1667,28 @@ public class McpPublicApiReflectionContractTests {
 		assertUnboundedClassWildcard(resolverParameterTypes[0]);
 		Assertions.assertEquals(McpSubscriptionConfig.class,
 				resolverParameterTypes[1]);
+
+		Method resolverSkills = assertInstanceMethod(
+				McpEndpointRegistry.class, "withSkillRegistrations",
+				McpEndpointRegistry.class, MethodShape.CONCRETE, false,
+				Class.class, List.class);
+		Assertions.assertEquals(McpEndpointRegistry.class,
+				resolverSkills.getGenericReturnType());
+		assertUnboundedClassWildcard(resolverSkills.getGenericParameterTypes()[0]);
+		assertParameterizedType(resolverSkills.getGenericParameterTypes()[1],
+				null, List.class, McpSkillRegistration.class);
+		assertParameterNames(resolverSkills, "annotatedEndpointClass", "skillRegistrations");
+
+		Method resolverSkillGroups = assertInstanceMethod(
+				McpEndpointRegistry.class, "withSkillGroups",
+				McpEndpointRegistry.class, MethodShape.CONCRETE, false,
+				Class.class, List.class);
+		Assertions.assertEquals(McpEndpointRegistry.class,
+				resolverSkillGroups.getGenericReturnType());
+		assertUnboundedClassWildcard(resolverSkillGroups.getGenericParameterTypes()[0]);
+		assertParameterizedType(resolverSkillGroups.getGenericParameterTypes()[1],
+				null, List.class, McpSkillGroup.class);
+		assertParameterNames(resolverSkillGroups, "annotatedEndpointClass", "skillGroups");
 
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpRequestContext.class, "getInputResponses",

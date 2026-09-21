@@ -17,7 +17,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Private end-to-end qualification entry point. This reads supplied bytes only:
  * it neither opens a file nor publishes a Skills registration. Callers provide
- * all limits; aggregate memory admission and public bundle APIs remain separate.
+ * all parser/output limits; public bundle APIs remain separate.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillFrontmatter {
 	private final SkillSource source;

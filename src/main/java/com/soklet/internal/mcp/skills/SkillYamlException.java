@@ -11,7 +11,11 @@ package com.soklet.internal.mcp.skills;
 
 import static java.util.Objects.requireNonNull;
 
-/** Fixed diagnostics deliberately exclude authored text, keys, tags and causes. */
+/**
+ * Fixed diagnostics deliberately exclude authored text, keys, tags and causes.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 final class SkillYamlException extends IllegalArgumentException {
 	private static final long serialVersionUID = 1L;
 	enum Reason {

@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 import static java.util.Objects.requireNonNull;
 
@@ -155,6 +156,89 @@ public final class McpEndpointRegistry {
 			@NonNull McpSubscriptionConfig subscriptionConfig) {
 		requireNonNull(annotatedEndpointClass);
 		requireNonNull(subscriptionConfig);
+		return withGeneratedEndpoint(annotatedEndpointClass,
+				endpoint -> endpoint.withSubscriptionConfig(subscriptionConfig));
+	}
+
+	/**
+	 * Returns a registry whose generated endpoint for the supplied annotated
+	 * class carries the given standalone Skills registrations.
+	 * <p>
+	 * The list is snapshotted and replaces the complete standalone registration
+	 * list; an empty list clears it. Existing Skills groups remain unchanged.
+	 * Skills identities, ordinary-resource collisions, and output limits are
+	 * validated against the copied endpoint before the new registry is returned.
+	 * A failed replacement leaves this registry unchanged.
+	 * <p>
+	 * Soklet selects the already-generated endpoint by the exact loaded
+	 * {@link Class} identity retained during generated-descriptor discovery. It
+	 * does not initialize the endpoint class, acquire an endpoint instance, or
+	 * rediscover handler metadata. Endpoint order, generated handlers, and every
+	 * other endpoint value are preserved.
+	 *
+	 * @param annotatedEndpointClass annotated endpoint class whose generated
+	 *                               endpoint is selected
+	 * @param skillRegistrations complete standalone Skills registration list
+	 * @return a new immutable registry
+	 * @throws IllegalArgumentException if this registry did not load a generated
+	 *                                  endpoint for the exact supplied class, or
+	 *                                  the resulting Skills output exceeds its limits
+	 * @throws IllegalStateException if Skills identities or files conflict, or an
+	 *                               ordinary resource overlaps a Skills file
+	 * @throws NullPointerException if either argument or a list member is null
+	 */
+	@NonNull
+	public McpEndpointRegistry withSkillRegistrations(
+			@NonNull Class<?> annotatedEndpointClass,
+			@NonNull List<@NonNull McpSkillRegistration> skillRegistrations) {
+		requireNonNull(annotatedEndpointClass);
+		requireNonNull(skillRegistrations);
+		return withGeneratedEndpoint(annotatedEndpointClass,
+				endpoint -> endpoint.withSkillRegistrations(skillRegistrations));
+	}
+
+	/**
+	 * Returns a registry whose generated endpoint for the supplied annotated
+	 * class carries the given Skills groups.
+	 * <p>
+	 * The list is snapshotted and replaces the complete group list; an empty
+	 * list clears it. Existing standalone Skills registrations remain unchanged.
+	 * Grouping does not select a locale or grant access. Skills identities,
+	 * ordinary-resource collisions, and output limits are validated against the
+	 * copied endpoint before the new registry is returned. A failed replacement
+	 * leaves this registry unchanged.
+	 * <p>
+	 * Soklet selects the already-generated endpoint by the exact loaded
+	 * {@link Class} identity retained during generated-descriptor discovery. It
+	 * does not initialize the endpoint class, acquire an endpoint instance, or
+	 * rediscover handler metadata. Endpoint order, generated handlers, and every
+	 * other endpoint value are preserved.
+	 *
+	 * @param annotatedEndpointClass annotated endpoint class whose generated
+	 *                               endpoint is selected
+	 * @param skillGroups complete Skills group list
+	 * @return a new immutable registry
+	 * @throws IllegalArgumentException if this registry did not load a generated
+	 *                                  endpoint for the exact supplied class, or
+	 *                                  the resulting Skills output exceeds its limits
+	 * @throws IllegalStateException if Skills identities or files conflict, or an
+	 *                               ordinary resource overlaps a Skills file
+	 * @throws NullPointerException if either argument or a list member is null
+	 */
+	@NonNull
+	public McpEndpointRegistry withSkillGroups(
+			@NonNull Class<?> annotatedEndpointClass,
+			@NonNull List<@NonNull McpSkillGroup> skillGroups) {
+		requireNonNull(annotatedEndpointClass);
+		requireNonNull(skillGroups);
+		return withGeneratedEndpoint(annotatedEndpointClass,
+				endpoint -> endpoint.withSkillGroups(skillGroups));
+	}
+
+	@NonNull
+	private McpEndpointRegistry withGeneratedEndpoint(
+			@NonNull Class<?> annotatedEndpointClass,
+			@NonNull UnaryOperator<@NonNull McpEndpoint> replacement) {
 		McpEndpoint generatedEndpoint = this.generatedEndpoints.get(
 				annotatedEndpointClass);
 		if (generatedEndpoint == null)
@@ -166,8 +250,7 @@ public final class McpEndpointRegistry {
 		for (int index = 0; index < endpoints.size(); ++index) {
 			McpEndpoint endpoint = endpoints.get(index);
 			if (endpoint == generatedEndpoint) {
-				McpEndpoint replacedEndpoint = endpoint.withSubscriptionConfig(
-						subscriptionConfig);
+				McpEndpoint replacedEndpoint = replacement.apply(endpoint);
 				endpoints.set(index, replacedEndpoint);
 				Map<Class<?>, McpEndpoint> generatedEndpoints =
 						new IdentityHashMap<>(this.generatedEndpoints);

@@ -45,8 +45,9 @@ The current targets are:
 - `McpRequestStatePlaintextCodecFuzzTest`
 - `McpSimulationCaptureFuzzTest`
 - `McpLocalizationFuzzTest`
+- `SkillYamlFuzzTest`
 
-These 16 classes expose 19 coverage-guided `@FuzzTest` methods. The MCP targets
+These 17 classes expose 21 coverage-guided `@FuzzTest` methods. The existing public MCP targets
 use production parser, compiler, evaluator, validation, and simulator-capture
 entry points with deterministic configuration. The Profile 1 target bounds a
 single fuzz input to 64 KiB and uses a literal `---INSTANCE---` line to split a
@@ -58,6 +59,31 @@ exercise JSON completion, SSE terminal duplication and coalescing, item-first
 and cumulative-byte rejection, cancel idempotence, and first-terminal
 stability. This coverage complements the exact production-limit unit tests; it
 does not claim exhaustive fuzzing at every configured or hard maximum.
+
+`SkillYamlFuzzTest` exercises the private Skills stream parser/resolver and the
+end-to-end UTF-8/frontmatter pipeline, with 16 small authored seeds and a separate
+curated-path assertion test. Input is bounded to 16 KiB, syntax depth to 32,
+shared nodes to 2,048, and work to 1,000,000 units. These are explicit exploration
+settings, not public or aggregate memory defaults. Only `SkillYamlException`
+is an expected rejection; other exceptions and failed successful-value JSON
+round trips are findings. Frontmatter checks original bytes and defensive copies.
+
+Focused replay and local smoke runs:
+
+```sh
+mvn -o -f fuzz/pom.xml -Dtest=SkillYamlFuzzTest test
+JAZZER_FUZZ=1 mvn -o -f fuzz/pom.xml \
+  -Dtest=SkillYamlFuzzTest#streamParsingAndResolutionRemainTypedAndBounded \
+  -Djazzer.max_duration=30s test
+JAZZER_FUZZ=1 mvn -o -f fuzz/pom.xml \
+  -Dtest=SkillYamlFuzzTest#frontmatterRemainsTypedBoundedAndByteExact \
+  -Djazzer.max_duration=30s test
+```
+
+Jazzer needs permission to attach its agent to the local test JVM. A denied
+attachment is a harness failure, not parser evidence. The initial Skills
+checkpoint passed 19 seed/test invocations on Java 17 and 26 and two local
+Java 26 smoke runs; it does not satisfy the planned 24-hour qualification.
 
 ## Corpus Policy
 
@@ -116,3 +142,8 @@ generated Jazzer corpus, runs coverage-guided fuzzing, uploads artifacts, and sa
 target-specific corpus cache under a run-specific key. The key rotates on every
 run so nightly exploration can compound over time; restore keys keep each
 target seeded from the newest available corpus for the branch.
+
+The two private Skills targets participate in ordinary corpus replay but are
+not yet registered in that 19-slot nightly/release-history inventory. Run their
+coverage-guided campaigns explicitly with the selectors above; local smoke
+success is not evidence that the nightly or long-duration gates ran.

@@ -19,7 +19,11 @@ package com.soklet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,12 +35,57 @@ import java.util.Set;
  */
 public class McpBuilderResetContractTests {
 	@Test
+	public void endpointSkillsCollectionsSupportSnapshotReplacementAtomicFailureAndIndependentReset() {
+		McpSkillRegistration first = skillRegistration("first-skill", "first");
+		McpSkillRegistration second = skillRegistration("second-skill", "second");
+		McpSkillGroup firstGroup = McpSkillGroup.fromKeyAndSkillRegistrations("first-group",
+				List.of(skillRegistration("third-skill", "third")));
+		McpSkillGroup secondGroup = McpSkillGroup.fromKeyAndSkillRegistrations("second-group",
+				List.of(skillRegistration("fourth-skill", "fourth")));
+		McpEndpoint.Builder builder = McpEndpoint.withPath("/skills", implementation());
+		Assertions.assertTrue(builder.build().getSkillRegistrations().isEmpty());
+		Assertions.assertTrue(builder.build().getSkillGroups().isEmpty());
+
+		List<McpSkillRegistration> registrations = new ArrayList<>(List.of(first));
+		List<McpSkillGroup> groups = new ArrayList<>(List.of(firstGroup));
+		builder.skillRegistrations(registrations).skillGroups(groups);
+		registrations.clear();
+		groups.clear();
+		Assertions.assertEquals(List.of(first), builder.build().getSkillRegistrations());
+		Assertions.assertEquals(List.of(firstGroup), builder.build().getSkillGroups());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> builder.skillRegistrations(Arrays.asList(second, null)));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> builder.skillGroups(Arrays.asList(secondGroup, null)));
+		Assertions.assertEquals(List.of(first), builder.build().getSkillRegistrations());
+		Assertions.assertEquals(List.of(firstGroup), builder.build().getSkillGroups());
+
+		McpEndpoint replaced = builder.skillRegistrations(List.of(second))
+				.skillGroups(List.of(secondGroup)).build();
+		Assertions.assertEquals(List.of(second), replaced.getSkillRegistrations());
+		Assertions.assertEquals(List.of(secondGroup), replaced.getSkillGroups());
+		McpEndpoint registrationsReset = builder.skillRegistrations(null).build();
+		Assertions.assertTrue(registrationsReset.getSkillRegistrations().isEmpty());
+		Assertions.assertEquals(List.of(secondGroup), registrationsReset.getSkillGroups());
+		McpEndpoint groupsReset = builder.skillRegistrations(List.of(second))
+				.skillGroups(null).build();
+		Assertions.assertEquals(List.of(second), groupsReset.getSkillRegistrations());
+		Assertions.assertTrue(groupsReset.getSkillGroups().isEmpty());
+		McpEndpoint emptyReset = builder.skillRegistrations(List.of())
+				.skillGroups(List.of()).build();
+		Assertions.assertTrue(emptyReset.getSkillRegistrations().isEmpty());
+		Assertions.assertTrue(emptyReset.getSkillGroups().isEmpty());
+	}
+
+	@Test
 	public void endpointHandlersPoliciesAndLimitersSupportReplacementAndReset() {
 		McpImplementation implementation = implementation();
 		McpResourceListHandler firstHandler = (request, list, features) ->
 				McpResourcePage.builder().build();
 		McpResourceListHandler secondHandler = (request, list, features) ->
 				McpResourcePage.builder().build();
+		McpSkillListHandler firstSkillHandler = (request, list, features) -> McpSkillPage.builder().build();
+		McpSkillListHandler secondSkillHandler = (request, list, features) -> McpSkillPage.builder().build();
 		McpRateLimiter directLimiter = context ->
 				McpRateLimitDecision.allowed();
 		McpCachePolicy customCachePolicy =
@@ -45,9 +94,12 @@ public class McpBuilderResetContractTests {
 		McpEndpoint replacedHandler = McpEndpoint.withPath("/mcp", implementation)
 				.resourceListHandler(firstHandler)
 				.resourceListHandler(secondHandler)
+				.skillListHandler(firstSkillHandler)
+				.skillListHandler(secondSkillHandler)
 				.build();
 		Assertions.assertSame(secondHandler,
 				replacedHandler.getResourceListHandler().orElseThrow());
+		Assertions.assertSame(secondSkillHandler, replacedHandler.getSkillListHandler().orElseThrow());
 
 		McpEndpoint reset = McpEndpoint.withPath("/mcp", implementation)
 				.serverInfoIncluded(false)
@@ -56,6 +108,10 @@ public class McpBuilderResetContractTests {
 				.instructions(null)
 				.resourceListHandler(firstHandler)
 				.resourceListHandler(null)
+				.skillListHandler(firstSkillHandler)
+				.skillListHandler(null)
+				.skillListCachePolicy(customCachePolicy)
+				.skillListCachePolicy(null)
 				.resourceListCachePolicy(customCachePolicy)
 				.resourceListCachePolicy(null)
 				.resourceTemplateListCachePolicy(customCachePolicy)
@@ -68,6 +124,8 @@ public class McpBuilderResetContractTests {
 		Assertions.assertTrue(reset.isServerInfoIncluded());
 		Assertions.assertTrue(reset.getInstructions().isEmpty());
 		Assertions.assertTrue(reset.getResourceListHandler().isEmpty());
+		Assertions.assertTrue(reset.getSkillListHandler().isEmpty());
+		Assertions.assertSame(McpCachePolicy.privateNoCacheInstance(), reset.getSkillListCachePolicy());
 		Assertions.assertSame(McpCachePolicy.privateNoCacheInstance(),
 				reset.getResourceListCachePolicy());
 		Assertions.assertSame(McpCachePolicy.privateNoCacheInstance(),
@@ -344,5 +402,13 @@ public class McpBuilderResetContractTests {
 	private static McpImplementation implementation() {
 		return McpImplementation.withNameAndVersion(
 				"builder-reset-contract-tests", "4.0.0").build();
+	}
+
+	private static McpSkillRegistration skillRegistration(String name, String uriPart) {
+		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md",
+				("---\nname: " + name + "\ndescription: Test skill\n---\nBody\n")
+						.getBytes(StandardCharsets.UTF_8)));
+		return McpSkillRegistration.withUriAndSkillBundle(
+				URI.create("skill://host.invalid/" + uriPart + "/" + name + "/SKILL.md"), bundle).build();
 	}
 }

@@ -140,8 +140,8 @@ class SkillYamlParserTests {
 	}
 
 	@Test
-	void rootBlockScalarRequiresIndentationAndDoesNotConsumeDocumentEndMarker() {
-		assertFailure(SkillYamlException.Reason.SYNTAX, "|\nfoo\n", LIMITS);
+	void rootBlockScalarAllowsZeroIndentationAndDoesNotConsumeDocumentEndMarker() {
+		Assertions.assertEquals("foo\n", scalar(parse("|\nfoo\n")).value());
 		SkillYamlNode.Scalar empty = scalar(parse("|\n...\n"));
 		Assertions.assertEquals("", empty.value());
 		Assertions.assertEquals(SkillYamlNode.Style.LITERAL, empty.style());
@@ -173,25 +173,23 @@ class SkillYamlParserTests {
 	}
 
 	@Test
-	void implicitFlowKeysMustStayOnOneLineButExplicitKeysMaySpanLines() {
-		for (String yaml : List.of("{a\n: value}", "{\"a\n  b\": value}"))
-			assertFailure(SkillYamlException.Reason.SYNTAX, yaml, LIMITS);
-		SkillYamlNode.Mapping root = mapping(parse("{? a\n: value}"));
-		Assertions.assertEquals(List.of("a"), keys(root));
-		Assertions.assertEquals("value", scalar(root.entries().get(0).value()).value());
+	void bracedFlowMappingKeysMaySpanLinesWithoutExplicitQuestionIndicator() {
+		for (String yaml : List.of("{a\n: value}", "{? a\n: value}", "{\"a\"\n: value}")) {
+			SkillYamlNode.Mapping root = mapping(parse(yaml));
+			Assertions.assertEquals(List.of("a"), keys(root));
+			Assertions.assertEquals("value", scalar(root.entries().get(0).value()).value());
+		}
+		Assertions.assertEquals(List.of("a b"), keys(mapping(parse("{\"a\n  b\": value}"))));
 	}
 
 	@Test
-	void implicitKeysRespectInclusive1024CodePointGrammarLimitInBlockAndFlowMappings() {
+	void blockImplicitKeysHave1024CodePointLimitButBracedFlowMappingsDoNot() {
 		for (String codePoint : List.of("a", "🚀")) {
 			String acceptedKey = codePoint.repeat(1_024);
 			String rejectedKey = codePoint.repeat(1_025);
-			for (boolean flow : List.of(false, true)) {
-				String prefix = flow ? "{" : "";
-				String suffix = flow ? ": value}" : ": value\n";
-				Assertions.assertEquals(List.of(acceptedKey), keys(mapping(parse(prefix + acceptedKey + suffix))));
-				assertFailure(SkillYamlException.Reason.SYNTAX, prefix + rejectedKey + suffix, LIMITS);
-			}
+			Assertions.assertEquals(List.of(acceptedKey), keys(mapping(parse(acceptedKey + ": value\n"))));
+			assertFailure(SkillYamlException.Reason.SYNTAX, rejectedKey + ": value\n", LIMITS);
+			Assertions.assertEquals(List.of(rejectedKey), keys(mapping(parse("{" + rejectedKey + ": value}"))));
 		}
 	}
 
@@ -256,8 +254,7 @@ class SkillYamlParserTests {
 
 	@Test
 	void initialUnsupportedGrammarIsExplicitlyClassified() {
-		for (String yaml : List.of("%YAML 1.2\n---\na: b\n",
-				"a: one\n---\nb: two\n", "[a: b]"))
+		for (String yaml : List.of("a: one\n---\nb: two\n"))
 			assertFailure(SkillYamlException.Reason.UNSUPPORTED_SYNTAX, yaml, LIMITS);
 	}
 

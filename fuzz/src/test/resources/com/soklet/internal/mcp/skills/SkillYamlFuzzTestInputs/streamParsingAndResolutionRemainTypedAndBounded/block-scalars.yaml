@@ -1,0 +1,9 @@
+literal: |+
+  first
+  second
+
+folded: >-
+  first
+  second
+explicit: |2-
+  indented

@@ -742,6 +742,8 @@ class SimulatorConfigDerivationTests {
 				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
 				"admissionController", "admissionControllerExplicitlyConfigured",
 				"catalogAccessPolicy", "catalogAccessPolicyExplicitlyConfigured",
+				"skillAccessPolicy", "skillAccessPolicyExplicitlyConfigured",
+				"skillVariantSelector",
 				"subscriptionAuthorizer",
 				"subscriptionAuthorizerExplicitlyConfigured",
 				"handlerInterceptor",

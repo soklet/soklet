@@ -13,7 +13,11 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import static java.util.Objects.requireNonNull;
 
-/** Lossless semantic inputs: mapping keys and duplicates survive syntax parsing. */
+/**
+ * Lossless semantic inputs: mapping keys and duplicates survive syntax parsing.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 sealed interface SkillYamlNode {
 	Position position();
 	Properties properties();

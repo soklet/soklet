@@ -4495,6 +4495,33 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			// present empty cursor, is therefore invalid rather than interpreted.
 			if (!mappedRequest.params().fields().members().isEmpty())
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		} else if ("skills/list".equals(mappedRequest.method())
+				|| "skills/get".equals(mappedRequest.method())) {
+			if (endpoint.skillsPlan().isEmpty())
+				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
+			McpServerRuntimeBridge.SkillsPlan skillsPlan = endpoint.skillsPlan().orElseThrow();
+			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+			if ("skills/list".equals(mappedRequest.method())) {
+				if (!Set.of("cursor").containsAll(fields.keySet())
+						|| !skillsPlan.customListHandler() && fields.containsKey("cursor"))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				if (fields.containsKey("cursor")
+						&& (!(fields.get("cursor") instanceof McpJsonString cursor)
+						|| !McpCursorValidator.fitsWithinUtf8ByteLimit(cursor.value(), skillsPlan.maximumCursorSizeInBytes())))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			} else {
+				if (!fields.keySet().equals(Set.of("uri"))
+						|| !(fields.get("uri") instanceof McpJsonString uri))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				try {
+					operationName = Optional.of(McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Skills URI"));
+				} catch (IllegalArgumentException ignored) {
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				}
+			}
+			applicationHandler = applicationRouter.resolve(mappedRequest.method());
+			if (applicationHandler.isEmpty())
+				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 		} else if (resourcesListRequest) {
 			if (capabilityRegistry.capabilities().resources().isEmpty())
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
@@ -4733,6 +4760,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						applicationRouter.resolveExactResource(uri);
 				McpApplicationResourceReadRoute resolvedRoute;
 				Map<String, String> templateVariables;
+				boolean skillRead = endpoint.isSkillFile(URI.create(uri));
 				if (exactRoute.isPresent()) {
 					// Exact registration deliberately wins over a matching template.
 					resolvedRoute = exactRoute.orElseThrow();
@@ -4744,13 +4772,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					} catch (IllegalArgumentException | IllegalStateException exception) {
 						return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 					}
-					if (templateMatch.isEmpty())
-						return invalidResourceUriParams(protocolProfile, mappedRequest, uri, corsHeaders);
-					McpApplicationResourceTemplateMatch match =
-							templateMatch.orElseThrow();
-					resolvedRoute = match.readRoute();
-					templateVariables = match.templateVariables();
+					if (templateMatch.isEmpty()) {
+						if (endpoint.skillsPlan().isEmpty() || genericResourceHandler.isEmpty())
+							return invalidResourceUriParams(protocolProfile, mappedRequest, uri, corsHeaders);
+						McpApplicationRequestHandler unavailable = genericResourceHandler.orElseThrow();
+						resolvedRoute = new McpApplicationResourceReadRoute(
+								invocation -> unavailable.handle(invocation.invocation()),
+								McpResourceCachePolicy.privateNoCache(), McpInputRequestPlan.empty(), McpRequestStateMode.NONE);
+						templateVariables = Map.of();
+						skillRead = true;
+					} else {
+						McpApplicationResourceTemplateMatch match = templateMatch.orElseThrow();
+						resolvedRoute = match.readRoute();
+						templateVariables = match.templateVariables();
+					}
 				}
+				if (skillRead && !fields.keySet().equals(Set.of("uri")))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 				McpApplicationResourceReadRoute route = resolvedRoute;
 				inputRequestPlan = route.inputRequestPlan();
 				requestStateMode = route.requestStateMode();
@@ -4765,6 +4803,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						applicationRouter));
 			} else {
 				// Preserve the generic package-private seam used by transport tests.
+				if (endpoint.skillsPlan().isPresent() && !fields.keySet().equals(Set.of("uri")))
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 				applicationHandler = genericResourceHandler;
 			}
 			if (applicationHandler.isEmpty()) {
@@ -4772,9 +4812,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return invalidResourceUriParams(protocolProfile, mappedRequest, uri, corsHeaders);
 				return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 			}
-		} else if (mappedRequest.method().startsWith("tasks/")) {
-			// The Tasks extension owns its complete method namespace. Obsolete and
-			// unknown task methods never fall through to an application route.
+		} else if (mappedRequest.method().startsWith("tasks/")
+				|| mappedRequest.method().startsWith("skills/")) {
+			// These framework extensions own their complete method namespaces.
+			// Unknown methods never fall through to an application route.
 			return methodNotFound(protocolProfile, mappedRequest, corsHeaders);
 		} else {
 			applicationHandler = applicationRouter.resolve(mappedRequest.method());
@@ -6044,6 +6085,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					new McpNormalizedResourceDescriptor(uriString.value(),
 							nameString.value(), new McpJsonObject(descriptorFields),
 							metadata, McpResourceCachePolicy.privateNoCache());
+			EndpointRuntime ownerEndpoint = this.endpointsByPath.get(endpointPath);
+			if (ownerEndpoint != null && ownerEndpoint.binding().endpoint().isSkillFile(URI.create(normalized.uri())))
+				throw new IllegalArgumentException(
+						"Ordinary resource lists must not expose Skills-owned files.");
 			if (!observedUris.add(URI.create(normalized.uri())))
 				throw new IllegalArgumentException(
 						resourceListRouteDiagnostic(true, normalized.uri(),
@@ -8118,8 +8163,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return false;
 		EndpointRuntime endpointRuntime = this.endpointsByPath.get(
 				requestPath(request.uri()));
-		return endpointRuntime != null && endpointRuntime.binding()
-				.endpointPolicy().localizationEnabled();
+		return endpointRuntime != null && (endpointRuntime.binding()
+				.endpointPolicy().localizationEnabled()
+				|| endpointRuntime.binding().endpoint().skillsPlan()
+						.map(McpServerRuntimeBridge.SkillsPlan::acceptLanguageVaryRequired).orElse(false));
 	}
 
 	@NonNull

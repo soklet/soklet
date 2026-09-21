@@ -51,6 +51,10 @@ public enum McpOperationType {
 	RESOURCES_TEMPLATES_LIST,
 	/** Resource retrieval through {@code resources/read}. */
 	RESOURCES_READ,
+	/** Skills catalog retrieval through {@code skills/list}. */
+	SKILLS_LIST,
+	/** Exact Skills registration retrieval through {@code skills/get}. */
+	SKILLS_GET,
 	/** Argument suggestions through {@code completion/complete}. */
 	COMPLETION_COMPLETE,
 	/** Subscription stream creation through {@code subscriptions/listen}. */
@@ -77,6 +81,8 @@ public enum McpOperationType {
 			case "resources/list" -> RESOURCES_LIST;
 			case "resources/templates/list" -> RESOURCES_TEMPLATES_LIST;
 			case "resources/read" -> RESOURCES_READ;
+			case "skills/list" -> SKILLS_LIST;
+			case "skills/get" -> SKILLS_GET;
 			case "completion/complete" -> COMPLETION_COMPLETE;
 			case "subscriptions/listen" -> SUBSCRIPTIONS_LISTEN;
 			case "tasks/get" -> TASKS_GET;

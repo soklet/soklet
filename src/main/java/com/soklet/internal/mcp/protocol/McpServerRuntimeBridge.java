@@ -94,6 +94,8 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/tasks";
+	private static final String SKILLS_EXTENSION_IDENTIFIER =
+			"io.modelcontextprotocol/skills";
 	@NonNull
 	private static final McpJsonCodec CANONICAL_JSON_CODEC =
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
@@ -1153,6 +1155,11 @@ public final class McpServerRuntimeBridge {
 		if (endpointPlan.tasksSupported())
 			endpointBuilder.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+		endpointPlan.skillsPlan().ifPresent(plan -> {
+			endpointBuilder.skillsPlan(plan);
+			endpointBuilder.serverExtension(SKILLS_EXTENSION_IDENTIFIER,
+					com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+		});
 		endpointPlan.catalogAccessAdapter()
 				.ifPresent(endpointBuilder::catalogAccessAdapter);
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
@@ -1342,6 +1349,15 @@ public final class McpServerRuntimeBridge {
 							invokeResourceList(resourceListPlan, invocation,
 									publicEndpoint));
 				});
+		endpointPlan.skillsPlan().ifPresent(plan -> {
+			for (SkillFilePlan file : plan.files()) {
+				McpApplicationResourceReadRoute route = new McpApplicationResourceReadRoute(
+						invocation -> invokeSkills(plan, invocation.invocation(), publicEndpoint),
+						toInternal(file.cachePolicy()), McpInputRequestPlan.empty(), McpRequestStateMode.NONE);
+				if (exactResourceRoutes.putIfAbsent(file.uri().toString(), route) != null)
+					throw new IllegalArgumentException("Conflicting Skills resource route.");
+			}
+		});
 		Map<String, McpApplicationCompletionRoute> promptCompletionRoutes =
 				new LinkedHashMap<>();
 		Map<String, McpApplicationCompletionRoute> resourceCompletionRoutes =
@@ -1413,6 +1429,14 @@ public final class McpServerRuntimeBridge {
 					invocation -> invokeTaskUpdate(adapter, invocation));
 			frameworkHandlers.put("tasks/cancel",
 					invocation -> invokeTaskCancel(adapter, invocation));
+		});
+		endpointPlan.skillsPlan().ifPresent(plan -> {
+			McpApplicationRequestHandler handler = invocation -> invokeSkills(plan, invocation, publicEndpoint);
+			frameworkHandlers.put("skills/list", handler);
+			frameworkHandlers.put("skills/get", handler);
+			// Unknown file reads reach the same neutral adapter as denied indexed
+			// files, but only after ordinary exact/template routing has failed.
+			frameworkHandlers.put("resources/read", handler);
 		});
 		McpApplicationRequestRouter applicationRouter =
 				McpApplicationRequestRouter
@@ -1882,7 +1906,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter,
 			@NonNull Optional<@NonNull CatalogAccessAdapter>
 					catalogAccessAdapter,
-			@NonNull List<@NonNull CompletionPlan> completionPlans) {
+			@NonNull List<@NonNull CompletionPlan> completionPlans,
+			@NonNull Optional<@NonNull SkillsPlan> skillsPlan) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1894,6 +1919,23 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(taskManagerAdapter);
 			requireNonNull(catalogAccessAdapter);
 			completionPlans = List.copyOf(requireNonNull(completionPlans));
+			requireNonNull(skillsPlan);
+		}
+
+		/** Compatibility constructor without Skills plans. */
+		public EndpointPlan(@NonNull McpEndpoint endpoint,
+				@NonNull List<@NonNull ToolPlan> toolPlans,
+				@NonNull List<@NonNull PromptPlan> promptPlans,
+				@NonNull List<@NonNull ResourcePlan> resourcePlans,
+				@NonNull ResourceListPlan resourceListPlan,
+				@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
+				boolean localizationEnabled,
+				@NonNull Optional<@NonNull TaskManagerAdapter> taskManagerAdapter,
+				@NonNull Optional<@NonNull CatalogAccessAdapter> catalogAccessAdapter,
+				@NonNull List<@NonNull CompletionPlan> completionPlans) {
+			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
+					catalogLocalizer, localizationEnabled, taskManagerAdapter,
+					catalogAccessAdapter, completionPlans, Optional.empty());
 		}
 
 		/** @return whether this endpoint has the Tasks protocol extension */
@@ -1942,6 +1984,49 @@ public final class McpServerRuntimeBridge {
 					catalogLocalizer, localizationEnabled, taskManagerAdapter,
 					catalogAccessAdapter, List.of());
 		}
+	}
+
+	/** Immutable Skills routing configuration; files are never ordinary list descriptors. */
+	@ThreadSafe
+	public record SkillsPlan(@NonNull List<@NonNull SkillFilePlan> files,
+			boolean customListHandler, int maximumCursorSizeInBytes,
+			boolean acceptLanguageVaryRequired, @NonNull SkillsInvoker invoker) {
+		public SkillsPlan {
+			files = List.copyOf(requireNonNull(files));
+			maximumCursorSizeInBytes = McpCursorLimit.requireSupportedMaximumSizeInBytes(maximumCursorSizeInBytes);
+			requireNonNull(invoker);
+			Set<URI> identities = new java.util.HashSet<>();
+			for (SkillFilePlan file : files)
+				if (!identities.add(file.uri()))
+					throw new IllegalArgumentException("Duplicate Skills file identity.");
+		}
+		@Override @NonNull public String toString() { return "SkillsPlan[redacted]"; }
+	}
+
+	/** Canonical indexed file and its already security-clamped shared cache policy. */
+	@ThreadSafe
+	public record SkillFilePlan(@NonNull URI uri, @NonNull CachePlan cachePolicy) {
+		public SkillFilePlan {
+			requireNonNull(uri);
+			requireNonNull(cachePolicy);
+			McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.toString(), "Skills file URI");
+		}
+		@Override @NonNull public String toString() { return "SkillFilePlan[redacted]"; }
+	}
+
+	/** Validated Skills parameters with the admitted bounded invocation carrier. */
+	@ThreadSafe
+	public record SkillsInvocation(@NonNull PromptInvocation base,
+			@NonNull Optional<@NonNull String> cursor, @NonNull Optional<@NonNull URI> uri) {
+		public SkillsInvocation { requireNonNull(base); requireNonNull(cursor); requireNonNull(uri); }
+		@Override @NonNull public String toString() { return "SkillsInvocation[redacted]"; }
+	}
+
+	/** Framework adapter for Skills list/get and indexed or unavailable file reads. */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface SkillsInvoker {
+		@NonNull ResourceListInvocationResult invoke(@NonNull SkillsInvocation invocation) throws Exception;
 	}
 
 	/** Immutable route for one literal Completion reference. */
@@ -4428,6 +4513,41 @@ public final class McpServerRuntimeBridge {
 				new com.soklet.internal.mcp.protocol.McpJsonObject(resultFields),
 				resultMetadata.isEmpty() ? Optional.empty()
 						: Optional.of(resultMetadata));
+	}
+
+	private static McpWireResult invokeSkills(@NonNull SkillsPlan plan,
+			@NonNull McpApplicationInvocation invocation, @NonNull McpEndpoint publicEndpoint) throws Exception {
+		McpJsonRpcMessage.Request request = invocation.request();
+		McpRequestMetadata metadata = request.params().metadata();
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields = request.params().fields().members();
+		Optional<String> cursor = fields.get("cursor") instanceof com.soklet.internal.mcp.protocol.McpJsonString value
+				? Optional.of(value.value()) : Optional.empty();
+		Optional<URI> uri = fields.get("uri") instanceof com.soklet.internal.mcp.protocol.McpJsonString value
+				? Optional.of(URI.create(value.value())) : Optional.empty();
+		PromptInvocation base = new PromptInvocation(
+				invocation.sokletRequest().orElseThrow(() -> new IllegalStateException(
+						"A production MCP Skills invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation), publicEndpoint, Map.of(), request.method(),
+				toPublic(request.id()), selectedProtocolRevision(invocation),
+				uri.map(URI::toString).orElse(request.method()),
+				metadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
+				(McpJsonObject) toPublic(metadata.clientCapabilities().toJsonObject()),
+				(McpJsonObject) toPublic(metadata.toJsonObject()),
+				toPublic(invocation.admissionIdentity().admittedIdentity()),
+				McpJsonObject.emptyInstance(), invocation.cancelationToken(),
+				progressEmitterFor(invocation, McpInputRequestPlan.empty()), invocation::requireHandlerEntry,
+				invocation.pastDeadline(), Optional.empty(), invocation.selectedLocale(), Optional.empty());
+		ResourceListInvocationResult result = requireNonNull(plan.invoker().invoke(
+				new SkillsInvocation(base, cursor, uri)), "The MCP Skills invoker returned null.");
+		if (result instanceof ResourceListInvocationResult.JsonRpcError error)
+			throw new McpApplicationJsonRpcException(toInternal(error));
+		if (!(result instanceof ResourceListInvocationResult.Complete complete))
+			throw new IllegalArgumentException("Unsupported MCP Skills invocation result.");
+		McpJsonValue nextCursor = complete.resultFields().getMembers().get("nextCursor");
+		if (nextCursor != null && (!(nextCursor instanceof McpJsonString string)
+				|| !McpCursorValidator.fitsWithinUtf8ByteLimit(string.getValue(), plan.maximumCursorSizeInBytes())))
+			throw new IllegalArgumentException("Invalid MCP Skills continuation cursor.");
+		return completeResult(complete.resultFields(), complete.metadata());
 	}
 
 	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,

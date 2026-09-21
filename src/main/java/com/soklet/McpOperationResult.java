@@ -19,17 +19,19 @@ package com.soklet;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Open result spine for programmatic MCP handlers and handler interception.
+ * Sealed result family for programmatic MCP handlers and handler interception.
  *
  * <p>The framework-owned result family includes {@link McpCompleteResult},
- * {@link McpInputRequiredResult}, {@link McpTaskCreatedResult}, and
- * {@link McpResourcePage}, and {@link McpArgumentCompletionResult}.
- * Applications should not implement this interface
- * directly. Each MCP method accepts only its corresponding result
- * implementation.
+ * {@link McpInputRequiredResult}, {@link McpTaskCreatedResult},
+ * {@link McpResourcePage}, {@link McpSkillPage}, and {@link McpArgumentCompletionResult}.
+ * Applications cannot implement this interface directly. Each MCP method
+ * accepts only its corresponding result implementation; sealing does not make
+ * every permitted result valid for every operation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpOperationResult {
+public sealed interface McpOperationResult permits McpCompleteResult,
+		McpInputRequiredResult, McpTaskCreatedResult, McpResourcePage,
+		McpArgumentCompletionResult, McpSkillPage {
 }

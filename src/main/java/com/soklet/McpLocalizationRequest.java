@@ -29,10 +29,10 @@ import java.util.Optional;
  * <p>
  * The effective language ranges initially derive from HTTP
  * {@code Accept-Language}. This value intentionally does not define or reserve
- * an MCP localization extension. For custom {@code resources/list}, the
- * separate cursor accessor exposes the same opaque application cursor that the
- * list handler receives, so locale selection can authenticate
- * application-owned pagination state before context creation.
+ * an MCP localization extension. Separate {@code resources/list} and
+ * {@code skills/list} cursor accessors expose the same opaque application cursor
+ * that the corresponding list handler receives, so locale selection can
+ * authenticate application-owned pagination state before context creation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -72,6 +72,21 @@ public interface McpLocalizationRequest {
 	 */
 	@NonNull
 	Optional<@NonNull String> getResourceListCursor();
+
+	/**
+	 * Returns the opaque application-owned cursor for a {@code skills/list}
+	 * operation before localization context creation. A present empty string is
+	 * preserved as a continuation value. This is empty for every other operation;
+	 * the resource-list cursor accessor is not reused for Skills pagination.
+	 *
+	 * <p>The application owns cursor integrity, endpoint/caller and content
+	 * binding, expiry, and retained snapshot availability across nodes. Soklet
+	 * does not decode, rewrite, sign, authenticate, or retain the snapshot.
+	 *
+	 * @return Skills-list cursor, or empty
+	 */
+	@NonNull
+	Optional<@NonNull String> getSkillListCursor();
 
 	/**
 	 * Returns the configured locale of every canonical default text hosted by

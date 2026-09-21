@@ -214,6 +214,27 @@ work; it is not claimed as fixed by 4.0.0:
 
 ### Detailed Implementation Record
 
+- **Skills:** added live `skills/list`, `skills/get`, and authorized
+  `resources/read` for immutable `McpSkillBundle` snapshots and generated
+  manifests. Endpoint configuration validates shared files, complete nested
+  snapshots, route collisions, and conservative automatic-page limits. Explicit
+  locale groups and independent access/discovery policies preserve canonical
+  bytes and fresh authorization; empty groups alone advertise no capability.
+  `McpSkillPage` supports at most 32 complete manifests, with optional
+  application-owned opaque cursors, continuation reauthorization, and private
+  cache/language safeguards. `McpOperationResult` is now sealed to its six
+  framework-owned result classes, including Skills pages. A
+  [standalone example](examples/skills/README.md) demonstrates discovery and
+  text/binary retrieval, verified by the unmodified Inspector 2.7.0 client on
+  Java 17 and 26. `McpEndpointRegistry.withSkillRegistrations(...)` and
+  `withSkillGroups(...)` attach standalone Skills or locale groups to an
+  annotation-generated endpoint without replacing its handlers or settings.
+  Toy Store publishes explicitly authored English, German, and Brazilian
+  Portuguese catalog guides with account-based selection and stable
+  locale-specific file identities.
+  Broader parser/fuzz, host-policy and activation qualification
+  remain pending. See [Skills](MCP.md#skills).
+
 - Task subscription deduplication retains only notification comparison fields,
   not private task origins or completed results. Terminal delivery and owner
   cleanup discard comparison state, and late workers cannot restore it.

@@ -47,6 +47,8 @@ final class DefaultMcpLocalizationRequest implements McpLocalizationRequest {
 	private final Locale continuationLocale;
 	@Nullable
 	private final String resourceListCursor;
+	@Nullable
+	private final String skillListCursor;
 	@NonNull
 	private final Locale fallbackLocale;
 
@@ -55,11 +57,21 @@ final class DefaultMcpLocalizationRequest implements McpLocalizationRequest {
 			@Nullable Locale continuationLocale,
 			@Nullable String resourceListCursor,
 			@NonNull Locale fallbackLocale) {
+		this(requestContext, languageRanges, continuationLocale, resourceListCursor, null, fallbackLocale);
+	}
+
+	DefaultMcpLocalizationRequest(@NonNull McpRequestContext requestContext,
+			@NonNull List<Locale.@NonNull LanguageRange> languageRanges,
+			@Nullable Locale continuationLocale,
+			@Nullable String resourceListCursor,
+			@Nullable String skillListCursor,
+			@NonNull Locale fallbackLocale) {
 		this.requestContext = requireNonNull(requestContext, "requestContext");
 		this.languageRanges = List.copyOf(
 				requireNonNull(languageRanges, "languageRanges"));
 		this.continuationLocale = continuationLocale;
 		this.resourceListCursor = resourceListCursor;
+		this.skillListCursor = skillListCursor;
 		this.fallbackLocale = requireNonNull(fallbackLocale, "fallbackLocale");
 	}
 
@@ -85,6 +97,12 @@ final class DefaultMcpLocalizationRequest implements McpLocalizationRequest {
 	@NonNull
 	public Optional<@NonNull String> getResourceListCursor() {
 		return Optional.ofNullable(this.resourceListCursor);
+	}
+
+	@Override
+	@NonNull
+	public Optional<@NonNull String> getSkillListCursor() {
+		return Optional.ofNullable(this.skillListCursor);
 	}
 
 	@Override

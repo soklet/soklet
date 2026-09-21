@@ -12,7 +12,11 @@ package com.soklet.internal.mcp.skills;
 import static com.soklet.internal.mcp.skills.SkillYamlException.Reason.*;
 import static java.util.Objects.requireNonNull;
 
-/** Single-use counters shared by syntax parsing and semantic expansion. */
+/**
+ * Single-use counters shared by syntax parsing and semantic expansion.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 final class SkillYamlBudget {
 	private final SkillYamlLimits limits;
 	private long workRemaining;
@@ -34,9 +38,12 @@ final class SkillYamlBudget {
 	}
 	void node(int depth, SkillYamlNode.Position position) {
 		work(1, position);
-		if (depth < 1 || depth > this.limits.maximumNestingDepth()) fail(DEPTH_LIMIT, position);
+		depth(depth, position);
 		if (this.nodesRemaining == 0) fail(NODE_LIMIT, position);
 		--this.nodesRemaining;
+	}
+	void depth(int depth, SkillYamlNode.Position position) {
+		if (depth < 1 || depth > this.limits.maximumNestingDepth()) fail(DEPTH_LIMIT, position);
 	}
 	void text(int amount, SkillYamlNode.Position position) {
 		if (amount < 0) throw new IllegalArgumentException("Negative YAML text charge.");

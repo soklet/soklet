@@ -57,6 +57,16 @@ public final class McpEndpoint {
 	private final List<@NonNull McpPromptRegistration> promptRegistrations;
 	@NonNull
 	private final List<@NonNull McpResourceRegistration> resourceRegistrations;
+	@NonNull
+	private final List<@NonNull McpSkillRegistration> skillRegistrations;
+	@NonNull
+	private final List<@NonNull McpSkillGroup> skillGroups;
+	@NonNull
+	private final McpSkillEndpointIndex skillIndex;
+	@Nullable
+	private final McpSkillListHandler skillListHandler;
+	@NonNull
+	private final McpCachePolicy skillListCachePolicy;
 	@Nullable
 	private final McpResourceListHandler resourceListHandler;
 	@NonNull
@@ -99,6 +109,12 @@ public final class McpEndpoint {
 		this.toolRegistrations = List.copyOf(builder.toolRegistrations);
 		this.promptRegistrations = List.copyOf(builder.promptRegistrations);
 		this.resourceRegistrations = List.copyOf(builder.resourceRegistrations);
+		this.skillRegistrations = List.copyOf(builder.skillRegistrations);
+		this.skillGroups = List.copyOf(builder.skillGroups);
+		this.skillIndex = McpSkillEndpointIndex.from(this.skillRegistrations, this.skillGroups,
+				this.resourceRegistrations);
+		this.skillListHandler = builder.skillListHandler;
+		this.skillListCachePolicy = builder.skillListCachePolicy;
 		this.resourceListHandler = builder.resourceListHandler;
 		this.resourceListCachePolicy = builder.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
@@ -147,6 +163,7 @@ public final class McpEndpoint {
 									+ "registration with the Apps MIME profile on the same endpoint.");
 			}
 		}
+		McpSkillEndpointIndex.preflight(this);
 	}
 
 	private static boolean hasAppsMimeType(@NonNull McpResourceRegistration resource) {
@@ -161,7 +178,10 @@ public final class McpEndpoint {
 	}
 
 	private McpEndpoint(@NonNull McpEndpoint endpoint,
-			@NonNull McpSubscriptionConfig subscriptionConfig) {
+			@NonNull List<@NonNull McpSkillRegistration> skillRegistrations,
+			@NonNull List<@NonNull McpSkillGroup> skillGroups,
+			@NonNull McpSkillEndpointIndex skillIndex,
+			@Nullable McpSubscriptionConfig subscriptionConfig) {
 		requireNonNull(endpoint);
 		this.path = endpoint.path;
 		this.serverInformation = endpoint.serverInformation;
@@ -170,13 +190,18 @@ public final class McpEndpoint {
 		this.toolRegistrations = endpoint.toolRegistrations;
 		this.promptRegistrations = endpoint.promptRegistrations;
 		this.resourceRegistrations = endpoint.resourceRegistrations;
+		this.skillRegistrations = skillRegistrations;
+		this.skillGroups = skillGroups;
+		this.skillIndex = skillIndex;
+		this.skillListHandler = endpoint.skillListHandler;
+		this.skillListCachePolicy = endpoint.skillListCachePolicy;
 		this.resourceListHandler = endpoint.resourceListHandler;
 		this.resourceListCachePolicy = endpoint.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
 				endpoint.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = endpoint.toolRateLimiterName;
 		this.toolRateLimiter = endpoint.toolRateLimiter;
-		this.subscriptionConfig = requireNonNull(subscriptionConfig);
+		this.subscriptionConfig = subscriptionConfig;
 	}
 
 	/**
@@ -257,6 +282,48 @@ public final class McpEndpoint {
 	}
 
 	/**
+	 * Returns only standalone Skills registrations in supplied order. Group members
+	 * remain in {@link #getSkillGroups()}; this getter does not flatten them.
+	 * Skills configuration is currently construction-only, pending runtime routing.
+	 *
+	 * @return immutable standalone Skills registrations
+	 */
+	@NonNull
+	public List<@NonNull McpSkillRegistration> getSkillRegistrations() {
+		return this.skillRegistrations;
+	}
+
+	/**
+	 * Returns explicit Skills locale groups in supplied order, without selecting
+	 * a locale or granting access to any member.
+	 *
+	 * @return immutable Skills groups
+	 */
+	@NonNull
+	public List<@NonNull McpSkillGroup> getSkillGroups() {
+		return this.skillGroups;
+	}
+
+	@NonNull
+	McpSkillEndpointIndex skillIndex() { return this.skillIndex; }
+
+	/**
+	 * Returns the optional application-owned {@code skills/list} page handler.
+	 * When absent, Soklet produces one bounded automatic page. A custom handler
+	 * owns pagination and retained snapshots, not canonical skill-file reads.
+	 *
+	 * @return custom Skills-list handler, or empty for automatic listing
+	 */
+	@NonNull
+	public Optional<@NonNull McpSkillListHandler> getSkillListHandler() {
+		return Optional.ofNullable(this.skillListHandler);
+	}
+
+	/** @return fixed Skills-list cache scope and default time to live */
+	@NonNull
+	public McpCachePolicy getSkillListCachePolicy() { return this.skillListCachePolicy; }
+
+	/**
 	 * Returns the optional sole custom {@code resources/list} handler.
 	 * <p>
 	 * When present, the returned handler is authoritative; Soklet does not merge
@@ -330,7 +397,32 @@ public final class McpEndpoint {
 	@NonNull
 	McpEndpoint withSubscriptionConfig(
 			@NonNull McpSubscriptionConfig subscriptionConfig) {
-		return new McpEndpoint(this, subscriptionConfig);
+		return new McpEndpoint(this, this.skillRegistrations, this.skillGroups, this.skillIndex,
+				requireNonNull(subscriptionConfig));
+	}
+
+	@NonNull
+	McpEndpoint withSkillRegistrations(
+			@NonNull List<@NonNull McpSkillRegistration> skillRegistrations) {
+		List<McpSkillRegistration> snapshot = List.copyOf(skillRegistrations);
+		McpSkillEndpointIndex skillIndex = McpSkillEndpointIndex.from(snapshot,
+				this.skillGroups, this.resourceRegistrations);
+		McpEndpoint endpoint = new McpEndpoint(this, snapshot, this.skillGroups, skillIndex,
+				this.subscriptionConfig);
+		McpSkillEndpointIndex.preflight(endpoint);
+		return endpoint;
+	}
+
+	@NonNull
+	McpEndpoint withSkillGroups(
+			@NonNull List<@NonNull McpSkillGroup> skillGroups) {
+		List<McpSkillGroup> snapshot = List.copyOf(skillGroups);
+		McpSkillEndpointIndex skillIndex = McpSkillEndpointIndex.from(this.skillRegistrations,
+				snapshot, this.resourceRegistrations);
+		McpEndpoint endpoint = new McpEndpoint(this, this.skillRegistrations, snapshot, skillIndex,
+				this.subscriptionConfig);
+		McpSkillEndpointIndex.preflight(endpoint);
+		return endpoint;
 	}
 
 	@NonNull
@@ -373,6 +465,14 @@ public final class McpEndpoint {
 		private List<@NonNull McpPromptRegistration> promptRegistrations;
 		@NonNull
 		private List<@NonNull McpResourceRegistration> resourceRegistrations;
+		@NonNull
+		private List<@NonNull McpSkillRegistration> skillRegistrations;
+		@NonNull
+		private List<@NonNull McpSkillGroup> skillGroups;
+		@Nullable
+		private McpSkillListHandler skillListHandler;
+		@NonNull
+		private McpCachePolicy skillListCachePolicy;
 		@Nullable
 		private McpResourceListHandler resourceListHandler;
 		@NonNull
@@ -394,6 +494,9 @@ public final class McpEndpoint {
 			this.toolRegistrations = List.of();
 			this.promptRegistrations = List.of();
 			this.resourceRegistrations = List.of();
+			this.skillRegistrations = List.of();
+			this.skillGroups = List.of();
+			this.skillListCachePolicy = McpCachePolicy.privateNoCacheInstance();
 			this.resourceListCachePolicy =
 					McpCachePolicy.privateNoCacheInstance();
 			this.resourceTemplateListCachePolicy =
@@ -495,6 +598,71 @@ public final class McpEndpoint {
 				@Nullable List<@NonNull McpResourceRegistration> resourceRegistrations) {
 			this.resourceRegistrations = resourceRegistrations == null ? List.of()
 					: List.copyOf(resourceRegistrations);
+			return this;
+		}
+
+		/**
+		 * Replaces standalone Skills registrations in supplied order. Null or empty
+		 * clears this property without changing groups. The complete list is
+		 * snapshotted before replacing the prior value. Endpoint construction checks
+		 * duplicate identities, listing names, shared files and resource collisions
+		 * across both sources, independent of setter order.
+		 *
+		 * @param skillRegistrations standalone Skills registrations, or null to clear
+		 * @return this builder
+		 * @throws NullPointerException if a list element is null
+		 */
+		@NonNull
+		public Builder skillRegistrations(
+				@Nullable List<@NonNull McpSkillRegistration> skillRegistrations) {
+			this.skillRegistrations = skillRegistrations == null ? List.of() : List.copyOf(skillRegistrations);
+			return this;
+		}
+
+		/**
+		 * Replaces explicit Skills locale groups in supplied order. Null or empty
+		 * clears this property without changing standalone registrations. The
+		 * complete list is snapshotted before replacing the prior value. Empty
+		 * groups are permitted but contribute no listing name or file owner.
+		 *
+		 * @param skillGroups Skills groups, or null to clear
+		 * @return this builder
+		 * @throws NullPointerException if a list element is null
+		 */
+		@NonNull
+		public Builder skillGroups(@Nullable List<@NonNull McpSkillGroup> skillGroups) {
+			this.skillGroups = skillGroups == null ? List.of() : List.copyOf(skillGroups);
+			return this;
+		}
+
+		/**
+		 * Installs the application-owned {@code skills/list} page handler.
+		 * Each invocation replaces the prior handler. Null restores bounded
+		 * automatic single-page listing. The handler owns authenticated cursors and
+		 * snapshot restoration, while Soklet validates page membership and current
+		 * access without changing canonical file-read handling.
+		 *
+		 * @param skillListHandler custom Skills-list handler, or null for automatic listing
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder skillListHandler(@Nullable McpSkillListHandler skillListHandler) {
+			this.skillListHandler = skillListHandler;
+			return this;
+		}
+
+		/**
+		 * Sets fixed cache scope and default freshness for {@code skills/list}.
+		 * The default is private scope with zero time to live. Page overrides affect
+		 * only freshness and remain subject to localization and security clamps.
+		 *
+		 * @param skillListCachePolicy Skills-list cache policy, or null to restore the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder skillListCachePolicy(@Nullable McpCachePolicy skillListCachePolicy) {
+			this.skillListCachePolicy = skillListCachePolicy == null
+					? McpCachePolicy.privateNoCacheInstance() : skillListCachePolicy;
 			return this;
 		}
 
@@ -630,11 +798,22 @@ public final class McpEndpoint {
 		 * Templates and custom resource-list descriptors do not establish this
 		 * eligibility. Validation does not invoke application handlers or fetch
 		 * resource contents.
+		 * <p>Skills names occupy distinct standalone/group listing slots. Registered
+		 * descendants must be completely present in every enclosing bundle. Shared
+		 * files must have identical bytes and representation, have at most 16 owners,
+		 * and cannot overlap ordinary exact-resource or URI-template routes.
+		 * Individual Skills responses include endpoint metadata in their output
+		 * preflight. Without a custom Skills-list handler, the complete unfiltered
+		 * automatic page must fit the output profile and contain at most 32 slots.
 		 *
 		 * @return the endpoint
 		 * @throws IllegalStateException if a tool name, prompt name, exact resource URI,
 		 *                               or resource URI template is duplicated,
-		 *                               or an Apps association has no eligible resource
+		 *                               an Apps association has no eligible resource,
+		 *                               or Skills configuration conflicts or is incomplete
+		 * @throws IllegalArgumentException if a Skills response cannot fit the output
+		 *                                  profile, or the automatic page requires a
+		 *                                  custom {@code skillListHandler(...)}
 		 */
 		@NonNull
 		public McpEndpoint build() {

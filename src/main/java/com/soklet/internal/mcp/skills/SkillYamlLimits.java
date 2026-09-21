@@ -9,7 +9,11 @@
  */
 package com.soklet.internal.mcp.skills;
 
-/** Explicit, per-parse qualification limits; not a catalog-memory policy. */
+/**
+ * Explicit per-parse limits; not a catalog-memory policy or public configuration.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 record SkillYamlLimits(int maximumInputBytes, int maximumNestingDepth,
 		int maximumNodes, int maximumScalarCharacters,
 		long maximumTotalScalarCharacters, long maximumWork) {

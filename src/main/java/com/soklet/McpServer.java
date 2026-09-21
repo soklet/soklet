@@ -62,6 +62,26 @@ public sealed interface McpServer permits DefaultMcpServer {
 	McpCatalogAccessPolicy getCatalogAccessPolicy();
 
 	/**
+	 * Returns the effective independent Skills access and discovery policy.
+	 * When omitted during construction this is
+	 * {@link McpSkillAccessPolicy#allowAllInstance()}.
+	 *
+	 * @return Skills access and discovery policy
+	 */
+	@NonNull
+	McpSkillAccessPolicy getSkillAccessPolicy();
+
+	/**
+	 * Returns the optional application-owned selector for explicit Skills groups.
+	 * A declared group with multiple variants requires a selector; standalone
+	 * registrations do not use it.
+	 *
+	 * @return the selector, or the empty optional when none was configured
+	 */
+	@NonNull
+	Optional<@NonNull McpSkillVariantSelector> getSkillVariantSelector();
+
+	/**
 	 * Returns the effective subscription authorizer. When omitted during
 	 * construction this is {@link McpSubscriptionAuthorizer#denyAllInstance()}.
 	 * Subscription-capable servers nevertheless require an explicitly selected
@@ -328,6 +348,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private McpCatalogAccessPolicy catalogAccessPolicy;
 		private boolean catalogAccessPolicyExplicitlyConfigured;
 		@NonNull
+		private McpSkillAccessPolicy skillAccessPolicy;
+		private boolean skillAccessPolicyExplicitlyConfigured;
+		@Nullable
+		private McpSkillVariantSelector skillVariantSelector;
+		@NonNull
 		private McpSubscriptionAuthorizer subscriptionAuthorizer;
 		private boolean subscriptionAuthorizerExplicitlyConfigured;
 		@NonNull
@@ -369,6 +394,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.catalogAccessPolicy =
 					McpCatalogAccessPolicy.allowAllInstance();
 			this.catalogAccessPolicyExplicitlyConfigured = false;
+			this.skillAccessPolicy = McpSkillAccessPolicy.allowAllInstance();
+			this.skillAccessPolicyExplicitlyConfigured = false;
+			this.skillVariantSelector = null;
 			this.subscriptionAuthorizer =
 					McpSubscriptionAuthorizer.denyAllInstance();
 			this.subscriptionAuthorizerExplicitlyConfigured = false;
@@ -460,6 +488,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.catalogAccessPolicy = exactSource.catalogAccessPolicy;
 			this.catalogAccessPolicyExplicitlyConfigured =
 					exactSource.catalogAccessPolicyExplicitlyConfigured;
+			this.skillAccessPolicy = exactSource.skillAccessPolicy;
+			this.skillAccessPolicyExplicitlyConfigured =
+					exactSource.skillAccessPolicyExplicitlyConfigured;
+			this.skillVariantSelector = exactSource.skillVariantSelector;
 			this.subscriptionAuthorizer = exactSource.subscriptionAuthorizer;
 			this.subscriptionAuthorizerExplicitlyConfigured =
 					exactSource.subscriptionAuthorizerExplicitlyConfigured;
@@ -1085,6 +1117,40 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Configures independent Skills access and discovery decisions. The policy
+		 * is application-owned and must support concurrent independent requests.
+		 * Null restores the shared allow-all default and clears explicit policy
+		 * configuration. This setting alone does not enable Skills routing.
+		 *
+		 * @param skillAccessPolicy Skills policy, or null to restore allow-all behavior
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder skillAccessPolicy(@Nullable McpSkillAccessPolicy skillAccessPolicy) {
+			this.skillAccessPolicy = skillAccessPolicy == null
+					? McpSkillAccessPolicy.allowAllInstance() : skillAccessPolicy;
+			this.skillAccessPolicyExplicitlyConfigured = skillAccessPolicy != null;
+			return this;
+		}
+
+		/**
+		 * Configures the application-owned selector for explicit Skills groups.
+		 * Every declared group with multiple variants requires a selector, even
+		 * when later access or discovery filtering might leave only one candidate.
+		 * Standalone registrations do not use the selector. Null clears it.
+		 * The selector must support concurrent independent requests; configuration
+		 * does not invoke it or enable Skills runtime routing.
+		 *
+		 * @param skillVariantSelector Skills group selector, or null to clear
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder skillVariantSelector(@Nullable McpSkillVariantSelector skillVariantSelector) {
+			this.skillVariantSelector = skillVariantSelector;
+			return this;
+		}
+
+		/**
 		 * Configures whole-subscription authorization. Soklet invokes the authorizer
 		 * on bounded application execution after initial request admission and before
 		 * subscription acknowledgement, then again during maintenance. A
@@ -1416,6 +1482,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               task-required tool exists without a task manager;
 		 *                               subscription support is enabled without an
 		 *                               explicitly selected subscription authorizer;
+		 *                               a declared multivariant Skills group lacks
+		 *                               an explicit selector;
 		 *                               or a configured localization response exceeds its
 		 *                               provider-lookup limit
 		 * @throws IllegalArgumentException if a configured allowed host is invalid or
@@ -1434,6 +1502,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 			McpEndpointRegistry endpointRegistry = this.endpointRegistry == null
 					? McpEndpointRegistry.fromClasspathIntrospection()
 					: this.endpointRegistry;
+			if (this.skillVariantSelector == null && endpointRegistry.getEndpoints().stream()
+					.flatMap(endpoint -> endpoint.getSkillGroups().stream())
+					.anyMatch(group -> group.getSkillRegistrations().size() > 1))
+				throw new IllegalStateException(
+						"An MCP Skills variant selector must be explicitly configured for multivariant groups.");
 			boolean toolsPresent = endpointRegistry.getEndpoints().stream()
 					.anyMatch(endpoint -> !endpoint.getToolRegistrations().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
@@ -1473,6 +1546,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.admissionControllerExplicitlyConfigured,
 					this.catalogAccessPolicy,
 					this.catalogAccessPolicyExplicitlyConfigured,
+					this.skillAccessPolicy,
+					this.skillAccessPolicyExplicitlyConfigured,
+					this.skillVariantSelector,
 					this.subscriptionAuthorizer,
 					this.subscriptionAuthorizerExplicitlyConfigured,
 					this.handlerInterceptor,

@@ -1,0 +1,6 @@
+%YAML 1.2
+%TAG !s! tag:yaml.org,2002:
+--- !s!str true
+...
+--- {value: !!str false, exact: 9007199254740993}
+--- [0o17, 0xFF, +12, 1.25e2, 2026-09-20, null]

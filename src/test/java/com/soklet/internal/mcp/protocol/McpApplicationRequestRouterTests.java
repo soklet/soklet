@@ -33,13 +33,13 @@ import java.util.Optional;
 @NotThreadSafe
 public class McpApplicationRequestRouterTests {
 	@Test
-	public void taskNamespaceCannotBeReplacedByApplicationHandlers() {
+	public void taskAndSkillsNamespacesCannotBeReplacedByApplicationHandlers() {
 		McpApplicationRequestHandler handler = invocation -> {
 			throw new AssertionError("A reserved task handler must not run.");
 		};
 
 		for (String method : List.of("tasks/get", "tasks/update", "tasks/cancel",
-				"tasks/list", "tasks/result", "tasks/custom")) {
+				"tasks/list", "tasks/result", "tasks/custom", "skills/list", "skills/get", "skills/custom")) {
 			IllegalArgumentException exception = Assertions.assertThrows(
 					IllegalArgumentException.class,
 					() -> McpApplicationRequestRouter.fromHandlers(
@@ -51,14 +51,14 @@ public class McpApplicationRequestRouterTests {
 	}
 
 	@Test
-	public void frameworkFactoryInstallsOnlyExactTaskMethods() {
+	public void frameworkFactoryInstallsOnlySupportedFrameworkMethods() {
 		McpApplicationRequestHandler handler = invocation -> {
 			throw new AssertionError("A routing-construction test must not dispatch.");
 		};
 		Map<String, McpApplicationRequestHandler> taskHandlers =
 				new LinkedHashMap<>();
 		for (String method : List.of("tasks/get", "tasks/update",
-				"tasks/cancel"))
+				"tasks/cancel", "skills/list", "skills/get", "resources/read"))
 			taskHandlers.put(method, handler);
 
 		McpApplicationRequestRouter router = frameworkRouter(taskHandlers);
@@ -66,12 +66,12 @@ public class McpApplicationRequestRouterTests {
 			Assertions.assertSame(handler, router.resolve(method).orElseThrow());
 
 		for (String method : List.of("server/discover", "example/custom",
-				"tasks/list", "tasks/result", "tasks/custom")) {
+				"tasks/list", "tasks/result", "tasks/custom", "skills/custom")) {
 			IllegalArgumentException exception = Assertions.assertThrows(
 					IllegalArgumentException.class,
 					() -> frameworkRouter(Map.of(method, handler)));
 			Assertions.assertEquals(
-					"Only framework-owned MCP task methods may be installed by the framework handler factory.",
+					"Only supported framework-owned MCP methods may be installed by the framework handler factory.",
 					exception.getMessage());
 		}
 	}

@@ -1,0 +1,2 @@
+# The runner's reports are retained; its disposable compiled driver is not.
+/results/*/classes/

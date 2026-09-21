@@ -536,9 +536,9 @@ final class McpApplicationRequestRouter {
 							resourceTemplateRoutes,
 					@NonNull Optional<@NonNull McpApplicationResourceListRoute>
 							resourceListRoute) {
-		// This bridge-only path installs only the exact framework-owned Tasks
-		// methods. Application-handler factories retain their ordinary reservation
-		// checks, and this path cannot install arbitrary or other framework methods.
+		// This bridge-only path installs exact Tasks/Skills methods and the Skills
+		// unavailable-file fallback. Application-handler factories retain their
+		// ordinary reservation checks; arbitrary methods remain unsupported here.
 		return fromHandlersAndOperationRoutes(frameworkHandlersByMethod,
 				toolRoutesByName, promptRoutesByName, exactResourceRoutesByUri,
 				resourceTemplateRoutes, resourceListRoute, false, true);
@@ -590,9 +590,9 @@ final class McpApplicationRequestRouter {
 			String method = requireNonNull(entry.getKey());
 			if (method.isBlank())
 				throw new IllegalArgumentException("Application MCP methods must not be blank.");
-			if (frameworkTaskHandlers && !isFrameworkTaskMethod(method))
+			if (frameworkTaskHandlers && !isFrameworkRoutedMethod(method))
 				throw new IllegalArgumentException(
-						"Only framework-owned MCP task methods may be installed by the framework handler factory.");
+						"Only supported framework-owned MCP methods may be installed by the framework handler factory.");
 			if (!frameworkTaskHandlers && isFrameworkOwnedMethod(method))
 				throw new IllegalArgumentException(
 						"Framework-owned MCP methods cannot be replaced by an application handler.");
@@ -666,7 +666,7 @@ final class McpApplicationRequestRouter {
 	}
 
 	private static boolean isFrameworkOwnedMethod(@NonNull String method) {
-		return method.startsWith("tasks/") || switch (method) {
+		return method.startsWith("tasks/") || method.startsWith("skills/") || switch (method) {
 			case "server/discover", "tools/list", "prompts/list", "resources/list",
 					"completion/complete",
 					"resources/templates/list" -> true;
@@ -674,9 +674,9 @@ final class McpApplicationRequestRouter {
 		};
 	}
 
-	private static boolean isFrameworkTaskMethod(@NonNull String method) {
+	private static boolean isFrameworkRoutedMethod(@NonNull String method) {
 		return switch (method) {
-			case "tasks/get", "tasks/update", "tasks/cancel" -> true;
+			case "tasks/get", "tasks/update", "tasks/cancel", "skills/list", "skills/get", "resources/read" -> true;
 			default -> false;
 		};
 	}
@@ -2641,6 +2641,8 @@ final class McpApplicationExecution {
 						McpProfileApplicationResultKind.RESOURCE_READ);
 				case "resources/list" -> Optional.of(
 						McpProfileApplicationResultKind.RESOURCE_LIST);
+				case "skills/list" -> Optional.of(McpProfileApplicationResultKind.SKILL_LIST);
+				case "skills/get" -> Optional.of(McpProfileApplicationResultKind.SKILL_GET);
 				case "completion/complete" -> Optional.of(
 						McpProfileApplicationResultKind.COMPLETION);
 				default -> Optional.empty();

@@ -62,7 +62,8 @@ public class McpLocalizationPublicApiTests {
 						"getFallbackLocale()",
 						"getLanguageRanges()",
 						"getRequestContext()",
-						"getResourceListCursor()")),
+						"getResourceListCursor()",
+						"getSkillListCursor()")),
 				Map.entry(McpLocalizationContext.class, Set.of(
 						"getLocale()",
 						"getRevision()",
@@ -223,6 +224,8 @@ public class McpLocalizationPublicApiTests {
 				"getContinuationLocale"), Locale.class);
 		assertParameterizedPayload(McpLocalizationRequest.class.getMethod(
 				"getResourceListCursor"), String.class);
+		assertParameterizedPayload(McpLocalizationRequest.class.getMethod(
+				"getSkillListCursor"), String.class);
 		assertParameterizedPayload(McpLocalizationContext.class.getMethod(
 				"getRevision"), McpLocalizationRevision.class);
 		assertParameterizedPayload(McpLocalizationCatalog.class.getMethod(

@@ -102,20 +102,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 154 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 164 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
 | `non-mcp-public-api.allowlist` | 64 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 280-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
-exactly 344 current types. Ownership alone does not freeze a type. The phase
+The 290-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
+exactly 354 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
 the updated include inventories establish current-source ownership without
 claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`6434cdf66c56327eabf9071576d795d0c940ab1224ff3dde734c65e911dedfa1`,
+`fe2305313988a5e25832be5305e42c48627ddd9ee714024525935afa46469ec0`,
 `17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
 `b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
@@ -3062,3 +3062,99 @@ freezes and candidate receipts are not rewritten. Caller-aware catalog-change
 notifications and reauthorization, Completion, Apps, Skills, and remaining
 approved cleanup still require their own implementation and fresh qualification
 evidence.
+
+### 2026-09-20 Skills construction API checkpoint
+
+Four current-source Phase 4 owners are added: `McpSkillBundle`,
+`McpSkillRegistration`, and the registration's nested `Builder` and `Resource`.
+They implement the approved one-argument byte-map factory, immutable inspection,
+generated manifests, URI/name validation, optional locale, private zero-TTL
+default cache policy, structural value methods, and redacted diagnostics.
+Bundle equality compares exact bytes, not only digests. No public memory-budget,
+parser configuration, file loader, or resource-construction factory is added.
+
+The four owners' signatures and nested JSpecify layout were reviewed before
+updating the Phase 4 nullability digest to
+`ce9fe8d09822410bf1c7b77098d9cd1cf9b9c25096a74de41cc23409d1931641`.
+Current-source ownership/reflection/Javadoc checks include them; historical
+signature and incompatibility ledgers remain unchanged pending MCP-G2.
+Canonical file representations and registration response preflights are
+implemented, but endpoint registration, authorization, discovery/read routing,
+and broader Skills qualification remain incomplete. Construction alone does
+not advertise protocol support. See [Skills](../../MCP.md#skills) for current runtime support.
+
+### 2026-09-20 Skills endpoint configuration checkpoint
+
+Added the `McpSkillGroup` owner and nullable replacement collection setters plus
+immutable standalone/group getters on `McpEndpoint`. Phase 4 now has 159 owners;
+the MCP union has 285. Reviewed factory/getter/setter signatures and nested
+JSpecify annotations produce Phase 4 digest
+`db8f9bc7fb61b9ed87075ccb765f8caf1732d7e0578e88a4d519c2d7cc93ee16`.
+The private owner index retains exact registration instances, validates complete
+nested snapshots and ordinary-resource collisions, and merges shared cache
+policies independently of future authorization. Endpoint subscription copies
+retain this immutable state. Until selection/discovery/authorized reads are
+wired, a server with nonempty Skills registrations rejects construction before
+runtime setup. No historical signature or incompatibility receipt is rewritten.
+
+### 2026-09-20 Skills policy and selection checkpoint
+
+Five owners are added: `McpSkillAccessPolicy`, its nested access/discovery
+evaluators, `McpSkillVariantSelector`, and the framework-created immutable
+`McpSkillVariantSelectionContext`. Server getter and nullable reset-setter
+contracts, callback signatures, parameter names, and nested nullability are
+checked by reflection. The reviewed Phase 4 nullability digest is
+`7754802769afaa10dcd6c26daf8e778f817e6ee58c42e8f9ec2b6cd728a0c201`.
+Policy/context values retain reference identity; selector membership requires
+the exact supplied registration, not its structural equal. Server and simulator
+configuration preserve policy/selector identities and explicit-configuration
+state. The private evaluation core is implemented, but the live routing guard
+remains. Historical API freezes and incompatibility receipts remain unchanged.
+
+### 2026-09-20 Skills pagination and live routing checkpoint
+
+The four additional owners are `McpSkillPage`, its builder, `McpSkillListHandler`,
+and the framework-created immutable `McpSkillListContext`. Phase 4 now has 168
+owners and the current MCP union has 294. Its include SHA-256 is
+`208af06ae2a26e6ede4d0408d1accb4216c4ce350fb231ed3d146d2c463b2807`.
+The approved `McpOperationResult` family is sealed to exactly six direct members,
+including `McpSkillPage`. Endpoint handler/cache setters, page/context signatures,
+and the `SKILLS_LIST`/`SKILLS_GET` operation enum additions are checked explicitly.
+The reviewed Phase 4 reflection/nullability digest is
+`5761188c637bf051400473b83525b0e9a1274e32b60887c1432b7b20a1228ecc`.
+`McpLocalizationRequest.getSkillListCursor()` preserves operation-specific and
+present-empty cursor semantics; the Phase 6 digest becomes
+`c5583ef492ffb4b8305bb7d6e590821b27361e0dbe0a7d11c9e39e74dbbdc29b`.
+Phase 5 remains unchanged. The metadata-builder inventory remains content-only;
+page result metadata is covered by its own value/reflection contracts.
+
+The temporary server-construction guard is removed with live Skills discovery,
+get and authorized file routes, automatic-page preflight, application-owned
+pagination, private-cache clamps, shared language preferences, and canonical
+file-interceptor validation. Historical signature/incompatibility freezes are
+not rewritten; this is current-source implementation, not release or real-host
+qualification. The dated construction/policy checkpoints above remain historical.
+
+### 2026-09-21 annotated Skills composition
+
+`McpEndpointRegistry.withSkillRegistrations(Class<?>, List<McpSkillRegistration>)`
+adds whole-list Skills replacement to a generated endpoint selected by exact
+loaded-class provenance. It preserves handlers and settings, revalidates the
+result, and leaves the original registry unchanged. No owner or historical
+signature snapshot is added or regenerated. The current Phase 4 reflection/
+nullability digest is
+`ed564706ffa273b15e1d7ab60eb50f8b18fa062910c12157cecfb6da31fc13e2`.
+
+### 2026-09-21 annotated Skills group composition
+
+`McpEndpointRegistry.withSkillGroups(Class<?>, List<McpSkillGroup>)` adds the
+corresponding whole-list group replacement/clear operation. Standalone
+registrations, generated handlers, settings, order, and exact loaded-class
+provenance survive either overlay order; replacements revalidate the complete
+Skills index and output limits before returning a new registry. Locale selection
+remains server policy, separate from direct-read authorization. No owner or
+historical signature snapshot changes. The reviewed Phase 4 reflection/
+nullability digest is
+`2285d7246cdd7cb6e730af58d4b73bcd51ec58b67861d6f974dc6f93d11cb8a0`;
+removing only the new method's five canonical entries reproduces the preceding
+digest.

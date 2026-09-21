@@ -33,6 +33,8 @@ import static java.util.Objects.requireNonNull;
  * <p>This class does not validate YAML syntax or select YAML scalar semantics.
  * An initial UTF-8 byte-order mark is omitted only from the decoded text view;
  * neither line endings nor the owned original bytes are rewritten.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 final class SkillSource {

@@ -1,0 +1,4 @@
+base: &base {value: one}
+copy: *base
+custom: {<<: *base, extra: two}
+sequence: [&item [a, b], *item]

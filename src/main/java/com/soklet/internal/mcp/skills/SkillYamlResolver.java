@@ -43,6 +43,8 @@ import static java.util.Objects.requireNonNull;
  * exact, finite JSON values, not Java object tags or YAML 1.1 merge semantics.
  * Syntax and expansion share the caller's budget; no production limits are
  * selected here.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillYamlResolver {
 	private final SkillYamlBudget budget;

@@ -91,6 +91,8 @@ enum McpProfileApplicationResultKind {
 	PROMPT,
 	RESOURCE_READ,
 	RESOURCE_LIST,
+	SKILL_LIST,
+	SKILL_GET,
 	COMPLETION
 }
 

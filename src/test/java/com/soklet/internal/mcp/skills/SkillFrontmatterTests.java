@@ -120,6 +120,14 @@ class SkillFrontmatterTests {
 	}
 
 	@Test
+	void streamSupportDoesNotPermitAdditionalMetadataDocuments() {
+		assertReason(UNSUPPORTED_SYNTAX, "name: first\n...\nname: second\n");
+		assertReason(TYPE, "# no metadata document\n...\n...\n");
+		assertEquals(new McpJsonString("first"), parse("name: first\n...\n# trailing comment\n")
+				.metadata().members().get("name"));
+	}
+
+	@Test
 	void authoredMalformedCharacterSmokeAlwaysTerminatesWithinExplicitBudgets() {
 		// Deterministic smoke only, not a claim of coverage-guided fuzz qualification.
 		assertTimeoutPreemptively(Duration.ofSeconds(4), () -> {

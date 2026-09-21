@@ -25,6 +25,9 @@ import com.soklet.McpOperationResult;
 import com.soklet.McpRateLimiter;
 import com.soklet.McpRequestContext;
 import com.soklet.McpServer;
+import com.soklet.McpSkillBundle;
+import com.soklet.McpSkillGroup;
+import com.soklet.McpSkillRegistration;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionNotificationType;
@@ -46,6 +49,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -299,6 +303,59 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			assertThrows(IllegalArgumentException.class,
 					() -> registry.withSubscriptionConfig(samePathImpostor,
 							subscriptions));
+		}
+	}
+
+	@Test
+	void skillsOverlayRetainsDiscoveredHandlersAndRequiresTheExactLoadedClass() throws Exception {
+		try (IndexedClassLoader classLoader = newClassLoader(goodIndex());
+				IndexedClassLoader otherClassLoader = newClassLoader(goodIndex())) {
+			Class<?> endpointA = Class.forName(ENDPOINT_A, false, classLoader);
+			Class<?> endpointB = Class.forName(ENDPOINT_B, false, classLoader);
+			Class<?> sameNameOtherLoader = Class.forName(ENDPOINT_B, false, otherClassLoader);
+			Class<?> samePathImpostor = Class.forName(UNINDEXED_ENDPOINT, false, classLoader);
+			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(endpointB, endpointA);
+			McpSkillRegistration skill = skillRegistration();
+			McpEndpointRegistry overlaid = registry.withSkillRegistrations(endpointB, List.of(skill));
+			assertEquals(List.of("/b", "/a"), endpointPaths(overlaid));
+			assertTrue(registry.getEndpoints().get(0).getSkillRegistrations().isEmpty());
+			assertEquals(List.of(skill), overlaid.getEndpoints().get(0).getSkillRegistrations());
+			assertSame(registry.getEndpoints().get(0).getToolRegistrations(),
+					overlaid.getEndpoints().get(0).getToolRegistrations());
+			assertSame(registry.getEndpoints().get(1), overlaid.getEndpoints().get(1));
+			assertThrows(IllegalArgumentException.class,
+					() -> overlaid.withSkillRegistrations(sameNameOtherLoader, List.of(skill)));
+			assertThrows(IllegalArgumentException.class,
+					() -> overlaid.withSkillRegistrations(samePathImpostor, List.of(skill)));
+			assertTrue(overlaid.withSkillRegistrations(endpointB, List.of()).getEndpoints()
+					.get(0).getSkillRegistrations().isEmpty());
+		}
+	}
+
+	@Test
+	void skillGroupOverlayRetainsDiscoveredHandlersAndRequiresTheExactLoadedClass() throws Exception {
+		try (IndexedClassLoader classLoader = newClassLoader(goodIndex());
+				IndexedClassLoader otherClassLoader = newClassLoader(goodIndex())) {
+			Class<?> endpointA = Class.forName(ENDPOINT_A, false, classLoader);
+			Class<?> endpointB = Class.forName(ENDPOINT_B, false, classLoader);
+			Class<?> sameNameOtherLoader = Class.forName(ENDPOINT_B, false, otherClassLoader);
+			Class<?> samePathImpostor = Class.forName(UNINDEXED_ENDPOINT, false, classLoader);
+			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(endpointB, endpointA);
+			McpSkillGroup group = McpSkillGroup.fromKeyAndSkillRegistrations("generated-guide",
+					List.of(skillRegistration()));
+			McpEndpointRegistry overlaid = registry.withSkillGroups(endpointB, List.of(group));
+			assertEquals(List.of("/b", "/a"), endpointPaths(overlaid));
+			assertTrue(registry.getEndpoints().get(0).getSkillGroups().isEmpty());
+			assertEquals(List.of(group), overlaid.getEndpoints().get(0).getSkillGroups());
+			assertSame(registry.getEndpoints().get(0).getToolRegistrations(),
+					overlaid.getEndpoints().get(0).getToolRegistrations());
+			assertSame(registry.getEndpoints().get(1), overlaid.getEndpoints().get(1));
+			assertThrows(IllegalArgumentException.class,
+					() -> overlaid.withSkillGroups(sameNameOtherLoader, List.of(group)));
+			assertThrows(IllegalArgumentException.class,
+					() -> overlaid.withSkillGroups(samePathImpostor, List.of(group)));
+			assertTrue(overlaid.withSkillGroups(endpointB, List.of()).getEndpoints()
+					.get(0).getSkillGroups().isEmpty());
 		}
 	}
 
@@ -607,8 +664,15 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				Thread.currentThread().setContextClassLoader(classLoader);
 				McpEndpointRegistry registry = McpEndpointRegistry
 						.fromClasspathIntrospection();
+				McpToolRegistration<?> originalTool = registry.getEndpoints().get(0)
+						.getToolRegistrations().get(0);
+				Class<?> endpointClass = Class.forName(ENDPOINT_A, false, classLoader);
+				registry = registry.withSkillRegistrations(endpointClass, List.of(skillRegistration()))
+						.withSkillGroups(endpointClass, List.of(McpSkillGroup.fromKeyAndSkillRegistrations(
+								"grouped-guide", List.of(skillRegistration("grouped-guide")))));
 				McpToolRegistration<?> tool = registry.getEndpoints().get(0)
 						.getToolRegistrations().get(0);
+				assertSame(originalTool, tool);
 
 				Class<?> argumentsClass = Class.forName(
 						ENDPOINT_A + "$Arguments", true, classLoader);
@@ -639,6 +703,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				Thread.currentThread().setContextClassLoader(previous);
 			}
 		}
+	}
+
+	private static McpSkillRegistration skillRegistration() {
+		return skillRegistration("generated-guide");
+	}
+
+	private static McpSkillRegistration skillRegistration(String name) {
+		byte[] root = ("---\nname: " + name + "\ndescription: Synthetic description\n---\nOpaque body.\n")
+				.getBytes(StandardCharsets.UTF_8);
+		return McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host.invalid/" + name + "/SKILL.md"),
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root))).build();
 	}
 
 	@NonNull

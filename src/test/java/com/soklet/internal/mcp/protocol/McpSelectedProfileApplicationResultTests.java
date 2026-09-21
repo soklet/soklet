@@ -69,8 +69,7 @@ public class McpSelectedProfileApplicationResultTests {
 		for (McpProfileApplicationResultKind kind
 				: McpProfileApplicationResultKind.values()) {
 			scenarios.add(new Scenario(kind, method(kind), completeResult(kind)));
-			if (kind != McpProfileApplicationResultKind.RESOURCE_LIST
-					&& kind != McpProfileApplicationResultKind.COMPLETION)
+			if (McpWireResult.supportsInputRequired(method(kind)))
 				scenarios.add(new Scenario(kind, method(kind), inputRequiredResult(kind)));
 		}
 
@@ -96,8 +95,8 @@ public class McpSelectedProfileApplicationResultTests {
 			}
 			Assertions.assertEquals(
 					EnumSet.allOf(McpProfileApplicationResultKind.class), observedKinds);
-			Assertions.assertEquals(8, fake.calls().size(),
-					"Dynamic resources/list and Completion are complete-only; the other kinds support both results.");
+			Assertions.assertEquals(10, fake.calls().size(),
+					"Resource lists, Skills and Completion are complete-only; tool/prompt/resource reads support both results.");
 		} finally {
 			execution.stop();
 			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
@@ -216,6 +215,17 @@ public class McpSelectedProfileApplicationResultTests {
 				fields.put("cacheScope", new McpJsonString("public"));
 				fields.put("ttlMs", new McpJsonNumber(60L));
 			}
+			case SKILL_LIST -> {
+				fields.put("skills", new McpJsonArray(List.of()));
+				fields.put("nextCursor", new McpJsonString(""));
+				fields.put("cacheScope", new McpJsonString("private"));
+				fields.put("ttlMs", new McpJsonNumber(0L));
+			}
+			case SKILL_GET -> {
+				fields.put("skill", new McpJsonObject(Map.of("uri", new McpJsonString("skill://sample/SKILL.md"))));
+				fields.put("cacheScope", new McpJsonString("private"));
+				fields.put("ttlMs", new McpJsonNumber(0L));
+			}
 			case COMPLETION -> fields.put("completion", new McpJsonObject(
 					Map.of("values", new McpJsonArray(List.of(
 							new McpJsonString("python"),
@@ -247,6 +257,8 @@ public class McpSelectedProfileApplicationResultTests {
 			case PROMPT -> "prompts/get";
 			case RESOURCE_READ -> "resources/read";
 			case RESOURCE_LIST -> "resources/list";
+			case SKILL_LIST -> "skills/list";
+			case SKILL_GET -> "skills/get";
 			case COMPLETION -> "completion/complete";
 		};
 	}

@@ -70,6 +70,10 @@ final class McpNormalizedEndpoint {
 	@NonNull
 	private final Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter>
 			catalogAccessAdapter;
+	@NonNull
+	private final Optional<McpServerRuntimeBridge.@NonNull SkillsPlan> skillsPlan;
+	@NonNull
+	private final Set<@NonNull URI> skillFileUris;
 
 	@NonNull
 	static Builder withServerInformation(@NonNull McpImplementationMetadata serverInformation) {
@@ -106,6 +110,10 @@ final class McpNormalizedEndpoint {
 		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
 		this.subscriptionConfig = builder.subscriptionConfig;
 		this.catalogAccessAdapter = builder.catalogAccessAdapter;
+		this.skillsPlan = builder.skillsPlan;
+		this.skillFileUris = skillsPlan.map(plan -> plan.files().stream()
+				.map(McpServerRuntimeBridge.SkillFilePlan::uri)
+				.collect(java.util.stream.Collectors.toUnmodifiableSet())).orElseGet(Set::of);
 
 		if (this.subscriptionConfig
 				.map(configuration -> configuration.notificationTypes().contains(
@@ -200,8 +208,13 @@ final class McpNormalizedEndpoint {
 	}
 
 	boolean hasResourceSurface() {
-		return customResourceListHandler || !exactResources.isEmpty() || !resourceTemplates.isEmpty();
+		return skillsPlan.isPresent() || customResourceListHandler || !exactResources.isEmpty() || !resourceTemplates.isEmpty();
 	}
+
+	@NonNull
+	Optional<McpServerRuntimeBridge.@NonNull SkillsPlan> skillsPlan() { return this.skillsPlan; }
+
+	boolean isSkillFile(@NonNull URI uri) { return this.skillFileUris.contains(requireNonNull(uri)); }
 
 	@NonNull
 	private static List<@NonNull McpNormalizedOperation> immutableOperations(
@@ -343,6 +356,8 @@ final class McpNormalizedEndpoint {
 		@NonNull
 		private Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter>
 				catalogAccessAdapter;
+		@NonNull
+		private Optional<McpServerRuntimeBridge.@NonNull SkillsPlan> skillsPlan;
 
 		private Builder(@NonNull McpImplementationMetadata serverInformation) {
 			this.serverInformation = requireNonNull(serverInformation);
@@ -362,6 +377,13 @@ final class McpNormalizedEndpoint {
 					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.subscriptionConfig = Optional.empty();
 			this.catalogAccessAdapter = Optional.empty();
+			this.skillsPlan = Optional.empty();
+		}
+
+		@NonNull
+		Builder skillsPlan(McpServerRuntimeBridge.@NonNull SkillsPlan skillsPlan) {
+			this.skillsPlan = Optional.of(requireNonNull(skillsPlan));
+			return this;
 		}
 
 		@NonNull

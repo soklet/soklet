@@ -44,6 +44,13 @@ import static java.util.Objects.requireNonNull;
  * Argument-completion invocations require an
  * {@link McpArgumentCompletionResult}; a result for another MCP operation is
  * rejected even when returned by an interceptor.
+ * Custom Skills-list handlers require a {@link McpSkillPage}; automatic
+ * {@code skills/list} and {@code skills/get} responses remain framework-owned
+ * and are not intercepted. Skills-file reads are intercepted only after fresh
+ * owner authorization and canonical resource-result construction. Their
+ * canonical URI, MIME type, contents and representation must remain unchanged;
+ * result metadata may be added, and freshness may be shortened but not widened
+ * beyond the shared-file cache policy and applicable security clamps.
  * A {@code null} return or thrown exception fails closed without exposing
  * exception-derived data.
  * <p>
