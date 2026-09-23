@@ -85,8 +85,16 @@ whose assertions hard-code Sampling. Its other checks produced 26 `SUCCESS`
 and the two existing mutable-list `SKIPPED` results. The fixture's elicitation
 diagnostic is independently tested, but does not turn those raw upstream
 failures into passing or skipped checks. The existing expected success profile
-is unchanged. The owner accepted the narrow [P0-C check-level disposition](P0C_CHECK_DISPOSITION_2026-09-22.md) on 2026-09-22,
-but runner integration, immutable-candidate replay, and toolchain security remain open; the gate stays red. No expected-failure suppression,
+is unchanged. The owner accepted the narrow [P0-C check-level disposition](P0C_CHECK_DISPOSITION_2026-09-22.md) on 2026-09-22.
+The runner now requires explicit `--p0c-policy accepted-2026-09-22` to apply
+that decision in Phase 5 verification or release mode. It captures the raw
+official failure and a paired real-socket Elicitation control, then verifies
+the exact checks, fixture, suite, candidate JAR, and owner decision. The
+aggregate status is `PASSED_WITH_REVIEWED_EXCEPTION`; the scenario row remains
+`passed: false`, with the official exit code and two `FAILURE` results intact.
+Every other scenario and the task-notification supplement must pass strictly.
+This integration has passed a development run; immutable-candidate replay and
+toolchain security disposition remain open. No expected-profile edit,
 upstream source modification, or synthetic Sampling response is used.
 
 The unfiltered `list --server` output
@@ -509,8 +517,10 @@ node conformance/official/run.mjs \
   --work-dir /absolute/project/target/conformance/official/phase-5 \
   --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
   --project-root /absolute/project \
+  --java /absolute/jdk17/bin/java \
   --phase 5 \
-  --mode verify
+  --mode verify \
+  --p0c-policy accepted-2026-09-22
 ```
 
 ## Immutable release-candidate verification
@@ -575,8 +585,10 @@ node conformance/official/run.mjs \
   --work-dir /absolute/project/target/conformance/official/release-phase-5 \
   --classpath "$(cat /absolute/project/target/conformance/official/release-fixture-classpath.txt)" \
   --project-root /absolute/project \
+  --java /absolute/jdk17/bin/java \
   --phase 5 \
   --mode release \
+  --p0c-policy accepted-2026-09-22 \
   --candidate-commit 0123456789abcdef0123456789abcdef01234567 \
   --release-manifest /absolute/evidence/release-candidate.json \
   --release-manifest-sha256 '<reviewed-manifest-sha256>'

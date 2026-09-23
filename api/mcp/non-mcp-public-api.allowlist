@@ -1,7 +1,6 @@
 com.soklet.CallbackRegistration
 com.soklet.CancelationToken
 com.soklet.CorsPreflight
-com.soklet.DefaultSseServer$DefaultSseUnicaster
 com.soklet.HttpServer
 com.soklet.HttpServer$Builder
 com.soklet.HttpTransportAttachmentContext
@@ -65,7 +64,6 @@ com.soklet.SseRequestResult$HandshakeAccepted
 com.soklet.SseServer
 com.soklet.SseServer$Builder
 com.soklet.SseTransportAttachmentContext
-com.soklet.SseUnicaster
 com.soklet.StartupContext
 com.soklet.StartupDisposition
 com.soklet.StreamResourceFactory

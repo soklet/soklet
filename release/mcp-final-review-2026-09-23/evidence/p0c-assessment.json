@@ -1,0 +1,30 @@
+{
+  "assessment": "PROPOSAL_REVIEWABLE",
+  "adopted": false,
+  "officialVerdict": "FAILURE",
+  "officialExitCode": 1,
+  "scenario": "server-stateless",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+  "suiteSourceTreeSha256": "e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d",
+  "candidateJarSha256": "ea81b1293a8c02827db92b1dfbb6d175d82cc0588f1782a42545f8f8bd6b713f",
+  "fixtureSourceSha256": "876ade70aa96a0aea2f24ef8810f4ad634b266a59edabd3cdb8565cd5da8b93c",
+  "fixtureClassesSha256": "7c841e4724a0c92b0be1c68377645f3e31d1b0c9ea39b1719d8c821dfb5c6dda",
+  "checksSha256": "08b0452e52d91ec17feb6386bc0eb583fc6aa450567fd1e0cf7cb2aa5c5f2298",
+  "officialStdoutSha256": "e00395ed1a600d8f6b96a7e088804df0ccaa7913d4ec18a91cf68252983b0c2b",
+  "officialStderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "runId": "soklet-47-p0c-20260923",
+  "endpoint": "http://127.0.0.1:61921/mcp",
+  "rawCheckCount": 30,
+  "upstreamFailureIds": [
+    "sep-2575-server-rejects-undeclared-capability",
+    "sep-2575-missing-capability-http-400"
+  ],
+  "unaffectedCheckCount": 28,
+  "independentControl": "REAL_SOCKET_ELICITATION_NEGATIVE_AND_POSITIVE_PASS",
+  "releaseGate": "UNCHANGED",
+  "officialCommandSha256": "9a6ec8a7b8c982ee210143e71ff64a1525f157eac6faf7561b94749cc510a35b",
+  "originalChecksSha256": "08b0452e52d91ec17feb6386bc0eb583fc6aa450567fd1e0cf7cb2aa5c5f2298",
+  "captureManifestSha256": "9ca09bb085bc10d518cb1437adf03518cb9fcc5d89cfa2b6fe9acefda131a606",
+  "rawManifestSha256": "5db4ad4ea002254a0d0e99638d90cc3318479329f8f46489e3d30f9e1fb8e6db",
+  "controlReceiptSha256": "7359ed917b7bce10c0282f554fd03c42e21a0901969d7f7dc5baf240855e41db"
+}

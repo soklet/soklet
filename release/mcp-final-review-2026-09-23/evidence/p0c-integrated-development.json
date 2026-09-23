@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "evidenceClass": "DEVELOPMENT_ONLY",
+  "candidateCommit": "47eeff6a907a0579b025b6b526b6ade1edbb1344",
+  "candidateJarSha256": "ea81b1293a8c02827db92b1dfbb6d175d82cc0588f1782a42545f8f8bd6b713f",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+  "aggregateStatus": "PASSED_WITH_REVIEWED_EXCEPTION",
+  "releaseCandidateEvidence": false,
+  "selectedScenarioCount": 46,
+  "strictPassedCount": 45,
+  "reviewedException": {
+    "scenario": "server-stateless",
+    "rawPassed": false,
+    "rawOfficialVerdict": "FAILURE",
+    "rawOfficialExitCode": 1,
+    "rawCheckCount": 30,
+    "unaffectedCheckCount": 28,
+    "upstreamFailureIds": [
+      "sep-2575-server-rejects-undeclared-capability",
+      "sep-2575-missing-capability-http-400"
+    ],
+    "independentControl": "REAL_SOCKET_ELICITATION_NEGATIVE_AND_POSITIVE_PASS",
+    "checksSha256": "8e8d41301fb1619af8a583a388e0d1ebbe8ebd3766ba5d1332e23899d7298247",
+    "controlReceiptSha256": "efdf79a9028da6e5f2063c09633d8715752200e4219a833d210d28810a3f9a4b"
+  },
+  "taskNotificationSupplementPassed": true,
+  "taskNotificationSupplementChecks": 8,
+  "fullLocalEvidenceSha256": "f93a8b5ce4e4048334a994b767f75e86e37839a1c370b418f6a3054df7df965c"
+}

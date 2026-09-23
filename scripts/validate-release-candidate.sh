@@ -933,6 +933,11 @@ run_matrix_closure() {
 run_candidate_conformance() {
 	local checkout
 	checkout=$(clone_pinned_gate candidate-conformance)
+	local repin_helper="$project_root/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/apply-repin.mjs"
+	[[ -f "$repin_helper" && ! -L "$repin_helper" ]] \
+		|| fail "Reviewed conformance dependency repin helper is missing or unsafe."
+	# Verify the exact upstream source before changing only its lock for npm ci.
+	node "$repin_helper" prepare "$checkout"
 	local npm_cache="$work_root/npm-cache-conformance"
 	local npm_home="$work_root/npm-home-conformance"
 	local npm_user_config="$npm_home/user.npmrc"
@@ -948,6 +953,9 @@ run_candidate_conformance() {
 			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
 			npm_config_globalconfig="$npm_global_config" npm run build
 	)
+	# Restore the original reviewed source tree and verify the built CLI. The
+	# installed node_modules still came from the exact repinned lock above.
+	node "$repin_helper" restore "$checkout"
 	node conformance/official/self-test.mjs --suite-dir "$checkout"
 	node conformance/official/runner-self-test.mjs
 	local fixture_root="$project_root/target/conformance/public-fixture"
@@ -966,8 +974,10 @@ run_candidate_conformance() {
 		--work-dir "$conformance_work" \
 		--classpath "$classpath" \
 		--project-root "$project_root" \
+		--java "$core_java_home/bin/java" \
 		--phase 5 \
 		--mode release \
+		--p0c-policy accepted-2026-09-22 \
 		--candidate-commit "$candidate_commit" \
 		--candidate-pom "$candidate_pom" \
 		--candidate-pom-sha256 "$pom_sha" \
@@ -981,6 +991,12 @@ run_candidate_conformance() {
 		"$manifest_path" "$candidate_commit" "$artifact_descriptor" \
 		"$conformance_work/evidence.json"
 	assert_pinned_checkout_unchanged candidate-conformance "$checkout"
+	local repin_lock="$project_root/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json"
+	local repin_sha
+	repin_sha=$(node "$evidence_helper" sha256 "$repin_lock")
+	printf 'upstreamCommit=%s\nrepinnedLockSha256=%s\n' \
+		"${gate_commit[candidate-conformance]}" "$repin_sha" \
+		> "$conformance_work/dependency-repin.txt"
 	record_gate candidate-conformance "conformance-evidence=$conformance_work"
 }
 

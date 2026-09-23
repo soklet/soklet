@@ -13,6 +13,7 @@ import {
 import { basename, delimiter, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adjudicateChecks } from './adjudicate.mjs';
+import { acceptedP0CPolicy, acceptedP0CStatus, runAcceptedP0CScenario } from './p0c-policy.mjs';
 import { validateFinalTagWire } from './validate-final-tag-wire.mjs';
 import { verifyProfileEvidence } from './verify-profile-evidence.mjs';
 import {
@@ -68,6 +69,10 @@ export async function runOfficialConformance(options, { processObject = process 
 		const { pins, selection, expectedChecks } = verifyManifestSet();
 		const observing = mode === 'observe';
 		const releasing = mode === 'release';
+		const acceptedP0C = options.p0cPolicy === acceptedP0CPolicy;
+		if (options.p0cPolicy !== undefined
+				&& (!acceptedP0C || observing || options.phase !== 5))
+			throw new Error('P0-C policy requires the exact accepted Phase 5 verify or release mode');
 		if (observing) {
 			if (options.phase !== selection.currentImplementationPhase + 1)
 				throw new Error(
@@ -164,7 +169,30 @@ export async function runOfficialConformance(options, { processObject = process 
     for (const [index, scenario] of scenarios.entries()) {
       supervisor.throwIfCancellationRequested();
       try {
-			evidence.scenarios.push(await runScenario({
+			if (acceptedP0C && index === 0) {
+				if (scenario.name !== 'server-stateless')
+					throw new Error('Accepted P0-C scenario is not first in the reviewed inventory');
+				if (releasing) assertReleaseCandidateUnchanged(scenarioOptions);
+				const { fixtureClasses, candidateJar } = verifyPublicFixtureClasspath(
+					options.classpath, options.projectRoot,
+					releasing ? releaseCandidate.candidateJar : undefined,
+				);
+				evidence.scenarios.push(await runAcceptedP0CScenario({
+					suiteDirectory: options.suiteDirectory,
+					candidateJarPath: candidateJar,
+					fixtureClassesPath: fixtureClasses,
+					javaExecutable: options.javaExecutable,
+					evidencePath,
+					runBoundedCapture: (script, args) => runBoundedCommand(
+						process.execPath, [script, ...args], {
+							timeoutMilliseconds: 180_000,
+							workingDirectory: options.projectRoot,
+							supervisor,
+						}),
+					expectedProjectRoot: options.projectRoot,
+				}));
+				if (releasing) assertReleaseCandidateUnchanged(scenarioOptions);
+			} else evidence.scenarios.push(await runScenario({
           ordinal: index + 1,
           scenario,
           options: scenarioOptions,
@@ -182,6 +210,11 @@ export async function runOfficialConformance(options, { processObject = process 
     }
 
     if (runFailure !== undefined) throw runFailure;
+		if (acceptedP0C && (evidence.scenarios.length !== 46
+				|| evidence.scenarios[0]?.name !== 'server-stateless'
+				|| evidence.scenarios[0]?.passed !== false
+				|| evidence.scenarios.slice(1).some((row) => row.passed !== true)))
+			throw new Error('Accepted P0-C run did not retain exactly one reviewed exception');
     evidence.taskNotificationSupplement = await runTaskNotificationSupplement(
       scenarioOptions, supervisor,
     );
@@ -189,10 +222,15 @@ export async function runOfficialConformance(options, { processObject = process 
 		if (releasing)
 			await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
 		if (releasing) assertReleaseCandidateUnchanged(scenarioOptions);
-		evidence.status = observing ? 'OBSERVED' : 'PASSED';
+		evidence.status = observing ? 'OBSERVED'
+			: acceptedP0C ? acceptedP0CStatus : 'PASSED';
     evidence.failure = null;
     persistEvidence(evidencePath, evidence);
-		console.log(observing
+		console.log(acceptedP0C
+			? `MCP Phase ${options.phase} ${releasing ? 'release-candidate' : 'development'} `
+				+ 'check passed with the accepted P0-C exception; raw official '
+				+ 'server-stateless FAILURE and exit 1 remain in evidence.'
+			: observing
 			? `Observed official MCP Phase ${options.phase} profiles for review: `
 				+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`
 			: releasing
@@ -1404,6 +1442,7 @@ function parseArguments(args) {
     const value = args[index + 1];
 		if (!['--suite-dir', '--work-dir', '--classpath', '--project-root', '--java', '--phase',
 			'--mode', '--candidate-commit', '--release-manifest', '--release-manifest-sha256',
+			'--p0c-policy',
 			'--candidate-pom', '--candidate-pom-sha256', '--candidate-jar',
 			'--candidate-jar-sha256', '--candidate-sources-jar',
 			'--candidate-sources-jar-sha256', '--candidate-javadoc-jar',
@@ -1425,6 +1464,7 @@ function parseArguments(args) {
 		javaExecutable: values.get('--java') ?? 'java',
 		phase: Number(values.get('--phase') ?? '5'),
 		mode: values.get('--mode') ?? 'verify',
+		p0cPolicy: values.get('--p0c-policy'),
 		candidateCommit: values.get('--candidate-commit'),
 		releaseManifest: values.has('--release-manifest')
 			? resolve(values.get('--release-manifest'))
@@ -1455,6 +1495,7 @@ function usage() {
       + '--suite-dir <built-suite> --work-dir <empty-absolute-directory> '
       + '--classpath <fixture-classes-and-candidate-jar> [--project-root <root>] '
 			+ '[--java <java>] [--phase <phase>] [--mode verify|observe|release] '
+			+ '[--p0c-policy accepted-2026-09-22] '
 			+ '[--candidate-commit <full-sha> '
 			+ '(--release-manifest <json> --release-manifest-sha256 <sha256> | '
 			+ '--candidate-pom <pom> --candidate-pom-sha256 <sha256> '

@@ -1,0 +1,335 @@
+{
+  "formatVersion": 1,
+  "evidenceClass": "CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY",
+  "releaseCandidateEvidence": false,
+  "status": "FAILED",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+  "protocolVersion": "2026-07-28",
+  "phase": 5,
+  "mode": "verify",
+  "goldenMessagesValidated": 48,
+  "taskNotificationSupplement": null,
+  "scenarios": [
+    {
+      "name": "server-stateless",
+      "passed": false,
+      "error": "Error: server-stateless emitted forbidden FAILURE check sep-2575-server-rejects-undeclared-capability"
+    },
+    {
+      "name": "completion-complete",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "completion-complete.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-list",
+      "passed": true,
+      "checkCount": 4,
+      "expectedCheckProfile": "tools-list.phase4.v2",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-simple-text",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-simple-text.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-image",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-image.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-audio",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-audio.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-embedded-resource",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-embedded-resource.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-mixed-content",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-mixed-content.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-error",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-error.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tools-call-with-progress",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tools-call-with-progress.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "json-schema-2020-12",
+      "passed": true,
+      "checkCount": 8,
+      "expectedCheckProfile": "json-schema-2020-12.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "server-sse-multiple-streams",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "server-sse-multiple-streams.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "resources-list",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "resources-list.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "resources-read-text",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "resources-read-text.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "resources-read-binary",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "resources-read-binary.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "resources-templates-read",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "resources-templates-read.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "sep-2164-resource-not-found",
+      "passed": true,
+      "checkCount": 4,
+      "expectedCheckProfile": "sep-2164-resource-not-found.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "prompts-list",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "prompts-list.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "prompts-get-simple",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "prompts-get-simple.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "prompts-get-with-args",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "prompts-get-with-args.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "prompts-get-embedded-resource",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "prompts-get-embedded-resource.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "prompts-get-with-image",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "prompts-get-with-image.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "dns-rebinding-protection",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "dns-rebinding-protection.phase3.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "caching",
+      "passed": true,
+      "checkCount": 8,
+      "expectedCheckProfile": "caching.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "http-header-validation",
+      "passed": true,
+      "checkCount": 14,
+      "expectedCheckProfile": "http-header-validation.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "http-custom-header-server-validation",
+      "passed": true,
+      "checkCount": 10,
+      "expectedCheckProfile": "http-custom-header-server-validation.phase4.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-lifecycle",
+      "passed": true,
+      "checkCount": 9,
+      "expectedCheckProfile": "tasks-lifecycle.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-capability-negotiation",
+      "passed": true,
+      "checkCount": 5,
+      "expectedCheckProfile": "tasks-capability-negotiation.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-wire-fields",
+      "passed": true,
+      "checkCount": 4,
+      "expectedCheckProfile": "tasks-wire-fields.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-request-state-removal",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "tasks-request-state-removal.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-mrtr-input",
+      "passed": true,
+      "checkCount": 4,
+      "expectedCheckProfile": "tasks-mrtr-input.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-request-headers",
+      "passed": true,
+      "checkCount": 5,
+      "expectedCheckProfile": "tasks-request-headers.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-dispatch-and-envelope",
+      "passed": true,
+      "checkCount": 9,
+      "expectedCheckProfile": "tasks-dispatch-and-envelope.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-status-notifications",
+      "passed": true,
+      "checkCount": 1,
+      "expectedCheckProfile": "tasks-status-notifications.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-required-task-error",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "tasks-required-task-error.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "tasks-mrtr-composition",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "tasks-mrtr-composition.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-basic-elicitation",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "input-required-result-basic-elicitation.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-request-state",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "input-required-result-request-state.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-multi-round",
+      "passed": true,
+      "checkCount": 4,
+      "expectedCheckProfile": "input-required-result-multi-round.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-missing-input-response",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "input-required-result-missing-input-response.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-non-tool-request",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "input-required-result-non-tool-request.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-result-type",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "input-required-result-result-type.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-unsupported-methods",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "input-required-result-unsupported-methods.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-tampered-state",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "input-required-result-tampered-state.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-ignore-extra-params",
+      "passed": true,
+      "checkCount": 2,
+      "expectedCheckProfile": "input-required-result-ignore-extra-params.phase5.v1",
+      "observedProfileDraft": null
+    },
+    {
+      "name": "input-required-result-validate-input",
+      "passed": true,
+      "checkCount": 3,
+      "expectedCheckProfile": "input-required-result-validate-input.phase5.v1",
+      "observedProfileDraft": null
+    }
+  ],
+  "failure": "Error: server-stateless emitted forbidden FAILURE check sep-2575-server-rejects-undeclared-capability"
+}

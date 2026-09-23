@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "scenario": "server-stateless",
+  "protocolVersion": "2026-07-28",
+  "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+  "suiteSourceTreeSha256": "e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d",
+  "candidateJarSha256": "ea81b1293a8c02827db92b1dfbb6d175d82cc0588f1782a42545f8f8bd6b713f",
+  "fixtureSourceSha256": "876ade70aa96a0aea2f24ef8810f4ad634b266a59edabd3cdb8565cd5da8b93c",
+  "fixtureClassesSha256": "7c841e4724a0c92b0be1c68377645f3e31d1b0c9ea39b1719d8c821dfb5c6dda",
+  "runId": "soklet-47-p0c-20260923",
+  "endpoint": "http://127.0.0.1:61921/mcp",
+  "checksSha256": "08b0452e52d91ec17feb6386bc0eb583fc6aa450567fd1e0cf7cb2aa5c5f2298",
+  "stdoutSha256": "e00395ed1a600d8f6b96a7e088804df0ccaa7913d4ec18a91cf68252983b0c2b",
+  "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "outputFailure": null
+}

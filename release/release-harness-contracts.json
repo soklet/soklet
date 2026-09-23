@@ -108,6 +108,14 @@
           {
             "id": "mcp-localization-overlay",
             "ordinal": 18
+          },
+          {
+            "id": "mcp-skill-yaml-stream",
+            "ordinal": 19
+          },
+          {
+            "id": "mcp-skill-frontmatter",
+            "ordinal": 20
           }
         ],
         "zeroToleranceOutcomes": [

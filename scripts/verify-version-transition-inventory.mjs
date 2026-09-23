@@ -152,9 +152,19 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  '1221b4738a7374a8dfee794f5e4e8e6045a7af9dda78a608f74158771d7a5d83';
+  'b4f707f26c89839a0949e5dedb742a4b43c7941723d5de6f631c10ac7ea26e34';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
+const REVIEWED_ALPHA11_REPIN_LOCK_PATH =
+  'conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json';
+const REVIEWED_ALPHA11_REPIN_LOCK_SHA256 =
+  '4bbf44df937f30f99f56dcb359ec5ca67c8200241b279f49f25d4b646e38fa1f';
+const REVIEWED_ALPHA11_REPIN_EXTERNAL_ANCHORS = new Set([
+  '22:19:3.6',
+  '4554:29:3.6',
+  '5715:20:3.6',
+  '5716:58:3.6',
+]);
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([
   'EXTERNAL_DEPENDENCY',
   'PRESERVED',
@@ -1362,6 +1372,22 @@ export function externalMavenVersionOwner(path, text, occurrence) {
   return null;
 }
 
+// The exact alpha.11 overlay has four incidental 3.6 tokens in third-party
+// npm versions. Bind this exception to the whole reviewed lock and to those
+// four locations; a changed lock must receive a fresh inventory review.
+export function externalReviewedNpmLockOwner(path, text, occurrence) {
+  if (path !== REVIEWED_ALPHA11_REPIN_LOCK_PATH
+      || sha256(text) !== REVIEWED_ALPHA11_REPIN_LOCK_SHA256
+      || !REVIEWED_ALPHA11_REPIN_EXTERNAL_ANCHORS.has(
+        `${occurrence.line}:${occurrence.column}:${occurrence.literal}`)) return null;
+  return 'npm-lock:alpha11-dependency-repin';
+}
+
+function externalVersionOwner(path, text, occurrence) {
+  return externalMavenVersionOwner(path, text, occurrence)
+    ?? externalReviewedNpmLockOwner(path, text, occurrence);
+}
+
 function verifyReviewedStage(inventory, currentTexts, stage, baselineTexts) {
   const files = inventory.currentStage.files.map((tuple, index) =>
     parseFileTuple(tuple, `currentStage.files[${index}]`));
@@ -1372,16 +1398,16 @@ function verifyReviewedStage(inventory, currentTexts, stage, baselineTexts) {
   const expected = expectedReviewedOccurrences(inventory, stage);
   for (const occurrence of expected) {
     if (occurrence.classification !== 'EXTERNAL_DEPENDENCY') continue;
-    const owner = externalMavenVersionOwner(occurrence.path,
+    const owner = externalVersionOwner(occurrence.path,
       currentTexts.get(occurrence.path) ?? '', occurrence);
     if (owner === null)
-      fail(`EXTERNAL_DEPENDENCY anchor is not an exact external Maven version at ${occurrence.path}:${occurrence.line}.`);
+      fail(`EXTERNAL_DEPENDENCY anchor is not an exact reviewed external dependency version at ${occurrence.path}:${occurrence.line}.`);
     if (occurrence.baselineKey !== null) {
       const key = occurrence.baselineKey;
       const baselineText = baselineTexts.get(key.path) ?? '';
       const token = scanText(key.path, baselineText).find((candidate) =>
         candidate.line === key.line && candidate.occurrenceIndex === key.occurrenceIndex);
-      if (!token || externalMavenVersionOwner(key.path, baselineText, token) !== owner)
+      if (!token || externalVersionOwner(key.path, baselineText, token) !== owner)
         fail(`EXTERNAL_DEPENDENCY changes its baseline Maven owner at ${key.path}:${key.line}.`);
     }
   }

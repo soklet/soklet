@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   ORDERED_PATTERNS,
@@ -18,6 +19,7 @@ import {
   currentStageCensusSha256,
   derivePostU7CurrentStage,
   externalMavenVersionOwner,
+  externalReviewedNpmLockOwner,
   maskedVersionFileSha256,
   scanCurrentVersionText,
   scanText,
@@ -745,8 +747,24 @@ runCase('Soklet dependencies cannot use the external exception even after reseal
   applyStage(root, { removeD2: true, removeU7: true });
   const text = BASELINE_FILES['external/pom.xml'].replace('org.example', 'com.soklet');
   const pin = reviewExternalVersion(root, 'new/pom.xml', text, false);
-  expectFailure(root, 'post-u7', pin, /not an exact external Maven version/u);
+  expectFailure(root, 'post-u7', pin, /not an exact reviewed external dependency version/u);
 });
+
+const reviewedNpmLockPath =
+  'conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json';
+const reviewedNpmLock = readFileSync(join(dirname(fileURLToPath(import.meta.url)),
+  '..', reviewedNpmLockPath), 'utf8');
+const reviewedNpmTokens = scanCurrentVersionText(reviewedNpmLockPath, reviewedNpmLock)
+  .filter(({ literal }) => literal === '3.6');
+assert.equal(reviewedNpmTokens.length, 4);
+for (const token of reviewedNpmTokens) {
+  assert.equal(externalReviewedNpmLockOwner(reviewedNpmLockPath, reviewedNpmLock, token),
+    'npm-lock:alpha11-dependency-repin');
+  assert.equal(externalReviewedNpmLockOwner(reviewedNpmLockPath,
+    `${reviewedNpmLock} `, token), null);
+  assert.equal(externalReviewedNpmLockOwner('other/package-lock.json',
+    reviewedNpmLock, token), null);
+}
 
 for (const text of [
   '<project><version>3.6.0</version></project>',

@@ -695,6 +695,16 @@
     {
       "classification": "REVIEWED_DISCOVERY_ONLY",
       "closureStatus": "CLOSED",
+      "id": "CLASS-CONFORMANCE-ALPHA11-REPIN-REVIEW",
+      "paths": [
+        "conformance/official/proposals/alpha11-dependency-repin-2026-09-23/REVIEW.md"
+      ],
+      "rationale": "This source-bound review note mentions lifecycle and process limits of the proposed official conformance dependency overlay. It opens no listener or child process and does not qualify the candidate conformance gate. The executable overlay and release runner remain subject to their existing bounded-process checks and exact candidate replay.",
+      "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
       "id": "CLASS-CONSUMER-CI-CONTROLS",
       "paths": [
         "scripts/verify-consumer-ci-self-test.mjs"
@@ -1422,8 +1432,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 8337,
-    "candidateSha256": "e37ab6bd8346c27a9762172e9eac17f7b8d70688f5e7b68cb05b0329fbd01ec9",
+    "candidateCount": 8338,
+    "candidateSha256": "5306827aa16523e2efaadc10b7a00a7bf3b14a62a97067afa831a1fb998e2b3c",
     "candidates": [
       {
         "kinds": [
@@ -1485,7 +1495,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 642,
+        "line": 648,
         "lineSha256": "73658002cf91a5187bf9bbacf96c7004a0f93956595933a718f615c3ce2ab79c",
         "path": ".github/workflows/ci.yml"
       },
@@ -1493,7 +1503,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 762,
+        "line": 768,
         "lineSha256": "233403a755141c8dd02eb01865156fe2fa2e8b3f4ecff9192715dc42e5bd8a59",
         "path": ".github/workflows/ci.yml"
       },
@@ -1501,7 +1511,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 893,
+        "line": 899,
         "lineSha256": "1be8943d5cb9cfd8af2ff7704c87229f58038746458f7eda133133b6b8d7ec91",
         "path": ".github/workflows/ci.yml"
       },
@@ -3116,7 +3126,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 185,
+        "line": 193,
         "lineSha256": "a7c188c14b61af15c12e783c55d6f5bd40f71fde4dde3f675dba6cc6e83ec310",
         "path": "conformance/official/README.md"
       },
@@ -3124,7 +3134,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 207,
+        "line": 215,
         "lineSha256": "b2cc0d56f10ca0f9ede9f13b4770230530e8d4aca865dd99522df866ff338834",
         "path": "conformance/official/README.md"
       },
@@ -3132,7 +3142,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 320,
+        "line": 328,
         "lineSha256": "ff3463b24452c7a3b2180cc95d13e288168c33b8316672a4f8cb81dd3f5395da",
         "path": "conformance/official/README.md"
       },
@@ -3140,7 +3150,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 423,
+        "line": 431,
         "lineSha256": "7df20e558672c51de292b30429c4e42c06d9c8df8824c6f833a11b4aacd7f83a",
         "path": "conformance/official/README.md"
       },
@@ -3148,7 +3158,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 439,
+        "line": 447,
         "lineSha256": "7b58423768ccc6fad163a1a2e581da1cffc2186edfbd38afe5f43d1f40e181ce",
         "path": "conformance/official/README.md"
       },
@@ -3156,7 +3166,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 473,
+        "line": 481,
         "lineSha256": "ef9d269d2295a76ef22d2fd3f228d4a0681fc81a1333d2508064e6b9bf733137",
         "path": "conformance/official/README.md"
       },
@@ -3164,7 +3174,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 607,
+        "line": 619,
         "lineSha256": "3700d19606197a580012070f4402e040b444c3f5c7ffdd9612469fe7f45145e1",
         "path": "conformance/official/README.md"
       },
@@ -3172,7 +3182,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 744,
+        "line": 756,
         "lineSha256": "5d974d8b65f2c50bb9188d6ff71e999ffd09ff66f39d8adefb805c605cfc7a0f",
         "path": "conformance/official/README.md"
       },
@@ -3239,6 +3249,14 @@
         "line": 1,
         "lineSha256": "7531137031017962aeb16494f95534ac17e6f77b47efe148b93b7a2bd867d8b1",
         "path": "conformance/official/golden-wire/phase-4/resources-read-text-response.json"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 71,
+        "lineSha256": "06ef549005d64bfa4979d45d8692783ef36ef528f16975cc04ca5bd60911f235",
+        "path": "conformance/official/proposals/alpha11-dependency-repin-2026-09-23/REVIEW.md"
       },
       {
         "kinds": [
@@ -4498,7 +4516,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 41,
+        "line": 42,
         "lineSha256": "40f5cf052cd7c4789cb90ce054dcf7b70f00503169e801b6c113c542844d6517",
         "path": "conformance/official/run.mjs"
       },
@@ -4507,7 +4525,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 42,
+        "line": 43,
         "lineSha256": "4d368c64e5fa782f78f834a8acf1f0ced15eebe6ec6111f10f1e34bb427f09c9",
         "path": "conformance/official/run.mjs"
       },
@@ -4516,7 +4534,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 43,
+        "line": 44,
         "lineSha256": "75da97b17b69a749cb12bded000a61d18756cc54231e7434b46789c46b5b80ee",
         "path": "conformance/official/run.mjs"
       },
@@ -4524,7 +4542,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 333,
+        "line": 371,
         "lineSha256": "4062d748a78b6ea603fb83dcbce6cc38b4a98526cae9597550daa1e96e28da95",
         "path": "conformance/official/run.mjs"
       },
@@ -4532,7 +4550,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 345,
+        "line": 383,
         "lineSha256": "45433911e16d5fd6ba277c65f2b98add99cb02fe5186764cef2858526c6c767c",
         "path": "conformance/official/run.mjs"
       },
@@ -4540,7 +4558,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 866,
+        "line": 904,
         "lineSha256": "d34c0b453f1b90f636e6703a154b0f44ed48293e09bf4d007941f62e48f502a5",
         "path": "conformance/official/run.mjs"
       },
@@ -4548,7 +4566,7 @@
         "kinds": [
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 875,
+        "line": 913,
         "lineSha256": "a8546c0f39ef5a7414757b667c70aea1b23f7accc140dc97dffa6ea720815a57",
         "path": "conformance/official/run.mjs"
       },
@@ -4557,7 +4575,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 890,
+        "line": 928,
         "lineSha256": "14cd39f51d48da83f182fb1a897d06a6575e0d7ffaa1df793694f6e48d8900f7",
         "path": "conformance/official/run.mjs"
       },
@@ -4565,7 +4583,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 989,
+        "line": 1027,
         "lineSha256": "ba2049abd7dffebcef8881190aea85326295b07a8c9401101d90062bbca27db4",
         "path": "conformance/official/run.mjs"
       },
@@ -4573,7 +4591,7 @@
         "kinds": [
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 994,
+        "line": 1032,
         "lineSha256": "74745eb5b4300239a9329adbdec5409ba1414648fb15402b525c93b44402283b",
         "path": "conformance/official/run.mjs"
       },
@@ -4581,7 +4599,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1019,
+        "line": 1057,
         "lineSha256": "9220593a4e2717da6c583ede255969512f6a7c7dbdd800e40428c3afcb471773",
         "path": "conformance/official/run.mjs"
       },
@@ -4589,7 +4607,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1107,
+        "line": 1145,
         "lineSha256": "b82ec8e5380df4e416d6be29068524471822e688049654f6f0dce8da08044b3a",
         "path": "conformance/official/run.mjs"
       },
@@ -4597,7 +4615,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1133,
+        "line": 1171,
         "lineSha256": "b37c9e3da979e77d9566a66a0f9fcf8be860cae1ddfe59056585f2f5921ff739",
         "path": "conformance/official/run.mjs"
       },
@@ -4605,7 +4623,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1181,
+        "line": 1219,
         "lineSha256": "2bb24450c6358b8018217c3877379c46ce62fdade4161dca026b9639e921fe13",
         "path": "conformance/official/run.mjs"
       },
@@ -4613,7 +4631,7 @@
         "kinds": [
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 1245,
+        "line": 1283,
         "lineSha256": "5b80347b4c396f4f4a67a8220074cdaad7624c76da3e63803f900000ccd7f7b7",
         "path": "conformance/official/run.mjs"
       },
@@ -4621,7 +4639,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1248,
+        "line": 1286,
         "lineSha256": "43a6bd9d9def8d36d64551cc663c36250b1e54ea96c06074fc9d1aa5597599de",
         "path": "conformance/official/run.mjs"
       },
@@ -4629,7 +4647,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1334,
+        "line": 1372,
         "lineSha256": "b2fb03295d75827ddcfaaff5d3541eedd1686c826caae194b2f8ede8c12a91f8",
         "path": "conformance/official/run.mjs"
       },
@@ -4637,7 +4655,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1339,
+        "line": 1377,
         "lineSha256": "d816bc04b69165bcc016e9beba488b424f43e197a028f163cbeceec3f2f6d5ee",
         "path": "conformance/official/run.mjs"
       },
@@ -4645,7 +4663,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1341,
+        "line": 1379,
         "lineSha256": "71ed0851897a013c68f3007736593247f12861593c8948ff9526d446db897125",
         "path": "conformance/official/run.mjs"
       },
@@ -5133,7 +5151,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2030,
+        "line": 2040,
         "lineSha256": "3874f56e0ef6aec09350d49e83df58f7f87f4b6d30a29f96b0fdd9ce86669c67",
         "path": "scripts/import-release-harness-evidence.mjs"
       },
@@ -5261,7 +5279,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1015,
+        "line": 1019,
         "lineSha256": "c449d4d0cf9267047d1f04b2c9559afb012bbd83a3126c0c2ce7e70b9408a1f9",
         "path": "scripts/release-validation-evidence.mjs"
       },
@@ -5317,7 +5335,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1059,
+        "line": 1075,
         "lineSha256": "20948df8b4be9b60753136a013a14bd3b2af47bcb130555dac9589aef803cf47",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5325,7 +5343,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1111,
+        "line": 1127,
         "lineSha256": "55bdb3912d9f088e9cce70ea2c30716ad7575f8b12e1fed607a6c5dc643b04e1",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5333,7 +5351,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1113,
+        "line": 1129,
         "lineSha256": "4ec0f5f0a448e182873e264ca4f5ba9a9d0e716560008c89a98d5333d49b1f68",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5341,7 +5359,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1136,
+        "line": 1152,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5349,7 +5367,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1172,
+        "line": 1188,
         "lineSha256": "04d78014d7feac77e70c557b99e18339e384f5ec8ff0f87f3d5c6a26451d34fa",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6221,7 +6239,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 175,
+        "line": 177,
         "lineSha256": "f006f3d0efb2ec3012a8148cfc71790969393eaf2636c6336ece0cfaadb3e590",
         "path": "scripts/verify-version-transition-inventory-self-test.mjs"
       },
@@ -6229,7 +6247,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 744,
+        "line": 746,
         "lineSha256": "4ba108e2c8fd773dd6224a0dc73bc8d9904e1492137652849c7661cf1bb54860",
         "path": "scripts/verify-version-transition-inventory-self-test.mjs"
       },
@@ -6237,7 +6255,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1310,
+        "line": 1320,
         "lineSha256": "9f25e2d409ebea0d661edb8fa78ef10f08b32e522c435287899082be0ba330f3",
         "path": "scripts/verify-version-transition-inventory.mjs"
       },
@@ -68537,12 +68555,12 @@
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 2124,
       "JUNIT_OUTER_GUARD": 411,
-      "LIFECYCLE_SIGNAL": 4592,
+      "LIFECYCLE_SIGNAL": 4593,
       "NAMED_TIMEOUT_CANDIDATE": 1590,
       "PROCESS_OUTER_GUARD": 18,
       "WORKFLOW_OUTER_GUARD": 14
     },
-    "pathCount": 433
+    "pathCount": 434
   },
   "formatVersion": 2,
   "javascriptGuards": [
@@ -68552,7 +68570,7 @@
       "consumerCount": 2,
       "deadlineConsumerCount": 2,
       "evidence": {
-        "line": 43,
+        "line": 44,
         "lineSha256": "75da97b17b69a749cb12bded000a61d18756cc54231e7434b46789c46b5b80ee",
         "path": "conformance/official/run.mjs"
       },
@@ -68583,7 +68601,7 @@
       "consumerCount": 1,
       "deadlineConsumerCount": 0,
       "evidence": {
-        "line": 509,
+        "line": 547,
         "lineSha256": "22ae5ca4cbe72125da6d06f5bf01ca37ddb1ce84eeffab28995ac430837b680c",
         "path": "conformance/official/run.mjs"
       },

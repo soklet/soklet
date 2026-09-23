@@ -136,14 +136,16 @@ mvn -B -ntp -f fuzz/pom.xml test
 The scheduled nightly run, or a manual workflow dispatch, uses a matrix with
 one Maven invocation per `@FuzzTest` method. Jazzer's JUnit integration runs
 only one coverage-guided fuzz test per JVM when `JAZZER_FUZZ=1`, so each target
-needs its own matrix slot. The current matrix has 19 slots, runs each target for
+needs its own matrix slot. The current matrix has 21 slots, runs each target for
 five minutes, and bounds each job to 15 minutes. Each slot restores the latest
 generated Jazzer corpus, runs coverage-guided fuzzing, uploads artifacts, and saves a
 target-specific corpus cache under a run-specific key. The key rotates on every
 run so nightly exploration can compound over time; restore keys keep each
 target seeded from the newest available corpus for the branch.
 
-The two private Skills targets participate in ordinary corpus replay but are
-not yet registered in that 19-slot nightly/release-history inventory. Run their
-coverage-guided campaigns explicitly with the selectors above; local smoke
-success is not evidence that the nightly or long-duration gates ran.
+The two private Skills targets now have dedicated nightly slots and registered
+release-history receipts. Each nightly slot runs for five minutes; this does
+not replace the separately required 24-hour Skills campaign. The expanded
+history contract needs a fresh complete run for every registered target on
+each of its required consecutive dates. Local smoke success is not evidence
+that the nightly or long-duration gates ran.

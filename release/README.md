@@ -672,7 +672,10 @@ Once every gate is ready, the validator:
    neither requested nor recorded by candidate validation;
 7. runs official conformance in release mode against the exact candidate bytes,
    requires `IMMUTABLE_RELEASE_CANDIDATE`, `releaseCandidateEvidence: true`, and
-   terminal `PASSED` evidence, then compiles and runs a library-neutral
+   terminal `PASSED_WITH_REVIEWED_EXCEPTION` evidence under the explicit accepted
+   P0-C policy. The validator independently checks the two unchanged upstream
+   failures, same-run real-socket controls, artifact identity, and strict success
+   for every other scenario and the notification supplement, then compiles and runs a library-neutral
    localization provider against the candidate JAR alone;
 8. checks out every downstream at its exact manifest commit and invokes its
    candidate hook, including same-candidate default/override servlet matrices, candidate-only

@@ -29,11 +29,11 @@ const MAXIMUM_BUNDLE_BYTES = 256 * 1024 * 1024;
 const MAXIMUM_ROLE_BYTES = 128 * 1024 * 1024;
 const APPROVED_REGISTRY_SHA256 =
   '9276535363b871dcd73e1e20d0e65a5885e70b0b6d0e253b64b175af2db8a51a';
-// Current pins include the source-compatible nightly-profile correction and
-// the owner-requested scanner refresh and narrowed current filter. Keep the U7 approval identity
-// separate: refreshing these pins is not a new scan result or release approval.
+// Current pins include the source-compatible nightly-profile correction,
+// scanner refresh, and two additional Skills fuzz-history targets. Keep the
+// original approval identity separate from this expanded current contract.
 const CURRENT_REGISTRY_SHA256 =
-  '637d14c3559366a9b215ea6241e6ff216399810d0adc9279e14c2f5771b293a3';
+  'b7189136b7ec92d716540150cfb51668d3accfbcff64c801536e4b7e37cf5e68';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',
@@ -395,6 +395,16 @@ export function verifyReleaseHarnessConfiguration(
     );
   }
   const historical = structuredClone(value);
+  const historicalFuzz = historical.contracts.find((contract) =>
+    contract.id === 'fuzz-nightly-history');
+  const newSkillsTargets = [
+    { id: 'mcp-skill-yaml-stream', ordinal: 19 },
+    { id: 'mcp-skill-frontmatter', ordinal: 20 },
+  ];
+  if (JSON.stringify(historicalFuzz?.policy?.targets?.slice(19))
+      !== JSON.stringify(newSkillsTargets))
+    fail('Expanded Skills fuzz targets differ from the exact reviewed additions.');
+  historicalFuzz.policy.targets.splice(19);
   historical.contracts.find((contract) => contract.id === 'soak-nightly-history')
     .policy.profileSha256 = 'e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3';
   // Project only the exact refreshed scanner fields back to their historical
@@ -426,7 +436,7 @@ export function verifyReleaseHarnessConfiguration(
     version: '4.9.8.3',
   });
   if (sha256(Buffer.from(`${JSON.stringify(historical, null, 2)}\n`)) !== APPROVED_REGISTRY_SHA256)
-    fail('Current release-harness registry changes exceed the exact profile and scanner-pin refresh.');
+    fail('Current release-harness registry changes exceed the exact reviewed extensions and pin refresh.');
   exactKeys(value, ['contracts', 'formatVersion'], 'Release-harness contract registry');
   if (value.formatVersion !== 1)
     fail('Release-harness contract registry formatVersion must be 1.');

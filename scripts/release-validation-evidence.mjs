@@ -17,6 +17,10 @@ import {
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
 import { taskNotificationSupplementChecks } from '../conformance/official/run.mjs';
+import {
+  acceptedP0CStatus,
+  verifyAcceptedP0CRow,
+} from '../conformance/official/p0c-policy.mjs';
 import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -2068,7 +2072,7 @@ export function verifyReleaseConformanceEvidence(
   if (evidence.formatVersion !== 1
       || evidence.evidenceClass !== 'IMMUTABLE_RELEASE_CANDIDATE'
       || evidence.releaseCandidateEvidence !== true
-      || evidence.status !== 'PASSED'
+      || !['PASSED', acceptedP0CStatus].includes(evidence.status)
       || evidence.phase !== 5
       || evidence.mode !== 'release'
       || evidence.protocolVersion !== pins.protocolVersion
@@ -2093,9 +2097,11 @@ export function verifyReleaseConformanceEvidence(
   }
   for (const [index, expectedScenario] of selectedScenarios.entries()) {
     const actual = evidence.scenarios[index];
+    const reviewedException = evidence.status === acceptedP0CStatus && index === 0;
     requireExactKeys(
       actual,
-      ['checkCount', 'expectedCheckProfile', 'name', 'observedProfileDraft', 'passed'],
+      ['checkCount', 'expectedCheckProfile', 'name', 'observedProfileDraft', 'passed',
+        ...(reviewedException ? ['p0cDisposition'] : [])],
       `release conformance scenario ${index + 1}`,
     );
     const profile = profilesById.get(expectedScenario.expectedCheckProfile);
@@ -2105,7 +2111,7 @@ export function verifyReleaseConformanceEvidence(
       + profile.automaticWireChecks['wire-schema-valid']
       + profile.automaticWireChecks['wire-schema-harness-error'];
     if (actual.name !== expectedScenario.name
-        || actual.passed !== true
+        || actual.passed !== !reviewedException
         || actual.checkCount !== expectedCheckCount
         || actual.expectedCheckProfile !== expectedScenario.expectedCheckProfile
         || actual.observedProfileDraft !== null) {
@@ -2113,6 +2119,28 @@ export function verifyReleaseConformanceEvidence(
         `Release conformance scenario ${index + 1} does not match the reviewed `
           + `${expectedScenario.name} result contract`,
       );
+    }
+    if (reviewedException) {
+      const candidateJarPath = resolve(config.projectRoot, 'target',
+        descriptor.artifacts.mainJar.fileName);
+      const candidateJarStat = existsSync(candidateJarPath)
+        ? lstatSync(candidateJarPath) : null;
+      if (descriptor.artifacts.mainJar.fileName !== `${config.candidate.artifactId}-${config.candidate.version}.jar`
+          || candidateJarStat === null || !candidateJarStat.isFile()
+          || candidateJarStat.isSymbolicLink()
+          || candidateJarStat.size !== descriptor.artifacts.mainJar.bytes
+          || candidateJarStat.size > 128 * 1024 * 1024
+          || sha256(readFileSync(candidateJarPath)) !== descriptor.artifacts.mainJar.sha256)
+        fail('P0-C capture candidate JAR does not match the immutable artifact descriptor');
+      verifyAcceptedP0CRow({
+        row: actual,
+        evidencePath: resolve(conformanceEvidencePath),
+        suiteDirectory: actual.p0cDisposition.suiteDirectory,
+        candidateJarPath,
+        fixtureClassesPath: resolve(config.projectRoot,
+          'target/conformance/public-fixture/classes'),
+        expectedProjectRoot: config.projectRoot,
+      });
     }
   }
 

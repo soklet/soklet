@@ -110,6 +110,14 @@ const FUZZ_TARGET_EXECUTIONS = Object.freeze({
     className: 'com.soklet.McpLocalizationFuzzTest',
     methodName: 'overlayPointerHandlingIsTotalAndNonMutating',
   }),
+  'mcp-skill-yaml-stream': Object.freeze({
+    className: 'com.soklet.internal.mcp.skills.SkillYamlFuzzTest',
+    methodName: 'streamParsingAndResolutionRemainTypedAndBounded',
+  }),
+  'mcp-skill-frontmatter': Object.freeze({
+    className: 'com.soklet.internal.mcp.skills.SkillYamlFuzzTest',
+    methodName: 'frontmatterRemainsTypedBoundedAndByteExact',
+  }),
 });
 const HISTORY_GATE_IDS = new Set([
   'fuzz-nightly-history',

@@ -2312,6 +2312,27 @@ run_barebones
     /does not match the reviewed server-stateless result contract/,
   );
   assertRejectsConformanceMutation(
+    (value) => { value.status = 'PASSED_WITH_REVIEWED_EXCEPTION'; },
+    /release conformance scenario 1 keys must be exactly/,
+  );
+  assertRejectsConformanceMutation(
+    (value) => {
+      value.status = 'PASSED_WITH_REVIEWED_EXCEPTION';
+      value.scenarios[0].passed = false;
+      value.scenarios[0].p0cDisposition = {
+        policy: 'accepted-2026-09-22', decisionSha256: '0'.repeat(64),
+        suiteDirectory: '/unreviewed-suite', assessment: {},
+      };
+    },
+    /P0-C capture candidate JAR does not match the immutable artifact descriptor/,
+  );
+  assertRejectsConformanceMutation(
+    (value) => {
+      value.scenarios[1].passed = false;
+    },
+    /does not match the reviewed completion-complete result contract/,
+  );
+  assertRejectsConformanceMutation(
     (value) => { value.unreviewed = true; },
     /release conformance evidence keys must be exactly/,
   );
