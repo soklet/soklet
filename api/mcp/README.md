@@ -3158,3 +3158,14 @@ nullability digest is
 `2285d7246cdd7cb6e730af58d4b73bcd51ec58b67861d6f974dc6f93d11cb8a0`;
 removing only the new method's five canonical entries reproduces the preceding
 digest.
+
+### 2026-09-21 default Apps content security policy
+
+`McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance()` is a non-null
+immutable convenience factory equivalent to `builder().build()`. The enclosing
+metadata getter remains `Optional<ContentSecurityPolicy>`; omission and explicit
+empty policy metadata retain their existing representations. Both retain
+host-enforced restrictive defaults rather than disabling protection. No owner or
+historical signature snapshot changes. The reviewed Phase 4 nullability digest
+is `0432c3fdd2421ff70be993ddb7c1c99cf5cd9993e6ba44754c43201f4b0f76a0`;
+removing only the factory's two canonical entries reproduces the preceding digest.

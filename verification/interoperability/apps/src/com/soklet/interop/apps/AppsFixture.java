@@ -92,6 +92,19 @@ public final class AppsFixture {
 	}
 
 	public AppsFixture(String shell, Map<String, Caller> credentials) {
+		this(shell, credentials, McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance());
+	}
+
+	/** Uses an explicit, immutable CSP in the disposable browser fixture. */
+	public AppsFixture(String shell, Map<String, Caller> credentials,
+			McpAppResourceMetadata.ContentSecurityPolicy contentSecurityPolicy) {
+		this(shell, credentials, contentSecurityPolicy, Set.of());
+	}
+
+	/** Requests a fixed permission set only for an opted-in host probe. */
+	public AppsFixture(String shell, Map<String, Caller> credentials,
+			McpAppResourceMetadata.ContentSecurityPolicy contentSecurityPolicy,
+			Set<McpAppResourceMetadata.Permission> permissions) {
 		requireNonNull(shell);
 		if (shell.isBlank() || shell.getBytes(StandardCharsets.UTF_8).length > MAXIMUM_SHELL_BYTES)
 			throw new IllegalArgumentException("Apps fixture shell is empty or oversized.");
@@ -99,8 +112,9 @@ public final class AppsFixture {
 		McpResourceDescriptor descriptor = McpResourceDescriptor
 				.withUriAndName(UI_URI, "catalog_view").title("Catalog view").mimeType(MIME).build();
 		McpAppResourceMetadata resourceMetadata = McpAppResourceMetadata.builder()
-				.contentSecurityPolicy(McpAppResourceMetadata.ContentSecurityPolicy.builder().build())
-				.permissions(Set.of()).prefersBorder(true).build();
+				.contentSecurityPolicy(requireNonNull(contentSecurityPolicy))
+				.permissions(requireNonNull(permissions))
+				.prefersBorder(true).build();
 		this.endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion("soklet-apps-fixture", "fixture-v1").build())
 				.toolRegistrations(java.util.List.of(tool(TOOL, false), tool(REFRESH, true)))

@@ -1,11 +1,11 @@
-# Apps CSP — real-host connect and image denial
+# Apps CSP — real-host connect and image allowlists
 
-This separately named experimental profile uses the exact prior candidate,
-unchanged public fixture/static shell and isolated one-file auth-patched
-Inspector. It preserves the real DOM catalog open and SDK-backed Refresh action,
-then exercises two page operations in the genuine opaque App default context:
-`fetch` (`connect-src`) and `Image` (`img-src`). No fixture, shell, production,
-compression or dependency bytes are changed.
+Two experimental profiles use the isolated one-file auth-patched Inspector and
+the same static App shell. Both preserve the real DOM catalog open and SDK-backed
+Refresh action, then exercise `fetch` (`connect-src`) and `Image` (`img-src`) in
+the genuine opaque App default context. The default profile retains explicit
+empty allowlists; `--profile allowlist` supplies one explicit loopback origin for
+both directives. The previous denial receipt remains a historical snapshot.
 
 ## Causal evidence, not a harness-blocked request
 
@@ -51,7 +51,31 @@ image without a network request even with HTTP `no-store` and CDP cache disablin
 Both exact image URLs map to the same server handler, bytes and response headers,
 including if requested in the App phase; no arbitrary query variants are allowed.
 Four live requests remain mandatory, so local image reuse cannot pass as endpoint
-liveness. No conclusion about positive App allowlist translation is drawn.
+liveness in the default denial profile.
+
+## Declared-origin allowlist profile
+
+The optional second fixture argument puts the canary origin in both
+`connectDomains` and `resourceDomains`. The MCP proxy checks the exact resource
+metadata, and the browser probe checks Inspector's exact resulting inner CSP
+meta element before any network operations. The main Inspector origin is not
+declared. The same App context that rendered and refreshed the catalog performs
+eight operations:
+
+1. Main-frame fetch and image controls reach the canary.
+2. App-frame fetch and image requests to the declared canary origin succeed and
+   produce two real canary requests with the expected fixed text and PNG.
+3. App-frame fetch and image requests to the undeclared Inspector origin fail,
+   each with one matching trusted enforcing CSP violation and no browser
+   exception. The Inspector has already served the rendered catalog, so that
+   origin is known to be live.
+4. Main-frame fetch and image controls reach the canary again. The final image
+   uses the same fixed alias as the denial profile to require a fresh request.
+
+The canary must record exactly six requests: two before, two from the App, and
+two after. Browser interception must continue every exact allowed request and
+block none; it cannot manufacture a CSP denial. The receipt retains only fixed
+structural rows, not the runtime origins or response bodies.
 
 The dedicated loopback origin is distinct from the host and sandbox. Responses
 have CORS `*` and `no-store`, fixed bodies and no redirects. Fetch uses omitted
@@ -82,8 +106,12 @@ node verification/interoperability/apps-csp-host/run.mjs \
   --work-dir /path/to/new-results
 ```
 
-The adjacent shell build receipt is required. Candidate, shell, original and
-patched dependencies are pinned to earlier retained evidence. Browser and all
+Add `--profile allowlist` to run the declared-origin case in a new work
+directory. The adjacent shell build receipt is required. The default denial
+profile pins the current core JAR SHA-256
+`e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f`;
+the allowlist profile records and rechecks its supplied candidate JAR and POM.
+The shell and original/patched Inspector installations are pinned. Browser and all
 source/class/config identities are recorded and rechecked. Public fixture
 compilation targets release 17 with annotation processing disabled and lint
 warnings as errors; dependency analysis must remain public-API-only.
@@ -97,6 +125,12 @@ OAuth/unexpected traffic/exceptions, fixed six-second post-probe observation,
 real DOM disconnect and clean browser/host/fixture/canary cleanup. Observations
 stay active through shutdown; the verdict is sealed only after callers and
 servers stop. Late interruption or input drift fails.
+
+`EXPERIMENTAL_APPS_CSP_ALLOWLIST_PASSED` requires the same host, UI, MCP trace,
+observation and cleanup checks, the eight ordered CSP rows, six live canary
+requests, two successful declared App requests and two independently witnessed
+undeclared-origin CSP denials. A final receipt with any failure marker fails
+independent adjudication.
 
 Each probe operation has a two-second deadline and a bounded event-settling
 interval. The canary caps total requests/connections at sixteen each, headers
@@ -118,9 +152,9 @@ runtime credentials/token hashes, browser storage and personalized responses
 are not archived. The exact static shell and harness source remain build inputs.
 Browser interception is not an OS-wide network firewall.
 
-This proves only these two denial cases in this pinned local host/browser with
-empty allowlists. It does not establish other CSP directives, positive App
-allowlist translation, permissions, localization, tenant switching, revocation,
-OAuth or full P3/release qualification. The receipt remains `experimental:true`,
+The two profiles prove empty-list denial and one declared-origin allowlist case
+for these directives in the pinned local host/browser. They do not establish
+other CSP directives, permissions, localization, tenant switching, revocation,
+OAuth or full P3/release qualification. Both receipts remain `experimental:true`,
 `fullHostQualification:false`, `releaseCandidateEvidence:false`; original
 released-host FAILED evidence is unchanged.

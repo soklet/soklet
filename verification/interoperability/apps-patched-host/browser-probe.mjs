@@ -259,7 +259,7 @@ const readyExpression = `(() => {
 /** Pinned Inspector's Apps sidebar uses the tool title and automatically opens
  * input-free Apps when selected. Only visible DOM controls invoke host actions.
  * The App's own button invokes its bundled SDK bridge. No MCP call is synthesized. */
-export async function exerciseApps(cdp, sessionId, observation) {
+export async function exerciseApps(cdp, sessionId, observation, {geolocation = false} = {}) {
   const s = states.get(observation);
   if (!s || s.cdp !== cdp || s.sessionId !== sessionId) fail('APPS_BROWSER_OPTIONS_INVALID');
   const facts = {};
@@ -287,6 +287,7 @@ export async function exerciseApps(cdp, sessionId, observation) {
     if (candidates.length === 1 && await evaluate(s, readyExpression, candidates[0])) return candidates[0];
     return undefined;
   }, 'APPS_UI_RENDER_TIMEOUT');
+  s.initialAppContext = context;
   facts.catalogRendered = true;
   facts.textOnlyHostileLabel = true;
   facts.serverSelectedLocaleRendered = true;
@@ -298,7 +299,7 @@ export async function exerciseApps(cdp, sessionId, observation) {
     return location.href === ${JSON.stringify(s.sandboxUrl)} && frames.length === 1
       && frames[0].hasAttribute('srcdoc') && !frames[0].hasAttribute('src')
       && frames[0].getAttribute('sandbox') === 'allow-scripts allow-forms'
-      && !frames[0].hasAttribute('allow');
+      && ${geolocation ? "frames[0].getAttribute('allow') === 'geolocation'" : "!frames[0].hasAttribute('allow')"};
   })()`, sandboxContexts[0])) fail('APPS_BROWSER_EMBEDDING_MISMATCH');
   facts.opaqueSrcdocSandboxObserved = true;
   s.stage = 'REFRESH';
@@ -318,6 +319,153 @@ export async function exerciseApps(cdp, sessionId, observation) {
   facts.refreshRendered = true;
   s.stage = 'REFRESH_COMPLETE';
   return facts;
+}
+
+/** Observe Chromium's effective policy in the actual opaque App document;
+ * an iframe attribute alone is not proof that a capability is usable. This
+ * does not grant the browser-level/user geolocation permission or read a fix. */
+export async function exerciseAppsPermissions(cdp, sessionId, observation) {
+  const s = states.get(observation);
+  if (!s || s.cdp !== cdp || s.sessionId !== sessionId || !s.initialAppContext
+      || s.stage !== 'REFRESH_COMPLETE') fail('APPS_BROWSER_OPTIONS_INVALID');
+  const context = s.initialAppContext;
+  if (s.contexts.get(`${context.session}:${context.contextId}`) !== context)
+    fail('APPS_UI_APP_REPLACED');
+  s.stage = 'PERMISSIONS_POLICY';
+  const policy = 'document.permissionsPolicy ?? document.featurePolicy';
+  const appReady = await evaluate(s, `location.href === 'about:srcdoc'
+    && document.getElementById('catalog-root')?.dataset.state === 'ready'`, context);
+  if (!appReady) fail('APPS_UI_APP_REPLACED');
+  const policyApiPresent = await evaluate(s,
+    `typeof (${policy})?.allowsFeature === 'function'`, context);
+  const sandboxFrameId = s.frames.get(context.frameId)?.parentId;
+  const sandboxContexts = [...s.contexts.values()].filter(item => item.frameId === sandboxFrameId);
+  if (sandboxContexts.length !== 1) fail('APPS_BROWSER_APP_CONTEXT_AMBIGUOUS');
+  const mainPolicyAllowsGeolocation = await evaluate(s,
+    `(${policy})?.allowsFeature('geolocation') === true`);
+  const sandboxPolicyAllowsGeolocation = await evaluate(s,
+    `(${policy})?.allowsFeature('geolocation') === true`, sandboxContexts[0]);
+  const outerSandboxLocated = await evaluate(s,
+    `document.querySelectorAll('iframe[src=${JSON.stringify(s.sandboxUrl)}]').length === 1`);
+  const outerSandboxGrantsGeolocation = await evaluate(s,
+    `(() => { const frames = [...document.querySelectorAll('iframe')]
+      .filter(frame => frame.getAttribute('src') === ${JSON.stringify(s.sandboxUrl)});
+      return frames.length === 1 && (frames[0].getAttribute('allow') || '')
+        .split(';').map(value => value.trim()).includes('geolocation'); })()`);
+  const declaredGeolocationEffective = await evaluate(s,
+    `(${policy})?.allowsFeature('geolocation') === true`, context);
+  const undeclaredCameraDenied = await evaluate(s,
+    `(${policy})?.allowsFeature('camera') === false`, context);
+  const undeclaredMicrophoneDenied = await evaluate(s,
+    `(${policy})?.allowsFeature('microphone') === false`, context);
+  const undeclaredClipboardWriteDenied = await evaluate(s,
+    `(${policy})?.allowsFeature('clipboard-write') === false`, context);
+  s.stage = 'PERMISSIONS_COMPLETE';
+  return {policyApiPresent, mainPolicyAllowsGeolocation, sandboxPolicyAllowsGeolocation,
+    outerSandboxLocated, outerSandboxGrantsGeolocation, declaredGeolocationEffective,
+    undeclaredCameraDenied, undeclaredMicrophoneDenied, undeclaredClipboardWriteDenied};
+}
+
+const betaReadyExpression = `(() => {
+  const byId = id => document.getElementById('catalog-' + id);
+  const root = byId('root'), view = byId('view'), refresh = byId('refresh');
+  return location.href === 'about:srcdoc' && root?.dataset.state === 'ready'
+    && root.getAttribute('aria-busy') === 'false' && !!view && !view.hidden
+    && view.getClientRects().length > 0 && !!refresh && !refresh.disabled
+    && document.documentElement.lang === 'pt-BR' && document.documentElement.dir === 'ltr'
+    && byId('tenant')?.textContent === 'beta' && byId('title')?.textContent === 'Catálogo'
+    && byId('summary')?.textContent === 'Catálogo beta: 1 item.'
+    && byId('item')?.textContent === 'Brinquedo <img src=x onerror=alert(1)>'
+    && byId('item').children.length === 0 && document.querySelectorAll('img').length === 0
+    && byId('amount')?.textContent === new Intl.NumberFormat('pt-BR', {
+      style: 'currency', currency: 'USD'
+    }).format(1234.5)
+    && byId('updated')?.getAttribute('datetime') === '2026-09-19T12:00:00Z'
+    && byId('updated')?.textContent === new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC'
+    }).format(new Date('2026-09-19T12:00:00Z'))
+    && refresh.textContent === 'Atualizar catálogo'
+    && !document.body.innerText.includes('Catalog alpha: 1 item.')
+    && !document.body.innerText.includes('fixture-private-canary');
+})()`;
+
+const deniedExpression = `(() => {
+  const byId = id => document.getElementById('catalog-' + id);
+  const root = byId('root'), view = byId('view'), refresh = byId('refresh');
+  return location.href === 'about:srcdoc' && root?.dataset.state === 'error'
+    && root.getAttribute('aria-busy') === 'false' && !!view && view.hidden
+    && refresh?.disabled && byId('status')?.textContent === 'View unavailable. Reopen this view.'
+    && !byId('status').hidden && !document.documentElement.hasAttribute('lang')
+    && !document.documentElement.hasAttribute('dir')
+    && ['tenant', 'title', 'summary', 'item', 'amount', 'updated', 'refresh']
+      .every(id => byId(id)?.textContent === '')
+    && !byId('updated').hasAttribute('datetime')
+    && !document.body.innerText.includes('Catalog alpha: 1 item.')
+    && !document.body.innerText.includes('Catálogo beta: 1 item.')
+    && !document.body.innerText.includes('fixture-private-canary');
+})()`;
+
+/** The same opaque App document must render new server-selected data and clear
+ * it after a policy denial. Caller changes are acknowledged by the fixture
+ * before each genuine DOM button click; no MCP call is synthesized here. */
+export async function exerciseAppsTransitions(cdp, sessionId, observation, changeCaller) {
+  const s = states.get(observation);
+  if (!s || s.cdp !== cdp || s.sessionId !== sessionId || typeof changeCaller !== 'function'
+      || !s.initialAppContext) fail('APPS_BROWSER_OPTIONS_INVALID');
+  const context = s.initialAppContext;
+  const stillSameApp = () => s.contexts.get(`${context.session}:${context.contextId}`) === context;
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  const clickAndCheckPending = async () => evaluate(s, `(() => {
+    const root = document.getElementById('catalog-root');
+    const refresh = document.getElementById('catalog-refresh');
+    if (!refresh || refresh.disabled || !refresh.getClientRects().length) return false;
+    refresh.click();
+    return root.dataset.state === 'pending' && root.getAttribute('aria-busy') === 'true'
+      && refresh.disabled && document.getElementById('catalog-view').hidden
+      && document.getElementById('catalog-summary').textContent === '';
+  })()`, context);
+  s.stage = 'CALLER_BETA';
+  await changeCaller('beta');
+  if (!stillSameApp() || !await clickAndCheckPending()) fail('APPS_UI_BETA_NOT_PENDING');
+  await until(s, () => evaluate(s, betaReadyExpression, context), 'APPS_UI_BETA_RENDER_TIMEOUT');
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  s.stage = 'CALLER_DENIED';
+  await changeCaller('denied');
+  if (!stillSameApp() || !await clickAndCheckPending()) fail('APPS_UI_DENIED_NOT_PENDING');
+  await until(s, () => evaluate(s, deniedExpression, context), 'APPS_UI_DENIED_CLEAR_TIMEOUT');
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  s.stage = 'CALLER_TRANSITIONS_COMPLETE';
+  return {betaRenderedInSameApp: true, previousTenantCleared: true,
+    denialClearedView: true, deniedViewRequiresReopen: true};
+}
+
+/** A separate fresh App instance exercises revocation, since the denied
+ * transition profile intentionally leaves its App terminal. */
+export async function exerciseAppsRevocation(cdp, sessionId, observation, revokeCaller) {
+  const s = states.get(observation);
+  if (!s || s.cdp !== cdp || s.sessionId !== sessionId || typeof revokeCaller !== 'function'
+      || !s.initialAppContext) fail('APPS_BROWSER_OPTIONS_INVALID');
+  const context = s.initialAppContext;
+  const stillSameApp = () => s.contexts.get(`${context.session}:${context.contextId}`) === context;
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  s.stage = 'CALLER_REVOKED';
+  await revokeCaller();
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  const pending = await evaluate(s, `(() => {
+    const root = document.getElementById('catalog-root');
+    const refresh = document.getElementById('catalog-refresh');
+    if (!refresh || refresh.disabled || !refresh.getClientRects().length) return false;
+    refresh.click();
+    return root.dataset.state === 'pending' && root.getAttribute('aria-busy') === 'true'
+      && refresh.disabled && document.getElementById('catalog-view').hidden
+      && document.getElementById('catalog-summary').textContent === '';
+  })()`, context);
+  if (!pending) fail('APPS_UI_REVOKED_NOT_PENDING');
+  await until(s, () => evaluate(s, deniedExpression, context), 'APPS_UI_REVOKED_CLEAR_TIMEOUT');
+  if (!stillSameApp()) fail('APPS_UI_APP_REPLACED');
+  s.stage = 'CALLER_REVOCATION_COMPLETE';
+  return {revokedRefreshClickedViaDom: true, revokedViewCleared: true,
+    revokedViewRequiresReopen: true};
 }
 
 /** Call only after the independent server trace has settled. */

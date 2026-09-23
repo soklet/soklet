@@ -22,6 +22,7 @@ import com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -152,6 +153,31 @@ class McpAppMetadataSupportTests {
 		}
 		McpJsonObject raw = metadata(McpJsonObject.builder().put("prefersBorder", false).build());
 		assertEquals(raw, McpAppMetadataSupport.resourceMetadata(raw, null));
+	}
+
+	@Test
+	void defaultPolicySerializesLikeEmptyBuilderWhileOmittedPolicyStaysAbsent() {
+		McpAppResourceMetadata factoryMetadata = McpAppResourceMetadata.builder()
+				.contentSecurityPolicy(McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance()).build();
+		McpAppResourceMetadata builderMetadata = McpAppResourceMetadata.builder()
+				.contentSecurityPolicy(McpAppResourceMetadata.ContentSecurityPolicy.builder().build())
+				.permissions(Set.of()).build();
+		McpJsonObject factoryWire = McpAppMetadataSupport.resourceMetadata(
+				McpJsonObject.emptyInstance(), factoryMetadata);
+		McpJsonObject builderWire = McpAppMetadataSupport.resourceMetadata(
+				McpJsonObject.emptyInstance(), builderMetadata);
+		McpJsonCodec codec = new McpJsonCodec(McpJsonLimits.productionDefaults());
+		byte[] factoryBytes = codec.toUtf8Bytes(McpPublicJsonValueConverter.toInternal(factoryWire));
+		assertArrayEquals(codec.toUtf8Bytes(McpPublicJsonValueConverter.toInternal(builderWire)), factoryBytes);
+		assertEquals("{\"ui\":{\"csp\":{\"connectDomains\":[],\"resourceDomains\":[],\"frameDomains\":[],\"baseUriDomains\":[]}}}",
+				new String(factoryBytes, StandardCharsets.UTF_8));
+
+		for (McpAppResourceMetadata omitted : List.of(McpAppResourceMetadata.builder().build(),
+				McpAppResourceMetadata.builder().permissions(Set.of()).build())) {
+			McpJsonObject wire = McpAppMetadataSupport.resourceMetadata(McpJsonObject.emptyInstance(), omitted);
+			assertEquals(metadata(McpJsonObject.emptyInstance()), wire);
+			assertTrue(((McpJsonObject) wire.find("ui").orElseThrow()).find("csp").isEmpty());
+		}
 	}
 
 	@Test

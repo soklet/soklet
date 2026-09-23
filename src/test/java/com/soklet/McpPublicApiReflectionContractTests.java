@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
 	private static final int CURRENT_MCP_TYPE_COUNT = 294;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"2285d7246cdd7cb6e730af58d4b73bcd51ec58b67861d6f974dc6f93d11cb8a0";
+			"0432c3fdd2421ff70be993ddb7c1c99cf5cd9993e6ba44754c43201f4b0f76a0";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"a90379f987dd745bf305b11668b7da224c88990373f749a2fe6644003ea80226";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -290,6 +290,14 @@ public class McpPublicApiReflectionContractTests {
 	public void phaseFourSealedHierarchyRemainsExact() throws Exception {
 		assertSealedHierarchy(phaseFourTypes(), PHASE_FOUR_PERMITTED_TYPES,
 				PHASE_FOUR_NON_SEALED_TYPES, "Phase 4");
+	}
+
+	@Test
+	public void appsDefaultContentSecurityPolicyFactoryPreservesOptionalGetter() throws Exception {
+		assertRequiredFactory(McpAppResourceMetadata.ContentSecurityPolicy.class
+				.getMethod("defaultInstance"), McpAppResourceMetadata.ContentSecurityPolicy.class);
+		assertNonNullOptionalPayload(McpAppResourceMetadata.class.getMethod("getContentSecurityPolicy"),
+				McpAppResourceMetadata.ContentSecurityPolicy.class);
 	}
 
 	@Test

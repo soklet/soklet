@@ -66,6 +66,53 @@ class McpAppResourceMetadataTests {
 	}
 
 	@Test
+	void defaultPolicyHasImmutableEmptyAllowlistsAndMatchesBuilderDefaults() {
+		McpAppResourceMetadata.ContentSecurityPolicy policy =
+				McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance();
+		McpAppResourceMetadata.ContentSecurityPolicy built =
+				McpAppResourceMetadata.ContentSecurityPolicy.builder().build();
+		assertEquals(built, policy);
+		assertEquals(built.hashCode(), policy.hashCode());
+		for (Set<String> origins : List.of(policy.getConnectDomains(),
+				policy.getResourceDomains(), policy.getFrameDomains(),
+				policy.getBaseUriDomains())) {
+			assertTrue(origins.isEmpty());
+			assertThrows(UnsupportedOperationException.class,
+					() -> origins.add("https://example.com"));
+		}
+
+		McpAppResourceMetadata.ContentSecurityPolicy changed =
+				McpAppResourceMetadata.ContentSecurityPolicy.builder()
+						.connectDomains(Set.of("https://connect.example.com"))
+						.resourceDomains(Set.of("https://resource.example.com"))
+						.frameDomains(Set.of("https://frame.example.com"))
+						.baseUriDomains(Set.of("https://base.example.com")).build();
+		assertNotEquals(policy, changed);
+		assertEquals(built, policy);
+		assertEquals(built, McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance());
+		assertEquals(built.hashCode(),
+				McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance().hashCode());
+	}
+
+	@Test
+	void explicitDefaultPolicyRemainsDistinctFromOmissionAndPermissionsDefaultToEmpty() {
+		McpAppResourceMetadata omitted = McpAppResourceMetadata.builder().build();
+		McpAppResourceMetadata.ContentSecurityPolicy policy =
+				McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance();
+		McpAppResourceMetadata.Builder builder = McpAppResourceMetadata.builder()
+				.contentSecurityPolicy(policy);
+		McpAppResourceMetadata explicit = builder.build();
+		assertTrue(omitted.getContentSecurityPolicy().isEmpty());
+		assertEquals(policy, explicit.getContentSecurityPolicy().orElseThrow());
+		assertNotEquals(omitted, explicit);
+		assertEquals(omitted, McpAppResourceMetadata.builder().permissions(Set.of()).build());
+		assertEquals(explicit, McpAppResourceMetadata.builder()
+				.contentSecurityPolicy(policy).permissions(Set.of()).build());
+		assertThrows(NullPointerException.class, () -> builder.contentSecurityPolicy(null));
+		assertEquals(explicit, builder.build());
+	}
+
+	@Test
 	void permissionsAreIndependentSnapshotsInEnumDeclarationOrder() {
 		Set<McpAppResourceMetadata.Permission> source = new LinkedHashSet<>(
 				List.of(CLIPBOARD_WRITE, GEOLOCATION, MICROPHONE, CAMERA));

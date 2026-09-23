@@ -376,9 +376,23 @@ final class SokletDirectTerminationPrecedenceTests {
 			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 					result.disposition());
 			Assertions.assertFalse(result.isComplete());
-			assertParticipant(result, InternalLifecycleComponentType.HTTP,
-					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
-					List.of(failure));
+			InternalLifecycleComponentShutdownResult participant = result
+					.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
+			Assertions.assertEquals(List.of(failure), participant.failures());
+			// The fake clock may reach the forced deadline before the force callback
+			// releases its tracked lifecycle call. Both snapshots are incomplete,
+			// but only that in-flight call may produce residual activity here.
+			if (participant.residualActivity().isEmpty())
+				Assertions.assertEquals(
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
+						participant.disposition());
+			else {
+				Assertions.assertEquals(Set.of(InternalResidualActivityType.LIFECYCLE_CALL),
+						participant.residualActivity());
+				Assertions.assertEquals(
+						InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
+						participant.disposition());
+			}
 			Assertions.assertSame(result, unexpected.getInternalShutdownResult());
 			Assertions.assertSame(failure, unexpected.getCause());
 			Assertions.assertTrue(http.awaitForce());

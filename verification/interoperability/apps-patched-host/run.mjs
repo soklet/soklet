@@ -11,8 +11,10 @@ import { browserVersion, chromeArguments, validWebConfig } from '../inspector/we
 import { connectCdp } from '../inspector/cdp.mjs';
 import { regularFile, validateShellBuild } from '../apps/run.mjs';
 import { startAppsProxy } from '../apps/host-trace.mjs';
-import { adjudicatePatchedAppsTrace as adjudicateAppsTrace } from './trace.mjs';
-import { beginBrowserObservation, exerciseApps, disconnectApps } from './browser-probe.mjs';
+import { adjudicatePatchedAppsTrace as adjudicateAppsTrace,
+  adjudicatePatchedAppsTransitionTrace, adjudicatePatchedAppsRevocationTrace } from './trace.mjs';
+import { beginBrowserObservation, exerciseApps, exerciseAppsTransitions,
+  exerciseAppsRevocation, exerciseAppsPermissions, disconnectApps } from './browser-probe.mjs';
 import { verifyPatchedDependencies } from '../inspector-auth-patch/patch.mjs';
 import { validateWorkDirectory } from '../inspector-auth-patch/run.mjs';
 
@@ -29,24 +31,38 @@ const uiChecks = ['selectedAppViaDom', 'hostAppReady', 'catalogRendered', 'textO
   'refreshClickedViaDom', 'pendingClearedPriorData', 'refreshRendered'];
 export const PROFILE = 'soklet.inspector.experimental-patched-apps-render-refresh.v1';
 export const SUCCESS = 'EXPERIMENTAL_APPS_RENDER_REFRESH_PASSED';
+export const TRANSITION_PROFILE = 'soklet.inspector.experimental-patched-apps-caller-transitions.v1';
+export const TRANSITION_SUCCESS = 'EXPERIMENTAL_APPS_CALLER_TRANSITIONS_PASSED';
+export const REVOCATION_PROFILE = 'soklet.inspector.experimental-patched-apps-caller-revocation.v1';
+export const REVOCATION_SUCCESS = 'EXPERIMENTAL_APPS_CALLER_REVOCATION_PASSED';
+export const REVOCATION_HOST_BLOCKED = 'BLOCKED_HOST_AUTH_FALLBACK';
+export const PERMISSIONS_PROFILE = 'soklet.inspector.experimental-patched-apps-permissions.v1';
+export const PERMISSIONS_SUCCESS = 'EXPERIMENTAL_APPS_PERMISSION_POLICY_PASSED';
+export const PERMISSIONS_HOST_BLOCKED = 'BLOCKED_HOST_PERMISSION_POLICY';
+const transitionMode = options => options['--profile'] === 'transitions';
+const revocationMode = options => options['--profile'] === 'revocation';
+const permissionsMode = options => options['--profile'] === 'permissions';
 export function validateExperimentPins(provenance, candidate, shell) {
   if (provenance?.patchedTree?.files !== 9391
       || provenance.patchedTree.sha256 !== '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'
       || provenance.patchedFileSha256 !== '405da5e71b887403bb53ff2e3984cec631a1138f50662ad199dfb8e536dcd47a'
       || provenance.experimental !== true || provenance.releasedHostQualification !== false
-      || candidate?.jarSha256 !== '1782dcaa2270cb543c49abc80c942a2ff0f1ab72f9abb88a5d2556d200bd8d74'
+      || candidate?.jarSha256 !== 'e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f'
       || shell?.sha256 !== '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60')
     fail('APPS_HOST_EXPERIMENT_PIN');
 }
 
 export function parseHostArguments(args) {
   const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--original-dependencies', '--dependencies', '--browser', '--work-dir'];
-  if (args.length !== keys.length * 2) fail('APPS_HOST_ARGUMENTS');
+  if (args.length !== keys.length * 2 && args.length !== (keys.length + 1) * 2) fail('APPS_HOST_ARGUMENTS');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
-    if (!keys.includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
+    if (![...keys, '--profile'].includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
     options[args[i]] = args[i + 1];
   }
+  if (keys.some(key => !Object.hasOwn(options, key))
+      || (Object.hasOwn(options, '--profile') && !['transitions', 'revocation', 'permissions'].includes(options['--profile'])))
+    fail('APPS_HOST_ARGUMENTS');
   return options;
 }
 
@@ -58,11 +74,42 @@ export function fixtureControl(line, event) {
       && value.host === '127.0.0.1' && value.path === '/apps'
       && Number.isSafeInteger(value.port) && value.port > 0 && value.port <= 65535) return value;
   if (event === 'stopped' && Object.keys(value).sort().join(',') === 'clean,event,format' && value.clean === true) return value;
+  if (event === 'caller' && Object.keys(value).sort().join(',') === 'event,format,state'
+      && ['beta', 'denied', 'revoked'].includes(value.state)) return value;
   fail('APPS_HOST_CONTROL');
 }
 
-export function completedHostChecks(receipt) {
-  return receipt.profile === PROFILE && receipt.experimental === true && receipt.patchIdentityVerified === true
+const PERMISSION_KEYS = ['declaredGeolocationEffective', 'mainPolicyAllowsGeolocation',
+  'outerSandboxGrantsGeolocation', 'outerSandboxLocated', 'policyApiPresent',
+  'sandboxPolicyAllowsGeolocation', 'undeclaredCameraDenied',
+  'undeclaredClipboardWriteDenied', 'undeclaredMicrophoneDenied'];
+function exactPermissions(value, blocked) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).sort().join(',') === [...PERMISSION_KEYS].sort().join(',')
+    && ['mainPolicyAllowsGeolocation', 'outerSandboxLocated', 'policyApiPresent',
+      'undeclaredCameraDenied', 'undeclaredClipboardWriteDenied', 'undeclaredMicrophoneDenied']
+      .every(key => value[key] === true)
+    && ['declaredGeolocationEffective', 'outerSandboxGrantsGeolocation',
+      'sandboxPolicyAllowsGeolocation'].every(key => value[key] === !blocked);
+}
+
+export function completedHostChecks(receipt, {allowBlockedPermission = false} = {}) {
+  const transitions = receipt?.profile === TRANSITION_PROFILE;
+  const revocation = receipt?.profile === REVOCATION_PROFILE;
+  const permissions = receipt?.profile === PERMISSIONS_PROFILE;
+  return [PROFILE, TRANSITION_PROFILE, REVOCATION_PROFILE, PERMISSIONS_PROFILE].includes(receipt?.profile)
+    && (!transitions || (Number.isSafeInteger(receipt.initialTraceCount)
+      && receipt.transitions?.betaRenderedInSameApp === true
+      && receipt.transitions?.previousTenantCleared === true
+      && receipt.transitions?.denialClearedView === true
+      && receipt.transitions?.deniedViewRequiresReopen === true))
+    && (!revocation || (Number.isSafeInteger(receipt.initialTraceCount)
+      && receipt.revocation?.revokedRefreshClickedViaDom === true
+      && receipt.revocation?.revokedViewCleared === true
+      && receipt.revocation?.revokedViewRequiresReopen === true))
+    && (!permissions || exactPermissions(receipt.permissions, false)
+      || allowBlockedPermission && exactPermissions(receipt.permissions, true))
+    && receipt.experimental === true && receipt.patchIdentityVerified === true
     && receipt.fullHostQualification === false && receipt.releaseCandidateEvidence === false
     && receipt.observationWindowCompleted === true
     && receipt.traceVerdict === 'PASSED' && uiChecks.every(key => receipt.ui?.[key] === true)
@@ -75,19 +122,77 @@ export function completedHostChecks(receipt) {
 }
 
 /** A passing local experiment is never a released-host qualification. */
-export function adjudicateHost(receipt, rejections) {
-  if (!completedHostChecks(receipt) || receipt.failure || receipt.integrityFailure || receipt.browserFailure || receipt.cleanupFailure
-      || !Array.isArray(rejections)) return 'FAILED';
-  return !receipt.traceFailure && rejections.length === 0 ? SUCCESS : 'FAILED';
+export function expectedRevocationOAuthFallback(rejections) {
+  if (!Array.isArray(rejections) || ![6, 12].includes(rejections.length)) return false;
+  const paths = ['OAUTH_PROTECTED_RESOURCE_PATH', 'OAUTH_PROTECTED_RESOURCE_ROOT',
+    'OAUTH_AUTHORIZATION_SERVER_ROOT', 'OPENID_CONFIGURATION_ROOT', 'OPENID_CONFIGURATION_ROOT'];
+  return rejections.every((row, index) => row && typeof row === 'object' && !Array.isArray(row)
+    && Object.keys(row).sort().join(',') === 'code,method,originAbsent,path,sequence'
+    && row.sequence === index + 1 && row.originAbsent === true
+    && row.method === (row.path === 'OAUTH_REGISTRATION_ROOT' ? 'POST' : 'GET')
+    && row.code === (row.path === 'OAUTH_REGISTRATION_ROOT' ? 'APPS_PATH' : 'APPS_POST_ONLY'))
+    && Array.from({length: rejections.length / 6}, (_, cycle) => rejections.slice(cycle * 6, cycle * 6 + 6))
+      .every(group => group[5].path === 'OAUTH_REGISTRATION_ROOT'
+        && group.slice(0, 5).map(row => row.path).sort().join(',') === [...paths].sort().join(','));
 }
 
-function cleanFixtureExit(exit) {
+export function adjudicateHost(receipt, rejections) {
+  if (!completedHostChecks(receipt, {allowBlockedPermission: true})
+      || receipt.failure || receipt.integrityFailure || receipt.browserFailure || receipt.cleanupFailure
+      || !Array.isArray(rejections)) return 'FAILED';
+  if (!receipt.traceFailure && rejections.length === 0)
+    return receipt.profile === TRANSITION_PROFILE ? TRANSITION_SUCCESS
+      : receipt.profile === REVOCATION_PROFILE ? REVOCATION_SUCCESS
+      : receipt.profile === PERMISSIONS_PROFILE
+        ? exactPermissions(receipt.permissions, true) ? PERMISSIONS_HOST_BLOCKED : PERMISSIONS_SUCCESS
+        : SUCCESS;
+  return receipt.profile === REVOCATION_PROFILE && receipt.traceFailure === 'APPS_POST_ONLY'
+    && expectedRevocationOAuthFallback(rejections)
+    ? REVOCATION_HOST_BLOCKED : 'FAILED';
+}
+
+function cleanFixtureExit(exit, callerMode) {
   const lines = exit.stdout.trimEnd().split('\n');
   try {
-    return lines.length === 2 && fixtureControl(lines[0], 'ready')
-      && fixtureControl(lines[1], 'stopped').clean && exit.code === 0
+    return lines.length === (callerMode === 'transitions' ? 4 : callerMode === 'revocation' ? 3 : 2)
+      && fixtureControl(lines[0], 'ready')
+      && (callerMode !== 'transitions' || (fixtureControl(lines[1], 'caller').state === 'beta'
+        && fixtureControl(lines[2], 'caller').state === 'denied'))
+      && (callerMode !== 'revocation' || fixtureControl(lines[1], 'caller').state === 'revoked')
+      && fixtureControl(lines[callerMode === 'transitions' ? 3 : callerMode === 'revocation' ? 2 : 1], 'stopped').clean
+      && exit.code === 0
       && exit.signal === null && exit.stderr === '';
   } catch { return false; }
+}
+
+function changeFixtureCaller(handle, state) {
+  if (!['beta', 'denied', 'revoked'].includes(state)) fail('APPS_HOST_CONTROL');
+  return new Promise((done, reject) => {
+    let buffer = '';
+    const timer = setTimeout(() => finish(new Error('APPS_HOST_CALLER_TIMEOUT')), 5000);
+    const data = bytes => {
+      buffer += bytes.toString('utf8');
+      if (Buffer.byteLength(buffer) > 8192) return finish(new Error('APPS_HOST_CONTROL_BOUND'));
+      const index = buffer.indexOf('\n');
+      if (index !== -1) {
+        try {
+          const control = fixtureControl(buffer.slice(0, index), 'caller');
+          if (control.state !== state) fail('APPS_HOST_CONTROL');
+          finish(null);
+        } catch { finish(new Error('APPS_HOST_CONTROL')); }
+      }
+    };
+    const close = () => finish(new Error('APPS_HOST_FIXTURE_EARLY_EXIT'));
+    function finish(error) {
+      clearTimeout(timer);
+      handle.child.stdout.off('data', data);
+      handle.child.off('close', close);
+      if (error) reject(error); else done();
+    }
+    handle.child.stdout.on('data', data);
+    handle.child.once('close', close);
+    handle.child.stdin.write((state === 'revoked' ? 'revoke' : state) + '\n');
+  });
 }
 
 async function fixtureEof(handle) {
@@ -240,6 +345,10 @@ function sourceInputs() {
 }
 
 export async function runHost(options) {
+  const transitions = transitionMode(options);
+  const revocation = revocationMode(options);
+  const permissions = permissionsMode(options);
+  const callerMode = transitions ? 'transitions' : revocation ? 'revocation' : undefined;
   const jar = regularFile(options['--candidate-jar']);
   const pom = regularFile(options['--candidate-pom']);
   const java = regularFile(options['--java']);
@@ -287,7 +396,8 @@ export async function runHost(options) {
   const interrupt = () => { interrupted = true; for (const handle of active) void handle.stop().catch(() => {}); };
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
-  const receipt = {formatVersion: 1, profile: PROFILE,
+  const receipt = {formatVersion: 1, profile: transitions ? TRANSITION_PROFILE
+    : revocation ? REVOCATION_PROFILE : permissions ? PERMISSIONS_PROFILE : PROFILE,
     status: 'FAILED', stage: 'INPUTS', experimental: true, patchIdentityVerified: true, provenance,
     fullHostQualification: false, releaseCandidateEvidence: false,
     executedAt: new Date().toISOString(), protocolVersion: '2026-07-28',
@@ -298,12 +408,21 @@ export async function runHost(options) {
     fixtureShutdown: 'NOT_PROVEN', hostShutdown: 'NOT_PROVEN', browserShutdown: 'NOT_PROVEN',
     bounds: {compileMs: 120000, identityMs: 10000, fixtureMs: 120000, hostMs: 120000, browserMs: 90000,
       childOutputBytes: 2 * 1024 * 1024, gracefulExitWaitMs: 3000, fixtureEofWaitMs: 6000,
-      termGraceMs: 2000, killGraceMs: 2000, postRefreshObservationMs: 6000, deniedSubscriptions: 8, mcpExchanges: 16},
+      termGraceMs: 2000, killGraceMs: 2000, postRefreshObservationMs: 6000,
+      postDenialObservationMs: transitions ? 6000 : 0,
+      postRevocationObservationMs: revocation ? 6000 : 0,
+      deniedSubscriptions: 8, mcpExchanges: transitions ? 18 : revocation ? 17 : 16},
     limitations: ['Dirty-tree local development evidence, not immutable release conformance.',
       'One Inspector build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
       'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
       'One to eight exact denied subscription retries are observed, never authorized or converted to success.',
-      'No general CSP/permissions enforcement, localization matrix, tenant switching, revocation, OAuth, or production-host qualification.',
+      transitions
+        ? 'Only one same-App beta/Portuguese refresh then denied refresh; no credential revocation, general CSP/permissions, OAuth, or production-host qualification.'
+        : revocation
+          ? 'Only one open-App revoked refresh; no idle-view invalidation, general CSP/permissions, OAuth, or production-host qualification.'
+          : permissions
+            ? 'One declared geolocation feature and three undeclared features in one opaque App; no user/browser grant, device access, other permission combinations, OAuth, or production-host qualification.'
+        : 'No general CSP/permissions enforcement, localization matrix, tenant switching, revocation, OAuth, or production-host qualification.',
       'Only allowlisted structural facts retained; private browser/config/runtime state is deleted after supervised cleanup.']};
   let fixture, proxy, host, browser, cdp, observation, configPath, configBytes, privateCreated = false;
   let hostExited = false, browserExited = false;
@@ -345,12 +464,15 @@ export async function runHost(options) {
     const token = randomBytes(32).toString('hex');
     const hostToken = randomBytes(32).toString('hex');
     receipt.stage = 'FIXTURE';
-    fixture = managed(java, ['-cp', classes + delimiter + jar, 'com.soklet.interop.apps.AppsFixtureMain', shell], {stdin: 'pipe'});
+    fixture = managed(java, ['-cp', classes + delimiter + jar, 'com.soklet.interop.apps.AppsFixtureMain',
+      shell, ...(transitions ? ['--caller-transitions'] : revocation ? ['--revoke-caller']
+        : permissions ? ['--permission-geolocation'] : [])], {stdin: 'pipe'});
     const readiness = readyLine(fixture);
     fixture.child.stdin.write(token + '\n');
     const ready = await readiness;
     receipt.authentication = await fixtureAuthentication(ready.port, token);
-    proxy = await startAppsProxy({fixturePort: ready.port, token, shell: readFileSync(shell, 'utf8')});
+    proxy = await startAppsProxy({fixturePort: ready.port, token, shell: readFileSync(shell, 'utf8'),
+      callerTransitions: transitions || revocation, geolocation: permissions});
     const config = createSessionConfig(`http://127.0.0.1:${proxy.port}/mcp`, token, {apps: true, skills: false});
     configPath = resolve(privateRoot, 'session.json');
     configBytes = json(config);
@@ -379,7 +501,8 @@ export async function runHost(options) {
     observation = await beginBrowserObservation(cdp, {sessionId, origin, sandboxUrl: initial.sandboxUrl});
     await cdp.send('Page.navigate', {url: origin}, sessionId);
     receipt.stage = 'APPS_UI';
-    receipt.ui = await exerciseApps(cdp, sessionId, observation);
+    receipt.ui = await exerciseApps(cdp, sessionId, observation, {geolocation: permissions});
+    if (permissions) receipt.permissions = await exerciseAppsPermissions(cdp, sessionId, observation);
     receipt.stage = 'OBSERVE';
     const observeUntil = Date.now() + 6000;
     while (Date.now() < observeUntil) {
@@ -388,7 +511,35 @@ export async function runHost(options) {
       await pause();
     }
     receipt.observationWindowCompleted = true;
-    receipt.traceVerdict = adjudicateAppsTrace(proxy.rows);
+    if (transitions || revocation) {
+      if (adjudicateAppsTrace(proxy.rows) !== 'PASSED') fail('APPS_HOST_INITIAL_TRACE');
+      receipt.initialTraceCount = proxy.rows.length;
+      if (transitions) {
+        receipt.stage = 'CALLER_TRANSITIONS';
+        receipt.transitions = await exerciseAppsTransitions(cdp, sessionId, observation, async state => {
+          await changeFixtureCaller(fixture, state);
+          proxy.setCallerPhase(state);
+        });
+      } else {
+        receipt.stage = 'CALLER_REVOCATION';
+        receipt.revocation = await exerciseAppsRevocation(cdp, sessionId, observation, async () => {
+          await changeFixtureCaller(fixture, 'revoked');
+          proxy.setCallerPhase('revoked');
+        });
+      }
+      const afterChange = Date.now() + 6000;
+      while (Date.now() < afterChange) {
+        if (interrupted || hostExited || browserExited || cdp.failure()
+            || proxy.failure() && !(revocation && proxy.failure() === 'APPS_POST_ONLY')
+            || observation.failure())
+          fail('APPS_HOST_OBSERVATION_INTERRUPTED');
+        await pause();
+      }
+    }
+    receipt.traceVerdict = transitions
+      ? adjudicatePatchedAppsTransitionTrace(proxy.rows, receipt.initialTraceCount)
+      : revocation ? adjudicatePatchedAppsRevocationTrace(proxy.rows, receipt.initialTraceCount)
+      : adjudicateAppsTrace(proxy.rows);
     // Finish a genuine UI disconnect and graceful shutdown even if a trace
     // check failed; a failure still cannot become PASS below or after sealing.
     await disconnectApps(cdp, sessionId, observation);
@@ -406,14 +557,15 @@ export async function runHost(options) {
     const hostExit = await boundedExit(host);
     if (hostExit.code === 0 && hostExit.signal === null) receipt.hostShutdown = 'CLEAN';
     const fixtureExit = await fixtureEof(fixture);
-    if (cleanFixtureExit(fixtureExit)) receipt.fixtureShutdown = 'CLEAN';
+    if (cleanFixtureExit(fixtureExit, callerMode)) receipt.fixtureShutdown = 'CLEAN';
     receipt.configUnchanged = readFileSync(configPath, 'utf8') === configBytes;
     receipt.stage = 'INPUT_RECHECK';
     if (!receipt.configUnchanged || [receipt.fixtureShutdown, receipt.hostShutdown, receipt.browserShutdown].some(value => value !== 'CLEAN'))
       fail('APPS_HOST_SHUTDOWN');
     if (!recheckInputs()) fail('APPS_HOST_INPUT_DRIFT');
     receipt.inputsUnchanged = true;
-    if (receipt.traceVerdict !== 'PASSED' || proxy.failure()) fail('APPS_HOST_TRACE');
+    if (receipt.traceVerdict !== 'PASSED'
+        || proxy.failure() && !(revocation && proxy.failure() === 'APPS_POST_ONLY')) fail('APPS_HOST_TRACE');
     receipt.status = 'PASSED';
     receipt.stage = 'COMPLETE';
   } catch (error) {
@@ -446,7 +598,7 @@ export async function runHost(options) {
     // check; the process-group supervisor remains the independent fallback.
     try {
       const exit = await fixtureEof(fixture);
-      if (exit && cleanFixtureExit(exit)) receipt.fixtureShutdown = 'CLEAN';
+      if (exit && cleanFixtureExit(exit, callerMode)) receipt.fixtureShutdown = 'CLEAN';
     } catch { /* The fallback stop below determines cleanup success. */ }
     const cleanup = await Promise.allSettled([browser?.stop(), host?.stop(), proxy?.close(), fixture?.stop()]);
     receipt.cleanup = {cdp: cdpClosed, browser: cleanup[0].status === 'fulfilled', host: cleanup[1].status === 'fulfilled',
@@ -455,11 +607,15 @@ export async function runHost(options) {
     process.off('SIGTERM', interrupt);
     // Seal after all callers and the proxy have stopped. Late disconnect or
     // shutdown traffic must not escape the pre-disconnect adjudication.
-    receipt.traceVerdict = adjudicateAppsTrace(proxy?.rows ?? []);
+    receipt.traceVerdict = transitions
+      ? adjudicatePatchedAppsTransitionTrace(proxy?.rows ?? [], receipt.initialTraceCount)
+      : revocation ? adjudicatePatchedAppsRevocationTrace(proxy?.rows ?? [], receipt.initialTraceCount)
+      : adjudicateAppsTrace(proxy?.rows ?? []);
     receipt.traceFailure = proxy?.failure() ?? null;
     receipt.browserFailure = observation?.failure()
       ?? (cdp?.failure() === 'CDP_CLOSED' ? null : cdp?.failure()) ?? null;
-    if (receipt.status === 'PASSED' && (receipt.traceVerdict !== 'PASSED' || receipt.traceFailure)) {
+    if (receipt.status === 'PASSED' && (receipt.traceVerdict !== 'PASSED'
+        || receipt.traceFailure && !(revocation && receipt.traceFailure === 'APPS_POST_ONLY'))) {
       receipt.status = 'FAILED'; receipt.failure = 'APPS_HOST_LATE_TRACE';
     }
     if (!cdpClosed || cleanup.some(row => row.status !== 'fulfilled')) {
@@ -485,12 +641,26 @@ export async function runHost(options) {
       receipt.failure ??= 'APPS_HOST_INPUT_DRIFT';
     }
     const finalStatus = adjudicateHost(receipt, proxy?.rejections ?? []);
-    receipt.renderRefresh = finalStatus === SUCCESS
+    receipt.renderRefresh = [SUCCESS, TRANSITION_SUCCESS, REVOCATION_SUCCESS, PERMISSIONS_SUCCESS].includes(finalStatus)
       ? 'EXPERIMENTAL_NARROW_OBSERVATION_PASSED'
       : uiChecks.every(key => receipt.ui?.[key] === true) ? 'OBSERVED_BEFORE_HOST_FAILURE' : 'NOT_QUALIFIED';
+    if (transitions) receipt.transitionObservation = finalStatus === TRANSITION_SUCCESS
+      ? 'EXPERIMENTAL_SAME_APP_TRANSITIONS_PASSED' : 'NOT_QUALIFIED';
+    if (revocation) receipt.revocationObservation = finalStatus === REVOCATION_SUCCESS
+      ? 'EXPERIMENTAL_OPEN_APP_REVOCATION_PASSED'
+      : finalStatus === REVOCATION_HOST_BLOCKED ? 'OBSERVED_WITH_EXACT_HOST_AUTH_FALLBACK' : 'NOT_QUALIFIED';
+    if (permissions) receipt.permissionsObservation = finalStatus === PERMISSIONS_SUCCESS
+      ? 'EFFECTIVE_DECLARED_AND_UNDECLARED_POLICY_PASSED'
+      : finalStatus === PERMISSIONS_HOST_BLOCKED ? 'DECLARED_PERMISSION_BLOCKED_AT_OUTER_SANDBOX'
+      : 'NOT_QUALIFIED';
     receipt.status = finalStatus;
-    if (finalStatus === SUCCESS) receipt.stage = 'COMPLETE';
-    else receipt.failure ??= 'APPS_HOST_INCOMPLETE_EVIDENCE';
+    if ([SUCCESS, TRANSITION_SUCCESS, REVOCATION_SUCCESS, PERMISSIONS_SUCCESS,
+      REVOCATION_HOST_BLOCKED, PERMISSIONS_HOST_BLOCKED].includes(finalStatus))
+      receipt.stage = 'COMPLETE';
+    if (finalStatus === REVOCATION_HOST_BLOCKED) receipt.failure = 'APPS_HOST_OAUTH_RECOVERY_UNSUPPORTED';
+    else if (finalStatus === PERMISSIONS_HOST_BLOCKED)
+      receipt.failure = 'APPS_HOST_OUTER_SANDBOX_PERMISSION_DENIAL';
+    else if (finalStatus === 'FAILED') receipt.failure ??= 'APPS_HOST_INCOMPLETE_EVIDENCE';
     const trace = {formatVersion: 1, policy: 'STRUCTURAL_ALLOWLIST_NO_RAW_PAYLOAD_OR_BODY_HASH',
       exchanges: proxy?.rows ?? [], rejections: proxy?.rejections ?? []};
     writeFileSync(resolve(work, 'sanitized-trace.json'), json(trace), {mode: 0o600, flag: 'wx'});
@@ -504,7 +674,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const receipt = await runHost(parseHostArguments(process.argv.slice(2)));
     console.log(JSON.stringify({status: receipt.status, stage: receipt.stage, failure: receipt.failure, fullHostQualification: false}));
-    if (receipt.status !== SUCCESS) process.exitCode = 1;
+    if (![SUCCESS, TRANSITION_SUCCESS, REVOCATION_SUCCESS, PERMISSIONS_SUCCESS].includes(receipt.status))
+      process.exitCode = [REVOCATION_HOST_BLOCKED, PERMISSIONS_HOST_BLOCKED].includes(receipt.status) ? 2 : 1;
   } catch {
     console.error('Apps host runner rejected its inputs; no qualified receipt.');
     process.exitCode = 1;

@@ -36,3 +36,45 @@ export function adjudicatePatchedAppsTrace(rows) {
     .map((row, index) => ({...row, sequence: index + 1}));
   return adjudicateAppsTrace(normalized);
 }
+
+/** A separately opted-in open-App transition: beta/Portuguese refresh, then a
+ * denied refresh. The ordinary render/refresh profile remains unchanged. */
+export function adjudicatePatchedAppsTransitionTrace(rows, baseCount) {
+  if (!Array.isArray(rows) || !Number.isSafeInteger(baseCount) || baseCount < 9 || baseCount > 16
+      || rows.length < baseCount + 2 || rows.length > 18
+      || adjudicatePatchedAppsTrace(rows.slice(0, baseCount)) !== 'PASSED') return 'FAILED';
+  const later = rows.slice(baseCount);
+  const baseDenials = rows.slice(0, baseCount).filter(row => row.method === 'subscriptions/listen').length;
+  if (baseDenials + later.slice(2).length > 8) return 'FAILED';
+  return later.every((row, index) => object(row)
+    && Object.keys(row).length === FIELDS.size && Object.keys(row).every(key => FIELDS.has(key))
+    && row.surface === 'apps-web' && row.sequence === baseCount + index + 1
+    && row.method === (index < 2 ? 'tools/call' : 'subscriptions/listen')
+    && row.tool === (index < 2 ? 'refresh_catalog' : 'NONE')
+    && row.responseStatus === (index === 0 ? 200 : index === 1 ? 400 : 403)
+    && row.subscriptionDenied === (index >= 2)
+    && REQUIRED.every(key => row[key] === true)
+    && Number.isSafeInteger(row.requestBytes) && row.requestBytes > 0 && row.requestBytes <= 64 * 1024
+    && Number.isSafeInteger(row.responseBytes) && row.responseBytes > 0 && row.responseBytes <= 1024 * 1024)
+    ? 'PASSED' : 'FAILED';
+}
+
+/** Fresh App, then credential revocation before its next genuine refresh. */
+export function adjudicatePatchedAppsRevocationTrace(rows, baseCount) {
+  if (!Array.isArray(rows) || !Number.isSafeInteger(baseCount) || baseCount < 9 || baseCount > 16
+      || rows.length < baseCount + 1 || rows.length > 17
+      || adjudicatePatchedAppsTrace(rows.slice(0, baseCount)) !== 'PASSED') return 'FAILED';
+  const later = rows.slice(baseCount);
+  const baseDenials = rows.slice(0, baseCount).filter(row => row.method === 'subscriptions/listen').length;
+  if (baseDenials + later.length - 1 > 8) return 'FAILED';
+  return later.every((row, index) => object(row)
+    && Object.keys(row).length === FIELDS.size && Object.keys(row).every(key => FIELDS.has(key))
+    && row.surface === 'apps-web' && row.sequence === baseCount + index + 1
+    && row.method === (index === 0 ? 'tools/call' : 'subscriptions/listen')
+    && row.tool === (index === 0 ? 'refresh_catalog' : 'NONE')
+    && row.responseStatus === 401 && row.subscriptionDenied === false
+    && REQUIRED.every(key => row[key] === true)
+    && Number.isSafeInteger(row.requestBytes) && row.requestBytes > 0 && row.requestBytes <= 64 * 1024
+    && Number.isSafeInteger(row.responseBytes) && row.responseBytes > 0 && row.responseBytes <= 1024 * 1024)
+    ? 'PASSED' : 'FAILED';
+}

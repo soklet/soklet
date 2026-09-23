@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {adjudicateHost, canaryNetworkMatches, completedHostChecks, fixtureControl, parseHostArguments,
-  PROFILE, SUCCESS, validateExperimentPins} from './run.mjs';
-import {adjudicateCspEvidence} from './browser-probe.mjs';
+  PROFILE, SUCCESS, ALLOWLIST_PROFILE, ALLOWLIST_SUCCESS, validateExperimentPins} from './run.mjs';
+import {adjudicateCspEvidence, adjudicateAllowlistEvidence} from './browser-probe.mjs';
 import {adjudicateCanary, CANARY_FAILURES} from './canary.mjs';
 
 function goodCsp() {
@@ -51,6 +51,35 @@ function complete() {
     cleanup: {cdp: true, browser: true, host: true, proxy: true, fixture: true, canary: true}};
 }
 
+function completeAllowlist() {
+  const receipt = complete();
+  receipt.profile = ALLOWLIST_PROFILE;
+  receipt.csp = {...goodCsp(), rows: [
+    ['CONTROL_BEFORE', 'connect', false], ['CONTROL_BEFORE', 'image', false],
+    ['APP', 'connect', false], ['APP', 'image', false],
+    ['APP', 'connect', true], ['APP', 'image', true],
+    ['CONTROL_AFTER', 'connect', false], ['CONTROL_AFTER', 'image', false],
+  ].map(([phase, operation, negative]) => ({
+    ...goodCsp().rows[negative ? 2 : 0], phase, operation,
+    context: phase === 'APP' ? 'APP' : 'MAIN',
+    targetKind: negative ? 'UNDECLARED' : 'DECLARED',
+    succeeded: !negative, failed: negative, responseMatches: !negative,
+    violationCount: Number(negative), matchingViolationCount: Number(negative),
+  }))};
+  delete receipt.csp.appDenialsPassed;
+  receipt.csp.appChecksPassed = true;
+  receipt.canary.requestCount = 6;
+  receipt.canary.phases.APP = {connect: 1, image: 1, rejected: 0};
+  receipt.canary.requests.splice(2, 0,
+    {sequence: 3, phase: 'APP', operation: 'CONNECT', method: 'GET', accepted: true, code: 'OK'},
+    {sequence: 4, phase: 'APP', operation: 'IMAGE', method: 'GET', accepted: true, code: 'OK'});
+  receipt.canary.requests[4].sequence = 5;
+  receipt.canary.requests[5].sequence = 6;
+  receipt.browser.canaryNetwork.continuedByOperation = [1, 1, 1, 1, 1, 1];
+  receipt.browser.canaryNetwork.appContinued = 2;
+  return receipt;
+}
+
 function paths(value, prefix = []) {
   return Object.keys(value).flatMap(key => {
     const path = [...prefix, key], child = value[key];
@@ -83,6 +112,28 @@ test('CSP profile requires all eight unique explicit inputs and does not reuse a
   }
 });
 
+test('allowlist profile requires declared App network success and undeclared CSP denials', () => {
+  assert.equal(parseHostArguments([...argumentsFixture(), '--profile', 'allowlist'])['--profile'], 'allowlist');
+  assert.throws(() => parseHostArguments([...argumentsFixture(), '--profile', 'unknown']), /APPS_HOST_ARGUMENTS/);
+  const receipt = completeAllowlist();
+  assert.equal(adjudicateAllowlistEvidence(receipt.csp), 'PASSED');
+  assert.equal(adjudicateCanary(receipt.canary, {allowApp: true}), 'PASSED');
+  assert.equal(canaryNetworkMatches(receipt.browser.canaryNetwork, {allowlist: true}), true);
+  assert.equal(adjudicateHost(receipt, []), ALLOWLIST_SUCCESS);
+  for (const index of [2, 3]) {
+    const altered = completeAllowlist(); altered.csp.rows[index].succeeded = false;
+    rejected(altered, 'declared App request must succeed');
+  }
+  for (const index of [4, 5]) {
+    const altered = completeAllowlist(); altered.csp.rows[index].violationCount = 0;
+    rejected(altered, 'undeclared App request needs enforced CSP evidence');
+  }
+  const noContact = completeAllowlist(); noContact.canary.phases.APP.connect = 0;
+  rejected(noContact, 'declared App request must reach the canary');
+  const blocked = completeAllowlist(); blocked.browser.canaryNetwork.blocked = 1;
+  rejected(blocked, 'the harness must not impersonate CSP');
+});
+
 test('fixture control accepts only the exact loopback listener and clean stop envelopes', () => {
   const ready = {format: 1, event: 'ready', host: '127.0.0.1', port: 1234, path: '/apps'};
   assert.deepEqual(fixtureControl(JSON.stringify(ready), 'ready'), ready);
@@ -106,7 +157,7 @@ test('candidate, shell and auth-patched dependencies remain pinned to the prior 
     sha256: '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'},
   patchedFileSha256: '405da5e71b887403bb53ff2e3984cec631a1138f50662ad199dfb8e536dcd47a',
   experimental: true, releasedHostQualification: false};
-  const candidate = {jarSha256: '1782dcaa2270cb543c49abc80c942a2ff0f1ab72f9abb88a5d2556d200bd8d74'};
+  const candidate = {jarSha256: 'e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f'};
   const shell = {sha256: '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
   assert.doesNotThrow(() => validateExperimentPins(provenance, candidate, shell));
   for (const [p, c, s] of [[null, candidate, shell], [{}, candidate, shell],

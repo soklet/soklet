@@ -2386,9 +2386,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->RequestOrThrowable.getRequest@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->RequestOrThrowable.getRequest@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "RequestOrThrowable.getRequest"
@@ -23417,9 +23417,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>,List<CompletionPlan>)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>,List<CompletionPlan>,Optional<SkillsPlan>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>,List<CompletionPlan>)",
+          "member": "EndpointPlan(McpEndpoint,List<ToolPlan>,List<PromptPlan>,List<ResourcePlan>,ResourceListPlan,Optional<McpRuntimeCatalogLocalizer>,boolean,Optional<TaskManagerAdapter>,Optional<CatalogAccessAdapter>,List<CompletionPlan>,Optional<SkillsPlan>)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan",
           "sink": "Diagnostic.recordConstructor"
@@ -34441,9 +34441,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalStateException"
@@ -34459,45 +34459,45 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->Throwable.McpLocalizationContextUnavailableException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->Throwable.McpLocalizationContextUnavailableException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.McpLocalizationContextUnavailableException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->Throwable.McpLocalizationContextUnavailableException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->Throwable.McpLocalizationContextUnavailableException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.McpLocalizationContextUnavailableException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->Throwable.McpLocalizationContextUnavailableException@3",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->Throwable.McpLocalizationContextUnavailableException@3",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 3,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.McpLocalizationContextUnavailableException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->Throwable.McpLocalizationContextUnavailableException@4",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->Throwable.McpLocalizationContextUnavailableException@4",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 4,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.McpLocalizationContextUnavailableException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)->Throwable.McpLocalizationContextUnavailableException@5",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)->Throwable.McpLocalizationContextUnavailableException@5",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>)",
+          "member": "applicationLocalizationContext(McpRequestContext,CancelationToken,BooleanSupplier,Optional<String>,AtomicReference<String>,Optional<String>,List<String>,Optional<String>,List<Locale.LanguageRange>)",
           "occurrence": 5,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.McpLocalizationContextUnavailableException"
@@ -37792,24 +37792,6 @@
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpEndpointRegistry.java#com.soklet.McpEndpointRegistry#fromClasspathIntrospection()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "fromClasspathIntrospection()",
-          "occurrence": 1,
-          "owner": "com.soklet.McpEndpointRegistry",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpEndpointRegistry.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpEndpointRegistry.java#com.soklet.McpEndpointRegistry#withSubscriptionConfig(Class<?>,McpSubscriptionConfig)->Throwable.IllegalArgumentException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "withSubscriptionConfig(Class<?>,McpSubscriptionConfig)",
-          "occurrence": 1,
-          "owner": "com.soklet.McpEndpointRegistry",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpEndpointRegistry.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpEndpointRegistry.java#com.soklet.McpEndpointRegistry#withSubscriptionConfig(Class<?>,McpSubscriptionConfig)->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "withSubscriptionConfig(Class<?>,McpSubscriptionConfig)",
           "occurrence": 1,
           "owner": "com.soklet.McpEndpointRegistry",
           "sink": "Throwable.IllegalStateException"
@@ -53845,27 +53827,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.disabledInstance@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.disabledInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.disabledInstance"
@@ -62907,6 +62889,2011 @@
           "sink": "Throwable.IllegalRequestBodyException"
         }
       ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/McpSkillAccessPolicyTests.java#independentEvaluatorsReceiveExactInputsOnceAndMayDeny",
+        "src/test/java/com/soklet/McpSkillPolicyEvaluatorTests.java#selectorSeesOnlyEligibleIdentityCandidatesAndSamePreferencesFeaturesAndLocalization",
+        "src/test/java/com/soklet/McpSkillPublicRuntimeTests.java#localizationProviderSeesOperationSpecificFirstAndPresentEmptyContinuationCursor"
+      ],
+      "category": "REQUEST",
+      "classification": "EXACT_APPLICATION_BOUNDARY",
+      "contract": "Skills access, discovery, variant-selection, list, and localization callbacks deliberately receive admitted request context plus application-authored cursors, registrations, language preferences, and feature values. Applications own logging and retention of these exact callback values; Soklet does not emit them as built-in diagnostics.",
+      "id": "PRIV-BOUND-044",
+      "name": "Skills request and callback carriers",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpLocalizationRequest.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpLocalizationRequest.java#com.soklet.DefaultMcpLocalizationRequest#getSkillListCursor()->ApplicationRequestCarrier.surface.getSkillListCursor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getSkillListCursor()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpLocalizationRequest",
+          "sink": "ApplicationRequestCarrier.surface.getSkillListCursor"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->RequestOrThrowable.getRequest@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "RequestOrThrowable.getRequest"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpLocalizationRequest.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpLocalizationRequest.java#com.soklet.McpLocalizationRequest#getSkillListCursor()->ApplicationRequestCarrier.surface.getSkillListCursor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getSkillListCursor()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpLocalizationRequest",
+          "sink": "ApplicationRequestCarrier.surface.getSkillListCursor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillAccessPolicy.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillAccessPolicy.java#com.soklet.McpSkillAccessPolicy.AccessEvaluator#isSkillAccessible(McpRequestContext,McpSkillRegistration,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isSkillAccessible(McpRequestContext,McpSkillRegistration,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillAccessPolicy.AccessEvaluator",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillAccessPolicy.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillAccessPolicy.java#com.soklet.McpSkillAccessPolicy.DiscoveryEvaluator#isSkillDiscoverable(McpRequestContext,McpSkillRegistration,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "isSkillDiscoverable(McpRequestContext,McpSkillRegistration,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillAccessPolicy.DiscoveryEvaluator",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillListContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillListContext.java#com.soklet.McpSkillListContext#getCursor()->ApplicationRequestCarrier.surface.getCursor@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getCursor()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillListContext",
+          "sink": "ApplicationRequestCarrier.surface.getCursor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillListContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillListContext.java#com.soklet.McpSkillListContext#getInitialSkillRegistrations()->ApplicationRequestCarrier.surface.getInitialSkillRegistrations@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getInitialSkillRegistrations()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillListContext",
+          "sink": "ApplicationRequestCarrier.surface.getInitialSkillRegistrations"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillListHandler.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillListHandler.java#com.soklet.McpSkillListHandler#handle(McpRequestContext,McpSkillListContext,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "handle(McpRequestContext,McpSkillListContext,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillListHandler",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillVariantSelectionContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillVariantSelectionContext.java#com.soklet.McpSkillVariantSelectionContext#getLanguageRanges()->ApplicationRequestCarrier.surface.getLanguageRanges@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getLanguageRanges()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillVariantSelectionContext",
+          "sink": "ApplicationRequestCarrier.surface.getLanguageRanges"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillVariantSelectionContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillVariantSelectionContext.java#com.soklet.McpSkillVariantSelectionContext#getSkillGroupKey()->ApplicationRequestCarrier.surface.getSkillGroupKey@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getSkillGroupKey()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillVariantSelectionContext",
+          "sink": "ApplicationRequestCarrier.surface.getSkillGroupKey"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillVariantSelectionContext.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillVariantSelectionContext.java#com.soklet.McpSkillVariantSelectionContext#getSkillRegistrations()->ApplicationRequestCarrier.surface.getSkillRegistrations@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getSkillRegistrations()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillVariantSelectionContext",
+          "sink": "ApplicationRequestCarrier.surface.getSkillRegistrations"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillVariantSelector.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/McpSkillVariantSelector.java#com.soklet.McpSkillVariantSelector#select(McpRequestContext,McpSkillVariantSelectionContext,McpInvocationFeatures)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "select(McpRequestContext,McpSkillVariantSelectionContext,McpInvocationFeatures)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillVariantSelector",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)->RequestOrThrowable.request@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "RequestOrThrowable.request"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge#preflightPage(List<Registration>,com.soklet.McpSkillPage,com.soklet.McpEndpoint,com.soklet.McpRequestId)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "preflightPage(List<Registration>,com.soklet.McpSkillPage,com.soklet.McpEndpoint,com.soklet.McpRequestId)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge",
+          "sink": "ApplicationRequestCarrier.declaration"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/McpSkillBundleTests.java#diagnosticsAreFixedAndDoNotExposeOwnedContent",
+        "src/test/java/com/soklet/McpSkillRegistrationTests.java#diagnosticsNeverExposeRegistrationOrResourceContent",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillDocumentMetadataTests.java#diagnosticsAndRenderingNeverExposeAuthoredMetadata",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillFileContentsTests.java#diagnosticsAndToStringAreFixedAndRedacted",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+      ],
+      "category": "DIAGNOSTIC",
+      "classification": "REDACTED",
+      "contract": "These explicit Skills object and record toString overrides emit fixed redaction markers rather than authored paths, URIs, metadata, cursor values, YAML text, tags, or aliases. Exact typed accessors and count-only renderers are classified separately.",
+      "id": "PRIV-BOUND-045",
+      "name": "Fixed redacted Skills renderers",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/McpSkillAccessPolicy.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillAccessPolicy.java#com.soklet.McpSkillAccessPolicy#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillAccessPolicy",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillBundle.java#com.soklet.McpSkillBundle#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillBundle",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillGroup.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillGroup.java#com.soklet.McpSkillGroup#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillGroup",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillListContext.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillListContext.java#com.soklet.McpSkillListContext#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillListContext",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPage.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillPage.java#com.soklet.McpSkillPage#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPage",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPolicyEvaluator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillPolicyEvaluator.java#com.soklet.McpSkillPolicyEvaluator#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPolicyEvaluator",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillRegistration.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillRegistration.java#com.soklet.McpSkillRegistration#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillRegistration",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillRegistration.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillRegistration.java#com.soklet.McpSkillRegistration.Resource#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillRegistration.Resource",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillVariantSelectionContext.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillVariantSelectionContext.java#com.soklet.McpSkillVariantSelectionContext#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillVariantSelectionContext",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Bundle#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Bundle",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Registration#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Registration",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle.Resource#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillDocumentMetadata.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillDocumentMetadata.java#com.soklet.internal.mcp.skills.SkillDocumentMetadata#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillDocumentMetadata",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java#com.soklet.internal.mcp.skills.SkillFrontmatter#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFrontmatter",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest.Resource#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest.Resource",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java#com.soklet.internal.mcp.skills.SkillResourceUris#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Frontmatter#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Frontmatter",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Alias#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Alias",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Entry#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Entry",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Properties#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Properties",
+          "sink": "Diagnostic.toString"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#inputByteLimitCountsUtf8BytesInclusively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+      ],
+      "category": "DIAGNOSTIC",
+      "classification": "BOUNDED_METADATA",
+      "contract": "Private Skills YAML line offsets, source positions, per-parse limit values, and AST renderer counts expose only finite numeric metadata or node style, not authored scalar text, keys, tags, or aliases. The parser's input and work bounds are inventoried separately.",
+      "id": "PRIV-BOUND-046",
+      "name": "Bounded Skills parser numeric diagnostics",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#Line(int,int,int)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Line(int,int,int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Line",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#endOffset()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "endOffset()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Line",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#nextOffset()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "nextOffset()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Line",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#startOffset()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "startOffset()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Line",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Line",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#SkillYamlLimits(int,int,int,int,long,long)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "SkillYamlLimits(int,int,int,int,long,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumInputBytes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumInputBytes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumNestingDepth()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumNestingDepth()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumNodes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumNodes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumScalarCharacters()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumScalarCharacters()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumTotalScalarCharacters()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumTotalScalarCharacters()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumWork()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumWork()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Mapping#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Mapping",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Position#Position(int,int)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Position(int,int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Position",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Position#column()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "column()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Position",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Position#line()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "line()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Position",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Position#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Position",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.toString"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Sequence#toString()->Diagnostic.toString@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Sequence",
+          "sink": "Diagnostic.toString"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/McpSkillPublicRuntimeTests.java#automaticListExactGetAndSkillsOnlyResourceReadsPreserveManifestBytes",
+        "src/test/java/com/soklet/McpSkillRegistrationTests.java#generatedResourcesUseEncodedUrisAndExactRawByteDigestsAndSizes",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+      ],
+      "category": "DIAGNOSTIC",
+      "classification": "EXACT_APPLICATION_BOUNDARY",
+      "contract": "Skills record constructors and typed accessors intentionally retain exact authored URI, path, frontmatter, MIME, cursor, policy, registration, and YAML node values; two private default record renderers can likewise include path or MIME text. Callers own any logging, retention, or export of these values. Explicit redacted and numeric-only renderers are classified separately.",
+      "id": "PRIV-BOUND-047",
+      "name": "Exact Skills typed value surfaces",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#File(URI,List<McpSkillRegistration>,McpCachePolicy,McpJsonObject)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "File(URI,List<McpSkillRegistration>,McpCachePolicy,McpJsonObject)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#cachePolicy()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "cachePolicy()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#owners()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "owners()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#readResult()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "readResult()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex.File#uri()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "uri()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex.File",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan#skillsPlan()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "skillsPlan()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan#SkillFilePlan(URI,CachePlan)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "SkillFilePlan(URI,CachePlan)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan#cachePolicy()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "cachePolicy()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan#uri()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "uri()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillFilePlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation#SkillsInvocation(PromptInvocation,Optional<String>,Optional<URI>)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "SkillsInvocation(PromptInvocation,Optional<String>,Optional<URI>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation#base()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "base()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation#cursor()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "cursor()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation#uri()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "uri()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsInvocation",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#SkillsPlan(List<SkillFilePlan>,boolean,int,boolean,SkillsInvoker)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "SkillsPlan(List<SkillFilePlan>,boolean,int,boolean,SkillsInvoker)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#acceptLanguageVaryRequired()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "acceptLanguageVaryRequired()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#customListHandler()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "customListHandler()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#files()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "files()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#invoker()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "invoker()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#maximumCursorSizeInBytes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumCursorSizeInBytes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource#Resource(URI,String,long)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Resource(URI,String,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource#digest()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "digest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource#sizeInBytes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "sizeInBytes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource#uri()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "uri()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle.Resource#Resource(String,String,long)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Resource(String,String,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle.Resource#digest()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "digest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle.Resource#path()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "path()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle.Resource#size()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "size()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#Mime(String,boolean)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Mime(String,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#text()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "text()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#value()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest.Resource#Resource(URI,String,long)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Resource(URI,String,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest.Resource",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest.Resource#digest()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "digest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest.Resource#size()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "size()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest.Resource#uri()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "uri()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest.Resource",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths.Path#Path(String,byte[])->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Path(String,byte[])",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths.Path",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths.Path#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths.Path",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths.Path#utf8()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "utf8()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths.Path",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths.Path#value()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths.Path",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Frontmatter#Frontmatter(String,int,int)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Frontmatter(String,int,int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Frontmatter",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Frontmatter#bodyByteOffset()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "bodyByteOffset()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Frontmatter",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Frontmatter#firstLine()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "firstLine()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Frontmatter",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Frontmatter#text()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "text()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource.Frontmatter",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Alias#Alias(String,Position)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Alias(String,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Alias",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Alias#name()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "name()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Alias",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Alias#position()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "position()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Alias",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Entry#Entry(SkillYamlNode,SkillYamlNode)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Entry(SkillYamlNode,SkillYamlNode)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Entry",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Entry#key()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "key()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Entry",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Entry#value()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Entry",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Mapping#Mapping(List<Entry>,Properties,Position)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Mapping(List<Entry>,Properties,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Mapping",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Mapping#entries()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "entries()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Mapping",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Mapping#position()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "position()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Mapping",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Mapping#properties()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "properties()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Mapping",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Properties#Properties(String,String)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Properties(String,String)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Properties",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Properties#anchor()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "anchor()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Properties",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Properties#tag()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "tag()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Properties",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#Scalar(String,Style,Properties,Position)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Scalar(String,Style,Properties,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#position()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "position()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#properties()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "properties()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#style()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "style()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Scalar#value()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Scalar",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Sequence#Sequence(List<SkillYamlNode>,Properties,Position)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Sequence(List<SkillYamlNode>,Properties,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Sequence",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Sequence#items()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "items()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Sequence",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Sequence#position()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "position()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Sequence",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Sequence#properties()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "properties()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Sequence",
+          "sink": "Diagnostic.recordAccessor"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java#interceptorJsonRpcExceptionsFailClosedForResourceOperations",
+        "src/test/java/com/soklet/McpSkillPublicRuntimeTests.java#customListHandlerPublishesItsIntentionalJsonRpcErrorExactly"
+      ],
+      "category": "EXCEPTION",
+      "classification": "EXACT_APPLICATION_BOUNDARY",
+      "contract": "A Skills-list handler may deliberately throw McpJsonRpcException; the handler boundary copies its exact application code, message, and structured data into the JSON-RPC error result. Framework failures do not use this publication path.",
+      "id": "PRIV-BOUND-048",
+      "name": "Application Skills JSON-RPC error publication",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpJsonRpcException@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpJsonRpcException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpWireError.publication.getCode@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpWireError.publication.getCode"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpWireError.publication.getData@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpWireError.publication.getData"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpWireError.publication.getError@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpWireError.publication.getError"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpWireError.publication.getError@2",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpWireError.publication.getError"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-009:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->McpWireError.publication.getMessage@1",
+          "matcherRuleId": "PRIV-MATCH-009",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "McpWireError.publication.getMessage"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/skills/SkillYamlFuzzTest.java#frontmatterRemainsTypedBoundedAndByteExact",
+        "fuzz/src/test/java/com/soklet/internal/mcp/skills/SkillYamlFuzzTest.java#streamParsingAndResolutionRemainTypedAndBounded"
+      ],
+      "category": "FIXTURE",
+      "classification": "EXACT_FIXTURE_CAPTURE",
+      "contract": "Tracked Skills frontmatter and stream-parser fuzz seeds preserve exact benign or malformed YAML bytes for deterministic parser regression. They are test fixtures, not runtime logs, metrics, or user-content capture.",
+      "id": "PRIV-BOUND-049",
+      "name": "Skills YAML fuzz seed corpus",
+      "sourcePaths": [
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/bom.md",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/bom.md#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/duplicate-key.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/duplicate-key.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/literal-description.md",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/literal-description.md#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/metadata.md",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/metadata.md#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/multiple-metadata-documents.md",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/multiple-metadata-documents.md#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/nonfinite.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/frontmatterRemainsTypedBoundedAndByteExact/nonfinite.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/anchors.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/anchors.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/block-scalars.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/block-scalars.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/bom-stream.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/bom-stream.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/complex-key.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/complex-key.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/cyclic-alias.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/cyclic-alias.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/directives-stream.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/directives-stream.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/document-local-alias.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/document-local-alias.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/malformed-flow.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/malformed-flow.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/quotes.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/quotes.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        },
+        {
+          "file": "fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/tags-and-empty-nodes.yaml",
+          "key": "PRIV-MATCH-010:fuzz/src/test/resources/com/soklet/internal/mcp/skills/SkillYamlFuzzTestInputs/streamParsingAndResolutionRemainTypedAndBounded/tags-and-empty-nodes.yaml#com.soklet.privacy.FixtureArtifact#$trackedArtifact()->FixtureArtifact.ROOT_007@1",
+          "matcherRuleId": "PRIV-MATCH-010",
+          "member": "$trackedArtifact()",
+          "occurrence": 1,
+          "owner": "com.soklet.privacy.FixtureArtifact",
+          "sink": "FixtureArtifact.ROOT_007"
+        }
+      ]
+    },
+    {
+      "canaryTests": [
+        "src/test/java/com/soklet/McpSkillBundleTests.java#invalidInputFailsWithoutEchoingAuthoredPathsOrMetadata",
+        "src/test/java/com/soklet/McpSkillPublicRuntimeTests.java#skillsListCursorBoundsApplyBeforeCallbacksAndRedactInvalidOutput",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlResolverTests.java#diagnosticNeverContainsAuthoredValuesKeysTagsOrAliasNames"
+      ],
+      "category": "EXCEPTION",
+      "classification": "EXACT_APPLICATION_BOUNDARY",
+      "contract": "Every newly discovered Skills-related explicit Throwable construction is conservatively inventoried as a possible exact application-boundary carrier. Most framework-created messages here are fixed or typed and redacted; this completeness lens does not claim they all disclose input. Cause chains and application callback handling remain application-owned, while built-in fallback logging remains bounded.",
+      "id": "PRIV-BOUND-050",
+      "name": "Skills explicit Throwable construction lens",
+      "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->Throwable.ApplicationHandlerJsonRpcException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.ApplicationHandlerJsonRpcException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)->Throwable.IllegalStateException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(McpEndpoint,McpSkillPolicyEvaluator,SkillsInvocation)",
+          "occurrence": 3,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpEndpointRegistry.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpEndpointRegistry.java#com.soklet.McpEndpointRegistry#withGeneratedEndpoint(Class<?>,UnaryOperator<McpEndpoint>)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "withGeneratedEndpoint(Class<?>,UnaryOperator<McpEndpoint>)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpEndpointRegistry",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpEndpointRegistry.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpEndpointRegistry.java#com.soklet.McpEndpointRegistry#withGeneratedEndpoint(Class<?>,UnaryOperator<McpEndpoint>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "withGeneratedEndpoint(Class<?>,UnaryOperator<McpEndpoint>)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpEndpointRegistry",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#build()->Throwable.IllegalStateException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "build()",
+          "occurrence": 3,
+          "owner": "com.soklet.McpServer.Builder",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex#invalid()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillEndpointIndex",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillGroup.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillGroup.java#com.soklet.McpSkillGroup#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillGroup",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillListContext.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillListContext.java#com.soklet.McpSkillListContext#McpSkillListContext(Optional<String>,Optional<List<McpSkillRegistration>>)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "McpSkillListContext(Optional<String>,Optional<List<McpSkillRegistration>>)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillListContext",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPage.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillPage.java#com.soklet.McpSkillPage.Builder#build()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "build()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPage.Builder",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPolicyEvaluator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillPolicyEvaluator.java#com.soklet.McpSkillPolicyEvaluator#McpSkillPolicyEvaluator(McpEndpoint,McpSkillAccessPolicy,McpSkillVariantSelector)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "McpSkillPolicyEvaluator(McpEndpoint,McpSkillAccessPolicy,McpSkillVariantSelector)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPolicyEvaluator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPolicyEvaluator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillPolicyEvaluator.java#com.soklet.McpSkillPolicyEvaluator#canceled()->Throwable.InterruptedException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "canceled()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPolicyEvaluator",
+          "sink": "Throwable.InterruptedException"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSkillPolicyEvaluator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpSkillPolicyEvaluator.java#com.soklet.McpSkillPolicyEvaluator#failure()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "failure()",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSkillPolicyEvaluator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#validateResourceListResult(Map<String, McpJsonValue>,String,McpApplicationRequestRouter)->Throwable.IllegalArgumentException@7",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateResourceListResult(Map<String, McpJsonValue>,String,McpApplicationRequestRouter)",
+          "occurrence": 7,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)->Throwable.McpApplicationJsonRpcException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invokeSkills(SkillsPlan,McpApplicationInvocation,McpEndpoint)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "Throwable.McpApplicationJsonRpcException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#toEndpointBinding(EndpointPlan,Set<String>,boolean,CorsAuthorizer,boolean,AdmissionAdapter,Optional<RateLimitAdapter>,McpUnknownMirroredHeaderPolicy,Optional<RequestObservationAdapter>,McpFrameworkRequestStateRuntime,List<LocalizedEndpointInvalidation>)->Throwable.IllegalArgumentException@5",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "toEndpointBinding(EndpointPlan,Set<String>,boolean,CorsAuthorizer,boolean,AdmissionAdapter,Optional<RateLimitAdapter>,McpUnknownMirroredHeaderPolicy,Optional<RequestObservationAdapter>,McpFrameworkRequestStateRuntime,List<LocalizedEndpointInvalidation>)",
+          "occurrence": 5,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan#SkillsPlan()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SkillsPlan()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SkillsPlan",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSkillResourceCollisionValidator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpSkillResourceCollisionValidator.java#com.soklet.internal.mcp.protocol.McpSkillResourceCollisionValidator#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpSkillResourceCollisionValidator",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge#paginationRequired()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "paginationRequired()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge#preflight(McpJsonObject,McpJsonLimits)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "preflight(McpJsonObject,McpJsonLimits)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge#preflightEndpoint(com.soklet.McpImplementation,boolean,List<List<Registration>>,boolean)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "preflightEndpoint(com.soklet.McpImplementation,boolean,List<List<Registration>>,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridge.java#com.soklet.internal.mcp.skills.McpSkillRuntimeBridge#preflightPage(List<Registration>,com.soklet.McpSkillPage,com.soklet.McpEndpoint,com.soklet.McpRequestId)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "preflightPage(List<Registration>,com.soklet.McpSkillPage,com.soklet.McpEndpoint,com.soklet.McpRequestId)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.McpSkillRuntimeBridge",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle#fromFiles(Map<String, byte[]>,SkillYamlLimits,McpJsonLimits)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromFiles(Map<String, byte[]>,SkillYamlLimits,McpJsonLimits)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle#sha256()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "sha256()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillDocumentMetadata.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillDocumentMetadata.java#com.soklet.internal.mcp.skills.SkillDocumentMetadata#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillDocumentMetadata",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java#com.soklet.internal.mcp.skills.SkillFrontmatter#parse(byte[],SkillYamlLimits,McpJsonLimits)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "parse(byte[],SkillYamlLimits,McpJsonLimits)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFrontmatter",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillFrontmatter.java#com.soklet.internal.mcp.skills.SkillFrontmatter#parse(byte[],SkillYamlLimits,McpJsonLimits)->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "parse(byte[],SkillYamlLimits,McpJsonLimits)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillFrontmatter",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillManifest.java#com.soklet.internal.mcp.skills.SkillManifest#from(URI,SkillBundle,McpJsonLimits)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "from(URI,SkillBundle,McpJsonLimits)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillManifest",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java#com.soklet.internal.mcp.skills.SkillResourceUris#from(URI,String,SkillPaths,long)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "from(URI,String,SkillPaths,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java#com.soklet.internal.mcp.skills.SkillResourceUris#from(URI,String,SkillPaths,long)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "from(URI,String,SkillPaths,long)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java#com.soklet.internal.mcp.skills.SkillResourceUris#invalid()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalid()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource#fromBytes(byte [],int)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromBytes(byte [],int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource#fromBytes(byte [],int)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromBytes(byte [],int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource#frontmatter()->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "frontmatter()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource#frontmatter()->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "frontmatter()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource#invalidUtf8(CharBuffer)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "invalidUtf8(CharBuffer)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillSource",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java#com.soklet.internal.mcp.skills.SkillYamlBudget#fail(SkillYamlException.Reason,SkillYamlNode.Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fail(SkillYamlException.Reason,SkillYamlNode.Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java#com.soklet.internal.mcp.skills.SkillYamlBudget#text(int,SkillYamlNode.Position)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "text(int,SkillYamlNode.Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java#com.soklet.internal.mcp.skills.SkillYamlBudget#work(long,SkillYamlNode.Position)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "work(long,SkillYamlNode.Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#SkillYamlLimits()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SkillYamlLimits()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlNode.java#com.soklet.internal.mcp.skills.SkillYamlNode.Position#Position()->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "Position()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlNode.Position",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#SkillYamlParser(String,SkillYamlBudget,int)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SkillYamlParser(String,SkillYamlBudget,int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#expandTag(String,Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "expandTag(String,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#expandTag(String,Position)->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "expandTag(String,Position)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#failure(SkillYamlException.Reason)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "failure(SkillYamlException.Reason)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateHandle(String,Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateHandle(String,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateHandle(String,Position)->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateHandle(String,Position)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateInput()->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateInput()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateInput()->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateInput()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateTagCharacters(String,boolean,Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateTagCharacters(String,boolean,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateTagCharacters(String,boolean,Position)->Throwable.SkillYamlException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateTagCharacters(String,boolean,Position)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateTagCharacters(String,boolean,Position)->Throwable.SkillYamlException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateTagCharacters(String,boolean,Position)",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#validateTagIdentity(String,Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateTagIdentity(String,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+          "sink": "Throwable.SkillYamlException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlResolver.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/skills/SkillYamlResolver.java#com.soklet.internal.mcp.skills.SkillYamlResolver#failure(Reason,Position)->Throwable.SkillYamlException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "failure(Reason,Position)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlResolver",
+          "sink": "Throwable.SkillYamlException"
+        }
+      ]
     }
   ],
   "delegations": [
@@ -63021,6 +65008,17 @@
   "productionProfile": "2026-07-28",
   "releaseTarget": "4.0.0",
   "reviewedExclusions": [
+    {
+      "file": "src/main/java/com/soklet/McpAppResourceMetadata.java",
+      "id": "PRIV-EX-019",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/McpAppResourceMetadata.java#com.soklet.McpAppResourceMetadata.ContentSecurityPolicy#defaultInstance()->MetricsCollector.override.defaultInstance@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "defaultInstance()",
+      "occurrence": 1,
+      "owner": "com.soklet.McpAppResourceMetadata.ContentSecurityPolicy",
+      "rationale": "This defaultInstance() declaration belongs to McpAppResourceMetadata.ContentSecurityPolicy, not MetricsCollector. It returns an empty typed CSP value and neither emits a metric nor exposes a MetricsCollector surface. The broad same-name matcher remains unchanged so future collisions require review.",
+      "sink": "MetricsCollector.override.defaultInstance"
+    },
     {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
       "id": "PRIV-EX-001",

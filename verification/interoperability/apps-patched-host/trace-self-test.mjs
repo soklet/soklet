@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { adjudicateAppsTrace, projectAppsExchange, MIME, PROTOCOL, UI } from '../apps/host-trace.mjs';
-import { adjudicatePatchedAppsTrace } from './trace.mjs';
+import { adjudicatePatchedAppsTrace, adjudicatePatchedAppsTransitionTrace,
+  adjudicatePatchedAppsRevocationTrace } from './trace.mjs';
 
 const POSITIVES = ['server/discover', 'resources/list', 'tools/list', 'resources/templates/list',
   'tools/list', 'show_catalog', 'resources/read', 'refresh_catalog'];
@@ -181,4 +182,35 @@ test('inclusive byte bounds remain identical to the original bounded proxy profi
     const changed = rows(order(8)).map(value => ({...value, ...sizes}));
     assert.equal(adjudicatePatchedAppsTrace(changed), 'PASSED');
   }
+});
+
+test('same-App caller transitions require one beta success, one denial, and only bounded later subscription retries', () => {
+  const base = rows(order(4));
+  const trace = [...base, row('refresh_catalog', 13),
+    {...row('refresh_catalog', 14), responseStatus: 400}, row('subscriptions/listen', 15)];
+  assert.equal(adjudicatePatchedAppsTransitionTrace(trace, base.length), 'PASSED');
+  assert.equal(adjudicatePatchedAppsTransitionTrace(trace.slice(0, -1), base.length), 'PASSED');
+  for (const changed of [trace.slice(0, 13), [...trace, row('show_catalog', 16)],
+    [...trace, ...Array.from({length: 5}, (_, i) => row('subscriptions/listen', 16 + i))],
+    trace.map((value, index) => index === 13 ? {...value, responseStatus: 200} : value),
+    trace.map((value, index) => index === 12 ? {...value, resultMatchesFixture: false} : value),
+    trace.map((value, index) => index === 14 ? {...value, responseNoStore: false} : value)])
+    assert.equal(adjudicatePatchedAppsTransitionTrace(changed, base.length), 'FAILED');
+  for (const invalidCount of [0, 9, 13, 17, '12'])
+    assert.equal(adjudicatePatchedAppsTransitionTrace(trace, invalidCount), 'FAILED');
+});
+
+test('open-App revocation requires one 401 refresh and only bounded 401 subscription retries', () => {
+  const base = rows(order(4));
+  const revoked = {...row('refresh_catalog', 13), responseStatus: 401};
+  const retry = {...row('subscriptions/listen', 14), responseStatus: 401, subscriptionDenied: false};
+  const trace = [...base, revoked, retry];
+  assert.equal(adjudicatePatchedAppsRevocationTrace(trace, base.length), 'PASSED');
+  assert.equal(adjudicatePatchedAppsRevocationTrace(trace.slice(0, -1), base.length), 'PASSED');
+  for (const changed of [base, [...trace, row('show_catalog', 15)],
+    [...trace, ...Array.from({length: 5}, (_, i) => ({...retry, sequence: 15 + i}))],
+    trace.map((value, index) => index === 12 ? {...value, responseStatus: 200} : value),
+    trace.map((value, index) => index === 13 ? {...value, subscriptionDenied: true} : value),
+    trace.map((value, index) => index === 13 ? {...value, resultMatchesFixture: false} : value)])
+    assert.equal(adjudicatePatchedAppsRevocationTrace(changed, base.length), 'FAILED');
 });

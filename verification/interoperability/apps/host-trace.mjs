@@ -25,9 +25,13 @@ const data = {
   itemLabel: 'Toy <img src=x onerror=alert(1)>', amount: 1234.5, currency: 'USD',
   updatedAt: '2026-09-19T12:00:00Z', timeZone: 'UTC',
 };
+const betaData = {...data, locale: 'pt-BR', tenant: 'beta', title: 'Catálogo',
+  refreshLabel: 'Atualizar catálogo', summary: 'Catálogo beta: 1 item.',
+  itemLabel: 'Brinquedo <img src=x onerror=alert(1)>'};
 const resource = {uri: UI_URI, name: 'catalog_view', title: 'Catalog view', mimeType: MIME};
-const resourceMetadata = {ui: {csp: {connectDomains: [], resourceDomains: [],
-  frameDomains: [], baseUriDomains: []}, prefersBorder: true}};
+const resourceMetadata = (cspOrigin, geolocation) => ({ui: {csp: {connectDomains: cspOrigin ? [cspOrigin] : [],
+  resourceDomains: cspOrigin ? [cspOrigin] : [], frameDomains: [], baseUriDomains: []},
+  ...(geolocation ? {permissions: {geolocation: {}}} : {}), prefersBorder: true}});
 const tools = [
   {name: 'show_catalog', title: 'Show catalog', inputSchema: schema,
     _meta: {ui: {resourceUri: UI_URI, visibility: ['model', 'app']}}},
@@ -38,19 +42,22 @@ const byName = entries => [...entries].sort((a, b) => String(a?.name).localeComp
 
 // Compare fixture payloads only in memory. Never preserve raw IDs, bodies,
 // headers, arguments, response text, shell bytes, or hashes of caller data.
-export function validAppsResult(method, result, shell) {
+export function validAppsResult(method, result, shell, cspOrigin, callerPhase = 'alpha', geolocation = false) {
   if (!object(result) || result.resultType !== 'complete') return false;
-  if (method === 'tools/call')
+  if (method === 'tools/call') {
+    const expected = callerPhase === 'beta' ? betaData : data;
     return keysWithin(result, ['resultType', 'content', 'structuredContent', '_meta'])
-      && same(result.content, [{type: 'text', text: data.summary}])
-      && same(result.structuredContent, data)
+      && same(result.content, [{type: 'text', text: expected.summary}])
+      && same(result.structuredContent, expected)
       && same(result._meta, {...serverMetadata, 'example/view': 'catalog-v1'});
+  }
   if (!same(result._meta, serverMetadata)) return false;
   if (method === 'resources/read')
     return typeof shell === 'string' && shell.length > 0
       && result.ttlMs === 0 && result.cacheScope === 'private'
       && keysWithin(result, ['resultType', 'contents', '_meta', 'ttlMs', 'cacheScope'])
-      && same(result.contents, [{uri: UI_URI, mimeType: MIME, text: shell, _meta: resourceMetadata}]);
+      && same(result.contents, [{uri: UI_URI, mimeType: MIME, text: shell,
+        _meta: resourceMetadata(cspOrigin, geolocation)}]);
   const catalog = ['resultType', '_meta', 'ttlMs', 'cacheScope'];
   if (result.ttlMs !== 0 || result.cacheScope !== 'private') return false;
   if (method === 'server/discover')
@@ -80,7 +87,8 @@ function validSelection(request) {
 }
 
 export function projectAppsExchange({request, response, headers, status, responseHeaders,
-  requestBytes, responseBytes, authorized, authorizationForwarded, sequence, shell}) {
+  requestBytes, responseBytes, authorized, authorizationForwarded, sequence, shell, cspOrigin,
+  callerPhase = 'alpha', geolocation = false}) {
   const method = METHODS.has(request?.method) ? request.method : 'UNSUPPORTED';
   const capabilities = request?.params?._meta?.[`${META}clientCapabilities`];
   const extensions = capabilities?.extensions;
@@ -92,6 +100,17 @@ export function projectAppsExchange({request, response, headers, status, respons
   // list-change subscription. The fixture deliberately denies it; only this
   // exact bounded JSON denial qualifies, never a stream or a generic error.
   const subscription = method === 'subscriptions/listen';
+  const deniedTool = callerPhase === 'denied' && method === 'tools/call';
+  const revokedAdmission = callerPhase === 'revoked'
+    && (method === 'tools/call' || method === 'subscriptions/listen');
+  const deniedToolError = deniedTool && status === 400 && object(response?.error)
+    && same(Object.keys(response.error).sort(), ['code', 'message'])
+    && response.error.code === -32602 && response.error.message === 'Invalid params'
+    && !JSON.stringify(response).includes('fixture-private-canary');
+  const revokedAdmissionError = revokedAdmission && status === 401 && object(response?.error)
+    && same(Object.keys(response.error).sort(), ['code', 'message'])
+    && response.error.code === -31901 && response.error.message === 'Authentication required.'
+    && !JSON.stringify(response).includes('fixture-private-canary');
   const subscriptionDenied = subscription && status === 403
     && same(response?.error, {code: -32603, message: 'Internal error'});
   return {
@@ -115,9 +134,11 @@ export function projectAppsExchange({request, response, headers, status, respons
     responseNoStore: responseHeaders['cache-control'] === 'no-store',
     responseCorrelated: response?.jsonrpc === '2.0' && response.id === request?.id,
     responseEnvelopeValid: object(response) && same(Object.keys(response).sort(),
-      subscription ? ['error', 'id', 'jsonrpc'] : ['id', 'jsonrpc', 'result']),
+      subscription || deniedTool || revokedAdmission ? ['error', 'id', 'jsonrpc'] : ['id', 'jsonrpc', 'result']),
     subscriptionDenied,
-    resultMatchesFixture: subscription ? subscriptionDenied : validAppsResult(method, response?.result, shell),
+    resultMatchesFixture: revokedAdmission ? revokedAdmissionError
+      : subscription ? subscriptionDenied : deniedTool ? deniedToolError
+      : validAppsResult(method, response?.result, shell, cspOrigin, callerPhase, geolocation),
     requestBytes, responseBytes,
   };
 }
@@ -193,10 +214,15 @@ function collectBody(stream, maximum) {
   });
 }
 
-export async function startAppsProxy({fixturePort, token, shell, allowedOrigin}) {
+export async function startAppsProxy({fixturePort, token, shell, allowedOrigin, cspOrigin,
+  callerTransitions = false, geolocation = false}) {
   if (!Number.isInteger(fixturePort) || fixturePort < 1 || fixturePort > 65535
       || typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)
       || typeof shell !== 'string' || Buffer.byteLength(shell) === 0 || Buffer.byteLength(shell) > 512 * 1024
+      || (cspOrigin !== undefined && (typeof cspOrigin !== 'string'
+        || !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(cspOrigin)
+        || Number(cspOrigin.split(':').at(-1)) > 65535))
+      || typeof callerTransitions !== 'boolean' || typeof geolocation !== 'boolean'
       || (allowedOrigin !== undefined && (typeof allowedOrigin !== 'string'
         || !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(allowedOrigin)
         || Number(allowedOrigin.split(':').at(-1)) > 65535)))
@@ -207,6 +233,7 @@ export async function startAppsProxy({fixturePort, token, shell, allowedOrigin})
   const upstreams = new Set();
   let exchanges = 0;
   let failure;
+  let callerPhase = 'alpha';
   const failed = code => { failure ??= APPS_PROXY_FAILURES.includes(code) ? code : 'APPS_REQUEST_INVALID'; };
   const server = createServer(async (incoming, outgoing) => {
     let upstream;
@@ -233,6 +260,7 @@ export async function startAppsProxy({fixturePort, token, shell, allowedOrigin})
       const name = request.method === 'tools/call' ? request.params.name
         : request.method === 'resources/read' ? request.params.uri : undefined;
       if (incoming.headers['mcp-name'] !== name) throw new Error('APPS_NAME_HEADER');
+      const requestCallerPhase = callerPhase;
       const headers = {host: `127.0.0.1:${fixturePort}`, 'content-length': String(body.length),
         authorization: incoming.headers.authorization};
       for (const field of ['content-type', 'accept', 'mcp-protocol-version', 'mcp-method',
@@ -250,7 +278,7 @@ export async function startAppsProxy({fixturePort, token, shell, allowedOrigin})
             status: response.statusCode, responseHeaders: response.headers,
             requestBytes: body.length, responseBytes: bytes.length, authorized: true,
             authorizationForwarded: headers.authorization === `Bearer ${token}`,
-            sequence: rows.length + 1, shell}));
+            sequence: rows.length + 1, shell, cspOrigin, callerPhase: requestCallerPhase, geolocation}));
           outgoing.writeHead(response.statusCode, response.headers);
           outgoing.end(bytes);
         } catch { failed('APPS_UPSTREAM_RESPONSE_INVALID'); outgoing.destroy(); }
@@ -282,6 +310,12 @@ export async function startAppsProxy({fixturePort, token, shell, allowedOrigin})
     server.listen(0, '127.0.0.1', resolve);
   });
   return {port: server.address().port, rows, rejections, failure: () => failure,
+    setCallerPhase(next) {
+      if (!callerTransitions || !((callerPhase === 'alpha' && ['beta', 'revoked'].includes(next))
+          || (callerPhase === 'beta' && next === 'denied')))
+        throw new Error('APPS_INVALID_CALLER_PHASE');
+      callerPhase = next;
+    },
     async close() {
       for (const upstream of upstreams) upstream.destroy();
       for (const socket of sockets) socket.destroy();

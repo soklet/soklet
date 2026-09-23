@@ -12,6 +12,11 @@ const MAX_EXCEPTION_DETAILS = 8;
 const MAX_EXCEPTION_STACK = 8;
 const UI_TIMEOUT_MS = 15000;
 export const EXPECTED_CSP = "default-src 'none'; connect-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'; object-src 'none'; worker-src 'none'";
+export function expectedAllowlistCsp(origin) {
+  if (typeof origin !== 'string' || !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(origin)
+      || Number(origin.split(':').at(-1)) > 65535) fail('APPS_CSP_OPTIONS_INVALID');
+  return `default-src 'none'; connect-src ${origin}; script-src 'unsafe-inline' ${origin}; style-src 'unsafe-inline' ${origin}; img-src ${origin}; font-src ${origin}; media-src ${origin}; frame-src 'none'; base-uri 'self'; form-action 'none'; object-src 'none'; worker-src 'none'`;
+}
 export const CSP_FAILURES = Object.freeze(['APPS_CSP_OPTIONS_INVALID', 'APPS_CSP_CONTEXT_MISMATCH',
   'APPS_CSP_POLICY_MISMATCH', 'APPS_CSP_PHASE_FAILED', 'APPS_CSP_NETWORK_REJECTED',
   'APPS_CSP_EVALUATION_FAILED', 'APPS_CSP_ROW_REJECTED', 'APPS_CSP_EVIDENCE_REJECTED']);
@@ -19,6 +24,8 @@ const PHASES = Object.freeze(['CONTROL_BEFORE', 'APP', 'CONTROL_AFTER']);
 const OPERATIONS = Object.freeze(['connect', 'image']);
 const CSP_FLAGS = Object.freeze(['policyVerified', 'appContextVerified', 'sandboxVerified',
   'controlsBeforePassed', 'appDenialsPassed', 'controlsAfterPassed', 'settled']);
+const ALLOWLIST_FLAGS = Object.freeze(['policyVerified', 'appContextVerified', 'sandboxVerified',
+  'controlsBeforePassed', 'appChecksPassed', 'controlsAfterPassed', 'settled']);
 const ROW_BOOLEANS = Object.freeze(['attempted', 'completed', 'timedOut', 'contextMatches',
   'succeeded', 'failed', 'responseMatches', 'violationBoundExceeded', 'settled',
   'trusted', 'enforced', 'directiveMatches', 'targetMatches', 'documentMatches', 'policyMatches']);
@@ -180,6 +187,33 @@ export function adjudicateCspEvidence(evidence) {
   } catch { return 'FAILED'; }
 }
 
+export function adjudicateAllowlistEvidence(evidence) {
+  try {
+    const expected = [
+      ['CONTROL_BEFORE', 'connect', 'DECLARED', false], ['CONTROL_BEFORE', 'image', 'DECLARED', false],
+      ['APP', 'connect', 'DECLARED', false], ['APP', 'image', 'DECLARED', false],
+      ['APP', 'connect', 'UNDECLARED', true], ['APP', 'image', 'UNDECLARED', true],
+      ['CONTROL_AFTER', 'connect', 'DECLARED', false], ['CONTROL_AFTER', 'image', 'DECLARED', false],
+    ];
+    if (!ownKeysExactly(evidence, ['status', 'rows', ...ALLOWLIST_FLAGS]) || evidence.status !== 'PASSED'
+        || !ALLOWLIST_FLAGS.every(key => evidence[key] === true)
+        || !Array.isArray(evidence.rows) || evidence.rows.length !== expected.length) return 'FAILED';
+    return expected.every(([phase, operation, targetKind, negative], index) => {
+      const row = evidence.rows[index];
+      const {targetKind: observedKind, ...base} = row ?? {};
+      return observedKind === targetKind && projectCspRow(base) !== null
+        && row.phase === phase && row.operation === operation
+        && row.context === (phase === 'APP' ? 'APP' : 'MAIN')
+        && row.attempted && row.completed && !row.timedOut && row.contextMatches
+        && row.settled && !row.violationBoundExceeded && row.succeeded === !negative
+        && row.failed === negative && row.responseMatches === !negative
+        && row.violationCount === Number(negative) && row.matchingViolationCount === Number(negative)
+        && row.unexpectedViolationCount === 0 && row.trusted && row.enforced
+        && row.directiveMatches && row.targetMatches && row.documentMatches && row.policyMatches;
+    }) ? 'PASSED' : 'FAILED';
+  } catch { return 'FAILED'; }
+}
+
 // This is the exact asset path in the unchanged pinned browser distribution.
 // Only an enum and bounded numeric source coordinates leave this projection.
 function exceptionSource(url, s) {
@@ -270,9 +304,10 @@ export function frameKind(url, { origin, sandboxUrl }) {
  * tracked by their default execution context; opaque-origin OOPIFs are tracked
  * in attached sessions. We never read console arguments, storage, tokens, raw
  * resource documents or personalized response payloads into the receipt. */
-export async function beginBrowserObservation(cdp, { sessionId, origin, sandboxUrl, canaryOrigin }) {
-  if (!identifier(sessionId) || !validCanaryOrigin(canaryOrigin, { origin, sandboxUrl })) fail('APPS_BROWSER_OPTIONS_INVALID');
-  const s = { cdp, sessionId, origin, sandboxUrl, canaryOrigin, stage: 'BROWSER_SETUP', failureCode: undefined,
+export async function beginBrowserObservation(cdp, { sessionId, origin, sandboxUrl, canaryOrigin, allowlist = false }) {
+  if (!identifier(sessionId) || !validCanaryOrigin(canaryOrigin, { origin, sandboxUrl })
+      || typeof allowlist !== 'boolean') fail('APPS_BROWSER_OPTIONS_INVALID');
+  const s = { cdp, sessionId, origin, sandboxUrl, canaryOrigin, allowlist, stage: 'BROWSER_SETUP', failureCode: undefined,
     sessions: new Set([sessionId]), contexts: new Map(), frames: new Map(), removers: [],
     requests: 0, sandboxRequests: 0, blockedFontRequests: 0, unexpectedRequests: 0,
     browserExceptions: 0, exceptionObservations: [], exceptionCountSaturated: false,
@@ -554,20 +589,26 @@ export async function exerciseApps(cdp, sessionId, observation) {
 /** The listener precedes the action, and a negative operation waits for its
  * independently queued violation event, not merely the fetch/image rejection.
  * A timer callback performs the network action in the actual default world. */
-export function cspOperationExpression({ phase, operation, origin, canaryOrigin, sandboxUrl }) {
+export function cspOperationExpression({ phase, operation, origin, canaryOrigin, sandboxUrl,
+  allowlist = false, blocked = false }) {
   if (!PHASES.includes(phase) || !OPERATIONS.includes(operation)
-      || !validCanaryOrigin(canaryOrigin, { origin, sandboxUrl })) fail('APPS_CSP_OPTIONS_INVALID');
-  const negative = phase === 'APP';
+      || !validCanaryOrigin(canaryOrigin, { origin, sandboxUrl })
+      || typeof allowlist !== 'boolean' || typeof blocked !== 'boolean'
+      || (blocked && (!allowlist || phase !== 'APP'))) fail('APPS_CSP_OPTIONS_INVALID');
+  const negative = phase === 'APP' && (!allowlist || blocked);
+  const target = blocked ? `${origin}/` : canaryTargetUrl(canaryOrigin, phase, operation);
+  const targetOrigin = blocked ? origin : canaryOrigin;
+  const policy = allowlist ? expectedAllowlistCsp(canaryOrigin) : EXPECTED_CSP;
   return `new Promise(resolve => {
-    const expectedPolicy = ${JSON.stringify(EXPECTED_CSP)};
-    const target = ${JSON.stringify(canaryTargetUrl(canaryOrigin, phase, operation))};
-    const targetOrigin = ${JSON.stringify(canaryOrigin)};
+    const expectedPolicy = ${JSON.stringify(policy)};
+    const target = ${JSON.stringify(target)};
+    const targetOrigin = ${JSON.stringify(targetOrigin)};
     const negative = ${negative};
     const diagnostics = { documentKind: 'NONE' };
     const row = { phase: ${JSON.stringify(phase)}, operation: ${JSON.stringify(operation)},
-      context: ${JSON.stringify(negative ? 'APP' : 'MAIN')},
+      context: ${JSON.stringify(phase === 'APP' ? 'APP' : 'MAIN')},
       attempted: false, completed: false, timedOut: false,
-      contextMatches: location.href === ${JSON.stringify(negative ? 'about:srcdoc' : `${origin}/`)},
+      contextMatches: location.href === ${JSON.stringify(phase === 'APP' ? 'about:srcdoc' : `${origin}/`)},
       succeeded: false, failed: false, responseMatches: false, violationBoundExceeded: false,
       settled: false, trusted: true, enforced: true, directiveMatches: true,
       targetMatches: true, documentMatches: true, policyMatches: true,
@@ -721,6 +762,96 @@ export async function exerciseCsp(cdp, sessionId, observation, { setPhase } = {}
         || s.canaryBlocked !== 0) reject('APPS_CSP_EVIDENCE_REJECTED');
     s.stage = 'CSP_COMPLETE';
     return { ...evidence, rows: evidence.rows.map(row => ({ ...row })) };
+  } catch (error) {
+    evidence.status = 'FAILED';
+    const code = CSP_FAILURES.includes(error?.message) || (s.failureCode && error?.message === s.failureCode)
+      ? error.message : 'APPS_CSP_EVALUATION_FAILED';
+    s.failureCode ??= code;
+    fail(code);
+  }
+}
+
+/** Exercise the same rendered App with one declared loopback origin and the
+ * live Inspector origin as an undeclared target. Real server contact is checked
+ * independently by the canary and host trace. */
+export async function exerciseAllowlist(cdp, sessionId, observation, {setPhase} = {}) {
+  const s = states.get(observation);
+  if (!s || s.cdp !== cdp || s.sessionId !== sessionId || s.allowlist !== true
+      || typeof setPhase !== 'function' || s.cspPhase !== 'IDLE'
+      || s.stage !== 'REFRESH_COMPLETE') fail('APPS_CSP_OPTIONS_INVALID');
+  const evidence = {status: 'FAILED', rows: [], ...Object.fromEntries(ALLOWLIST_FLAGS.map(key => [key, false]))};
+  s.cspEvidence = evidence;
+  const reject = code => { s.failureCode ??= code; fail(code); };
+  try {
+    s.stage = 'CSP_VERIFY';
+    const app = s.appContext, frame = app && s.frames.get(app.frameId);
+    const mains = [...s.contexts.values()].filter(context => context.session === s.sessionId
+      && s.frames.get(context.frameId)?.kind === 'main');
+    if (!app || s.contexts.get(`${app.session}:${app.contextId}`) !== app
+        || frame?.kind !== 'app' || s.frames.get(frame.parentId)?.kind !== 'sandbox'
+        || mains.length !== 1 || !await evaluate(s, readyExpression, app)) reject('APPS_CSP_CONTEXT_MISMATCH');
+    evidence.appContextVerified = true;
+    s.cspMainContext = mains[0];
+    const sandboxes = [...s.contexts.values()].filter(context => context.frameId === frame.parentId);
+    if (sandboxes.length !== 1 || !await evaluate(s, `(() => {
+      const frames = [...document.querySelectorAll('iframe')];
+      return location.href === ${JSON.stringify(s.sandboxUrl)} && frames.length === 1
+        && frames[0].hasAttribute('srcdoc') && !frames[0].hasAttribute('src')
+        && frames[0].getAttribute('sandbox') === 'allow-scripts allow-forms'
+        && !frames[0].hasAttribute('allow');
+    })()`, sandboxes[0])) reject('APPS_CSP_CONTEXT_MISMATCH');
+    evidence.sandboxVerified = true;
+    if (!await evaluate(s, `(() => {
+      const metas = [...document.querySelectorAll('meta[http-equiv]')]
+        .filter(meta => meta.getAttribute('http-equiv').toLowerCase() === 'content-security-policy');
+      return location.href === 'about:srcdoc' && globalThis.origin === 'null'
+        && metas.length === 1 && document.head.firstElementChild === metas[0]
+        && metas[0].getAttribute('content') === ${JSON.stringify(expectedAllowlistCsp(s.canaryOrigin))};
+    })()`, app)) reject('APPS_CSP_POLICY_MISMATCH');
+    evidence.policyVerified = true;
+    const steps = [
+      [{operation: 'connect'}, {operation: 'image'}],
+      [{operation: 'connect'}, {operation: 'image'},
+        {operation: 'connect', blocked: true}, {operation: 'image', blocked: true}],
+      [{operation: 'connect'}, {operation: 'image'}],
+    ];
+    for (let phaseIndex = 0; phaseIndex < PHASES.length; ++phaseIndex) {
+      const phase = PHASES[phaseIndex];
+      try { await setPhase(phase); } catch { reject('APPS_CSP_PHASE_FAILED'); }
+      s.cspPhase = phase;
+      s.stage = `CSP_${phase}`;
+      for (const {operation, blocked = false} of steps[phaseIndex]) {
+        if (s.failureCode) fail(s.failureCode);
+        if (s.closed || s.closingBrowser || cdp.failure()) reject('APPS_CSP_EVALUATION_FAILED');
+        const context = phase === 'APP' ? app : mains[0];
+        if (s.contexts.get(`${context.session}:${context.contextId}`) !== context)
+          reject('APPS_CSP_CONTEXT_MISMATCH');
+        s.activeOperation = blocked ? undefined : operation;
+        let result;
+        try {
+          result = await cdp.send('Runtime.evaluate', {
+            expression: cspOperationExpression({...s, phase, operation, blocked}), returnByValue: true,
+            awaitPromise: true, allowUnsafeEvalBlockedByCSP: false, contextId: context.contextId,
+          }, context.session);
+        } catch { reject('APPS_CSP_EVALUATION_FAILED'); }
+        finally { s.activeOperation = undefined; }
+        if (result.exceptionDetails || result.result?.type !== 'object') reject('APPS_CSP_EVALUATION_FAILED');
+        const projected = projectCspOperationResult(result.result.value);
+        if (!projected) reject('APPS_CSP_EVALUATION_FAILED');
+        const {row, diagnostics} = projected;
+        evidence.rows.push({...row, targetKind: blocked ? 'UNDECLARED' : 'DECLARED'});
+        s.cspViolationDiagnostics.push({phase: row.phase, operation: row.operation, ...diagnostics});
+        if (s.failureCode || cdp.failure()) reject('APPS_CSP_ROW_REJECTED');
+      }
+      evidence[['controlsBeforePassed', 'appChecksPassed', 'controlsAfterPassed'][phaseIndex]] = true;
+    }
+    evidence.settled = true;
+    evidence.status = 'PASSED';
+    if (adjudicateAllowlistEvidence(evidence) !== 'PASSED'
+        || !s.canaryContinued.every(count => count === 1) || s.canaryBlocked !== 0)
+      reject('APPS_CSP_EVIDENCE_REJECTED');
+    s.stage = 'CSP_COMPLETE';
+    return {...evidence, rows: evidence.rows.map(row => ({...row}))};
   } catch (error) {
     evidence.status = 'FAILED';
     const code = CSP_FAILURES.includes(error?.message) || (s.failureCode && error?.message === s.failureCode)

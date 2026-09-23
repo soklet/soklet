@@ -2213,6 +2213,8 @@ run_barebones
         observedProfileDraft: null,
       };
     });
+  assert.equal(conformanceScenarios.length, 46);
+  assert.equal(conformanceScenarios[1].name, 'completion-complete');
   const conformanceEvidence = {
     evidenceClass: 'IMMUTABLE_RELEASE_CANDIDATE',
     failure: null,

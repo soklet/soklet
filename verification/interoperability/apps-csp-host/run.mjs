@@ -12,7 +12,8 @@ import { connectCdp } from '../inspector/cdp.mjs';
 import { regularFile, validateShellBuild } from '../apps/run.mjs';
 import { startAppsProxy } from '../apps/host-trace.mjs';
 import { adjudicatePatchedAppsTrace as adjudicateAppsTrace } from '../apps-patched-host/trace.mjs';
-import { beginBrowserObservation, exerciseApps, exerciseCsp, adjudicateCspEvidence, CSP_FAILURES, disconnectApps } from './browser-probe.mjs';
+import { beginBrowserObservation, exerciseApps, exerciseCsp, exerciseAllowlist,
+  adjudicateCspEvidence, adjudicateAllowlistEvidence, CSP_FAILURES, disconnectApps } from './browser-probe.mjs';
 import { startCanary, adjudicateCanary } from './canary.mjs';
 import { verifyPatchedDependencies } from '../inspector-auth-patch/patch.mjs';
 import { validateWorkDirectory } from '../inspector-auth-patch/run.mjs';
@@ -30,24 +31,32 @@ const uiChecks = ['selectedAppViaDom', 'hostAppReady', 'catalogRendered', 'textO
   'refreshClickedViaDom', 'pendingClearedPriorData', 'refreshRendered'];
 export const PROFILE = 'soklet.inspector.experimental-apps-csp-denial.v1';
 export const SUCCESS = 'EXPERIMENTAL_APPS_CSP_DENIAL_PASSED';
-export function validateExperimentPins(provenance, candidate, shell) {
+export const ALLOWLIST_PROFILE = 'soklet.inspector.experimental-apps-csp-allowlist.v1';
+export const ALLOWLIST_SUCCESS = 'EXPERIMENTAL_APPS_CSP_ALLOWLIST_PASSED';
+const allowlistMode = options => options['--profile'] === 'allowlist';
+const cspVerdict = receipt => receipt?.profile === ALLOWLIST_PROFILE
+  ? adjudicateAllowlistEvidence(receipt.csp) : adjudicateCspEvidence(receipt?.csp);
+export function validateExperimentPins(provenance, candidate, shell, {allowlist = false} = {}) {
   if (provenance?.patchedTree?.files !== 9391
       || provenance.patchedTree.sha256 !== '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'
       || provenance.patchedFileSha256 !== '405da5e71b887403bb53ff2e3984cec631a1138f50662ad199dfb8e536dcd47a'
       || provenance.experimental !== true || provenance.releasedHostQualification !== false
-      || candidate?.jarSha256 !== '1782dcaa2270cb543c49abc80c942a2ff0f1ab72f9abb88a5d2556d200bd8d74'
+      || (!allowlist && candidate?.jarSha256 !== 'e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f')
+      || (allowlist && !/^[a-f0-9]{64}$/.test(candidate?.jarSha256))
       || shell?.sha256 !== '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60')
     fail('APPS_HOST_EXPERIMENT_PIN');
 }
 
 export function parseHostArguments(args) {
   const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--original-dependencies', '--dependencies', '--browser', '--work-dir'];
-  if (args.length !== keys.length * 2) fail('APPS_HOST_ARGUMENTS');
+  if (args.length !== keys.length * 2 && args.length !== (keys.length + 1) * 2) fail('APPS_HOST_ARGUMENTS');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
-    if (!keys.includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
+    if (![...keys, '--profile'].includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
     options[args[i]] = args[i + 1];
   }
+  if (keys.some(key => !Object.hasOwn(options, key))
+      || (Object.hasOwn(options, '--profile') && options['--profile'] !== 'allowlist')) fail('APPS_HOST_ARGUMENTS');
   return options;
 }
 
@@ -63,12 +72,14 @@ export function fixtureControl(line, event) {
 }
 
 export function completedHostChecks(receipt) {
-  return receipt?.profile === PROFILE && receipt.experimental === true && receipt.patchIdentityVerified === true
+  const allowlist = receipt?.profile === ALLOWLIST_PROFILE;
+  return [PROFILE, ALLOWLIST_PROFILE].includes(receipt?.profile)
+    && receipt.experimental === true && receipt.patchIdentityVerified === true
     && receipt.fullHostQualification === false && receipt.releaseCandidateEvidence === false
     && receipt.observationWindowCompleted === true && receipt.interrupted === false
-    && adjudicateCspEvidence(receipt.csp) === 'PASSED'
-    && adjudicateCanary(receipt.canary) === 'PASSED'
-    && canaryNetworkMatches(receipt.browser?.canaryNetwork)
+    && cspVerdict(receipt) === 'PASSED'
+    && adjudicateCanary(receipt.canary, {allowApp: allowlist}) === 'PASSED'
+    && canaryNetworkMatches(receipt.browser?.canaryNetwork, {allowlist})
     && receipt.traceVerdict === 'PASSED' && uiChecks.every(key => receipt.ui?.[key] === true)
     && receipt.browser?.pageNetworkPolicySatisfied === true && receipt.browser?.noBrowserExceptions === true
     && receipt.browser?.allObservedSessionsCacheDisabled === true
@@ -79,14 +90,14 @@ export function completedHostChecks(receipt) {
     && ['cdp', 'browser', 'host', 'proxy', 'fixture', 'canary'].every(key => receipt.cleanup?.[key] === true);
 }
 
-export function canaryNetworkMatches(value) {
+export function canaryNetworkMatches(value, {allowlist = false} = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
       || Object.keys(value).sort().join(',') !== 'appContinued,blocked,continuedByOperation,mainContinued,phase'
       || value.phase !== 'CONTROL_AFTER' || value.blocked !== 0 || value.mainContinued !== 4
       || !Array.isArray(value.continuedByOperation) || value.continuedByOperation.length !== 6) return false;
   const counts = value.continuedByOperation;
   return [0, 1, 4, 5].every(index => counts[index] === 1)
-    && [2, 3].every(index => counts[index] === 0 || counts[index] === 1)
+    && [2, 3].every(index => allowlist ? counts[index] === 1 : counts[index] === 0 || counts[index] === 1)
     && value.appContinued === counts[2] + counts[3];
 }
 
@@ -94,7 +105,8 @@ export function canaryNetworkMatches(value) {
 export function adjudicateHost(receipt, rejections) {
   if (!completedHostChecks(receipt) || receipt.failure || receipt.integrityFailure || receipt.browserFailure || receipt.cleanupFailure || receipt.canaryFailure
       || !Array.isArray(rejections)) return 'FAILED';
-  return !receipt.traceFailure && rejections.length === 0 ? SUCCESS : 'FAILED';
+  return !receipt.traceFailure && rejections.length === 0
+    ? receipt.profile === ALLOWLIST_PROFILE ? ALLOWLIST_SUCCESS : SUCCESS : 'FAILED';
 }
 
 function cleanFixtureExit(exit) {
@@ -259,6 +271,7 @@ function sourceInputs() {
 }
 
 export async function runHost(options) {
+  const allowlist = allowlistMode(options);
   const jar = regularFile(options['--candidate-jar']);
   const pom = regularFile(options['--candidate-pom']);
   const java = regularFile(options['--java']);
@@ -276,7 +289,7 @@ export async function runHost(options) {
   regularFile(resolve(inspector, 'clients/web/dist/index.html'));
   const provenance = verifyPatchedDependencies(original, dependencies);
   const installed = provenance.patchedTree;
-  validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)});
+  validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)}, {allowlist});
   if (lstatSync(shell).size > 512 * 1024 || lstatSync(shellReceipt).size > 2 * 1024 * 1024) fail('APPS_HOST_SHELL_BOUND');
   const shellInputs = ['../inspector/process.mjs', 'assets/catalog-entry.mjs', 'assets/catalog-shell.html',
     'assets/catalog-shell.mjs', 'build-shell.mjs'].map(path => ({path,
@@ -306,7 +319,7 @@ export async function runHost(options) {
   const interrupt = () => { interrupted = true; for (const handle of active) void handle.stop().catch(() => {}); };
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
-  const receipt = {formatVersion: 1, profile: PROFILE,
+  const receipt = {formatVersion: 1, profile: allowlist ? ALLOWLIST_PROFILE : PROFILE,
     status: 'FAILED', stage: 'INPUTS', experimental: true, patchIdentityVerified: true, provenance,
     fullHostQualification: false, releaseCandidateEvidence: false,
     executedAt: new Date().toISOString(), protocolVersion: '2026-07-28',
@@ -318,15 +331,17 @@ export async function runHost(options) {
     bounds: {compileMs: 120000, identityMs: 10000, fixtureMs: 120000, hostMs: 120000, browserMs: 90000,
       childOutputBytes: 2 * 1024 * 1024, gracefulExitWaitMs: 3000, fixtureEofWaitMs: 6000,
       termGraceMs: 2000, killGraceMs: 2000, postCspObservationMs: 6000, deniedSubscriptions: 8, mcpExchanges: 16,
-      cspOperations: 6, cspOperationMs: 2000, cspSettleMs: 100, canaryRequests: 16, canaryConnections: 16,
+      cspOperations: allowlist ? 8 : 6, cspOperationMs: 2000, cspSettleMs: 100, canaryRequests: 16, canaryConnections: 16,
       canaryHeaderBytes: 8192, canaryExchangeMs: 5000, canaryCloseMs: 1000},
     limitations: ['Dirty-tree local development evidence, not immutable release conformance.',
       'One Inspector build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
       'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
       'One to eight exact denied subscription retries are observed, never authorized or converted to success.',
-      'Only connect-src and img-src denial in the existing opaque App frame; no general CSP/permissions, localization, tenant, revocation, OAuth, or production-host qualification.',
+      allowlist ? 'One declared loopback origin for connect-src and img-src plus the undeclared Inspector origin; no general CSP/permissions, localization, tenant, revocation, OAuth, or production-host qualification.'
+        : 'Only connect-src and img-src denial in the existing opaque App frame; no general CSP/permissions, localization, tenant, revocation, OAuth, or production-host qualification.',
       'Fixed CDP-triggered page operations, not an altered fixture, App SDK action, CSP override or synthetic MCP invocation.',
-      'Exact loopback canary URLs are allowed by interception; trusted enforced CSP violations, failed App operations, and before/after successful main-frame controls are independently required.',
+      allowlist ? 'Declared-origin App requests must reach the independent canary; undeclared-origin App requests require trusted enforcing CSP violations. Main-frame controls bracket the App phase.'
+        : 'Exact loopback canary URLs are allowed by interception; trusted enforced CSP violations, failed App operations, and before/after successful main-frame controls are independently required.',
       'Only allowlisted structural facts retained; private browser/config/runtime state is deleted after supervised cleanup.']};
   let fixture, proxy, host, browser, cdp, observation, canary, configPath, configBytes, privateCreated = false;
   let hostExited = false, browserExited = false;
@@ -365,15 +380,18 @@ export async function runHost(options) {
     if (audit.stderr !== '' || audit.stdout.includes('com.soklet.internal') || audit.stdout.includes('not found')) fail('APPS_HOST_DEPENDENCY_AUDIT');
     writeFileSync(resolve(work, 'dependencies.txt'), audit.stdout, {mode: 0o600, flag: 'wx'});
     receipt.fixtureClassTree = directoryIdentity(classes);
+    if (allowlist) canary = await startCanary({allowApp: true});
     const token = randomBytes(32).toString('hex');
     const hostToken = randomBytes(32).toString('hex');
     receipt.stage = 'FIXTURE';
-    fixture = managed(java, ['-cp', classes + delimiter + jar, 'com.soklet.interop.apps.AppsFixtureMain', shell], {stdin: 'pipe'});
+    fixture = managed(java, ['-cp', classes + delimiter + jar, 'com.soklet.interop.apps.AppsFixtureMain',
+      shell, ...(allowlist ? [canary.origin] : [])], {stdin: 'pipe'});
     const readiness = readyLine(fixture);
     fixture.child.stdin.write(token + '\n');
     const ready = await readiness;
     receipt.authentication = await fixtureAuthentication(ready.port, token);
-    proxy = await startAppsProxy({fixturePort: ready.port, token, shell: readFileSync(shell, 'utf8')});
+    proxy = await startAppsProxy({fixturePort: ready.port, token, shell: readFileSync(shell, 'utf8'),
+      ...(allowlist ? {cspOrigin: canary.origin} : {})});
     const config = createSessionConfig(`http://127.0.0.1:${proxy.port}/mcp`, token, {apps: true, skills: false});
     configPath = resolve(privateRoot, 'session.json');
     configBytes = json(config);
@@ -390,7 +408,7 @@ export async function runHost(options) {
     receipt.hostAuthRequired = (await hostApi(origin, hostToken, false)).status === 401;
     receipt.hostOriginRestricted = (await hostApi(origin, hostToken, true, 'http://127.0.0.1:1')).status === 403;
     if (!receipt.readOnlyMemoryStore || !receipt.hostAuthRequired || !receipt.hostOriginRestricted) fail('APPS_HOST_ISOLATION');
-    canary = await startCanary();
+    if (!allowlist) canary = await startCanary();
     receipt.stage = 'BROWSER';
     const profile = resolve(privateRoot, 'chrome-profile');
     mkdirSync(profile, {mode: 0o700});
@@ -400,13 +418,16 @@ export async function runHost(options) {
     receipt.browserVersion = browserVersion(await cdp.send('Browser.getVersion'));
     const {targetId} = await cdp.send('Target.createTarget', {url: 'about:blank'});
     const {sessionId} = await cdp.send('Target.attachToTarget', {targetId, flatten: true});
-    observation = await beginBrowserObservation(cdp, {sessionId, origin, sandboxUrl: initial.sandboxUrl, canaryOrigin: canary.origin});
+    observation = await beginBrowserObservation(cdp, {sessionId, origin,
+      sandboxUrl: initial.sandboxUrl, canaryOrigin: canary.origin, allowlist});
     await cdp.send('Page.navigate', {url: origin}, sessionId);
     receipt.stage = 'APPS_UI';
     receipt.ui = await exerciseApps(cdp, sessionId, observation);
     receipt.stage = 'CSP';
-    receipt.csp = await exerciseCsp(cdp, sessionId, observation, {setPhase: phase => canary.setPhase(phase)});
-    if (adjudicateCspEvidence(receipt.csp) !== 'PASSED' || canary.failure()) fail('APPS_HOST_CSP_FAILED');
+    receipt.csp = allowlist
+      ? await exerciseAllowlist(cdp, sessionId, observation, {setPhase: phase => canary.setPhase(phase)})
+      : await exerciseCsp(cdp, sessionId, observation, {setPhase: phase => canary.setPhase(phase)});
+    if (cspVerdict(receipt) !== 'PASSED' || canary.failure()) fail('APPS_HOST_CSP_FAILED');
     receipt.stage = 'OBSERVE';
     const observeUntil = Date.now() + 6000;
     while (Date.now() < observeUntil) {
@@ -481,7 +502,7 @@ export async function runHost(options) {
     // Keep the independent endpoint observable until every possible caller has
     // stopped, even on failure. Sealing never hides a late request.
     let canaryCleanup = true;
-    try { if (adjudicateCspEvidence(receipt.csp) === 'PASSED') canary?.setPhase('SEALED'); }
+    try { if (cspVerdict(receipt) === 'PASSED') canary?.setPhase('SEALED'); }
     catch { canaryCleanup = false; }
     try { await canary?.close(); } catch { canaryCleanup = false; }
     receipt.cleanup = {cdp: cdpClosed, browser: cleanup[0].status === 'fulfilled', host: cleanup[1].status === 'fulfilled',
@@ -525,11 +546,14 @@ export async function runHost(options) {
     receipt.interrupted = interrupted;
     if (interrupted) receipt.failure = 'APPS_HOST_INTERRUPTED';
     const finalStatus = adjudicateHost(receipt, proxy?.rejections ?? []);
-    receipt.cspDenials = finalStatus === SUCCESS
+    if (allowlist) receipt.cspAllowlist = finalStatus === ALLOWLIST_SUCCESS
+      ? 'EXPERIMENTAL_DECLARED_AND_UNDECLARED_ORIGINS_PASSED'
+      : cspVerdict(receipt) === 'PASSED' ? 'PAGE_PROBES_PASSED_BEFORE_FINAL_FAILURE' : 'NOT_QUALIFIED';
+    else receipt.cspDenials = finalStatus === SUCCESS
       ? 'EXPERIMENTAL_CONNECT_AND_IMAGE_DENIALS_PASSED'
-      : adjudicateCspEvidence(receipt.csp) === 'PASSED' ? 'PAGE_PROBES_PASSED_BEFORE_FINAL_FAILURE' : 'NOT_QUALIFIED';
+      : cspVerdict(receipt) === 'PASSED' ? 'PAGE_PROBES_PASSED_BEFORE_FINAL_FAILURE' : 'NOT_QUALIFIED';
     receipt.status = finalStatus;
-    if (finalStatus === SUCCESS) receipt.stage = 'COMPLETE';
+    if ([SUCCESS, ALLOWLIST_SUCCESS].includes(finalStatus)) receipt.stage = 'COMPLETE';
     else receipt.failure ??= 'APPS_HOST_INCOMPLETE_EVIDENCE';
     const trace = {formatVersion: 1, policy: 'STRUCTURAL_ALLOWLIST_NO_RAW_PAYLOAD_OR_BODY_HASH',
       exchanges: proxy?.rows ?? [], rejections: proxy?.rejections ?? []};
@@ -546,7 +570,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const receipt = await runHost(parseHostArguments(process.argv.slice(2)));
     console.log(JSON.stringify({status: receipt.status, stage: receipt.stage, failure: receipt.failure, fullHostQualification: false}));
-    if (receipt.status !== SUCCESS) process.exitCode = 1;
+    if (![SUCCESS, ALLOWLIST_SUCCESS].includes(receipt.status)) process.exitCode = 1;
   } catch {
     console.error('Apps host runner rejected its inputs; no qualified receipt.');
     process.exitCode = 1;

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 import { appsRequestPolicy, beginBrowserObservation, clickExpression, disconnectApps,
-  exerciseApps, frameKind, validAppsOrigins } from './browser-probe.mjs';
+  exerciseApps, exerciseAppsTransitions, exerciseAppsRevocation, frameKind, validAppsOrigins } from './browser-probe.mjs';
+import { exerciseAppsPermissions } from './browser-probe.mjs';
 
 const origin = 'http://127.0.0.1:48311';
 const sandboxUrl = 'http://127.0.0.1:48312/sandbox';
@@ -169,6 +170,75 @@ test('mock orchestration exercises genuine DOM controls and evaluates App only i
   assert.ok(evaluates.every(command => !/fetch\(|callServerTool\(|postMessage\(/.test(command.params.expression)));
   assert.deepEqual(await disconnectApps(cdp, 'MAIN', observation), { disconnected: true });
   assert.equal(observation.facts().stage, 'DISCONNECTED');
+  observation.close();
+});
+
+test('permission probe reads effective policy only in matched main, sandbox and App contexts', async () => {
+  const cdp = mockCdp();
+  const observation = await beginBrowserObservation(cdp, options);
+  await attach(cdp, 'SANDBOX', 'MAIN', 'sandbox');
+  await attach(cdp, 'APP', 'SANDBOX', 'app');
+  await exerciseApps(cdp, 'MAIN', observation, {geolocation: true});
+  const facts = await exerciseAppsPermissions(cdp, 'MAIN', observation);
+  assert.ok(Object.values(facts).every(value => value === true));
+  assert.equal(observation.facts().stage, 'PERMISSIONS_COMPLETE');
+  const checks = cdp.commands.filter(command => command.method === 'Runtime.evaluate'
+    && command.params.expression.includes('allowsFeature'));
+  assert.ok(checks.some(command => command.session === 'MAIN' && command.params.contextId === undefined));
+  assert.ok(checks.some(command => command.session === 'SANDBOX' && command.params.contextId === 1));
+  assert.ok(checks.some(command => command.session === 'APP' && command.params.contextId === 1));
+  assert.ok(cdp.commands.every(command => command.method !== 'Page.createIsolatedWorld'));
+  observation.close();
+});
+
+test('caller transitions acknowledge beta then denial before two same-App DOM refreshes', async () => {
+  const cdp = mockCdp();
+  const observation = await beginBrowserObservation(cdp, options);
+  await attach(cdp, 'SANDBOX', 'MAIN', 'sandbox');
+  await attach(cdp, 'APP', 'SANDBOX', 'app');
+  await exerciseApps(cdp, 'MAIN', observation);
+  const phases = [];
+  const facts = await exerciseAppsTransitions(cdp, 'MAIN', observation, async phase => phases.push(phase));
+  assert.deepEqual(phases, ['beta', 'denied']);
+  assert.deepEqual(facts, {betaRenderedInSameApp: true, previousTenantCleared: true,
+    denialClearedView: true, deniedViewRequiresReopen: true});
+  assert.equal(observation.facts().stage, 'CALLER_TRANSITIONS_COMPLETE');
+  const evaluations = cdp.commands.filter(command => command.method === 'Runtime.evaluate');
+  assert.equal(evaluations.filter(command => command.params.expression.includes('refresh.click()')).length, 3);
+  assert.ok(evaluations.filter(command => command.params.expression.includes('refresh.click()'))
+    .every(command => command.session === 'APP' && command.params.contextId === 1));
+  assert.ok(evaluations.every(command => !/fetch\(|callServerTool\(|postMessage\(/.test(command.params.expression)));
+  observation.close();
+});
+
+test('caller transition probe refuses a replaced App execution context', async () => {
+  const cdp = mockCdp();
+  const observation = await beginBrowserObservation(cdp, options);
+  await attach(cdp, 'SANDBOX', 'MAIN', 'sandbox');
+  await attach(cdp, 'APP', 'SANDBOX', 'app');
+  await exerciseApps(cdp, 'MAIN', observation);
+  await cdp.emit('Runtime.executionContextDestroyed', {executionContextId: 1}, 'APP');
+  await assert.rejects(exerciseAppsTransitions(cdp, 'MAIN', observation, async () => {}),
+    {message: 'APPS_UI_APP_REPLACED'});
+  observation.close();
+});
+
+test('revocation acknowledges the same credential removal before a fresh App DOM refresh', async () => {
+  const cdp = mockCdp();
+  const observation = await beginBrowserObservation(cdp, options);
+  await attach(cdp, 'SANDBOX', 'MAIN', 'sandbox');
+  await attach(cdp, 'APP', 'SANDBOX', 'app');
+  await exerciseApps(cdp, 'MAIN', observation);
+  let acknowledged = false;
+  const facts = await exerciseAppsRevocation(cdp, 'MAIN', observation, async () => {acknowledged = true;});
+  assert.equal(acknowledged, true);
+  assert.deepEqual(facts, {revokedRefreshClickedViaDom: true, revokedViewCleared: true,
+    revokedViewRequiresReopen: true});
+  assert.equal(observation.facts().stage, 'CALLER_REVOCATION_COMPLETE');
+  const clicks = cdp.commands.filter(command => command.method === 'Runtime.evaluate'
+    && command.params.expression.includes('refresh.click()'));
+  assert.equal(clicks.length, 2);
+  assert.ok(clicks.every(command => command.session === 'APP' && command.params.contextId === 1));
   observation.close();
 });
 

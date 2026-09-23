@@ -11,6 +11,7 @@ package com.soklet.interop.apps;
 
 import com.soklet.LifecycleObserver;
 import com.soklet.LogEvent;
+import com.soklet.McpAppResourceMetadata;
 import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
 import com.soklet.ShutdownComponentDisposition;
@@ -28,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -35,8 +37,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Disposable loopback listener for the separately supervised browser probe.
- * The only argument is an absolute shell path. The credential is the first
- * stdin line; subsequent EOF requests graceful shutdown. No credential, request,
+ * Arguments are an absolute shell path and, optionally, a canonical loopback
+ * origin or an isolated caller/permission profile. The credential is the first
+ * stdin line; in the ordinary profile subsequent EOF requests graceful shutdown.
+ * No credential, request,
  * payload, exception, or framework log is written to the control streams.
  */
 public final class AppsFixtureMain {
@@ -66,14 +70,21 @@ public final class AppsFixtureMain {
 		McpServer server = null;
 		boolean failed = false;
 		try {
-			if (arguments.length != 1)
+			if (arguments.length != 1 && arguments.length != 2)
 				throw new IllegalArgumentException();
 			String shell = readShell(arguments[0]);
 			ScheduledFuture<?> inputDeadline = watchdog.schedule(() -> haltFailed(124), 10, TimeUnit.SECONDS);
 			String token = readToken(System.in);
 			inputDeadline.cancel(false);
+			boolean transitions = arguments.length == 2 && arguments[1].equals("--caller-transitions");
+			boolean revocation = arguments.length == 2 && arguments[1].equals("--revoke-caller");
+			boolean geolocation = arguments.length == 2 && arguments[1].equals("--permission-geolocation");
+			McpAppResourceMetadata.ContentSecurityPolicy policy = arguments.length == 1 || transitions || revocation || geolocation
+					? McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance()
+					: allowlistPolicy(arguments[1]);
 			AppsFixture fixture = new AppsFixture(shell,
-					Map.of(token, new AppsFixture.Caller("browser-probe", "alpha", "en-US", true)));
+					Map.of(token, new AppsFixture.Caller("browser-probe", "alpha", "en-US", true)), policy,
+					geolocation ? Set.of(McpAppResourceMetadata.Permission.GEOLOCATION) : Set.of());
 			SokletConfig config = fixture.serverConfig(0, QUIET_OBSERVER);
 			server = config.getMcpServer().orElseThrow();
 			soklet = Soklet.fromConfig(config);
@@ -83,7 +94,11 @@ public final class AppsFixtureMain {
 				throw new IllegalStateException();
 			control("{\"format\":1,\"event\":\"ready\",\"host\":\"127.0.0.1\",\"port\":"
 					+ address.getPort() + ",\"path\":\"/apps\"}");
-			if (System.in.read() != -1)
+			if (transitions)
+				runCallerTransitions(System.in, fixture, token);
+			else if (revocation)
+				runCallerRevocation(System.in, fixture, token);
+			else if (System.in.read() != -1)
 				throw new IllegalArgumentException();
 		} catch (Throwable failure) {
 			failed = true;
@@ -143,6 +158,55 @@ public final class AppsFixtureMain {
 				throw new IllegalArgumentException();
 			token.append((char) next);
 		}
+	}
+
+	private static void runCallerTransitions(InputStream input, AppsFixture fixture, String token)
+			throws Exception {
+		if (!"beta".equals(readCommand(input)))
+			throw new IllegalArgumentException();
+		fixture.setCaller(token, new AppsFixture.Caller("browser-beta", "beta", "pt-BR", true));
+		control("{\"format\":1,\"event\":\"caller\",\"state\":\"beta\"}");
+		if (!"denied".equals(readCommand(input)))
+			throw new IllegalArgumentException();
+		fixture.setCaller(token, new AppsFixture.Caller("browser-denied", "beta", "pt-BR", false));
+		control("{\"format\":1,\"event\":\"caller\",\"state\":\"denied\"}");
+		if (readCommand(input) != null)
+			throw new IllegalArgumentException();
+	}
+
+	private static void runCallerRevocation(InputStream input, AppsFixture fixture, String token)
+			throws Exception {
+		if (!"revoke".equals(readCommand(input)))
+			throw new IllegalArgumentException();
+		fixture.revoke(token);
+		control("{\"format\":1,\"event\":\"caller\",\"state\":\"revoked\"}");
+		if (readCommand(input) != null)
+			throw new IllegalArgumentException();
+	}
+
+	private static String readCommand(InputStream input) throws Exception {
+		StringBuilder command = new StringBuilder(16);
+		while (true) {
+			int next = input.read();
+			if (next == -1) {
+				if (!command.isEmpty())
+					throw new IllegalArgumentException();
+				return null;
+			}
+			if (next == '\n')
+				return command.toString();
+			if (command.length() >= 16 || next < 'a' || next > 'z')
+				throw new IllegalArgumentException();
+			command.append((char) next);
+		}
+	}
+
+	private static McpAppResourceMetadata.ContentSecurityPolicy allowlistPolicy(String origin) {
+		if (!origin.matches("http://127\\.0\\.0\\.1:[1-9][0-9]{0,4}")
+				|| Integer.parseInt(origin.substring(origin.lastIndexOf(':') + 1)) > 65535)
+			throw new IllegalArgumentException();
+		return McpAppResourceMetadata.ContentSecurityPolicy.builder()
+				.connectDomains(java.util.Set.of(origin)).resourceDomains(java.util.Set.of(origin)).build();
 	}
 
 	private static void control(String line) {

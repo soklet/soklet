@@ -63,7 +63,13 @@ public final class McpAppResourceMetadata {
 		this.prefersBorder = builder.prefersBorder;
 	}
 
-	/** @return content security policy, or empty when omitted */
+	/**
+	 * Returns the explicitly supplied content security policy.
+	 * <p>An empty optional means CSP metadata is omitted, not that sandbox
+	 * protection is disabled. MCP Apps hosts must still apply restrictive defaults.
+	 *
+	 * @return content security policy, or empty when omitted
+	 */
 	@NonNull
 	public Optional<@NonNull ContentSecurityPolicy> getContentSecurityPolicy() {
 		return Optional.ofNullable(this.contentSecurityPolicy);
@@ -81,7 +87,13 @@ public final class McpAppResourceMetadata {
 		return Optional.ofNullable(this.domain);
 	}
 
-	/** @return border preference, preserving omission separately from false */
+	/**
+	 * Returns the host presentation preference for a visible border and background.
+	 * Omission leaves the presentation to the host; explicit false requests an
+	 * unframed presentation. This hint does not configure CSS inside the App.
+	 *
+	 * @return border preference, preserving omission separately from false
+	 */
 	@NonNull
 	public Optional<@NonNull Boolean> getPrefersBorder() {
 		return Optional.ofNullable(this.prefersBorder);
@@ -195,7 +207,9 @@ public final class McpAppResourceMetadata {
 		}
 
 		/**
-		 * Sets a presentation preference, retaining explicit false.
+		 * Requests a host-provided border and background when true, or an
+		 * unframed presentation when false. Omitting this call lets the host decide.
+		 * This presentation hint does not change the App's security policy.
 		 *
 		 * @param prefersBorder whether a border is preferred
 		 * @return this builder
@@ -226,6 +240,8 @@ public final class McpAppResourceMetadata {
 	@ThreadSafe
 	public static final class ContentSecurityPolicy {
 		@NonNull
+		private static final ContentSecurityPolicy DEFAULT_INSTANCE = builder().build();
+		@NonNull
 		private final Set<@NonNull String> connectDomains;
 		@NonNull
 		private final Set<@NonNull String> resourceDomains;
@@ -233,6 +249,23 @@ public final class McpAppResourceMetadata {
 		private final Set<@NonNull String> frameDomains;
 		@NonNull
 		private final Set<@NonNull String> baseUriDomains;
+
+		/**
+		 * Returns the immutable default policy, equivalent to {@code builder().build()}.
+		 * <p>All four origin allowlists are empty: no additional external connection,
+		 * resource, or frame origins are declared, and document base URIs remain
+		 * same-origin-only. Enforcement belongs to the host, which may further restrict
+		 * the policy.
+		 * <p>Supplying this value explicitly emits CSP metadata. Leaving the policy
+		 * unspecified omits that metadata, but still requires the host to apply
+		 * restrictive defaults; omission does not disable sandbox protection.
+		 *
+		 * @return default content security policy
+		 */
+		@NonNull
+		public static ContentSecurityPolicy defaultInstance() {
+			return DEFAULT_INSTANCE;
+		}
 
 		/** @return mutable builder with empty origin allowlists */
 		@NonNull

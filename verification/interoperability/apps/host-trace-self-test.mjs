@@ -143,6 +143,62 @@ test('result checks reject raw metadata/text, tenant changes, schema changes and
   }
 });
 
+test('opt-in geolocation metadata must be exact and is not accepted in the default profile', () => {
+  const resource = result('resources/read');
+  resource.contents[0]._meta.ui.permissions = {geolocation: {}};
+  assert.equal(validAppsResult('resources/read', resource, shell, undefined, 'alpha', true), true);
+  assert.equal(validAppsResult('resources/read', resource, shell), false);
+  assert.equal(project('resources/read', 1, {geolocation: true,
+    response: {jsonrpc: '2.0', id: secret, result: resource}}).resultMatchesFixture, true);
+  for (const invalid of [{camera: {}}, {geolocation: true}, {geolocation: {}, microphone: {}}]) {
+    const altered = structuredClone(resource);
+    altered.contents[0]._meta.ui.permissions = invalid;
+    assert.equal(validAppsResult('resources/read', altered, shell, undefined, 'alpha', true), false);
+  }
+});
+
+test('transition projection validates beta data and a content-free denied refresh without storing either body', () => {
+  const beta = result('refresh_catalog');
+  beta.content[0].text = 'Catálogo beta: 1 item.';
+  Object.assign(beta.structuredContent, {locale: 'pt-BR', tenant: 'beta', title: 'Catálogo',
+    refreshLabel: 'Atualizar catálogo', summary: 'Catálogo beta: 1 item.',
+    itemLabel: 'Brinquedo <img src=x onerror=alert(1)>'});
+  assert.equal(validAppsResult('tools/call', beta, shell, undefined, 'beta'), true);
+  assert.equal(validAppsResult('tools/call', beta, shell), false);
+  const betaRow = project('refresh_catalog', 10, {callerPhase: 'beta',
+    response: {jsonrpc: '2.0', id: secret, result: beta}});
+  assert.equal(betaRow.resultMatchesFixture, true); sanitized(betaRow);
+  const denied = {jsonrpc: '2.0', id: secret,
+    error: {code: -32602, message: 'Invalid params'}};
+  const deniedRow = project('refresh_catalog', 11, {callerPhase: 'denied', status: 400, response: denied});
+  assert.equal(deniedRow.responseEnvelopeValid, true);
+  assert.equal(deniedRow.resultMatchesFixture, true); sanitized(deniedRow);
+  for (const error of [{...denied.error, data: secret}, {code: -32602, message: secret},
+    {code: -32601, message: 'Method not found'}]) {
+    const changed = project('refresh_catalog', 11, {callerPhase: 'denied', status: 400,
+      response: {...denied, error}});
+    assert.equal(changed.resultMatchesFixture, false);
+  }
+});
+
+test('revocation projection requires exact 401 authentication errors for refresh and subscription retry', () => {
+  const response = {jsonrpc: '2.0', id: secret,
+    error: {code: -31901, message: 'Authentication required.'}};
+  for (const operation of ['refresh_catalog', 'subscriptions/listen']) {
+    const valid = project(operation, 13, {callerPhase: 'revoked', status: 401, response});
+    assert.equal(valid.responseEnvelopeValid, true);
+    assert.equal(valid.resultMatchesFixture, true);
+    assert.equal(valid.subscriptionDenied, false);
+    sanitized(valid);
+    for (const error of [{...response.error, data: secret},
+      {code: -31901, message: secret}, {code: -32602, message: 'Invalid params'}]) {
+      const changed = project(operation, 13, {callerPhase: 'revoked', status: 401,
+        response: {...response, error}});
+      assert.equal(changed.resultMatchesFixture, false);
+    }
+  }
+});
+
 test('request projection rejects wrong Apps shape, unexpected arguments, headers and error envelopes', () => {
   for (const ui of [{mimeTypes: [MIME]}, {mimeTypes: ['text/html'], elicitation: {}},
     {mimeTypes: [MIME], elicitation: {}, extra: true}]) {

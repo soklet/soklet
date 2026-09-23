@@ -118,6 +118,29 @@ abort signal plus an independent local timeout.
 This runner deliberately uses the off-network simulator, not the independently
 supervised loopback listener below. Nothing here establishes a production-host pass.
 
+For a separate, narrow live-HTTP authorization check, compile the public-API
+fixture and `AppsFixtureHttpAuthorizationTest.java` against the same candidate
+JAR with `--release 17 -proc:none -Xlint:all -Werror`, then run the test with
+the candidate JAR on the classpath and the built shell as its argument:
+
+```sh
+mkdir -p /absolute/path/to/new-classes
+"/absolute/path/to/jdk/bin/javac" --release 17 -proc:none -Xlint:all -Werror \
+  -classpath /absolute/path/to/candidate.jar -d /absolute/path/to/new-classes \
+  verification/interoperability/apps/src/com/soklet/interop/apps/AppsFixture.java \
+  verification/interoperability/apps/test-src/com/soklet/interop/apps/AppsFixtureHttpAuthorizationTest.java
+"/absolute/path/to/jdk/bin/java" \
+  -classpath /absolute/path/to/new-classes:/absolute/path/to/candidate.jar \
+  com.soklet.interop.apps.AppsFixtureHttpAuthorizationTest /absolute/path/to/catalog.html
+```
+
+This starts a real Soklet listener on an ephemeral loopback port and checks 12
+requests across authorized, denied, changed-tenant/locale, and revoked states
+for the same credential. It checks that hidden tool errors match unknown-tool
+errors, while denied and unknown resource reads both expose no content; the
+fixture does not promise identical resource errors. This is server authorization
+evidence, not a browser-session or released-host authorization claim.
+
 ## Real Inspector render/refresh profile
 
 ```sh

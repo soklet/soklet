@@ -2015,6 +2015,228 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpSkillEndpointTests.java#fileOwnerCeilingAllowsSixteenAndRejectsSeventeenCompleteNestedOwners",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#fileCountBoundaryIncludesRootAndPermitsExactly512Files",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#utf8ByteCeilingCountsMultibyteAndSupplementaryScalars",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillResourceUrisTests.java#individualDerivedUriByteCeilingIsInclusive",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#depthLimitIncludesRootAndScalarDepthInclusively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#inputByteLimitCountsUtf8BytesInclusively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeLimitIncludesContainersAndIsInclusive",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#scalarLimitCountsDecodedUtf16UnitsInclusively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#totalTextLimitAccumulatesAcrossScalarsInclusively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#workLimitStopsParsingWithoutExposingInput"
+      ],
+      "category": "SKILLS",
+      "deterministicFailure": {
+        "contract": "Skills bundle, path, URI and YAML construction reject inputs exceeding per-bundle or per-parse limits before registration or publication.",
+        "stage": "BUNDLE_OR_METADATA_CONSTRUCTION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "member": "addOwner",
+          "owner": "com.soklet.McpSkillEndpointIndex.PendingFile"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "member": "fromFiles",
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "member": "from",
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "member": "from",
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "member": "depth",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "member": "node",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "member": "scalarLength",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "member": "text",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlBudget.java",
+          "member": "work",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlBudget"
+        }
+      ],
+      "id": "FINITE-SKILLS-001",
+      "name": "Skills bundle, URI and per-parse YAML bounds",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpSkillEndpointTests.java#completeNestedSnapshotsShareOneImmutableCanonicalFileAndOrderedOwners",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#arbitraryBinaryAndEmptyFilesHaveByteExactResources",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#canonicalOrderIsRootFirstThenUnsignedUtf8NotUtf16",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillResourceUrisTests.java#preservesTheOriginalRootUriObjectAndCanonicalPathOrder",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#anchorsTagsAndAliasesSurviveWithoutExpansionOrTagResolution"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSkillEndpointIndex.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSkillEndpointIndex.java#com.soklet.McpSkillEndpointIndex#MAXIMUM_FILE_OWNERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_FILE_OWNERS",
+          "owner": "com.soklet.McpSkillEndpointIndex"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/skills/SkillBundle.java#com.soklet.internal.mcp.skills.SkillBundle#MAXIMUM_TOTAL_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TOTAL_BYTES",
+          "owner": "com.soklet.internal.mcp.skills.SkillBundle"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths#MAXIMUM_FILES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_FILES",
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/skills/SkillPaths.java#com.soklet.internal.mcp.skills.SkillPaths#MAXIMUM_PATH_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_PATH_UTF_8_BYTES",
+          "owner": "com.soklet.internal.mcp.skills.SkillPaths"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/skills/SkillResourceUris.java#com.soklet.internal.mcp.skills.SkillResourceUris#MAXIMUM_URI_ASCII_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_URI_ASCII_BYTES",
+          "owner": "com.soklet.internal.mcp.skills.SkillResourceUris"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumInputBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumInputBytes",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumNestingDepth",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNestingDepth",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumNodes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNodes",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumScalarCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumScalarCharacters",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumTotalScalarCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumTotalScalarCharacters",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/skills/SkillYamlLimits.java#com.soklet.internal.mcp.skills.SkillYamlLimits#maximumWork",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumWork",
+          "owner": "com.soklet.internal.mcp.skills.SkillYamlLimits"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "file count including SKILL.md",
+          "key": "skills.bundle.maximum-files",
+          "unit": "FILES",
+          "value": "512"
+        },
+        {
+          "accounting": "combined raw bytes of one authored bundle",
+          "key": "skills.bundle.maximum-total-bytes",
+          "unit": "BYTES",
+          "value": "16777216"
+        },
+        {
+          "accounting": "registrations sharing one exact file",
+          "key": "skills.endpoint.maximum-file-owners",
+          "unit": "OWNERS",
+          "value": "16"
+        },
+        {
+          "accounting": "one logical file path",
+          "key": "skills.path.maximum-utf8-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "8192"
+        },
+        {
+          "accounting": "one root or derived resource URI",
+          "key": "skills.uri.maximum-ascii-bytes",
+          "unit": "ASCII_BYTES",
+          "value": "1048576"
+        },
+        {
+          "accounting": "complete root document including body",
+          "key": "skills.yaml.maximum-input-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "4194304"
+        },
+        {
+          "accounting": "parsed metadata nesting",
+          "key": "skills.yaml.maximum-nesting-depth",
+          "unit": "LEVELS",
+          "value": "128"
+        },
+        {
+          "accounting": "parsed metadata nodes",
+          "key": "skills.yaml.maximum-nodes",
+          "unit": "NODES",
+          "value": "1000000"
+        },
+        {
+          "accounting": "one decoded scalar",
+          "key": "skills.yaml.maximum-scalar-characters",
+          "unit": "UTF16_UNITS",
+          "value": "1048576"
+        },
+        {
+          "accounting": "decoded scalar text across one parse",
+          "key": "skills.yaml.maximum-total-scalar-characters",
+          "unit": "UTF16_UNITS",
+          "value": "4194304"
+        },
+        {
+          "accounting": "charged syntax and resolution work across one parse",
+          "key": "skills.yaml.maximum-work",
+          "unit": "WORK_UNITS",
+          "value": "50000000"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
         "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#defaultsAndBuilderResetsAreFiniteAndValidated",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskBuilderValidatesIdentifiersTimesDurationsAndCollections",

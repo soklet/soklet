@@ -17,17 +17,20 @@ const validOrigin = value => value === undefined || value === 'null'
   || typeof value === 'string' && /^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(value)
     && Number(value.split(':').at(-1)) <= 65535;
 
-export function adjudicateCanary(facts) {
+export function adjudicateCanary(facts, {allowApp = false} = {}) {
+  const expectedCount = allowApp ? 6 : 4;
   if (!keys(facts, ['phase', 'closed', 'closeClean', 'failure', 'requestCount', 'connectionCount', 'phases', 'requests'])
       || facts.phase !== 'SEALED' || facts.closed !== true || facts.closeClean !== true || facts.failure !== null
-      || facts.requestCount !== 4 || !Number.isSafeInteger(facts.connectionCount)
+      || facts.requestCount !== expectedCount || !Number.isSafeInteger(facts.connectionCount)
       || facts.connectionCount < 1 || facts.connectionCount > MAX_CONNECTIONS
-      || !keys(facts.phases, PHASES) || !Array.isArray(facts.requests) || facts.requests.length !== 4) return 'FAILED';
+      || !keys(facts.phases, PHASES) || !Array.isArray(facts.requests) || facts.requests.length !== expectedCount) return 'FAILED';
   for (const phase of PHASES) {
-    const control = phase === 'CONTROL_BEFORE' || phase === 'CONTROL_AFTER';
-    if (!same(facts.phases[phase], {connect: control ? 1 : 0, image: control ? 1 : 0, rejected: 0})) return 'FAILED';
+    const contact = phase === 'CONTROL_BEFORE' || phase === 'CONTROL_AFTER'
+      || (phase === 'APP' && allowApp);
+    if (!same(facts.phases[phase], {connect: contact ? 1 : 0, image: contact ? 1 : 0, rejected: 0})) return 'FAILED';
   }
-  const expected = ['CONTROL_BEFORE', 'CONTROL_BEFORE', 'CONTROL_AFTER', 'CONTROL_AFTER'];
+  const expected = allowApp ? ['CONTROL_BEFORE', 'CONTROL_BEFORE', 'APP', 'APP', 'CONTROL_AFTER', 'CONTROL_AFTER']
+    : ['CONTROL_BEFORE', 'CONTROL_BEFORE', 'CONTROL_AFTER', 'CONTROL_AFTER'];
   const operations = [];
   for (let index = 0; index < expected.length; ++index) {
     const row = facts.requests[index];
@@ -37,8 +40,8 @@ export function adjudicateCanary(facts) {
         || row.accepted !== true || row.code !== 'OK') return 'FAILED';
     operations.push(row.operation);
   }
-  return same(operations.slice(0, 2).sort(), ['CONNECT', 'IMAGE'])
-    && same(operations.slice(2).sort(), ['CONNECT', 'IMAGE']) ? 'PASSED' : 'FAILED';
+  return expected.every((_, index) => index % 2 !== 0
+    || same(operations.slice(index, index + 2).sort(), ['CONNECT', 'IMAGE'])) ? 'PASSED' : 'FAILED';
 }
 
 /** A live local observer, never a policy-enforcement substitute. A valid App
@@ -46,7 +49,7 @@ export function adjudicateCanary(facts) {
  * Both exact image URLs use the same handler and bytes in every phase. The
  * fixed after-control alias prevents browser Image memory reuse from replacing
  * that final server-liveness observation; all other query strings are rejected. */
-export async function startCanary() {
+export async function startCanary({allowApp = false} = {}) {
   let phaseIndex = 0, failure = null, requestCount = 0, connectionCount = 0;
   let closed = false, closeClean = false, closePromise;
   const phases = Object.fromEntries(PHASES.map(phase => [phase, {connect: 0, image: 0, rejected: 0}]));
@@ -58,7 +61,7 @@ export async function startCanary() {
     increment(phases[atPhase], accepted ? operation === 'CONNECT' ? 'connect' : 'image' : 'rejected');
     if (sequence <= MAX_REQUESTS) requests.push({sequence, phase: atPhase, operation, method, accepted, code});
     if (code !== 'OK') failed(code);
-    if (atPhase === 'APP') failed('CANARY_APP_CONTACT');
+    if (atPhase === 'APP' && !allowApp) failed('CANARY_APP_CONTACT');
     else if (atPhase === 'IDLE' || atPhase === 'SEALED') failed('CANARY_PHASE_CONTACT');
   }
   const server = createServer({maxHeaderSize: MAX_HEADERS, requestTimeout: EXCHANGE_MS,

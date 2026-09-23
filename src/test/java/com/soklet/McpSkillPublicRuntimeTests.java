@@ -245,6 +245,29 @@ public class McpSkillPublicRuntimeTests {
 	}
 
 	@Test
+	public void customListHandlerPublishesItsIntentionalJsonRpcErrorExactly() throws Exception {
+		McpEndpoint endpoint = endpointBuilder()
+				.skillListHandler((request, context, features) -> {
+					throw new McpJsonRpcException(McpJsonRpcError.fromInvalidParameters(
+							"Application Skills cursor canary",
+							McpJsonObject.builder().put("reason", "application-detail-canary").build()));
+				})
+				.build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet owner = managedSoklet(server);
+		try {
+			owner.start();
+			HttpResponse<String> response = send(port(server), "intentional-error", "skills/list",
+					"", null, null);
+			assertError(response, 400, -32602, "intentional-error");
+			assertContains(response.body(), "\"message\":\"Application Skills cursor canary\"");
+			assertContains(response.body(), "\"reason\":\"application-detail-canary\"");
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
 	public void continuationRechecksAccessAndDiscoveryWithoutReselectingVariants() throws Exception {
 		McpSkillRegistration french = registration("skill://continuation/fr/private-skill/SKILL.md",
 				Map.of("SKILL.md", skillDocument("private-skill", "private-continuation-canary")),

@@ -559,7 +559,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'nodePin',
     'node conformance/official/run.mjs --phase 5 --mode release',
     'release',
-    'ALL_45_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
+    'ALL_46_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
     [directoryRole(
       'conformance-evidence',
       'application/vnd.soklet.conformance-evidence',
@@ -2062,8 +2062,8 @@ export function verifyReleaseConformanceEvidence(
     fail('Release manifest conformance commit does not match the reviewed suite pin');
   }
   const selectedScenarios = activeScenarios(selection, 5);
-  if (selectedScenarios.length !== 45)
-    fail('Reviewed Phase 5 conformance selection must contain exactly 45 scenarios');
+  if (selectedScenarios.length !== 46)
+    fail('Reviewed Phase 5 conformance selection must contain exactly 46 scenarios');
 
   if (evidence.formatVersion !== 1
       || evidence.evidenceClass !== 'IMMUTABLE_RELEASE_CANDIDATE'

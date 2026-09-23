@@ -139,6 +139,9 @@ maintenance or security fixes afterward. See the explicit
 
 ### Release Highlights
 
+- **MCP Apps CSP convenience:** `McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance()`
+  returns the immutable policy with empty origin allowlists. The metadata getter
+  remains optional, preserving omitted versus explicitly supplied CSP metadata.
 - Response compression now supports application-provided codecs and caching
   of compressed body bytes through lazy `ResponseCompressionPlan` providers.
   Soklet retains encoding acceptance, `Vary`, validator, and framing handling;

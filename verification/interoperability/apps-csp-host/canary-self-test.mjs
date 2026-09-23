@@ -17,8 +17,8 @@ function exchange(canary, path, {method = 'GET', headers = {}, body, agent} = {}
     outgoing.once('error', reject); outgoing.end(body);
   });
 }
-async function withCanary(fn) {
-  const canary = await startCanary();
+async function withCanary(fn, options) {
+  const canary = await startCanary(options);
   try {await fn(canary);} finally {await canary.close();}
 }
 function finishPhases(canary) {
@@ -73,6 +73,21 @@ test('fixed no-store CORS endpoints pass only after both controls, no App traffi
     facts.phases.APP.connect = 10; facts.requests[0].code = secret;
     assert.equal(adjudicateCanary(canary.facts()), 'PASSED', 'snapshots cannot mutate retained evidence');
   });
+});
+
+test('allowlist profile requires both real App contacts and clean before/after controls', async () => {
+  await withCanary(async canary => {
+    canary.setPhase('CONTROL_BEFORE'); await controls(canary);
+    canary.setPhase('APP'); await controls(canary);
+    canary.setPhase('CONTROL_AFTER'); await controls(canary, ['/connect', '/image?control=after']);
+    canary.setPhase('SEALED'); await canary.close();
+    const facts = canary.facts();
+    assert.equal(adjudicateCanary(facts, {allowApp: true}), 'PASSED');
+    assert.equal(adjudicateCanary(facts), 'FAILED');
+    sanitized(facts, canary);
+    facts.phases.APP.image = 0;
+    assert.equal(adjudicateCanary(facts, {allowApp: true}), 'FAILED');
+  }, {allowApp: true});
 });
 
 test('fixed after-image alias has identical bytes and content headers in every phase, including normal App success', async () => {

@@ -28,6 +28,28 @@ class SkillYamlParserTests {
 			4_096, 16_384, 1_000_000);
 
 	@Test
+	void nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors() {
+		String canary = "private-value-canary";
+		SkillYamlNode.Position position = new SkillYamlNode.Position(7, 9);
+		SkillYamlNode.Properties properties = new SkillYamlNode.Properties("!" + canary, canary);
+		SkillYamlNode.Scalar scalar = new SkillYamlNode.Scalar(canary,
+				SkillYamlNode.Style.PLAIN, properties, position);
+		SkillYamlNode.Entry entry = new SkillYamlNode.Entry(scalar, scalar);
+
+		Assertions.assertEquals(canary, scalar.value());
+		Assertions.assertEquals("!" + canary, scalar.properties().tag());
+		Assertions.assertEquals("Position[line=7, column=9]", position.toString());
+		Assertions.assertEquals("Properties[redacted]", properties.toString());
+		Assertions.assertEquals("Entry[redacted]", entry.toString());
+		Assertions.assertEquals("Alias[redacted]", new SkillYamlNode.Alias(canary, position).toString());
+		Assertions.assertEquals("Scalar[style=PLAIN, characters=" + canary.length() + "]", scalar.toString());
+		Assertions.assertEquals("Sequence[items=1]",
+				new SkillYamlNode.Sequence(List.of(scalar), properties, position).toString());
+		Assertions.assertEquals("Mapping[entries=1]",
+				new SkillYamlNode.Mapping(List.of(entry), properties, position).toString());
+	}
+
+	@Test
 	void blockMappingContainsNestedMappingAndIndentlessSequence() {
 		SkillYamlNode.Mapping root = mapping(parse("name: demo\ncustom:\n- one\n- two\nmetadata:\n  author: example\n"));
 		Assertions.assertEquals(List.of("name", "custom", "metadata"), keys(root));
