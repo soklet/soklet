@@ -636,7 +636,9 @@
     {
       "canaryTests": [
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted",
-        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass"
+        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass",
+        "src/test/java/com/soklet/StreamingResourceOwnershipRuntimeTests.java#producerFailureRemainsPrimaryWhenCleanupAlsoFails",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#failed_cleanup_is_finished_work_and_diagnostics_cannot_block_supervision"
       ],
       "category": "THROWABLE",
       "classification": "EXACT_APPLICATION_BOUNDARY",
@@ -821,6 +823,15 @@
           "matcherRuleId": "PRIV-MATCH-004",
           "member": "start()",
           "occurrence": 11,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "LogEvent.Builder.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->LogEvent.Builder.throwable@12",
+          "matcherRuleId": "PRIV-MATCH-004",
+          "member": "start()",
+          "occurrence": 12,
           "owner": "com.soklet.DefaultHttpServer",
           "sink": "LogEvent.Builder.throwable"
         },
@@ -1240,9 +1251,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.Builder.throwable@1",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)->LogEvent.Builder.throwable@1",
           "matcherRuleId": "PRIV-MATCH-004",
-          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "member": "registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.Builder.throwable"
@@ -1252,6 +1263,15 @@
           "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)->LogEvent.Builder.throwable@1",
           "matcherRuleId": "PRIV-MATCH-004",
           "member": "safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.Builder.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#start()->LogEvent.Builder.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-004",
+          "member": "start()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.Builder.throwable"
@@ -1546,20 +1566,29 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveHttpStream()->LogEvent.Builder.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-004",
+          "member": "reserveHttpStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.Builder.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveSseStream()->LogEvent.Builder.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-004",
+          "member": "reserveSseStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.Builder.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-004:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseBroadcaster#handleBroadcastError(Throwable)->LogEvent.Builder.throwable@1",
           "matcherRuleId": "PRIV-MATCH-004",
           "member": "handleBroadcastError(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.MockSseBroadcaster",
-          "sink": "LogEvent.Builder.throwable"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-004:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#handleUnicastError(Throwable)->LogEvent.Builder.throwable@1",
-          "matcherRuleId": "PRIV-MATCH-004",
-          "member": "handleUnicastError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
           "sink": "LogEvent.Builder.throwable"
         },
         {
@@ -1582,9 +1611,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-004:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleUnicastError(Throwable)->LogEvent.Builder.throwable@1",
+          "key": "PRIV-MATCH-004:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleConsumerError(Throwable,boolean)->LogEvent.Builder.throwable@1",
           "matcherRuleId": "PRIV-MATCH-004",
-          "member": "handleUnicastError(Throwable)",
+          "member": "handleConsumerError(Throwable,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "LogEvent.Builder.throwable"
@@ -1609,7 +1638,12 @@
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#handlerFailurePublishesExactInternalErrorAndImmutableThrowable",
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted",
         "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java#applicationProtectedStateRoundTripsExactlyWithOneSharedContext",
+        "src/test/java/com/soklet/McpSkillAccessPolicyTests.java#independentEvaluatorsReceiveExactInputsOnceAndMayDeny",
+        "src/test/java/com/soklet/McpSkillPageTests.java#contextDistinguishesPresentEmptyFirstPageFromPresentEmptyContinuationCursor",
         "src/test/java/com/soklet/ResponseMarshalerTests.java#unparsedRequestIsAnImmutableValueWithFreshReadOnlyByteViews",
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#close_without_consumers_releases_connection_and_preserves_handshake_metadata",
+        "src/test/java/com/soklet/StreamingResponseStreamRuntimeTests.java#httpWriterReceivesRequestAndConfiguredTimeoutsWithFreshExecutionState",
+        "src/test/java/com/soklet/StreamingResponseStreamRuntimeTests.java#simulatorWriterReceivesRequestAndEmptyTimeoutsWithFreshExecutionState",
         "src/test/java/com/soklet/UnparsedRequestTransportTests.java#allParserRejectionsAreObservedAndMarshaledOffTheEventLoop",
         "src/test/java/com/soklet/UnparsedRequestTransportTests.java#requestCaptureIsTruncatedAt64KiBAndReportsTheFullSafeBoundary"
       ],
@@ -3376,6 +3410,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)->RequestOrThrowable.getRequest@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "RequestOrThrowable.getRequest"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)",
@@ -3421,18 +3464,18 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel)->ApplicationRequestCarrier.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel)",
+          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.DefaultSseConnection",
           "sink": "ApplicationRequestCarrier.declaration"
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel)",
+          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.DefaultSseConnection",
           "sink": "RequestOrThrowable.declaration"
@@ -7506,6 +7549,33 @@
           "sink": "ApplicationRequestCarrier.declaration"
         },
         {
+          "file": "src/main/java/com/soklet/ResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ResponseStream.java#com.soklet.ResponseStream#getRequest()->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.ResponseStream",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/ResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ResponseStream.java#com.soklet.ResponseStream#getRequest()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.ResponseStream",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/ResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ResponseStream.java#com.soklet.ResponseStream#getRequest()->RequestOrThrowable.getRequest@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.ResponseStream",
+          "sink": "RequestOrThrowable.getRequest"
+        },
+        {
           "file": "src/main/java/com/soklet/ShutdownComponentResult.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/ShutdownComponentResult.java#com.soklet.ShutdownComponentResult#getThrowables()->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
@@ -7849,15 +7919,6 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#onError(Throwable)->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "onError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.DefaultSimulator",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#onUnicastError(Consumer<Throwable>)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "onUnicastError(Consumer<Throwable>)",
@@ -7957,6 +8018,15 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseServer#getBroadcastErrorHandler()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getBroadcastErrorHandler()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.MockSseServer",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseServer#getUnicastErrorHandler()->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "getUnicastErrorHandler()",
@@ -7984,57 +8054,12 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#MockSseUnicaster(ResourcePath,Consumer<SseEvent>,Consumer<SseComment>,AtomicReference<Consumer<Throwable>>,Consumer<LogEvent>)->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "MockSseUnicaster(ResourcePath,Consumer<SseEvent>,Consumer<SseComment>,AtomicReference<Consumer<Throwable>>,Consumer<LogEvent>)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#handleUnicastError(Throwable)->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "handleUnicastError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorCancelationToken#getCancelationCause()->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "getCancelationCause()",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.SimulatorCancelationToken",
           "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorStreamingResponseContext#getRequest()->ApplicationRequestCarrier.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.SimulatorStreamingResponseContext",
-          "sink": "ApplicationRequestCarrier.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorStreamingResponseContext#getRequest()->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.SimulatorStreamingResponseContext",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorStreamingResponseContext#getRequest()->RequestOrThrowable.getRequest@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.SimulatorStreamingResponseContext",
-          "sink": "RequestOrThrowable.getRequest"
         },
         {
           "file": "src/main/java/com/soklet/SokletApplication.java",
@@ -8359,42 +8384,6 @@
           "occurrence": 1,
           "owner": "com.soklet.StreamingResponseCanceledException",
           "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/StreamingResponseContext.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/StreamingResponseContext.java#com.soklet.StreamingResponseContext#getCancelationCause()->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getCancelationCause()",
-          "occurrence": 1,
-          "owner": "com.soklet.StreamingResponseContext",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/StreamingResponseContext.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/StreamingResponseContext.java#com.soklet.StreamingResponseContext#getRequest()->ApplicationRequestCarrier.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.StreamingResponseContext",
-          "sink": "ApplicationRequestCarrier.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/StreamingResponseContext.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/StreamingResponseContext.java#com.soklet.StreamingResponseContext#getRequest()->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.StreamingResponseContext",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/StreamingResponseContext.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/StreamingResponseContext.java#com.soklet.StreamingResponseContext#getRequest()->RequestOrThrowable.getRequest@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.StreamingResponseContext",
-          "sink": "RequestOrThrowable.getRequest"
         },
         {
           "file": "src/main/java/com/soklet/StreamingResponseHandle.java",
@@ -11223,6 +11212,51 @@
           "sink": "RequestOrThrowable.request"
         },
         {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#bindTermination(BiConsumer<StreamTerminationReason, Throwable>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "bindTermination(BiConsumer<StreamTerminationReason, Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#cancel(StreamTerminationReason,Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "cancel(StreamTerminationReason,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#cause()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "cause()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#reportCleanupFailure(Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "reportCleanupFailure(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)->ApplicationRequestCarrier.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
@@ -11236,6 +11270,24 @@
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses",
           "sink": "RequestOrThrowable.declaration"
@@ -11269,45 +11321,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext#getRequest()->ApplicationRequestCarrier.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext",
-          "sink": "ApplicationRequestCarrier.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext#getRequest()->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext#getRequest()->RequestOrThrowable.getRequest@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getRequest()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultStreamingResponseContext",
-          "sink": "RequestOrThrowable.getRequest"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#close(StreamTerminationReason,Throwable)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "close(StreamTerminationReason,Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#onError(Throwable)->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "onError(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
           "sink": "RequestOrThrowable.declaration"
@@ -11346,6 +11362,78 @@
           "member": "isCompatibleWithThrowsClause(Throwable,Class<?>...)",
           "occurrence": 1,
           "owner": "com.soklet.internal.spring.ObjectUtils",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#ManagedResponseStream(Request,CancelationToken,Instant,Duration,Output,Runnable,Consumer<Throwable>,Consumer<Throwable>)->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "ManagedResponseStream(Request,CancelationToken,Instant,Duration,Output,Runnable,Consumer<Throwable>,Consumer<Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#ManagedResponseStream(Request,CancelationToken,Instant,Duration,Output,Runnable,Consumer<Throwable>,Consumer<Throwable>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "ManagedResponseStream(Request,CancelationToken,Instant,Duration,Output,Runnable,Consumer<Throwable>,Consumer<Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#getRequest()->ApplicationRequestCarrier.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "ApplicationRequestCarrier.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#getRequest()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#getRequest()->RequestOrThrowable.getRequest@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getRequest()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "RequestOrThrowable.getRequest"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java#com.soklet.internal.streaming.ManagedSseLifecycle#terminate(StreamTerminationReason,Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "terminate(StreamTerminationReason,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedSseLifecycle",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#copy(StreamingResponseBody.PublisherBody,CancelationToken,ManagedResponseStream.Output,StreamLifecycleCoordinator.Reservation,Runnable,Consumer<Throwable>,Consumer<Throwable>)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "copy(StreamingResponseBody.PublisherBody,CancelationToken,ManagedResponseStream.Output,StreamLifecycleCoordinator.Reservation,Runnable,Consumer<Throwable>,Consumer<Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#onError(Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "onError(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
           "sink": "RequestOrThrowable.declaration"
         }
       ]
@@ -13135,10 +13223,12 @@
       "canaryTests": [
         "src/test/java/com/soklet/McpAppToolAnnotationProcessorTests.java#rejectsTheSameInvalidUrisAsProgrammaticMetadataWithoutEchoingValues",
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted",
+        "src/test/java/com/soklet/SseInitializerRuntimeTests.java#synchronousInitializerQueuesCatchupBeforeBroadcast",
         "src/test/java/com/soklet/internal/mcp/protocol/McpAppMimeTypeClientCapabilityTests.java#requirementCanonicalizesEquivalentMimeValuesAndPreservesCaseSensitiveValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java#implementation_metadata_preserves_optional_fields_icons_and_extensions",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCoreTests.java#descriptorFailuresAreContainedAndPathsUseStablePointerEscaping",
-        "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#chunkDataTerminatorStopsCaptureAtFirstMismatchingByte"
+        "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#chunkDataTerminatorStopsCaptureAtFirstMismatchingByte",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#retained_work_outlives_initializer_exit_and_terminal_publication_until_physical_release"
       ],
       "category": "DIAGNOSTIC",
       "classification": "EXACT_APPLICATION_BOUNDARY",
@@ -13337,9 +13427,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultHttpServer.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer.HttpRuntimeSnapshot#HttpRuntimeSnapshot(EventLoop,ExecutorService,ExecutorService,ScheduledExecutorService,AtomicBoolean,TimeoutScheduler)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer.HttpRuntimeSnapshot#HttpRuntimeSnapshot(EventLoop,ExecutorService,ExecutorService,StreamLifecycleCoordinator,ScheduledExecutorService,AtomicBoolean,TimeoutScheduler)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "HttpRuntimeSnapshot(EventLoop,ExecutorService,ExecutorService,ScheduledExecutorService,AtomicBoolean,TimeoutScheduler)",
+          "member": "HttpRuntimeSnapshot(EventLoop,ExecutorService,ExecutorService,StreamLifecycleCoordinator,ScheduledExecutorService,AtomicBoolean,TimeoutScheduler)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultHttpServer.HttpRuntimeSnapshot",
           "sink": "Diagnostic.recordConstructor"
@@ -13367,6 +13457,15 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer.HttpRuntimeSnapshot#requestTimeoutScheduler()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "requestTimeoutScheduler()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultHttpServer.HttpRuntimeSnapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer.HttpRuntimeSnapshot#streamLifecycleCoordinator()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "streamLifecycleCoordinator()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultHttpServer.HttpRuntimeSnapshot",
           "sink": "Diagnostic.recordAccessor"
@@ -13985,9 +14084,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.SseRuntimeSnapshot#SseRuntimeSnapshot(long,Thread,ServerSocketChannel,ExecutorService,TimeoutScheduler,ExecutorService,ExecutorService,List<DefaultSseConnection>)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.SseRuntimeSnapshot#SseRuntimeSnapshot(long,Thread,ServerSocketChannel,ExecutorService,TimeoutScheduler,ExecutorService,ExecutorService,StreamLifecycleCoordinator,List<DefaultSseConnection>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "SseRuntimeSnapshot(long,Thread,ServerSocketChannel,ExecutorService,TimeoutScheduler,ExecutorService,ExecutorService,List<DefaultSseConnection>)",
+          "member": "SseRuntimeSnapshot(long,Thread,ServerSocketChannel,ExecutorService,TimeoutScheduler,ExecutorService,ExecutorService,StreamLifecycleCoordinator,List<DefaultSseConnection>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.SseRuntimeSnapshot",
           "sink": "Diagnostic.recordConstructor"
@@ -14060,6 +14159,15 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.SseRuntimeSnapshot#serverSocketChannel()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "serverSocketChannel()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.SseRuntimeSnapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.SseRuntimeSnapshot#streamLifecycleCoordinator()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "streamLifecycleCoordinator()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.SseRuntimeSnapshot",
           "sink": "Diagnostic.recordAccessor"
@@ -28956,7 +29064,11 @@
       "canaryTests": [
         "src/test/java/com/soklet/McpObservabilityPublicApiTests.java#metricSchemaHasExactFiniteNonTraceDimensions",
         "src/test/java/com/soklet/McpPrivacyBoundaryTests.java#propagationAndBridgeDiagnosticsRedactExactApplicationCarriers",
-        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java#diagnosticRenderingContainsNoKeyIdsOrMaterialCanaries"
+        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java#diagnosticRenderingContainsNoKeyIdsOrMaterialCanaries",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#deadline_diagnostics_and_snapshots_exclude_retained_application_secrets",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#observer_cleanup_expires_once_at_exact_deadline_across_signed_clock_wrap",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#pending_publisher_deadline_reports_evidence_without_releasing_the_obligation",
+        "src/test/java/com/soklet/internal/microhttp/StreamLifecycleCoordinatorTests.java#producer_cleanup_expires_once_at_exact_deadline_across_signed_clock_wrap"
       ],
       "category": "DIAGNOSTIC",
       "classification": "BOUNDED_METADATA",
@@ -30412,6 +30524,222 @@
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration",
           "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#Snapshot(boolean,int,int,int,int,int,int,int,int,int,long)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Snapshot(boolean,int,int,int,int,int,int,int,int,int,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#accepting()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "accepting()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#callbacks()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "callbacks()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#diagnostics()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "diagnostics()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#overdue()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "overdue()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#pendingPublisherAcquisitions()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "pendingPublisherAcquisitions()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#publisherLifetimes()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "publisherLifetimes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#queuedCallbacks()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "queuedCallbacks()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#queuedProducers()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "queuedProducers()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#reservations()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "reservations()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#retainedWork()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "retainedWork()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#runningProducers()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "runningProducers()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Snapshot",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getCancelationState()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getCancelationState()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getDispatcherQueued()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getDispatcherQueued()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getDispatcherRunning()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getDispatcherRunning()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getPendingPublisherAcquisitions()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getPendingPublisherAcquisitions()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getPhase()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getPhase()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getProducerState()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getProducerState()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getPublisherLifetimes()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getPublisherLifetimes()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getPublisherState()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getPublisherState()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getReservationId()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getReservationId()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getRetainedWork()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getRetainedWork()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException#getTerminationState()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "matcherRuleId": "PRIV-MATCH-012",
+          "member": "getTerminationState()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.CleanupDeadlineExceededException",
+          "sink": "ExceptionCarrier.publicOrProtectedMethod"
         }
       ]
     },
@@ -33133,7 +33461,11 @@
         "src/test/java/com/soklet/McpCompleteToolResultSanitizerRuntimeTests.java#wrongPayloadNullAndExceptionResultsFailClosedAndDoNotExposePartialMetadata",
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#handlerFailurePublishesExactInternalErrorAndImmutableThrowable",
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted",
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#helper_thread_may_queue_during_initializer_but_handle_closes_at_return",
         "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass",
+        "src/test/java/com/soklet/StreamingResourceOwnershipRuntimeTests.java#cleanupOnlyFailureCannotProduceSuccessfulCompletion",
+        "src/test/java/com/soklet/StreamingResourceOwnershipRuntimeTests.java#producerFailureRemainsPrimaryWhenCleanupAlsoFails",
+        "src/test/java/com/soklet/StreamingServerSettingsTests.java#defaultsAndNullResetsResolveIndependently",
         "src/test/java/com/soklet/internal/mcp/protocol/McpAppMimeTypeClientCapabilityTests.java#invalidRequirementInputsAreRejectedWithoutEchoingMime",
         "src/test/java/com/soklet/internal/mcp/protocol/McpAppMimeTypeTests.java#malformed_values_never_retain_sensitive_input_in_messages_or_causes"
       ],
@@ -33739,6 +34071,42 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#DefaultHttpServer(Builder)->Throwable.IllegalArgumentException@22",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultHttpServer(Builder)",
+          "occurrence": 22,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#DefaultHttpServer(Builder)->Throwable.IllegalArgumentException@23",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultHttpServer(Builder)",
+          "occurrence": 23,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#DefaultHttpServer(Builder)->Throwable.IllegalArgumentException@24",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultHttpServer(Builder)",
+          "occurrence": 24,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#DefaultHttpServer(Builder)->Throwable.IllegalArgumentException@25",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultHttpServer(Builder)",
+          "occurrence": 25,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#DefaultHttpServer(Builder)->Throwable.IllegalArgumentException@3",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "DefaultHttpServer(Builder)",
@@ -33910,6 +34278,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#setStreamLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "setStreamLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->Throwable.IllegalRequestException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "start()",
@@ -34006,6 +34383,15 @@
           "occurrence": 3,
           "owner": "com.soklet.DefaultHttpServer",
           "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#toMicrohttpResponse(Request,ResourceMethod,MarshaledResponse,MarshaledResponseBody,BooleanSupplier)->Throwable.RejectedExecutionException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "toMicrohttpResponse(Request,ResourceMethod,MarshaledResponse,MarshaledResponseBody,BooleanSupplier)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "Throwable.RejectedExecutionException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultHttpServer.java",
@@ -35908,6 +36294,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#DefaultSseServer(Builder)->Throwable.IllegalArgumentException@15",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultSseServer(Builder)",
+          "occurrence": 15,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#DefaultSseServer(Builder)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "DefaultSseServer(Builder)",
@@ -36529,57 +36924,21 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#DefaultSseUnicaster(ResourcePath,int)->Throwable.IllegalArgumentException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultSseUnicaster(ResourcePath,int)",
-          "occurrence": 1,
-          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)",
-          "occurrence": 1,
-          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)->Throwable.IllegalStateException@2",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)",
-          "occurrence": 2,
-          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)->Throwable.IllegalStateException@3",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "activate(BlockingQueue<DefaultSseConnection.WriteQueueElement>)",
-          "occurrence": 3,
-          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#enqueue(DefaultSseConnection.WriteQueueElement)->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "enqueue(DefaultSseConnection.WriteQueueElement)",
-          "occurrence": 1,
-          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#enqueue(DefaultSseConnection.WriteQueueElement)->Throwable.SseInitializerQueueCapacityExceededException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "enqueue(DefaultSseConnection.WriteQueueElement)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
           "sink": "Throwable.SseInitializerQueueCapacityExceededException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseUnicaster#requireInitializingUnderLock()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "requireInitializingUnderLock()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.DefaultSseUnicaster",
+          "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/EntityTag.java",
@@ -39841,15 +40200,6 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializePublisher(com.soklet.StreamingResponseBody.PublisherBody,SimulatorResponseStream,SimulatorStreamingResponseContext)->Throwable.RuntimeException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "materializePublisher(com.soklet.StreamingResponseBody.PublisherBody,SimulatorResponseStream,SimulatorStreamingResponseContext)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.DefaultSimulator",
-          "sink": "Throwable.RuntimeException"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "materializeStreamingResponse(Request,HttpRequestResult)",
@@ -39877,39 +40227,75 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->Throwable.IllegalStateException@4",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->Throwable.StreamingResponseCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "materializeStreamingResponse(Request,HttpRequestResult)",
-          "occurrence": 4,
+          "occurrence": 1,
           "owner": "com.soklet.Soklet.DefaultSimulator",
-          "sink": "Throwable.IllegalStateException"
+          "sink": "Throwable.StreamingResponseCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody)",
+          "member": "materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.DefaultSimulator",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody)->Throwable.RuntimeException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.RuntimeException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody)",
+          "member": "materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.DefaultSimulator",
           "sink": "Throwable.RuntimeException"
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#onError(Throwable)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.StreamingResponseCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "onError(Throwable)",
+          "member": "materializeStreamingResponseBody(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.StreamingResponseCanceledException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.DefaultSimulator",
           "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 2,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalStateException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 3,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->Throwable.StreamingResponseCanceledException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.StreamingResponseCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
@@ -39994,9 +40380,45 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request)->Throwable.IllegalStateException@5",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "performSseRequestWhileAdmitted(Request)",
+          "occurrence": 5,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request)->Throwable.IllegalStateException@6",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "performSseRequestWhileAdmitted(Request)",
+          "occurrence": 6,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#requireScopeOpenWhileLocked()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "requireScopeOpenWhileLocked()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#setSseLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "setSseLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#setStreamLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "setStreamLifecycleCoordinatorFactoryForTests(Supplier<StreamLifecycleCoordinator>)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.DefaultSimulator",
           "sink": "Throwable.IllegalStateException"
@@ -40021,6 +40443,24 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#unicastComment(SseComment)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "unicastComment(SseComment)",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.MockSseUnicaster",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#unicastEvent(SseEvent)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "unicastEvent(SseEvent)",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.MockSseUnicaster",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorCancelationToken#cancel(StreamTerminationReason,Throwable)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "cancel(StreamTerminationReason,Throwable)",
@@ -40030,20 +40470,20 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorResponseStream#write(ByteBuffer)->Throwable.StreamingResponseCanceledException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorResponseOutput#write(ByteBuffer)->Throwable.StreamingResponseCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "write(ByteBuffer)",
           "occurrence": 1,
-          "owner": "com.soklet.Soklet.SimulatorResponseStream",
+          "owner": "com.soklet.Soklet.SimulatorResponseOutput",
           "sink": "Throwable.StreamingResponseCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorResponseStream#write(ByteBuffer)->Throwable.StreamingResponseCanceledException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.SimulatorResponseOutput#write(ByteBuffer)->Throwable.StreamingResponseCanceledException@2",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "write(ByteBuffer)",
           "occurrence": 2,
-          "owner": "com.soklet.Soklet.SimulatorResponseStream",
+          "owner": "com.soklet.Soklet.SimulatorResponseOutput",
           "sink": "Throwable.StreamingResponseCanceledException"
         },
         {
@@ -40822,18 +41262,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#registerCommentConsumer(Consumer<SseComment>)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#enqueue(Channel<T>,T,boolean)->Throwable.QueueCapacityExceededException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "registerCommentConsumer(Consumer<SseComment>)",
+          "member": "enqueue(Channel<T>,T,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
-          "sink": "Throwable.IllegalStateException"
+          "sink": "Throwable.QueueCapacityExceededException"
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#registerEventConsumer(Consumer<SseEvent>)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#register(Channel<T>,Consumer<T>)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "registerEventConsumer(Consumer<SseEvent>)",
+          "member": "register(Channel<T>,Consumer<T>)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "Throwable.IllegalStateException"
@@ -47518,6 +47958,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#prepareToWriteResponse(InFlightDispatch)->Throwable.NullPointerException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "prepareToWriteResponse(InFlightDispatch)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
+          "sink": "Throwable.NullPointerException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#prepareToWriteResponse(InFlightDispatch)->Throwable.RuntimeException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "prepareToWriteResponse(InFlightDispatch)",
@@ -48111,58 +48560,238 @@
           "sink": "Throwable.MalformedRequestException"
         },
         {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)->Throwable.IllegalArgumentException@1",
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)",
+          "member": "StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)->Throwable.IllegalArgumentException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)->Throwable.IllegalArgumentException@4",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "StreamLifecycleCoordinator(int,int,Duration,Consumer<Throwable>,LongSupplier)",
+          "occurrence": 4,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.ProducerTask#run()->Throwable.RejectedExecutionException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "run()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.ProducerTask",
+          "sink": "Throwable.RejectedExecutionException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#abandon()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "abandon()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#bindTermination(BiConsumer<StreamTerminationReason, Throwable>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "bindTermination(BiConsumer<StreamTerminationReason, Throwable>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#bindTermination(BiConsumer<StreamTerminationReason, Throwable>)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "bindTermination(BiConsumer<StreamTerminationReason, Throwable>)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#cancel(StreamTerminationReason,Throwable)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "cancel(StreamTerminationReason,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#checkCleanupDeadline(long)->Throwable.CleanupDeadlineExceededException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkCleanupDeadline(long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.CleanupDeadlineExceededException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#completeProduction()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "completeProduction()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#completeProduction()->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "completeProduction()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#dispatch(int,Runnable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "dispatch(int,Runnable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#dispatch(int,Runnable)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "dispatch(int,Runnable)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#dispatch(int,Runnable)->Throwable.IllegalStateException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "dispatch(int,Runnable)",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#dispatch(int,Runnable)->Throwable.IllegalStateException@4",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "dispatch(int,Runnable)",
+          "occurrence": 4,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#execute(ExecutorService,Runnable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "execute(ExecutorService,Runnable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#executeInline(Runnable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "executeInline(Runnable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#retainPublisher()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "retainPublisher()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#retainPublisher()->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "retainPublisher()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation#retainWork()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "retainWork()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator.Reservation",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)->Throwable.IllegalArgumentException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses#withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>)",
+          "member": "withStreamingBody(Integer,String,List<Header>,Request,StreamingResponseBody,ExecutorService,ScheduledExecutorService,Integer,Integer,Instant,Duration,BooleanSupplier,TerminationListener,Consumer<Throwable>,StreamLifecycleCoordinator.Reservation)",
           "occurrence": 2,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultCancelationToken#cancel(StreamTerminationReason,Throwable)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultCancelationToken#reserveCancelation(StreamTerminationReason,Throwable)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "cancel(StreamTerminationReason,Throwable)",
+          "member": "reserveCancelation(StreamTerminationReason,Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.DefaultCancelationToken",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#copyPublisher(com.soklet.StreamingResponseBody.PublisherBody)->Throwable.RuntimeException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#applyFailure(StreamTerminationReason,Throwable)->Throwable.StreamingResponseCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "copyPublisher(com.soklet.StreamingResponseBody.PublisherBody)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
-          "sink": "Throwable.RuntimeException"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#fail(StreamTerminationReason,Throwable)->Throwable.StreamingResponseCanceledException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "fail(StreamTerminationReason,Throwable)",
+          "member": "applyFailure(StreamTerminationReason,Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
           "sink": "Throwable.StreamingResponseCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#onError(Throwable)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#prepareProducer()->Throwable.RejectedExecutionException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "onError(Throwable)",
+          "member": "prepareProducer()",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
-          "sink": "Throwable.IllegalStateException"
+          "sink": "Throwable.RejectedExecutionException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
@@ -48184,9 +48813,27 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource.ResponseStreamAdapter#enqueue(byte[])->Throwable.StreamingResponseCanceledException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource#writeTo(SocketChannel,long)->Throwable.StreamingResponseCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "enqueue(byte[])",
+          "member": "writeTo(SocketChannel,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource",
+          "sink": "Throwable.StreamingResponseCanceledException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource.ResponseStreamAdapter#enqueue(byte[],ByteBuffer)->Throwable.InterruptedException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "enqueue(byte[],ByteBuffer)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource.ResponseStreamAdapter",
+          "sink": "Throwable.InterruptedException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/StreamingMicrohttpResponses.java#com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource.ResponseStreamAdapter#enqueue(byte[],ByteBuffer)->Throwable.StreamingResponseCanceledException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "enqueue(byte[],ByteBuffer)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.StreamingMicrohttpResponses.StreamingWritableSource.ResponseStreamAdapter",
           "sink": "Throwable.StreamingResponseCanceledException"
@@ -48226,6 +48873,222 @@
           "occurrence": 1,
           "owner": "com.soklet.internal.spring.ObjectUtils",
           "sink": "Throwable.UnsupportedOperationException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#acquisitionFailure()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "acquisitionFailure()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#adopt(T,AbortMode,ResourceAborter<? super T>)->Throwable.AssertionError@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "adopt(T,AbortMode,ResourceAborter<? super T>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.AssertionError"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#adopt(T,AbortMode,ResourceAborter<? super T>)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "adopt(T,AbortMode,ResourceAborter<? super T>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#checkInterrupted()->Throwable.InterruptedException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkInterrupted()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.InterruptedException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#checkOutputLifetime()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkOutputLifetime()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#checkOwner()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkOwner()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#checkWritable()->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkWritable()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#checkWritable()->Throwable.IOException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkWritable()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#interruptedIOException(InterruptedException,int)->Throwable.InterruptedIOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "interruptedIOException(InterruptedException,int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.InterruptedIOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#outcome()->Throwable.StreamingResponseCanceledException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "outcome()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.StreamingResponseCanceledException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#own(T)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "own(T)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#rethrow(Throwable)->Throwable.RuntimeException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "rethrow(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.RuntimeException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#run(StreamingResponseWriter)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "run(StreamingResponseWriter)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream#writeScalar(int)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "writeScalar(int)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream.OutputView#checkLifetime()->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkLifetime()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream.OutputView",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedResponseStream.java#com.soklet.internal.streaming.ManagedResponseStream.OutputView#checkLifetime()->Throwable.IOException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkLifetime()",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.streaming.ManagedResponseStream.OutputView",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java#com.soklet.internal.streaming.ManagedSseLifecycle#rethrow(Throwable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "rethrow(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedSseLifecycle",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/ManagedSseLifecycle.java#com.soklet.internal.streaming.ManagedSseLifecycle#whileOpen(Supplier<T>)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "whileOpen(Supplier<T>)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.ManagedSseLifecycle",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#end(Throwable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "end(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#onError(Throwable)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onError(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#onNext(ByteBuffer)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onNext(ByteBuffer)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#onSubscribe(Flow.Subscription)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onSubscribe(Flow.Subscription)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#onSubscribe(Flow.Subscription)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "onSubscribe(Flow.Subscription)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/streaming/PublisherResponseStream.java#com.soklet.internal.streaming.PublisherResponseStream#throwFailure()->Throwable.RuntimeException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "throwFailure()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.streaming.PublisherResponseStream",
+          "sink": "Throwable.RuntimeException"
         },
         {
           "file": "src/main/java/com/soklet/internal/util/ConcurrentLruMap.java",
@@ -49216,8 +50079,10 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#buffered_delivery_preserves_unicast_and_broadcast_error_handlers",
         "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesDirectlyWithoutRecursivelyCallingObserver",
-        "src/test/java/com/soklet/SokletTests.java#requestResults"
+        "src/test/java/com/soklet/SokletTests.java#requestResults",
+        "src/test/java/com/soklet/SseInitializerRuntimeTests.java#checkedInitializerFailureTerminatesWithoutActivation"
       ],
       "category": "LOG",
       "classification": "EXACT_APPLICATION_BOUNDARY",
@@ -49393,6 +50258,15 @@
           "matcherRuleId": "PRIV-MATCH-001",
           "member": "start()",
           "occurrence": 10,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "LogEvent.with:SERVER_INTERNAL_ERROR"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->LogEvent.with:SERVER_INTERNAL_ERROR@11",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "start()",
+          "occurrence": 11,
           "owner": "com.soklet.DefaultHttpServer",
           "sink": "LogEvent.with:SERVER_INTERNAL_ERROR"
         },
@@ -49857,9 +50731,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.with:SSE_SERVER_CONNECTION_REJECTED@1",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)->LogEvent.with:SSE_SERVER_CONNECTION_REJECTED@1",
           "matcherRuleId": "PRIV-MATCH-001",
-          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "member": "registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.with:SSE_SERVER_CONNECTION_REJECTED"
@@ -49872,6 +50746,15 @@
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.with:METRICS_COLLECTOR_FAILED"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#start()->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "start()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.with:SSE_SERVER_INTERNAL_ERROR"
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
@@ -50145,20 +51028,29 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveHttpStream()->LogEvent.with:RESPONSE_STREAM_CLOSE_FAILED@1",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "reserveHttpStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.with:RESPONSE_STREAM_CLOSE_FAILED"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveSseStream()->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "reserveSseStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.with:SSE_SERVER_INTERNAL_ERROR"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-001:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseBroadcaster#handleBroadcastError(Throwable)->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
           "matcherRuleId": "PRIV-MATCH-001",
           "member": "handleBroadcastError(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.MockSseBroadcaster",
-          "sink": "LogEvent.with:SSE_SERVER_INTERNAL_ERROR"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-001:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#handleUnicastError(Throwable)->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
-          "matcherRuleId": "PRIV-MATCH-001",
-          "member": "handleUnicastError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
           "sink": "LogEvent.with:SSE_SERVER_INTERNAL_ERROR"
         },
         {
@@ -50190,9 +51082,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-001:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleUnicastError(Throwable)->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleConsumerError(Throwable,boolean)->LogEvent.with:SSE_SERVER_INTERNAL_ERROR@1",
           "matcherRuleId": "PRIV-MATCH-001",
-          "member": "handleUnicastError(Throwable)",
+          "member": "handleConsumerError(Throwable,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "LogEvent.with:SSE_SERVER_INTERNAL_ERROR"
@@ -51933,6 +52825,8 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#buffered_delivery_preserves_unicast_and_broadcast_error_handlers",
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#initializer_and_broadcast_payloads_are_ordered_and_released_after_close",
         "src/test/java/com/soklet/SokletTests.java#requestResults",
         "src/test/java/com/soklet/SseTests.java#sseServerSimulator"
       ],
@@ -52664,9 +53558,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SseHandshakeResult.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SseHandshakeResult.java#com.soklet.SseHandshakeResult.Accepted.Builder#clientInitializer(Consumer<SseUnicaster>)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SseHandshakeResult.java#com.soklet.SseHandshakeResult.Accepted.Builder#clientInitializer(SseClientInitializer)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "clientInitializer(Consumer<SseUnicaster>)",
+          "member": "clientInitializer(SseClientInitializer)",
           "occurrence": 1,
           "owner": "com.soklet.SseHandshakeResult.Accepted.Builder",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -52723,6 +53617,15 @@
           "member": "toString()",
           "occurrence": 1,
           "owner": "com.soklet.SseHandshakeResult.Rejected",
+          "sink": "SimulationCapture.publicOrProtectedSurface"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#close()->SimulationCapture.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "close()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "SimulationCapture.publicOrProtectedSurface"
         },
         {
@@ -52850,6 +53753,87 @@
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.RequestFailed",
           "sink": "SimulationCapture.publicOrProtectedSurface"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Delivery#Delivery(Consumer<T>,T,boolean)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Delivery(Consumer<T>,T,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Delivery",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Delivery#broadcast()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "broadcast()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Delivery",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Delivery#consumer()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "consumer()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Delivery",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Delivery#payload()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "payload()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Delivery",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Delivery#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Delivery",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Pending#Pending(T,boolean)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Pending(T,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Pending",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Pending#broadcast()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "broadcast()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Pending",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Pending#payload()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "payload()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Pending",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SseRequestResult.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted.Pending#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.SseRequestResult.HandshakeAccepted.Pending",
+          "sink": "Diagnostic.recordRenderer"
         }
       ]
     },
@@ -53058,6 +54042,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
+          "key": "PRIV-MATCH-013:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadableDuringStreamingResponse()->MicrohttpLogger.invocation.log@3",
+          "matcherRuleId": "PRIV-MATCH-013",
+          "member": "doOnReadableDuringStreamingResponse()",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
+          "sink": "MicrohttpLogger.invocation.log"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
           "key": "PRIV-MATCH-013:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadableDuringStreamingResponse()->MicrohttpLogger.invocation.logFailure@1",
           "matcherRuleId": "PRIV-MATCH-013",
           "member": "doOnReadableDuringStreamingResponse()",
@@ -53244,6 +54237,15 @@
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
           "sink": "MicrohttpLogger.invocation.log"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
+          "key": "PRIV-MATCH-013:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#prepareToWriteResponse(InFlightDispatch)->MicrohttpLogger.invocation.logFailure@1",
+          "matcherRuleId": "PRIV-MATCH-013",
+          "member": "prepareToWriteResponse(InFlightDispatch)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
+          "sink": "MicrohttpLogger.invocation.logFailure"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/EventLoop.java",
@@ -53823,24 +54825,6 @@
           "member": "DefaultMcpRequestContext(RequestObservationInput,Optional<DefaultMcpSecurityKeyManagers>)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpRequestContext",
-          "sink": "MetricsCollector.invocation.defaultInstance"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
-          "occurrence": 1,
-          "owner": "com.soklet.DefaultMcpServer",
-          "sink": "MetricsCollector.invocation.defaultInstance"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
-          "occurrence": 2,
-          "owner": "com.soklet.DefaultMcpServer",
           "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
@@ -58248,6 +59232,7 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/SimulatorSseInitializerTests.java#buffered_delivery_preserves_unicast_and_broadcast_error_handlers",
         "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesDirectlyWithoutRecursivelyCallingObserver",
         "src/test/java/com/soklet/SokletTests.java#requestResults"
       ],
@@ -58691,6 +59676,15 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->LogEvent.attachment.build@14",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "start()",
+          "occurrence": 14,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->LogEvent.attachment.build@2",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "start()",
@@ -58785,6 +59779,15 @@
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "start()",
           "occurrence": 11,
+          "owner": "com.soklet.DefaultHttpServer",
+          "sink": "LogEvent.attachment.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer#start()->LogEvent.attachment.throwable@12",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "start()",
+          "occurrence": 12,
           "owner": "com.soklet.DefaultHttpServer",
           "sink": "LogEvent.attachment.throwable"
         },
@@ -59699,18 +60702,18 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.attachment.build@1",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)->LogEvent.attachment.build@1",
           "matcherRuleId": "PRIV-MATCH-016",
-          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "member": "registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.attachment.build"
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)->LogEvent.attachment.throwable@1",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)->LogEvent.attachment.throwable@1",
           "matcherRuleId": "PRIV-MATCH-016",
-          "member": "registerClientSocketChannel(SocketChannel,Request,SseHandshakeResult.Accepted)",
+          "member": "registerClientSocketChannel(DefaultSseConnection,SseHandshakeResult.Accepted,AtomicBoolean)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.attachment.throwable"
@@ -59747,6 +60750,24 @@
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)->LogEvent.attachment.throwable@1",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "safelyCollectMetrics(String,Request,ResourceMethod,Consumer<MetricsCollector>)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.attachment.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#start()->LogEvent.attachment.build@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "start()",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#start()->LogEvent.attachment.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "start()",
           "occurrence": 1,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "LogEvent.attachment.throwable"
@@ -61094,15 +62115,6 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->LogEvent.attachment.finish@2",
-          "matcherRuleId": "PRIV-MATCH-016",
-          "member": "materializeStreamingResponse(Request,HttpRequestResult)",
-          "occurrence": 2,
-          "owner": "com.soklet.Soklet.DefaultSimulator",
-          "sink": "LogEvent.attachment.finish"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->LogEvent.attachment.marshaledResponse@1",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "materializeStreamingResponse(Request,HttpRequestResult)",
@@ -61274,6 +62286,42 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveHttpStream()->LogEvent.attachment.build@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "reserveHttpStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveHttpStream()->LogEvent.attachment.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "reserveHttpStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.attachment.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveSseStream()->LogEvent.attachment.build@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "reserveSseStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#reserveSseStream()->LogEvent.attachment.throwable@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "reserveSseStream()",
+          "occurrence": 1,
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "sink": "LogEvent.attachment.throwable"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseBroadcaster#handleBroadcastError(Throwable)->LogEvent.attachment.build@1",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "handleBroadcastError(Throwable)",
@@ -61288,24 +62336,6 @@
           "member": "handleBroadcastError(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.Soklet.MockSseBroadcaster",
-          "sink": "LogEvent.attachment.throwable"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#handleUnicastError(Throwable)->LogEvent.attachment.build@1",
-          "matcherRuleId": "PRIV-MATCH-016",
-          "member": "handleUnicastError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
-          "sink": "LogEvent.attachment.build"
-        },
-        {
-          "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.MockSseUnicaster#handleUnicastError(Throwable)->LogEvent.attachment.throwable@1",
-          "matcherRuleId": "PRIV-MATCH-016",
-          "member": "handleUnicastError(Throwable)",
-          "occurrence": 1,
-          "owner": "com.soklet.Soklet.MockSseUnicaster",
           "sink": "LogEvent.attachment.throwable"
         },
         {
@@ -61355,18 +62385,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleUnicastError(Throwable)->LogEvent.attachment.build@1",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleConsumerError(Throwable,boolean)->LogEvent.attachment.build@1",
           "matcherRuleId": "PRIV-MATCH-016",
-          "member": "handleUnicastError(Throwable)",
+          "member": "handleConsumerError(Throwable,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "LogEvent.attachment.build"
         },
         {
           "file": "src/main/java/com/soklet/SseRequestResult.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleUnicastError(Throwable)->LogEvent.attachment.throwable@1",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/SseRequestResult.java#com.soklet.SseRequestResult.HandshakeAccepted#handleConsumerError(Throwable,boolean)->LogEvent.attachment.throwable@1",
           "matcherRuleId": "PRIV-MATCH-016",
-          "member": "handleUnicastError(Throwable)",
+          "member": "handleConsumerError(Throwable,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.SseRequestResult.HandshakeAccepted",
           "sink": "LogEvent.attachment.throwable"
@@ -63032,11 +64062,18 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/McpSkillAccessPolicyTests.java#identityAndRenderingDoNotInspectEvaluatorCapabilities",
+        "src/test/java/com/soklet/McpSkillAccessPolicyTests.java#selectionContextSnapshotsExactCandidateIdentityAndLanguagePreferences",
         "src/test/java/com/soklet/McpSkillBundleTests.java#diagnosticsAreFixedAndDoNotExposeOwnedContent",
+        "src/test/java/com/soklet/McpSkillPageTests.java#structuralEqualityIncludesOrderMetadataCursorAndTtlWithoutExposingData",
         "src/test/java/com/soklet/McpSkillRegistrationTests.java#diagnosticsNeverExposeRegistrationOrResourceContent",
+        "src/test/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridgeTests.java#readAndInspectionValuesAreImmutableCachedAndExactUriBound",
         "src/test/java/com/soklet/internal/mcp/skills/SkillDocumentMetadataTests.java#diagnosticsAndRenderingNeverExposeAuthoredMetadata",
         "src/test/java/com/soklet/internal/mcp/skills/SkillFileContentsTests.java#diagnosticsAndToStringAreFixedAndRedacted",
-        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+        "src/test/java/com/soklet/internal/mcp/skills/SkillManifestTests.java#manifestDiagnosticRepresentationDoesNotExposeContentOrRegistrationUri",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillSourceTests.java#sourceAndFrontmatterDiagnosticRepresentationsExcludeAuthoredContent",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#syntaxNodesSnapshotCollectionsAndRedactDiagnosticRepresentations"
       ],
       "category": "DIAGNOSTIC",
       "classification": "REDACTED",
@@ -63318,15 +64355,55 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/internal/mcp/skills/SkillFileContentsTests.java#recognizesOnlyTheDocumentedTextSuffixTableCaseInsensitively",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillSourceTests.java#onlyExactColumnZeroDelimiterLinesTerminateHeader",
         "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#inputByteLimitCountsUtf8BytesInclusively",
-        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#privateLimitConfigurationRequiresPositiveBoundsAndBoundedDepth",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#syntaxNodesSnapshotCollectionsAndRedactDiagnosticRepresentations"
       ],
       "category": "DIAGNOSTIC",
       "classification": "BOUNDED_METADATA",
-      "contract": "Private Skills YAML line offsets, source positions, per-parse limit values, and AST renderer counts expose only finite numeric metadata or node style, not authored scalar text, keys, tags, or aliases. The parser's input and work bounds are inventoried separately.",
+      "contract": "Private Skills YAML line offsets, source positions, per-parse limit values, and AST renderer counts expose only finite numeric metadata or node style. The private SkillFileContents.Mime record is constructed only from the fixed MIME suffix table and a boolean text flag. These surfaces expose no authored path, YAML text, resource bytes, or request carrier; the parser input and work bounds are inventoried separately.",
       "id": "PRIV-BOUND-046",
-      "name": "Bounded Skills parser numeric diagnostics",
+      "name": "Bounded Skills parser metadata and MIME selection",
       "sourcePaths": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#Mime(String,boolean)->Diagnostic.recordConstructor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "Mime(String,boolean)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordConstructor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#text()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "text()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#toString()->Diagnostic.recordRenderer@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "toString()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordRenderer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#value()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
+          "sink": "Diagnostic.recordAccessor"
+        },
         {
           "file": "src/main/java/com/soklet/internal/mcp/skills/SkillSource.java",
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillSource.java#com.soklet.internal.mcp.skills.SkillSource.Line#Line(int,int,int)->Diagnostic.recordConstructor@1",
@@ -63511,13 +64588,18 @@
     },
     {
       "canaryTests": [
+        "src/test/java/com/soklet/McpSkillEndpointTests.java#completeNestedSnapshotsShareOneImmutableCanonicalFileAndOrderedOwners",
         "src/test/java/com/soklet/McpSkillPublicRuntimeTests.java#automaticListExactGetAndSkillsOnlyResourceReadsPreserveManifestBytes",
         "src/test/java/com/soklet/McpSkillRegistrationTests.java#generatedResourcesUseEncodedUrisAndExactRawByteDigestsAndSizes",
-        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors"
+        "src/test/java/com/soklet/internal/mcp/skills/McpSkillRuntimeBridgeTests.java#readAndInspectionValuesAreImmutableCachedAndExactUriBound",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillManifestTests.java#resourceObjectsAndJsonAgreeExactlyWithBundleDigestsAndSizes",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillSourceTests.java#sourceAndFrontmatterDiagnosticRepresentationsExcludeAuthoredContent",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#nodeDiagnosticsSeparateRedactedRenderersFromExactAccessors",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillYamlParserTests.java#syntaxNodesSnapshotCollectionsAndRedactDiagnosticRepresentations"
       ],
       "category": "DIAGNOSTIC",
       "classification": "EXACT_APPLICATION_BOUNDARY",
-      "contract": "Skills record constructors and typed accessors intentionally retain exact authored URI, path, frontmatter, MIME, cursor, policy, registration, and YAML node values; two private default record renderers can likewise include path or MIME text. Callers own any logging, retention, or export of these values. Explicit redacted and numeric-only renderers are classified separately.",
+      "contract": "Skills endpoint plans, request invocations, file ownership/read-result records, bundle/manifest resources, and parsed YAML records intentionally retain exact application callbacks, URIs, cursors, metadata, resource names, authored text, tags, anchors, and byte arrays. Constructors and accessors are exact application or internal processing surfaces, not telemetry emissions. The private SkillPaths.Path implicit renderer includes the exact logical path. Explicit redacted and bounded metadata renderers are classified separately.",
       "id": "PRIV-BOUND-047",
       "name": "Exact Skills typed value surfaces",
       "sourcePaths": [
@@ -63762,42 +64844,6 @@
           "member": "size()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.skills.SkillBundle.Resource",
-          "sink": "Diagnostic.recordAccessor"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#Mime(String,boolean)->Diagnostic.recordConstructor@1",
-          "matcherRuleId": "PRIV-MATCH-008",
-          "member": "Mime(String,boolean)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
-          "sink": "Diagnostic.recordConstructor"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#text()->Diagnostic.recordAccessor@1",
-          "matcherRuleId": "PRIV-MATCH-008",
-          "member": "text()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
-          "sink": "Diagnostic.recordAccessor"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#toString()->Diagnostic.recordRenderer@1",
-          "matcherRuleId": "PRIV-MATCH-008",
-          "member": "toString()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
-          "sink": "Diagnostic.recordRenderer"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/skills/SkillFileContents.java#com.soklet.internal.mcp.skills.SkillFileContents.Mime#value()->Diagnostic.recordAccessor@1",
-          "matcherRuleId": "PRIV-MATCH-008",
-          "member": "value()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.skills.SkillFileContents.Mime",
           "sink": "Diagnostic.recordAccessor"
         },
         {
@@ -64177,12 +65223,13 @@
     },
     {
       "canaryTests": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/skills/SkillYamlFuzzTest.java#curatedSeedsReachResolutionAndDocumentIsolation",
         "fuzz/src/test/java/com/soklet/internal/mcp/skills/SkillYamlFuzzTest.java#frontmatterRemainsTypedBoundedAndByteExact",
         "fuzz/src/test/java/com/soklet/internal/mcp/skills/SkillYamlFuzzTest.java#streamParsingAndResolutionRemainTypedAndBounded"
       ],
       "category": "FIXTURE",
       "classification": "EXACT_FIXTURE_CAPTURE",
-      "contract": "Tracked Skills frontmatter and stream-parser fuzz seeds preserve exact benign or malformed YAML bytes for deterministic parser regression. They are test fixtures, not runtime logs, metrics, or user-content capture.",
+      "contract": "Every listed tracked Skills YAML/frontmatter seed is exact local fuzz input. The corpus preserves authored or malformed scalar text, tags, aliases, BOMs, document separators, and metadata to reproduce parser, resolver, and byte-preservation behavior. These files are test fixtures, not production telemetry or a redaction promise for their contents.",
       "id": "PRIV-BOUND-049",
       "name": "Skills YAML fuzz seed corpus",
       "sourcePaths": [
@@ -65009,6 +66056,50 @@
   "releaseTarget": "4.0.0",
   "reviewedExclusions": [
     {
+      "file": "src/main/java/com/soklet/DefaultHttpServer.java",
+      "id": "PRIV-EX-033",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultHttpServer.java#com.soklet.DefaultHttpServer.HttpLifecycleOperations#residualActivity()->MetricsCollector.invocation.snapshot@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "residualActivity()",
+      "occurrence": 1,
+      "owner": "com.soklet.DefaultHttpServer.HttpLifecycleOperations",
+      "rationale": "The receiver/declaration is StreamLifecycleCoordinator.snapshot(), not MetricsCollector. It reads finite lifecycle counters for shutdown accounting and performs no metric emission, label construction or collector callback. The broad snapshot vocabulary matcher is unchanged; exclude only these exact five keys after review. Exact reviewed member: com.soklet.DefaultHttpServer.HttpLifecycleOperations#residualActivity(); occurrence 1.",
+      "sink": "MetricsCollector.invocation.snapshot"
+    },
+    {
+      "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+      "id": "PRIV-EX-020",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+      "occurrence": 1,
+      "owner": "com.soklet.DefaultMcpServer",
+      "rationale": "This exact constructor occurrence invokes LifecycleObserver.defaultInstance(), assigning the server lifecycleObserver field. The receiver is not MetricsCollector; it constructs or selects a component and emits no metric or label. The broad defaultInstance matcher remains unchanged; exclude only this exact source key.",
+      "sink": "MetricsCollector.invocation.defaultInstance"
+    },
+    {
+      "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+      "id": "PRIV-EX-021",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@2",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "DefaultMcpServer(int,String,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)",
+      "occurrence": 2,
+      "owner": "com.soklet.DefaultMcpServer",
+      "rationale": "This exact constructor occurrence invokes InstanceProvider.defaultInstance(), assigning the server instanceProvider field. The receiver is not MetricsCollector; it constructs or selects a component and emits no metric or label. The broad defaultInstance matcher remains unchanged; exclude only this exact source key.",
+      "sink": "MetricsCollector.invocation.defaultInstance"
+    },
+    {
+      "file": "src/main/java/com/soklet/DefaultSseServer.java",
+      "id": "PRIV-EX-022",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.SseLifecycleOperations#residualActivity()->MetricsCollector.invocation.snapshot@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "residualActivity()",
+      "occurrence": 1,
+      "owner": "com.soklet.DefaultSseServer.SseLifecycleOperations",
+      "rationale": "The receiver/declaration is StreamLifecycleCoordinator.snapshot(), not MetricsCollector. It reads finite lifecycle counters for shutdown accounting and performs no metric emission, label construction or collector callback. The broad snapshot vocabulary matcher is unchanged; exclude only these exact five keys after review. Exact reviewed member: com.soklet.DefaultSseServer.SseLifecycleOperations#residualActivity(); occurrence 1.",
+      "sink": "MetricsCollector.invocation.snapshot"
+    },
+    {
       "file": "src/main/java/com/soklet/McpAppResourceMetadata.java",
       "id": "PRIV-EX-019",
       "key": "PRIV-MATCH-015:src/main/java/com/soklet/McpAppResourceMetadata.java#com.soklet.McpAppResourceMetadata.ContentSecurityPolicy#defaultInstance()->MetricsCollector.override.defaultInstance@1",
@@ -65018,6 +66109,28 @@
       "owner": "com.soklet.McpAppResourceMetadata.ContentSecurityPolicy",
       "rationale": "This defaultInstance() declaration belongs to McpAppResourceMetadata.ContentSecurityPolicy, not MetricsCollector. It returns an empty typed CSP value and neither emits a metric nor exposes a MetricsCollector surface. The broad same-name matcher remains unchanged so future collisions require review.",
       "sink": "MetricsCollector.override.defaultInstance"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-023",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#httpScopeResidualActivity()->MetricsCollector.invocation.snapshot@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "httpScopeResidualActivity()",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receiver/declaration is StreamLifecycleCoordinator.snapshot(), not MetricsCollector. It reads finite lifecycle counters for shutdown accounting and performs no metric emission, label construction or collector callback. The broad snapshot vocabulary matcher is unchanged; exclude only these exact five keys after review. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#httpScopeResidualActivity(); occurrence 1.",
+      "sink": "MetricsCollector.invocation.snapshot"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-024",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#sseScopeResidualActivity()->MetricsCollector.invocation.snapshot@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "sseScopeResidualActivity()",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receiver/declaration is StreamLifecycleCoordinator.snapshot(), not MetricsCollector. It reads finite lifecycle counters for shutdown accounting and performs no metric emission, label construction or collector callback. The broad snapshot vocabulary matcher is unchanged; exclude only these exact five keys after review. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#sseScopeResidualActivity(); occurrence 1.",
+      "sink": "MetricsCollector.invocation.snapshot"
     },
     {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
@@ -65196,6 +66309,61 @@
       "sink": "MetricsCollector.invocation.reset"
     },
     {
+      "file": "src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java",
+      "id": "PRIV-EX-025",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/microhttp/StreamLifecycleCoordinator.java#com.soklet.internal.microhttp.StreamLifecycleCoordinator#snapshot()->MetricsCollector.override.snapshot@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "snapshot()",
+      "occurrence": 1,
+      "owner": "com.soklet.internal.microhttp.StreamLifecycleCoordinator",
+      "rationale": "The receiver/declaration is StreamLifecycleCoordinator.snapshot(), not MetricsCollector. It reads finite lifecycle counters for shutdown accounting and performs no metric emission, label construction or collector callback. The broad snapshot vocabulary matcher is unchanged; exclude only these exact five keys after review. Exact reviewed member: com.soklet.internal.microhttp.StreamLifecycleCoordinator#snapshot(); occurrence 1.",
+      "sink": "MetricsCollector.override.snapshot"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-026",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult)->LogEvent.attachment.build@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "materializeStreamingResponse(Request,HttpRequestResult)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#materializeStreamingResponse(Request,HttpRequestResult); occurrence 1.",
+      "sink": "LogEvent.attachment.build"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-027",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation); occurrence 1.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-028",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->LogEvent.attachment.finish@2",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+      "occurrence": 2,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation); occurrence 2.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-029",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)->LogEvent.attachment.marshaledResponse@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#materializeStreamingResponseWhileReserved(Request,HttpRequestResult,StreamingResponseBody,StreamLifecycleCoordinator.Reservation); occurrence 1.",
+      "sink": "LogEvent.attachment.marshaledResponse"
+    },
+    {
       "file": "src/main/java/com/soklet/Soklet.java",
       "id": "PRIV-EX-017",
       "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performHttpRequest(Request)->LogEvent.attachment.finish@1",
@@ -65216,6 +66384,39 @@
       "owner": "com.soklet.Soklet.DefaultSimulator",
       "rationale": "The receiver at this exact site is the Request.Copier returned by requireNonNull(request).copy(), not LogEvent.Copier. finish() constructs a fresh immutable Request identity for one SSE simulation dispatch; it emits no log or attachment. Existing request-carrier and simulator boundaries cover the exact application values. The broad fluent-attachment matcher remains unchanged so other finish() sites still require classification.",
       "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-030",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request)->LogEvent.attachment.build@2",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "performSseRequestWhileAdmitted(Request)",
+      "occurrence": 2,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request); occurrence 2.",
+      "sink": "LogEvent.attachment.build"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-031",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request)->LogEvent.attachment.finish@2",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "performSseRequestWhileAdmitted(Request)",
+      "occurrence": 2,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request); occurrence 2.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-032",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request)->LogEvent.attachment.marshaledResponse@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "performSseRequestWhileAdmitted(Request)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet.DefaultSimulator",
+      "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request); occurrence 1.",
+      "sink": "LogEvent.attachment.marshaledResponse"
     }
   ],
   "scanRoots": [

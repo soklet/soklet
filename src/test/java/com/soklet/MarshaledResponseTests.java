@@ -33,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.nio.file.StandardOpenOption.READ;
 
@@ -156,8 +157,116 @@ public class MarshaledResponseTests {
 	}
 
 	@Test
+	public void stream_registers_writer_lazily_and_copier_preserves_or_replaces_it() {
+		AtomicInteger invocationCount = new AtomicInteger();
+		StreamingResponseWriter streamingResponseWriter = responseStream -> invocationCount.incrementAndGet();
+		StreamingResponseWriter replacementWriter = responseStream -> invocationCount.incrementAndGet();
+		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Content-Type", Set.of("text/plain")));
+
+		Assertions.assertSame(builder, builder.stream(streamingResponseWriter));
+		MarshaledResponse response = builder.build();
+		StreamingResponseBody.WriterBody writerBody = (StreamingResponseBody.WriterBody)
+				response.getStreamingResponseBody().orElseThrow();
+		Assertions.assertSame(streamingResponseWriter, writerBody.getWriter());
+		Assertions.assertTrue(response.isStreaming());
+		Assertions.assertTrue(response.getBody().isEmpty());
+		Assertions.assertSame(writerBody, response.copy().finish().getStreamingResponseBody().orElseThrow());
+
+		MarshaledResponse.Copier copier = response.copy();
+		Assertions.assertSame(copier, copier.stream(replacementWriter));
+		MarshaledResponse replacedResponse = copier.finish();
+		Assertions.assertSame(replacementWriter,
+				((StreamingResponseBody.WriterBody) replacedResponse.getStreamingResponseBody().orElseThrow()).getWriter());
+		Assertions.assertSame(streamingResponseWriter, writerBody.getWriter());
+		Assertions.assertEquals(response.getHeaders(), replacedResponse.getHeaders());
+		Assertions.assertEquals(response.getStatusCode(), replacedResponse.getStatusCode());
+		Assertions.assertEquals(0, invocationCount.get());
+	}
+
+	@Test
+	public void stream_keeps_known_length_body_conflicts_until_explicitly_removed() {
+		StreamingResponseWriter streamingResponseWriter = responseStream -> {
+			// No-op
+		};
+		byte[] bytes = new byte[]{1, 2, 3};
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.body(bytes).stream(streamingResponseWriter).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.stream(streamingResponseWriter).body(bytes).build());
+
+		MarshaledResponse knownLengthResponse = MarshaledResponse.withStatusCode(200).body(bytes).build();
+		MarshaledResponse.Copier copier = knownLengthResponse.copy().stream(streamingResponseWriter);
+		Assertions.assertThrows(IllegalStateException.class, copier::finish);
+		MarshaledResponse streamingResponse = copier.withoutBody().finish();
+		Assertions.assertTrue(streamingResponse.getBody().isEmpty());
+		Assertions.assertSame(streamingResponseWriter,
+				((StreamingResponseBody.WriterBody) streamingResponse.getStreamingResponseBody().orElseThrow()).getWriter());
+		Assertions.assertSame(bytes, ((MarshaledResponseBody.Bytes) knownLengthResponse.getBody().orElseThrow()).getBytes());
+		Assertions.assertFalse(knownLengthResponse.isStreaming());
+	}
+
+	@Test
+	public void stream_uses_existing_explicit_and_nullable_clearing_methods() {
+		StreamingResponseWriter streamingResponseWriter = responseStream -> {
+			throw new AssertionError("Clearing a stream must not invoke its writer");
+		};
+		byte[] bytes = new byte[]{1, 2, 3};
+		MarshaledResponse explicitlyCleared = MarshaledResponse.withStatusCode(200)
+				.stream(streamingResponseWriter).withoutStreamingResponseBody().body(bytes).build();
+		MarshaledResponse nullCleared = MarshaledResponse.withStatusCode(200)
+				.body(bytes).stream(streamingResponseWriter).streamingResponseBody(null).build();
+		MarshaledResponse streamingResponse = MarshaledResponse.withStatusCode(200).stream(streamingResponseWriter).build();
+		MarshaledResponse copiedExplicitlyCleared = streamingResponse.copy()
+				.withoutStreamingResponseBody().body(bytes).finish();
+		MarshaledResponse copiedNullCleared = streamingResponse.copy()
+				.body(bytes).streamingResponseBody(null).finish();
+
+		for (MarshaledResponse clearedResponse : List.of(explicitlyCleared, nullCleared,
+				copiedExplicitlyCleared, copiedNullCleared)) {
+			Assertions.assertFalse(clearedResponse.isStreaming());
+			Assertions.assertTrue(clearedResponse.getStreamingResponseBody().isEmpty());
+			Assertions.assertSame(bytes, ((MarshaledResponseBody.Bytes) clearedResponse.getBody().orElseThrow()).getBytes());
+		}
+
+		Assertions.assertTrue(streamingResponse.isStreaming());
+	}
+
+	@Test
+	public void stream_rejects_null_without_replacing_the_current_writer() {
+		StreamingResponseWriter streamingResponseWriter = responseStream -> {
+			// No-op
+		};
+		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(200).stream(streamingResponseWriter);
+		Assertions.assertThrows(NullPointerException.class, () -> builder.stream(null));
+		MarshaledResponse response = builder.build();
+		Assertions.assertSame(streamingResponseWriter,
+				((StreamingResponseBody.WriterBody) response.getStreamingResponseBody().orElseThrow()).getWriter());
+
+		MarshaledResponse.Copier copier = response.copy();
+		Assertions.assertThrows(NullPointerException.class, () -> copier.stream(null));
+		Assertions.assertSame(streamingResponseWriter,
+				((StreamingResponseBody.WriterBody) copier.finish().getStreamingResponseBody().orElseThrow()).getWriter());
+	}
+
+	@Test
+	public void stream_obeys_existing_header_and_status_validation() {
+		StreamingResponseWriter streamingResponseWriter = responseStream -> {
+			// No-op
+		};
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
+				.stream(streamingResponseWriter).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Content-Length", Set.of("10"))).stream(streamingResponseWriter).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.fromStatusCode(200).copy()
+				.headers(Map.of("Transfer-Encoding", Set.of("chunked"))).stream(streamingResponseWriter).finish());
+	}
+
+	@Test
 	public void build_rejects_known_length_body_and_stream() {
-		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter(responseStream -> {
 			// No-op
 		});
 
@@ -174,7 +283,7 @@ public class MarshaledResponseTests {
 
 	@Test
 	public void explicit_without_body_allows_switching_to_stream() {
-		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter(responseStream -> {
 			// No-op
 		});
 
@@ -192,7 +301,7 @@ public class MarshaledResponseTests {
 
 	@Test
 	public void explicit_without_stream_allows_switching_to_known_length_body() {
-		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter(responseStream -> {
 			// No-op
 		});
 
@@ -210,7 +319,7 @@ public class MarshaledResponseTests {
 
 	@Test
 	public void streaming_response_rejects_known_length_headers() {
-		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter(responseStream -> {
 			// No-op
 		});
 
@@ -228,7 +337,7 @@ public class MarshaledResponseTests {
 	@Test
 	public void streaming_response_rejects_bodyless_status_code() {
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
-				.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
+				.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 					// No-op
 				}))
 				.build());
@@ -449,7 +558,7 @@ public class MarshaledResponseTests {
 	public void default_head_response_omits_content_length_for_streaming_body() {
 		MarshaledResponse getResponse = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> output.write(new byte[]{1, 2, 3})))
+				.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> responseStream.write(new byte[]{1, 2, 3})))
 				.build();
 		MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(
 				Request.withPath(HttpMethod.HEAD, "/stream").build(), getResponse);

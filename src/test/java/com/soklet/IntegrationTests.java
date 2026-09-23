@@ -804,7 +804,7 @@ public class IntegrationTests {
 		public MarshaledResponse streamed() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> output.write(LARGE_RESPONSE_BODY)))
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> responseStream.write(LARGE_RESPONSE_BODY)))
 					.build();
 		}
 

@@ -311,7 +311,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 
 			@Override
 			@NonNull
-			public AutoCloseable onCancel(@NonNull Runnable callback) {
+			public CallbackRegistration onCancel(@NonNull Runnable callback) {
 				return () -> {};
 			}
 		};

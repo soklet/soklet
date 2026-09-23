@@ -85,8 +85,8 @@ whose assertions hard-code Sampling. Its other checks produced 26 `SUCCESS`
 and the two existing mutable-list `SKIPPED` results. The fixture's elicitation
 diagnostic is independently tested, but does not turn those raw upstream
 failures into passing or skipped checks. The existing expected success profile
-is unchanged, so the conformance gate stays red pending an upstream correction
-or a separately reviewed handling decision. No expected-failure suppression,
+is unchanged. The owner accepted the narrow [P0-C check-level disposition](P0C_CHECK_DISPOSITION_2026-09-22.md) on 2026-09-22,
+but runner integration, immutable-candidate replay, and toolchain security remain open; the gate stays red. No expected-failure suppression,
 upstream source modification, or synthetic Sampling response is used.
 
 The unfiltered `list --server` output

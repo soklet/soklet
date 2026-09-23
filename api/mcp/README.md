@@ -33,12 +33,22 @@ compatibility snapshots and the limits of each freeze decision.
 `current-incompatibilities.jsonl` retains the reviewed pre-P1b MCP compatibility
 snapshot between the released `com.soklet:soklet:3.5.1` artifact and the
 4.0.0 development tree, with five separately reviewed non-MCP gzip-policy
-removals added by the concurrent 2026-09-19 response-compression change. It now
-contains 659 records and has SHA-256
-`6cc07247883012725bc2ecacec7ecb6963fe83e2079e68760d842018684ea2f4`.
+removals added by the 2026-09-19 response-compression change. The 4.0 streaming
+redesign contributed 47 non-MCP HTTP/SSE incompatibilities at its September 22
+checkpoint. The optional `ResponseStream.writeUtf8(String)` addition and four
+provisional `SseUnicaster` methods were later removed from the final surface. The
+[streaming amendment](streaming-api-amendment-2026-09-22.md) preserves every
+previous record and all historical MCP signature snapshots. At that checkpoint
+the ledger contained 706 records and had SHA-256
+`d09dd3b74137e8a181fa9732ffa236dfd383d302ba22fa16a842cc287a5409b9`.
+The [separate route-component amendment](route-component-api-amendment-2026-09-22.md)
+adds one independently reviewed non-MCP removal. After removing the streaming
+helper and narrowing the SSE initializer to synchronous catch-up, the current
+ledger contains 702 records and has SHA-256
+`0c997ec0c53f3891126ddd2a7e8eaf8d9d82c68722f5689c64eb72beee08e427`.
 The MCP portion remains unchanged while the 2026-09-18 P1b current-source
 foundation awaits the P0-C disposition and MCP-G2 refreeze. This narrowly
-scoped non-MCP amendment does not qualify the later MCP changes. At refreeze,
+scoped non-MCP work does not qualify the later MCP changes. At refreeze,
 the API-diff gate will regenerate the set and compare it in both directions,
 so an unexpected addition, removal, or changed record fails.
 
@@ -102,20 +112,20 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 164 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 168 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
-| `non-mcp-public-api.allowlist` | 64 | reviewed lifecycle, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
+| `non-mcp-public-api.allowlist` | 85 | reviewed lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 290-entry current-source MCP union plus the 64-entry non-MCP allowlist owns
-exactly 354 current types. Ownership alone does not freeze a type. The phase
+The 294-entry current-source MCP union plus the 85-entry non-MCP allowlist owns
+exactly 379 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
 the updated include inventories establish current-source ownership without
 claiming a refreeze.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`fe2305313988a5e25832be5305e42c48627ddd9ee714024525935afa46469ec0`,
+`208af06ae2a26e6ede4d0408d1accb4216c4ce350fb231ed3d146d2c463b2807`,
 `17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
 `b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
@@ -127,6 +137,30 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-22 route-component compatibility amendment
+
+The [route-component amendment](route-component-api-amendment-2026-09-22.md)
+records the independently documented `ResourcePathDeclaration.Component`
+factory rename. It preserves the 706 records reviewed at the streaming
+checkpoint and all historical MCP phase/provisional signatures. The current
+aggregate comparison still reports nine unexpected and four missing MCP records;
+their coordinated refreeze remains pending.
+
+### 2026-09-22 streaming/SSE compatibility amendment (later narrowed)
+
+The [streaming amendment](streaming-api-amendment-2026-09-22.md) accounts for the
+breaking HTTP API, the then-proposed SSE ownership API, and its shared neutral
+callback handle. The September 23 SSE decision keeps checked synchronous
+initialization but removes the four provisional `SseUnicaster` methods and the
+SSE-only callback/cleanup builder settings; the earlier exact amendment remains
+historical evidence.
+It adds no compatibility aliases. The current non-MCP inventory also classifies
+`ResourcePathDeclaration.Component` as an existing route-value owner; this does
+not accept its independent factory-rename incompatibility. The fresh candidate
+has 712 incompatibility records; after the streaming amendment the aggregate
+gate still reports ten unexpected and four missing records from earlier work.
+Historical MCP phase/provisional signatures are unchanged and MCP-G2 remains open.
 
 ### 2026-09-20 N0 naming and collection replacements (not a refreeze)
 

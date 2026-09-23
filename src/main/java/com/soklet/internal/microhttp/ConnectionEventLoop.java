@@ -66,6 +66,7 @@ import static com.soklet.internal.ObjectIdentity.sameInstance;
  */
 class ConnectionEventLoop {
     private static final long MAX_RESPONSE_BYTES_PER_WRITE_TURN = 1024L * 1024L;
+    private static final int MAX_QUEUED_TASKS_PER_TURN = 256;
 
     @FunctionalInterface
     private interface ThrowingTask {
@@ -332,7 +333,9 @@ class ConnectionEventLoop {
         boolean keepAlive;
         boolean closeAfterResponse;
         boolean inputHalfClosed;
-        boolean monitorClientDisconnectsDuringStreamingResponse;
+        Handler.StreamingResponseInputPolicy streamingResponseInputPolicy =
+                Handler.StreamingResponseInputPolicy.NONE;
+        final AtomicBoolean writeReadyTaskQueued = new AtomicBoolean();
         boolean unparsedResponsePending;
         int streamingResponseBytesDiscarded;
         final AtomicBoolean closed;
@@ -389,7 +392,7 @@ class ConnectionEventLoop {
                     // when graceful drain closes the socket after the active response.
                 } else if (writableSource != null) {
                     closeAfterResponse = true;
-                    if (!monitorClientDisconnectsDuringStreamingResponse) {
+                    if (streamingResponseInputPolicy == Handler.StreamingResponseInputPolicy.NONE) {
                         disableReadInterest();
                         return;
                     }
@@ -453,7 +456,7 @@ class ConnectionEventLoop {
             InFlightDispatch dispatch = inFlightDispatch;
             if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
                 failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, throwable);
-            } else if (monitorClientDisconnectsDuringStreamingResponse
+            } else if (streamingResponseInputPolicy != Handler.StreamingResponseInputPolicy.NONE
                     && writableSource != null) {
                 failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, throwable);
             } else {
@@ -467,7 +470,8 @@ class ConnectionEventLoop {
                 doOnReadableWhileAwaitingResponse(dispatch);
                 return;
             }
-            if (monitorClientDisconnectsDuringStreamingResponse && writableSource != null) {
+            if (streamingResponseInputPolicy != Handler.StreamingResponseInputPolicy.NONE
+                    && writableSource != null) {
                 doOnReadableDuringStreamingResponse();
                 return;
             }
@@ -591,13 +595,18 @@ class ConnectionEventLoop {
         }
 
         private void doOnReadableDuringStreamingResponse() throws IOException {
-            if (!monitorClientDisconnectsDuringStreamingResponse || writableSource == null) {
+            if (streamingResponseInputPolicy == Handler.StreamingResponseInputPolicy.NONE
+                    || writableSource == null) {
                 disableReadInterest();
                 return;
             }
 
+            boolean retainPipelinedRequests =
+                    streamingResponseInputPolicy == Handler.StreamingResponseInputPolicy.RETAIN;
             buffer.clear();
-            int remainingCapacity = options.maxRequestSize() - streamingResponseBytesDiscarded;
+            int bufferedBytes = retainPipelinedRequests
+                    ? byteTokenizer.size() : streamingResponseBytesDiscarded;
+            int remainingCapacity = options.maxRequestSize() - bufferedBytes;
             boolean overflowProbe = remainingCapacity <= 0;
             buffer.limit(overflowProbe ? 1 : Math.min(buffer.capacity(), remainingCapacity));
             int numBytes = socketChannel.read(buffer);
@@ -609,9 +618,12 @@ class ConnectionEventLoop {
                             new LogEntry("id", id));
                 }
                 // EOF closes only the client's sending side. The committed response may continue
-                // writing indefinitely; no future request can arrive on this connection.
+                // writing. Retained, complete pipelined requests may still follow that response.
                 inputHalfClosed = true;
-                monitorClientDisconnectsDuringStreamingResponse = false;
+                if (retainPipelinedRequests && byteTokenizer.size() == 0) {
+                    closeAfterResponse = true;
+                }
+                streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;
                 disableReadInterest();
                 return;
             }
@@ -622,15 +634,31 @@ class ConnectionEventLoop {
 
             if (overflowProbe) {
                 try (TransportFailureObserver.Observation ignored =
-                             beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                             beginTransportFailure(retainPipelinedRequests
+                                     ? TransportFailureReason.REQUEST_TOO_LARGE
+                                     : TransportFailureReason.UNKNOWN)) {
                     if (logger.failureEnabled()) {
                         logger.logFailure(
                                 new LogEntry("event", "streaming_response_read_limit_close"),
                                 new LogEntry("id", id),
-                                new LogEntry("discarded_bytes",
+                                new LogEntry(retainPipelinedRequests
+                                        ? "buffered_request_bytes" : "discarded_bytes",
                                         Long.toString((long) options.maxRequestSize() + 1L)));
                     }
                     failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
+                }
+                return;
+            }
+
+            if (retainPipelinedRequests) {
+                buffer.flip();
+                byteTokenizer.add(buffer);
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "read_pipelined_bytes_during_streaming_response"),
+                            new LogEntry("id", id),
+                            new LogEntry("read_bytes", Integer.toString(numBytes)),
+                            new LogEntry("buffered_request_bytes", Integer.toString(byteTokenizer.size())));
                 }
                 return;
             }
@@ -939,7 +967,8 @@ class ConnectionEventLoop {
             responseInDelivery = microhttpResponse;
             boolean committed = false;
             boolean bodyOwnershipAttempted = false;
-            boolean monitorStreamingResponse = false;
+            Handler.StreamingResponseInputPolicy nextStreamingInputPolicy =
+                    Handler.StreamingResponseInputPolicy.NONE;
 
             try {
                 if (microhttpResponse.streaming() && httpOneDotZero) {
@@ -977,12 +1006,42 @@ class ConnectionEventLoop {
                     closeAfterResponse = true;
                 }
                 if (microhttpResponse.streaming()) {
-                    monitorStreamingResponse =
-                            handler.monitorClientDisconnectsDuringStreamingResponse(dispatch.request);
-                    if (monitorStreamingResponse && byteTokenizer.size() > 0) {
+                    nextStreamingInputPolicy = handler.streamingResponseInputPolicy(dispatch.request);
+                    if (nextStreamingInputPolicy == null) {
+                        throw new NullPointerException("Streaming response input policy is null");
+                    }
+                    if (nextStreamingInputPolicy == Handler.StreamingResponseInputPolicy.DISCARD
+                            && byteTokenizer.size() > 0) {
                         // Bytes already coalesced with the request predate committed monitoring but
                         // must obey the same no-pipelining contract.
                         closeAfterResponse = true;
+                    }
+                    if (nextStreamingInputPolicy == Handler.StreamingResponseInputPolicy.RETAIN
+                            && byteTokenizer.size() > options.maxRequestSize()) {
+                        // A read may have coalesced the next request with this one before the monitor
+                        // was armed. Enforce the same finite buffer bound before committing any headers.
+                        try (TransportFailureObserver.Observation ignored =
+                                     beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                            if (logger.failureEnabled()) {
+                                logger.logFailure(
+                                        new LogEntry("event", "streaming_response_read_limit_close"),
+                                        new LogEntry("id", id),
+                                        new LogEntry("buffered_request_bytes",
+                                                Integer.toString(byteTokenizer.size())));
+                            }
+                            TransportFailureObserver.@Nullable Observation cancelFailureObservation =
+                                    cancelDispatch(dispatch, StreamTerminationReason.BACKPRESSURE, null);
+                            try {
+                                responseInDelivery = null;
+                                bodyOwnershipAttempted = true;
+                                discardResponse(microhttpResponse, StreamTerminationReason.BACKPRESSURE, null);
+                                failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
+                            } finally {
+                                if (cancelFailureObservation != null)
+                                    cancelFailureObservation.close();
+                            }
+                        }
+                        return;
                     }
                 }
                 responseWriteIdleTimeoutEnabled = !microhttpResponse.streaming()
@@ -1020,9 +1079,9 @@ class ConnectionEventLoop {
                 if (inFlightDispatch == dispatch) {
                     inFlightDispatch = null;
                 }
-                monitorClientDisconnectsDuringStreamingResponse = monitorStreamingResponse;
+                streamingResponseInputPolicy = nextStreamingInputPolicy;
                 streamingResponseBytesDiscarded = 0;
-                if (monitorStreamingResponse) {
+                if (nextStreamingInputPolicy != Handler.StreamingResponseInputPolicy.NONE) {
                     enableReadInterestForDisconnectMonitoring();
                 }
 
@@ -1091,7 +1150,13 @@ class ConnectionEventLoop {
         }
 
         private void onWritableSourceReady() {
+            if (closed.get() || !writeReadyTaskQueued.compareAndSet(false, true)) {
+                return;
+            }
             queueConnectionTask("write_error", TransportFailureReason.WRITE_ERROR, () -> {
+                // Clear before checking readiness: a producer may publish bytes while this
+                // task runs, and that later notification must be able to schedule a turn.
+                writeReadyTaskQueued.set(false);
                 if (closed.get() || writableSource == null || !selectionKey.isValid()) {
                     return;
                 }
@@ -1121,7 +1186,7 @@ class ConnectionEventLoop {
                 writableSource = null; // done with current write source, remove reference
                 MicrohttpResponse deliveredResponse = responseInDelivery;
                 responseInDelivery = null;
-                monitorClientDisconnectsDuringStreamingResponse = false;
+                streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;
                 streamingResponseBytesDiscarded = 0;
                 cancelResponseWriteIdleTimeout();
                 if (deliveredResponse != null)
@@ -1437,7 +1502,7 @@ class ConnectionEventLoop {
                     }
                 }
                 continueResponseBuffer = null;
-                monitorClientDisconnectsDuringStreamingResponse = false;
+                streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;
                 streamingResponseBytesDiscarded = 0;
                 try {
                     selectionKey.cancel();
@@ -1566,7 +1631,7 @@ class ConnectionEventLoop {
 
             if (writableSource != null) {
                 closeAfterResponse = true;
-                if (!monitorClientDisconnectsDuringStreamingResponse)
+                if (streamingResponseInputPolicy == Handler.StreamingResponseInputPolicy.NONE)
                     disableReadInterest();
                 return;
             }
@@ -1876,9 +1941,16 @@ class ConnectionEventLoop {
             timeoutQueue.expired().forEach(task -> runLoopTask(task,
                     "timeout_task_error", TransportFailureReason.TIMEOUT_TASK_ERROR));
             Runnable task;
-            while ((task = taskQueue.poll()) != null) {
+            int tasksRun = 0;
+            while (tasksRun < MAX_QUEUED_TASKS_PER_TURN
+                    && (task = taskQueue.poll()) != null) {
                 runLoopTask(task, "task_error", TransportFailureReason.TASK_ERROR);
+                tasksRun++;
             }
+            // A busy producer must not keep the selector from observing reads and resets.
+            // Make the next select return promptly when a finite task turn left work behind.
+            if (!taskQueue.isEmpty())
+                selector.wakeup();
         }
     }
 

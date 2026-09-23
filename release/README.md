@@ -49,6 +49,12 @@ inventory digest supplies that owner decision. Preserve frozen provenance
 hashes. Current finite/privacy semantic repins and their reviewed reasons are
 recorded separately in that document.
 
+The [September 22 streaming inventory checkpoint](../docs/streaming-api-milestone-6b.md)
+records the next current-only finite/privacy review, lifecycle harness
+reconciliation and source-version census. Its development checks do not change
+the release-gate universe or statuses, downstream commit pins, historical
+approvals, or the independent MCP API refreeze requirement.
+
 The release-harness registry retains five executable evidence producers. Two
 are blocking imported release gates:
 

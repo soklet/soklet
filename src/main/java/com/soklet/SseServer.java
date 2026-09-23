@@ -97,9 +97,13 @@ public interface SseServer {
 	/**
 	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.SseEventSource}, acquire a {@link SseBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
 	 * <p>
-	 * When using the default {@link SseServer}, Soklet guarantees exactly one {@link SseBroadcaster} instance exists per {@link ResourcePath} (within the same JVM process).  Soklet is responsible for the creation and management of {@link SseBroadcaster} instances.
+	 * The default server manages one active internal broadcaster per {@link ResourcePath}
+	 * while clients are connected. Each acquisition may return a distinct public
+	 * handle for that path; callers must not rely on handle object identity.
 	 * <p>
-	 * Your code should not hold long-lived references to {@link SseBroadcaster} instances (e.g. in a cache or instance variables) - the recommended usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
+	 * A handle from the default server may be retained for the server's lifetime.
+	 * It follows the current broadcaster across idle eviction and new connections;
+	 * a broadcast while no clients are connected has no recipients.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *
@@ -217,6 +221,8 @@ public interface SseServer {
 		Integer resourcePathCacheCapacity;
 		@Nullable
 		Integer connectionQueueCapacity;
+		@Nullable
+		Integer streamingLifecycleCapacity;
 		@Nullable
 		Boolean verifyConnectionOnceEstablished;
 		@Nullable
@@ -501,6 +507,24 @@ public interface SseServer {
 		}
 
 		/**
+		 * Sets the maximum number of admitted SSE connection lifetimes, including pending initialization.
+		 * <p>
+		 * A terminated connection retains its lifecycle slot while admitted initializer or connection work remains
+		 * physically outstanding. This bound is independent of {@link #concurrentConnectionLimit(Integer)}.
+		 * Passing {@code null} restores the current default of 256.
+		 * <p>
+		 * At {@link #build()}, the effective capacity must be between 1 and {@code Integer.MAX_VALUE / 2}, inclusive.
+		 *
+		 * @param streamingLifecycleCapacity the lifecycle capacity, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingLifecycleCapacity(@Nullable Integer streamingLifecycleCapacity) {
+			this.streamingLifecycleCapacity = streamingLifecycleCapacity;
+			return this;
+		}
+
+		/**
 		 * Sets whether Soklet verifies that an SSE connection remains usable after
 		 * its handshake. Passing {@code null} restores the built-in default of
 		 * {@code true} (verification enabled).
@@ -532,6 +556,7 @@ public interface SseServer {
 		 * Builds one stopped, one-shot SSE transport.
 		 *
 		 * @return configured SSE server
+		 * @throws IllegalArgumentException if the effective configuration is invalid
 		 */
 		@NonNull
 		public SseServer build() {

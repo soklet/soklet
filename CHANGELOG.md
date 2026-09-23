@@ -4,6 +4,39 @@
 
 ### Breaking Changes
 
+- **HTTP streaming API:** writers now receive one `ResponseStream` with output,
+  request, cancelation-token, and timing access; the separate
+  `StreamingResponseContext` is removed. Response builders and copiers add
+  `stream(StreamingResponseWriter)`. Cancelation registrations use unchecked
+  `CallbackRegistration.close()`, and input-stream/reader descriptors use
+  checked `StreamResourceFactory` acquisition with renamed factory getters.
+  `ResponseStream` adds `open`, `own`, and `using` with producer-thread ownership,
+  coordinated abort/final close, lexical cleanup, and supervised resource lifetimes
+  in HTTP and simulation. Retained output is invalid after managed finalization;
+  unclassified producer interruption reports `APPLICATION_CANCELED`.
+  Publisher adapters now retain asynchronous subscription acquisition and entered
+  provider calls through physical completion, including late cancelation and
+  synchronous completion followed by a blocked provider return.
+  Added array-slice writes and independently closeable
+  `OutputStream` views with shared scalar buffering, accepted-prefix interruption
+  accounting, and owned encoder finalization before response completion.
+  HTTP builders expose lifecycle capacity, callback concurrency, and cleanup
+  timeout with defaults of 256, four, and five seconds; nullable resets and
+  cross-setting validation apply at build time. Derived simulators inherit the
+  built-in HTTP server's effective settings without reusing its transport.
+  See [HTTP streaming callbacks and sources](MIGRATING_TO_4_0.md#http-streaming-callbacks-and-sources).
+- **SSE initialization and admission:** replaced
+  `Consumer<SseUnicaster>` initialization with checked `SseClientInitializer`,
+  without compatibility overloads. The initializer remains a one-time,
+  synchronous, bounded setup/catch-up step; ongoing delivery uses
+  `SseBroadcaster`. Queue overflow is terminal even when caught. Lifecycle
+  admission precedes accepted headers and returns HTTP 503 when exhausted.
+  The SSE builder adds `streamingLifecycleCapacity` (default 256), separate from
+  the 128-write connection queue. Derived simulators inherit both settings;
+  simulated accepted results are `AutoCloseable`, with client-disconnect close
+  and server-stopping teardown even without consumers. The first termination
+  outcome wins, and admitted work remains accounted for through physical exit.
+  See [SSE client initialization and connection admission](MIGRATING_TO_4_0.md#sse-client-initialization-and-connection-admission).
 - **Naming and collection APIs:** completed the scoped 4.0 renames for streaming
   bodies, transport attachment signals, metric route properties, servlet response
   factories, and MCP role types. MCP endpoint/registration/output/page builders
@@ -292,8 +325,8 @@ work; it is not claimed as fixed by 4.0.0:
   underlying cause is present, so they are no longer misreported as transport
   `WRITE_ERROR` / stream `WRITE_FAILED` failures.
 - SSE client-initializer catch-up buffering is hard-bounded by
-  `connectionQueueCapacity`; uncaught overflows are now logged and metered
-  instead of silently dropping an accepted connection. The framework's optional
+  `connectionQueueCapacity`; overflow terminates the accepted connection with
+  `BACKPRESSURE`, even if the initializer catches the exception. The framework's optional
   connection-verification heartbeat is held outside the application queue, so
   an initializer may use the full configured capacity. Handshake parse-error
   responses and the timeout path now claim one atomic channel owner before

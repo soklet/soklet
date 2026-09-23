@@ -21,6 +21,7 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md',
   'conformance/official/public-fixture-test-src/com/soklet/conformance/McpChunkedHttpClient.java',
   'conformance/official/public-fixture-test-src/com/soklet/conformance/McpTaskNotificationSocketDriver.java',
+  'docs/sse-final-candidate-checks-2026-09-23.md',
   'release/G5_RELEASE_RUNBOOK.md',
   'release/MCP_CLIENT_COMPATIBILITY.md',
   'release/MCP_OAUTH_RESOURCE_SERVER.md',
@@ -151,7 +152,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-	'30c854e5f665b865a00dac31354d1bcc2a1c28b95c192f4deb95f99b4c5e64a9';
+  '1221b4738a7374a8dfee794f5e4e8e6045a7af9dda78a608f74158771d7a5d83';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

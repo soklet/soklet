@@ -1,0 +1,88 @@
+{
+  "kind": "compile-only-api-decision-fixtures",
+  "verifiedAt": "2026-09-22T00:14:59.824917+00:00",
+  "javac": "javac 17.0.20.1",
+  "baselineCommit": "c5d02871d95d6dac1b4e5366496c08d6c314b383",
+  "compilerOptions": [
+    "--release",
+    "17",
+    "-proc:none",
+    "-parameters",
+    "-XDrawDiagnostics",
+    "-Xlint:unchecked",
+    "-Werror"
+  ],
+  "annotationJars": {
+    "org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar": "070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66",
+    "com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
+  },
+  "coreClassBundleSha256": "4e459acb6d745047c14e64396066e350f303b30ef8bb0875f663719d8dca7f61",
+  "sourceSha256": {
+    "api/com/soklet/CallbackRegistration.java": "c95a587bb5559e78d2dec7dfd3447da2a1880432e4fd13fbc160515120c19c67",
+    "api/com/soklet/CancelationToken.java": "8b4203b04434095fd8e3b46bf9e04997d943fafa57a3ed7f6e353c539ef142eb",
+    "api/com/soklet/HttpServer.java": "3a1078f06f789f85ebbcbe01066adce85f2d1d8ea2bb8e964f664df6dbf0050c",
+    "api/com/soklet/MarshaledResponse.java": "a6a81c4f1d8599627a625a857f7a7ed5ba77764593fdffb8eb946bf3352298e2",
+    "api/com/soklet/ResponseStream.java": "89d1b70900cbdb89c53acddb4a3e8081e6fb99e3d45b45c1a4bbf4a4d15670b2",
+    "api/com/soklet/SseClientInitializer.java": "6c413d6d4e16bcbc22048d94ded9d39a05569ddb3bca88faa935206e75418a0e",
+    "api/com/soklet/SseHandshakeResult.java": "b2852c79cc7c8befdce64b1e0b232ea3f8f33f065b9b6f1f94e26d64c1d238c2",
+    "api/com/soklet/SseServer.java": "2148c9b5524118934017672b46e5b06c8e1c1a9ef19af11cc9ec4d03a1347928",
+    "api/com/soklet/SseUnicaster.java": "35681f897984293c56768677a617872631b082792ca7d296bc2105555d191eb2",
+    "api/com/soklet/StreamResourceFactory.java": "d6e20c821a2cc82d6a91067e6a26a537f74e09fc29c575b0607d05c1edb57615",
+    "api/com/soklet/StreamingResponseBody.java": "cfda0e391eaa6e051a553c0beed157fd7687b5cfa1dd33a2cf7b3ca592eefb56",
+    "api/com/soklet/StreamingResponseWriter.java": "543bffe1e3ec1a949474bf73217d3b81a18d545e3fac8f70af70b0263ffd09b4",
+    "positive/fixtures/Providers.java": "33739cc16af954d55e92e4d853f70d788ec0e4bfa826c13209e073e1eb8c2178",
+    "positive/fixtures/ServerSettings.java": "8b7e365a4e43e8d64c8bb46eb25f60681f05b054d91976c146b826300c181553",
+    "positive/fixtures/SignatureContracts.java": "74b7f1e53c14bc617842ef2c5c83f6548cfc638a399dc6f38fd85e67ffe7ab00",
+    "positive/fixtures/StreamingHandlers.java": "3e15dab3b74f47f86e1d2999fbb64f8a5da03c6fe2e9cccae8bd808066bbb5b2",
+    "comparisons/fixtures/Alternatives.java": "820aabe522b2cc91fdacccf1a5abe80978007df4f6ce5cd21966a7d787decbd2",
+    "negative/CheckedCancelationCallback.java": "04c4fca1055f3978f2ba3370bbafd50e308a0d6cb703c72864e1b76805bf203d",
+    "negative/LegacyInputStreamSupplier.java": "5439029d4d4f8dd603dd0d88dda76baaed2a17b0f6cf7a6a594a38dc8c9e7895",
+    "negative/LegacySseInitializerConsumer.java": "6c6eb8d099749af5a6cc6ffbd56486d7c2c6d03d5e91c3cd0dd1b55cfe1badfd",
+    "negative/LegacyWriterArity.java": "98840b839910da41a4b06ddd30e2d91d0cbf4354c0be3cf4fe4c1b367e666cc9",
+    "negative/NonCloseableResource.java": "659f996fa7bfda35d5ed5b3db2a474540847e4a45e6b7a275a71b59c90e1bf1e",
+    "negative/SseLexicalOwnership.java": "c935d0ad271a523b0fb3683bd2fa06882a12304dbcd8c80b3a30b5af37dd4df5",
+    "negative/SseProducerThreadOwnership.java": "b0e7fed909d0068e5fc88423b9c69e17c4fb9d7fd4404d589898528feeeffa51",
+    "negative/SseSeparateAbort.java": "a34ff925f77c41d2ce0757ec9136e9b879843b5bdaa91128cb9b4ab873fb3bbc"
+  },
+  "verifierSha256": "ebeb77a695bc394156995195a25f997b07c0dba27dbdbe8f1990de3229392bd7",
+  "compiled": {
+    "api": 12,
+    "positive": 4,
+    "comparisons": 1
+  },
+  "rejected": {
+    "CheckedCancelationCallback.java": {
+      "line": 6,
+      "diagnostic": "compiler.err.unreported.exception.need.to.catch.or.throw: java.io.IOException"
+    },
+    "LegacyInputStreamSupplier.java": {
+      "line": 9,
+      "diagnostic": "compiler.err.cant.apply.symbol: kindname.method, fromInputStream, com.soklet.StreamResourceFactory<? extends java.io.InputStream>, java.util.function.Supplier<java.io.InputStream>, kindname.interface, com.soklet.StreamingResponseBody, (compiler.misc.no.conforming.assignment.exists: (compiler.misc.inconvertible.types: java.util.function.Supplier<java.io.InputStream>, com.soklet.StreamResourceFactory<? extends java.io.InputStream>))"
+    },
+    "LegacySseInitializerConsumer.java": {
+      "line": 8,
+      "diagnostic": "compiler.err.cant.apply.symbol: kindname.method, clientInitializer, com.soklet.SseClientInitializer, java.util.function.Consumer<com.soklet.SseUnicaster>, kindname.class, com.soklet.SseHandshakeResult.Accepted.Builder, (compiler.misc.no.conforming.assignment.exists: (compiler.misc.inconvertible.types: java.util.function.Consumer<com.soklet.SseUnicaster>, com.soklet.SseClientInitializer))"
+    },
+    "LegacyWriterArity.java": {
+      "line": 5,
+      "diagnostic": "compiler.err.prob.found.req: (compiler.misc.incompatible.arg.types.in.lambda)"
+    },
+    "NonCloseableResource.java": {
+      "line": 5,
+      "diagnostic": "compiler.err.cant.apply.symbols: kindname.method, open, @29,{(compiler.misc.inapplicable.method: kindname.method, com.soklet.ResponseStream, <T>open(com.soklet.StreamResourceFactory<? extends T>), (compiler.misc.incompatible.bounds: T, (compiler.misc.upper.bounds: java.lang.AutoCloseable), (compiler.misc.lower.bounds: java.lang.Object))),(compiler.misc.inapplicable.method: kindname.method, com.soklet.ResponseStream, <T>open(com.soklet.StreamResourceFactory<? extends T>,com.soklet.ResponseStream.ResourceAborter<? super T>), (compiler.misc.infer.arg.length.mismatch: T))}"
+    },
+    "SseLexicalOwnership.java": {
+      "line": 6,
+      "diagnostic": "compiler.err.cant.resolve.location.args: kindname.method, using, , @28,@73, (compiler.misc.location.1: kindname.variable, sseUnicaster, com.soklet.SseUnicaster)"
+    },
+    "SseProducerThreadOwnership.java": {
+      "line": 6,
+      "diagnostic": "compiler.err.cant.resolve.location.args: kindname.method, own, , java.io.ByteArrayInputStream, (compiler.misc.location.1: kindname.variable, sseUnicaster, com.soklet.SseUnicaster)"
+    },
+    "SseSeparateAbort.java": {
+      "line": 6,
+      "diagnostic": "compiler.err.cant.apply.symbol: kindname.method, open, com.soklet.StreamResourceFactory<? extends T>, @27,@72, kindname.interface, com.soklet.SseUnicaster, (compiler.misc.infer.arg.length.mismatch: T)"
+    }
+  },
+  "result": "PASS"
+}

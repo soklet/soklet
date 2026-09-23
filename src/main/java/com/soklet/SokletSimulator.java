@@ -1242,23 +1242,32 @@ public final class SokletSimulator {
 
 		private void applyShutdownPhase(
 				@NonNull ShutdownContext context) {
-			if (this.kind != InternalLifecycleComponentType.MCP) {
-				if (this.kind == InternalLifecycleComponentType.SSE)
-					this.scope.sseServer.stop();
-				this.terminationSignal.signalTerminated();
-				return;
-			}
 			DefaultSimulator simulator = this.scope.simulator();
-			if (requireNonNull(context).getShutdownPhase() == ShutdownPhase.FORCED)
+			boolean forced = requireNonNull(context).getShutdownPhase() == ShutdownPhase.FORCED;
+			if (this.kind == InternalLifecycleComponentType.HTTP) {
+				if (forced)
+					simulator.forceHttpScope();
+				else
+					simulator.quiesceHttpScope();
+			} else if (this.kind == InternalLifecycleComponentType.SSE) {
+				if (forced)
+					simulator.forceSseScope();
+				else
+					simulator.quiesceSseScope();
+			} else if (forced)
 				simulator.forceMcpScope();
 			else
 				simulator.quiesceMcpScope();
-			beginMcpProofObservation(context);
+			beginProofObservation(context);
 		}
 
-		private void beginMcpProofObservation(
+		private void beginProofObservation(
 				@NonNull ShutdownContext context) {
-			if (this.scope.simulator().mcpScopeTerminationProven()) {
+			if (this.kind == InternalLifecycleComponentType.HTTP
+					? this.scope.simulator().httpScopeTerminationProven()
+					: this.kind == InternalLifecycleComponentType.SSE
+							? this.scope.simulator().sseScopeTerminationProven()
+							: this.scope.simulator().mcpScopeTerminationProven()) {
 				this.terminationSignal.signalTerminated();
 				return;
 			}
@@ -1270,13 +1279,18 @@ public final class SokletSimulator {
 			TrackedLifecycleCallRunner.Call<Void> observer;
 			try {
 				observer = this.scope.callRunner.submit(
-						"simulator-mcp-termination-observer-"
+						"simulator-" + this.kind.name().toLowerCase(Locale.ROOT) + "-termination-observer-"
 								+ exactContext.getShutdownPhase().name().toLowerCase(Locale.ROOT),
 						this.terminationGroup, () -> {
 							try {
-								if (this.scope.simulator().awaitMcpScopeTermination(
-										exactContext.absoluteDeadlineNanos(),
-										this.scope.clock))
+								if (this.kind == InternalLifecycleComponentType.HTTP
+										? this.scope.simulator().awaitHttpScopeTermination(
+												exactContext.absoluteDeadlineNanos(), this.scope.clock)
+										: this.kind == InternalLifecycleComponentType.SSE
+												? this.scope.simulator().awaitSseScopeTermination(
+														exactContext.absoluteDeadlineNanos(), this.scope.clock)
+												: this.scope.simulator().awaitMcpScopeTermination(
+														exactContext.absoluteDeadlineNanos(), this.scope.clock))
 									this.terminationSignal.signalTerminated();
 							} catch (InterruptedException phaseAdvance) {
 								// A phase advance or result freeze ends only this observation.
@@ -1322,8 +1336,12 @@ public final class SokletSimulator {
 		@NonNull
 		@Override
 		public Set<InternalResidualActivityType> residualActivity() {
-			return this.kind == InternalLifecycleComponentType.MCP
-					? this.scope.simulator().mcpScopeResidualActivity() : Set.of();
+			return switch (this.kind) {
+				case HTTP -> this.scope.simulator().httpScopeResidualActivity();
+				case MCP -> this.scope.simulator().mcpScopeResidualActivity();
+				case SSE -> this.scope.simulator().sseScopeResidualActivity();
+				default -> Set.of();
+			};
 		}
 
 		private final class ScopeRuntime implements InternalTransportRuntime {

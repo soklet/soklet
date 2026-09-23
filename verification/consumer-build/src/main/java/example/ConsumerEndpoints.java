@@ -1,5 +1,7 @@
 package example;
 
+import com.soklet.MarshaledResponse;
+import com.soklet.StreamingResponseBody;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.annotation.GET;
@@ -9,6 +11,7 @@ import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpToolArgument;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +21,24 @@ public final class ConsumerEndpoints {
   @GET("/hello")
   public String hello() {
     return "consumer-ok";
+  }
+
+  @GET("/stream")
+  public MarshaledResponse stream() {
+    return MarshaledResponse.withStatusCode(200).stream(responseStream -> {
+      var source = responseStream.open(ConsumerOwnership.Source::new);
+      // Compile the neutral registration return type against the packaged JAR.
+      com.soklet.CallbackRegistration registration = responseStream.getCancelationToken().onCancel(() -> {});
+      registration.close();
+      responseStream.write(source.text().getBytes(StandardCharsets.UTF_8));
+      responseStream.flush();
+    }).build();
+  }
+
+  @GET("/source")
+  public MarshaledResponse source() {
+    return MarshaledResponse.withStatusCode(200).streamingResponseBody(
+        StreamingResponseBody.fromInputStream(ConsumerOwnership::openInputStream)).build();
   }
 
   @McpTool(name = "catalog.search")

@@ -27,7 +27,7 @@ import java.util.Optional;
  * <p>
  * Producers and handlers should check this token between expensive or blocking
  * operations and stop work when it becomes canceled. Soklet exposes it through
- * streaming response contexts and through
+ * {@link ResponseStream#getCancelationToken()} and through
  * {@link McpInvocationFeatures#getCancelationToken()} for selected MCP
  * application handlers. Soklet cancels the token when the associated response
  * can no longer continue, such as when the client disconnects, forced shutdown
@@ -36,8 +36,8 @@ import java.util.Optional;
  * Graceful shutdown by itself does not cancel already-admitted finite MCP work;
  * its unary or request-scoped progress response may finish within that budget.
  *
- * <p>Normal completion does not mark the token canceled. MCP invocation
- * tokens release registered callbacks when the invocation completes normally,
+ * <p>Normal completion does not mark the token canceled. Tokens
+ * release registered callbacks when the associated operation completes normally,
  * and callbacks registered afterward are inert.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -71,18 +71,21 @@ public interface CancelationToken {
 	/**
 	 * Registers a callback that runs when the token is canceled.
 	 * <p>
-	 * The returned handle removes the callback when closed. If the token is already canceled, the callback may run
-	 * before this method returns. If the associated operation already completed
-	 * normally, the callback does not run.
+	 * Each registration is independent, including registrations of the same callback object. Closing the returned
+	 * handle suppresses invocation if removal wins before callback claim; it does not wait for a claimed callback.
+	 * If the token is already canceled, the callback may run before this method returns. If the associated operation
+	 * already completed normally, the callback does not run and its reference is not retained.
 	 * <p>
-	 * Callbacks run synchronously on the thread that performs cancelation. Keep callbacks fast and non-blocking; if
-	 * cleanup may take meaningful time, dispatch it to an application-owned executor from the callback.
+	 * Callback dispatch is selected by the runtime. HTTP streaming uses managed callback execution; other runtimes
+	 * may defer delivery until their operation releases callbacks. Late delivery may run inline on the registering
+	 * application thread. Keep callbacks fast and non-blocking. Each callback is invoked at most once; failures
+	 * are isolated, and independent callbacks have no ordering guarantee.
 	 *
 	 * @param callback the callback to run on cancelation
 	 * @return a handle that removes the callback when closed
 	 */
 	@NonNull
-	AutoCloseable onCancel(@NonNull Runnable callback);
+	CallbackRegistration onCancel(@NonNull Runnable callback);
 
 	/**
 	 * Throws if the token has been canceled.

@@ -528,6 +528,22 @@ public final class MarshaledResponse {
 		}
 
 		/**
+		 * Sets a streaming response body backed by the given writer callback.
+		 * <p>
+		 * The callback is retained for response production and is not invoked while building the response.
+		 * This follows the body-selection rules of {@link #streamingResponseBody(StreamingResponseBody)}:
+		 * a current known-length body is not removed, and {@link #build()} rejects a response that specifies both.
+		 * Use {@link #withoutStreamingResponseBody()} to remove the stream.
+		 *
+		 * @param streamingResponseWriter the callback that writes the response
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder stream(@NonNull StreamingResponseWriter streamingResponseWriter) {
+			return streamingResponseBody(StreamingResponseBody.fromWriter(streamingResponseWriter));
+		}
+
+		/**
 		 * Removes the response body from this builder.
 		 * <p>
 		 * If the current body owns a caller-supplied {@link FileChannel}, the channel is closed before it is
@@ -867,6 +883,22 @@ public final class MarshaledResponse {
 		public Copier streamingResponseBody(@Nullable StreamingResponseBody streamingResponseBody) {
 			this.builder.streamingResponseBody(streamingResponseBody);
 			return this;
+		}
+
+		/**
+		 * Replaces the streaming response body with one backed by the given writer callback.
+		 * <p>
+		 * The callback is retained for response production and is not invoked while copying the response.
+		 * This follows the body-selection rules of {@link #streamingResponseBody(StreamingResponseBody)}:
+		 * a current known-length body is not removed, and {@link #finish()} rejects a response that specifies both.
+		 * Use {@link #withoutStreamingResponseBody()} to remove the stream.
+		 *
+		 * @param streamingResponseWriter the callback that writes the response
+		 * @return this copier
+		 */
+		@NonNull
+		public Copier stream(@NonNull StreamingResponseWriter streamingResponseWriter) {
+			return streamingResponseBody(StreamingResponseBody.fromWriter(streamingResponseWriter));
 		}
 
 		/**

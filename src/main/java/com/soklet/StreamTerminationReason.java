@@ -47,6 +47,14 @@ public enum StreamTerminationReason {
 	 */
 	RESPONSE_IDLE_TIMEOUT,
 	/**
+	 * Managed producer finalization exceeded its cleanup grace before another
+	 * termination reason was recorded. Cleanup may still be running; this reason
+	 * does not claim that resources were closed or that their work was retired.
+	 * Expiry of an observer after successful delivery does not change the stream's
+	 * termination reason.
+	 */
+	CLEANUP_TIMEOUT,
+	/**
 	 * Producer code intentionally aborted the stream.
 	 */
 	APPLICATION_CANCELED,

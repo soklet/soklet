@@ -414,7 +414,7 @@
           "effort": "Max",
           "engineJarSha256": "a88cad2e0ea9bb74b908ce82ae89416c61fa8f8ea5cfcc9368b1baac2da878d2",
           "engineVersion": "4.10.4",
-          "exclusionFileSha256": "65e286664f80f29f803448f63c50620e23d6d1252d1536c8a3c7e98287511f58",
+          "exclusionFileSha256": "87fb30137fc2a7636caf59f0ab534e567a4eacd495d0ee04a1d880d16be3b808",
           "failOnError": true,
           "mavenPluginJarSha256": "405114389d4c93ab6ce0ddb09bad5b0f1da95ffac0bb36c04094066c5b01e338",
           "mavenPluginVersion": "4.10.4.1",

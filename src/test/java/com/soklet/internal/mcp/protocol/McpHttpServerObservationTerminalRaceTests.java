@@ -71,6 +71,32 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 
 	@Test
+	@Timeout(value = 90, unit = TimeUnit.SECONDS)
+	void cleanup_timeout_finishes_request_as_internal_error_without_a_framework_cause()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		AtomicReference<MicrohttpResponse> response = new AtomicReference<>();
+		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
+				invocation -> completeResult("pending-delivery"), observation,
+				McpApplicationClock.SYSTEM);
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "cleanup-timeout");
+			submit(runtime, address, request, response::set);
+			awaitValue(response, "The response awaiting transport completion was not offered.");
+			terminateBody(response.get(), StreamTerminationReason.CLEANUP_TIMEOUT, null);
+			observation.awaitFinished();
+			awaitClean(runtime);
+			observation.assertExactlyOne(McpRequestOutcome.INTERNAL_ERROR);
+			Assertions.assertNull(observation.error.get());
+			Assertions.assertTrue(observation.throwables.get().isEmpty(),
+					"A framework cleanup budget does not introduce an application throwable.");
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	void lifecycleLeaseOutlivesBodyCompletionUntilApplicationExchangeUnwinds()
 			throws Exception {
@@ -919,10 +945,15 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	private static void completeBody(MicrohttpResponse response) throws Exception {
+		terminateBody(response, StreamTerminationReason.COMPLETED, null);
+	}
+
+	private static void terminateBody(MicrohttpResponse response,
+			StreamTerminationReason reason, @Nullable Throwable cause) throws Exception {
 		Method reserveBodyTermination = MicrohttpResponse.class.getDeclaredMethod(
 				"reserveBodyTermination", StreamTerminationReason.class, Throwable.class);
 		reserveBodyTermination.setAccessible(true);
-		invoke(reserveBodyTermination, response, StreamTerminationReason.COMPLETED, null);
+		invoke(reserveBodyTermination, response, reason, cause);
 
 		Method deliverBodyTermination = MicrohttpResponse.class.getDeclaredMethod(
 				"deliverBodyTermination");

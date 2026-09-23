@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpCompleteResult;
@@ -130,7 +131,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertDoesNotThrow(() -> terminalReporter.get().report(
 					McpProgressUpdate.withProgress(100.0d).build()));
 			AtomicBoolean lateCallback = new AtomicBoolean();
-			AutoCloseable lateRegistration = terminalToken.get().onCancel(
+			CallbackRegistration lateRegistration = terminalToken.get().onCancel(
 					() -> lateCallback.set(true));
 			lateRegistration.close();
 			Assertions.assertFalse(lateCallback.get());

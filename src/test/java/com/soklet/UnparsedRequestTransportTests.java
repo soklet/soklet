@@ -461,7 +461,7 @@ class UnparsedRequestTransportTests {
 							.body(new byte[CAPTURE_LIMIT_IN_BYTES]).build();
 					case 2 -> MarshaledResponse.withStatusCode(200)
 							.streamingResponseBody(StreamingResponseBody.fromWriter(
-									(output, context) -> {})).build();
+									responseStream -> {})).build();
 					case 3 -> MarshaledResponse.withStatusCode(200)
 							.body(responseFile).build();
 					case 4 -> MarshaledResponse.withStatusCode(200)

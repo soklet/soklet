@@ -46,12 +46,6 @@
 		<Method name="start"/>
 		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
 	</Match>
-	<Match>
-		<Class name="com.soklet.SseRequestResult$HandshakeAccepted"/>
-		<Method name="unregisterConsumers"/>
-		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
-	</Match>
-
 	<!-- Reviewed best-effort queue wakeups: close paths also close the socket and/or interrupt the processor,
 	     so blocking to force enqueue would make shutdown behavior worse. Keep the category live elsewhere. -->
 	<Match>

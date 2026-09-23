@@ -27,6 +27,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
+import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
 import com.soklet.internal.microhttp.StreamingMicrohttpResponses;
 import com.soklet.internal.microhttp.UnparsedRequestRejection;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
@@ -132,6 +133,12 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Duration DEFAULT_STREAMING_RESPONSE_TIMEOUT;
 	@NonNull
+	static final Integer DEFAULT_STREAMING_LIFECYCLE_CAPACITY;
+	@NonNull
+	static final Integer DEFAULT_STREAMING_CALLBACK_CONCURRENCY;
+	@NonNull
+	static final Duration DEFAULT_STREAMING_CLEANUP_TIMEOUT;
+	@NonNull
 	private static final Integer DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER;
 	private static final Integer UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES;
 	private static final Integer UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES;
@@ -158,6 +165,9 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_STREAMING_QUEUE_CAPACITY_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_STREAMING_CHUNK_SIZE_IN_BYTES = 1_024 * 16;
 		DEFAULT_STREAMING_RESPONSE_TIMEOUT = Duration.ZERO;
+		DEFAULT_STREAMING_LIFECYCLE_CAPACITY = 256;
+		DEFAULT_STREAMING_CALLBACK_CONCURRENCY = 4;
+		DEFAULT_STREAMING_CLEANUP_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER = 4;
 		UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES = 64 * 1_024;
 		UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES = 64 * 1_024;
@@ -218,6 +228,12 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private volatile Runnable startSetupHook = () -> {};
 	@NonNull
+	private final Integer streamingLifecycleCapacity;
+	@NonNull
+	private final Integer streamingCallbackConcurrency;
+	@NonNull
+	private final Duration streamingCleanupTimeout;
+	@NonNull
 	private final Integer streamingQueueCapacityInBytes;
 	@NonNull
 	private final Integer streamingChunkSizeInBytes;
@@ -229,6 +245,10 @@ final class DefaultHttpServer implements HttpServer {
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
 	private volatile ExecutorService streamingExecutorService;
+	@Nullable
+	private volatile StreamLifecycleCoordinator streamLifecycleCoordinator;
+	@Nullable
+	private volatile Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
 	@Nullable
 	private volatile ScheduledExecutorService streamingTimeoutExecutorService;
 	@Nullable
@@ -361,6 +381,33 @@ final class DefaultHttpServer implements HttpServer {
 					new ArrayBlockingQueue<>(queueCapacity),
 					new NonvirtualThreadFactory(threadNamePrefix));
 		};
+
+		this.streamingLifecycleCapacity = builder.streamingLifecycleCapacity != null
+				? builder.streamingLifecycleCapacity
+				: DEFAULT_STREAMING_LIFECYCLE_CAPACITY;
+
+		if (this.streamingLifecycleCapacity < 1 || this.streamingLifecycleCapacity > Integer.MAX_VALUE / 2)
+			throw new IllegalArgumentException("Streaming lifecycle capacity must be between 1 and Integer.MAX_VALUE / 2");
+
+		this.streamingCallbackConcurrency = builder.streamingCallbackConcurrency != null
+				? builder.streamingCallbackConcurrency
+				: DEFAULT_STREAMING_CALLBACK_CONCURRENCY;
+
+		if (this.streamingCallbackConcurrency < 1 || this.streamingCallbackConcurrency > this.streamingLifecycleCapacity)
+			throw new IllegalArgumentException("Streaming callback concurrency must be positive and no greater than streaming lifecycle capacity");
+
+		this.streamingCleanupTimeout = builder.streamingCleanupTimeout != null
+				? builder.streamingCleanupTimeout
+				: DEFAULT_STREAMING_CLEANUP_TIMEOUT;
+
+		if (this.streamingCleanupTimeout.isNegative() || this.streamingCleanupTimeout.isZero())
+			throw new IllegalArgumentException("Streaming cleanup timeout must be > 0");
+
+		try {
+			this.streamingCleanupTimeout.toNanos();
+		} catch (ArithmeticException overflow) {
+			throw new IllegalArgumentException("Streaming cleanup timeout must be representable in nanoseconds", overflow);
+		}
 
 		this.streamingQueueCapacityInBytes = builder.streamingQueueCapacityInBytes != null
 				? builder.streamingQueueCapacityInBytes
@@ -673,10 +720,13 @@ final class DefaultHttpServer implements HttpServer {
 											try {
 												microHttpCallback.accept(microhttpResponse);
 											} catch (Throwable t) {
+												StreamingMicrohttpResponses.discard(microhttpResponse);
 												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
 														.throwable(t)
 														.build());
 											}
+										} else {
+											StreamingMicrohttpResponses.discard(microhttpResponse);
 										}
 									} catch (Throwable t) {
 										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
@@ -686,7 +736,9 @@ final class DefaultHttpServer implements HttpServer {
 										if (responseWritten.compareAndSet(false, true)) {
 											cancelTimeout(timeoutFutureRef.getAndSet(null));
 											try {
-												microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
+												int statusCode = t instanceof RejectedExecutionException ? 503 : 500;
+												MicrohttpResponse failsafeResponse = provideMicrohttpFailsafeResponse(statusCode, microhttpRequest, t);
+												microHttpCallback.accept(statusCode == 503 ? withConnectionClose(failsafeResponse) : failsafeResponse);
 											} catch (Throwable t2) {
 												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 														.throwable(t2)
@@ -826,6 +878,12 @@ final class DefaultHttpServer implements HttpServer {
 				}
 
 				@Override
+				public Handler.StreamingResponseInputPolicy streamingResponseInputPolicy(
+						@NonNull MicrohttpRequest request) {
+					return Handler.StreamingResponseInputPolicy.RETAIN;
+				}
+
+				@Override
 				public boolean handleUnparsedRequest(
 						@NonNull UnparsedRequestRejection rejection,
 						@NonNull Consumer<byte[]> responseConsumer) {
@@ -853,6 +911,14 @@ final class DefaultHttpServer implements HttpServer {
 
 				this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 				this.streamingExecutorService = getStreamingExecutorServiceSupplier().get();
+				Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactory = this.streamLifecycleCoordinatorFactoryForTests;
+				this.streamLifecycleCoordinator = streamLifecycleCoordinatorFactory == null
+						? new StreamLifecycleCoordinator(getStreamingLifecycleCapacity(),
+								getStreamingCallbackConcurrency(), getStreamingCleanupTimeout(),
+								throwable -> safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+										"An exception occurred during streaming lifecycle supervision")
+										.throwable(throwable).build()))
+						: requireNonNull(streamLifecycleCoordinatorFactory.get());
 				this.streamingTimeoutExecutorService = new ScheduledThreadPoolExecutor(1, new NonvirtualThreadFactory("streaming-timeout"));
 				this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
 				EventLoop eventLoop = new EventLoop(options, logger, handler, connectionListener);
@@ -1467,9 +1533,9 @@ final class DefaultHttpServer implements HttpServer {
 		headers.sort(Comparator.comparing(Header::name));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
-		StreamingResponseBody stream = marshaledResponse.getStreamingResponseBody().orElse(null);
+		StreamingResponseBody streamingResponseBody = marshaledResponse.getStreamingResponseBody().orElse(null);
 
-		if (stream != null) {
+		if (streamingResponseBody != null) {
 			Request streamingRequest = requireNonNull(request);
 			ResourceMethod streamingResourceMethod = requireNonNull(resourceMethod);
 			ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
@@ -1490,28 +1556,39 @@ final class DefaultHttpServer implements HttpServer {
 					? null
 					: streamingResponseIdleTimeout;
 
-			return StreamingMicrohttpResponses.withStreamingBody(
-					marshaledResponse.getStatusCode(),
-					reasonPhrase,
-					headers,
-					streamingRequest,
-					stream,
-					streamingExecutorService,
-					streamingTimeoutExecutorService,
-					getStreamingQueueCapacityInBytes(),
-					getStreamingChunkSizeInBytes(),
-					deadline,
-					idleTimeout,
-					streamingForcedShutdownStarted,
-					(establishedAt, streamDuration, cancelationReason, throwable) ->
-							notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
-					(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
-									"An exception occurred while invoking a streaming response cancelation callback")
-							.throwable(throwable)
-							.request(streamingRequest)
-							.resourceMethod(streamingResourceMethod)
-							.marshaledResponse(marshaledResponse)
-							.build()));
+			StreamLifecycleCoordinator streamLifecycleCoordinator = this.streamLifecycleCoordinator;
+			StreamLifecycleCoordinator.Reservation reservation = streamLifecycleCoordinator == null
+					? null : streamLifecycleCoordinator.tryReserve();
+			if (reservation == null)
+				throw new RejectedExecutionException("Streaming lifecycle capacity is unavailable.");
+
+			try {
+				return StreamingMicrohttpResponses.withStreamingBody(
+						marshaledResponse.getStatusCode(),
+						reasonPhrase,
+						headers,
+						streamingRequest,
+						streamingResponseBody,
+						streamingExecutorService,
+						streamingTimeoutExecutorService,
+						getStreamingQueueCapacityInBytes(),
+						getStreamingChunkSizeInBytes(),
+						deadline,
+						idleTimeout,
+						streamingForcedShutdownStarted,
+						(establishedAt, streamDuration, cancelationReason, throwable) ->
+								notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
+						(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
+										"An exception occurred while invoking a streaming response cancelation callback")
+								.throwable(throwable)
+								.request(streamingRequest)
+								.resourceMethod(streamingResourceMethod)
+								.marshaledResponse(marshaledResponse)
+								.build()), reservation);
+			} catch (RuntimeException | Error throwable) {
+				reservation.abandon();
+				throw throwable;
+			}
 		}
 
 		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
@@ -2358,6 +2435,21 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
+	protected Integer getStreamingLifecycleCapacity() {
+		return this.streamingLifecycleCapacity;
+	}
+
+	@NonNull
+	protected Integer getStreamingCallbackConcurrency() {
+		return this.streamingCallbackConcurrency;
+	}
+
+	@NonNull
+	protected Duration getStreamingCleanupTimeout() {
+		return this.streamingCleanupTimeout;
+	}
+
+	@NonNull
 	protected Integer getStreamingQueueCapacityInBytes() {
 		return this.streamingQueueCapacityInBytes;
 	}
@@ -2506,10 +2598,22 @@ final class DefaultHttpServer implements HttpServer {
 		this.startSetupHook = requireNonNull(startSetupHook);
 	}
 
+	void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactory) {
+		if (this.streamLifecycleCoordinator != null)
+			throw new IllegalStateException("Streaming lifecycle coordinator is already initialized.");
+		this.streamLifecycleCoordinatorFactoryForTests = requireNonNull(streamLifecycleCoordinatorFactory);
+	}
+
+	@NonNull
+	Optional<StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
+		return Optional.ofNullable(this.streamLifecycleCoordinator);
+	}
+
 	@NonNull
 	private HttpRuntimeSnapshot runtimeSnapshot() {
 		return new HttpRuntimeSnapshot(this.eventLoop,
 				this.requestHandlerExecutorService, this.streamingExecutorService,
+				this.streamLifecycleCoordinator,
 				this.streamingTimeoutExecutorService,
 				this.streamingForcedShutdownStarted,
 				this.requestHandlerTimeoutScheduler);
@@ -2523,6 +2627,8 @@ final class DefaultHttpServer implements HttpServer {
 			this.requestHandlerExecutorService = null;
 		if (sameInstance(this.streamingExecutorService, snapshot.streamingExecutor()))
 			this.streamingExecutorService = null;
+		if (sameInstance(this.streamLifecycleCoordinator, snapshot.streamLifecycleCoordinator()))
+			this.streamLifecycleCoordinator = null;
 		if (sameInstance(this.streamingTimeoutExecutorService, snapshot.streamingTimeoutExecutor()))
 			this.streamingTimeoutExecutorService = null;
 		if (sameInstance(this.streamingForcedShutdownStarted, snapshot.streamingForcedShutdownStarted()))
@@ -2552,6 +2658,7 @@ final class DefaultHttpServer implements HttpServer {
 			@Nullable EventLoop eventLoop,
 			@Nullable ExecutorService requestHandlerExecutor,
 			@Nullable ExecutorService streamingExecutor,
+			@Nullable StreamLifecycleCoordinator streamLifecycleCoordinator,
 			@Nullable ScheduledExecutorService streamingTimeoutExecutor,
 			@Nullable AtomicBoolean streamingForcedShutdownStarted,
 			@Nullable TimeoutScheduler requestTimeoutScheduler) {
@@ -2567,6 +2674,9 @@ final class DefaultHttpServer implements HttpServer {
 		public void quiesce() {
 			HttpRuntimeSnapshot snapshot = runtimeSnapshot();
 			this.retainedSnapshot.compareAndSet(null, snapshot);
+			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
+			if (streamLifecycleCoordinator != null)
+				streamLifecycleCoordinator.stopAdmission();
 			EventLoop eventLoop = snapshot.eventLoop();
 			if (eventLoop != null) {
 				eventLoop.stopAccepting();
@@ -2578,9 +2688,8 @@ final class DefaultHttpServer implements HttpServer {
 			ExecutorService streamingExecutor = snapshot.streamingExecutor();
 			if (streamingExecutor != null)
 				streamingExecutor.shutdown();
-			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
-			if (streamingTimeoutExecutor != null)
-				streamingTimeoutExecutor.shutdown();
+			// Admitted streams may still produce bytes and renew idle deadlines while
+			// draining. Their timer service closes after transport and producers exit.
 			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
 			if (requestTimeoutScheduler != null)
 				requestTimeoutScheduler.shutdown();
@@ -2593,6 +2702,9 @@ final class DefaultHttpServer implements HttpServer {
 			AtomicBoolean streamingForcedShutdownStarted = snapshot.streamingForcedShutdownStarted();
 			if (streamingForcedShutdownStarted != null)
 				streamingForcedShutdownStarted.set(true);
+			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
+			if (streamLifecycleCoordinator != null)
+				streamLifecycleCoordinator.force();
 			EventLoop eventLoop = snapshot.eventLoop();
 			if (eventLoop != null)
 				eventLoop.stopConnections();
@@ -2600,8 +2712,11 @@ final class DefaultHttpServer implements HttpServer {
 			if (requestHandlerExecutor != null)
 				requestHandlerExecutor.shutdownNow();
 			ExecutorService streamingExecutor = snapshot.streamingExecutor();
-			if (streamingExecutor != null)
-				streamingExecutor.shutdownNow();
+			if (streamingExecutor != null) {
+				List<Runnable> removedProducers = streamingExecutor.shutdownNow();
+				if (streamLifecycleCoordinator != null)
+					streamLifecycleCoordinator.retireQueuedTasks(removedProducers);
+			}
 			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
 			if (streamingTimeoutExecutor != null)
 				streamingTimeoutExecutor.shutdownNow();
@@ -2621,13 +2736,19 @@ final class DefaultHttpServer implements HttpServer {
 					snapshot.requestHandlerExecutor(), absoluteDeadlineNanos);
 			boolean streamingTerminated = awaitExecutor(
 					snapshot.streamingExecutor(), absoluteDeadlineNanos);
+			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
+			if (eventLoopTerminated && streamingTerminated && streamingTimeoutExecutor != null)
+				streamingTimeoutExecutor.shutdown();
 			boolean streamingTimeoutsTerminated = awaitExecutor(
-					snapshot.streamingTimeoutExecutor(), absoluteDeadlineNanos);
+					streamingTimeoutExecutor, absoluteDeadlineNanos);
 			boolean requestTimeoutsTerminated = awaitScheduler(
 					snapshot.requestTimeoutScheduler(), absoluteDeadlineNanos);
+			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
+			boolean streamLifecycleTerminated = streamLifecycleCoordinator == null
+					|| streamLifecycleCoordinator.awaitTermination(absoluteDeadlineNanos);
 			return eventLoopTerminated && requestHandlersTerminated
 					&& streamingTerminated && streamingTimeoutsTerminated
-					&& requestTimeoutsTerminated;
+					&& requestTimeoutsTerminated && streamLifecycleTerminated;
 		}
 
 		@Override
@@ -2641,10 +2762,21 @@ final class DefaultHttpServer implements HttpServer {
 				kinds.add(InternalResidualActivityType.EVENT_LOOP);
 			if (eventLoop != null && eventLoop.numAdmittedConnections() > 0)
 				kinds.add(InternalResidualActivityType.CONNECTION);
+			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
+			if (streamLifecycleCoordinator != null) {
+				StreamLifecycleCoordinator.Snapshot streamSnapshot = streamLifecycleCoordinator.snapshot();
+				if (streamSnapshot.reservations() > 0)
+					kinds.add(InternalResidualActivityType.STREAM);
+				if (streamSnapshot.callbacks() > 0 || streamSnapshot.diagnostics() > 0
+						|| streamSnapshot.publisherLifetimes() > 0)
+					kinds.add(InternalResidualActivityType.CALLBACK);
+			}
 			if (!terminated(snapshot.requestHandlerExecutor())
 					|| !terminated(snapshot.streamingExecutor())
 					|| !terminated(snapshot.streamingTimeoutExecutor())
-					|| !terminated(snapshot.requestTimeoutScheduler()))
+					|| !terminated(snapshot.requestTimeoutScheduler())
+					|| (snapshot.streamLifecycleCoordinator() != null
+							&& !snapshot.streamLifecycleCoordinator().isTerminated()))
 				kinds.add(InternalResidualActivityType.EXECUTOR_TASK);
 			return Collections.unmodifiableSet(kinds);
 		}

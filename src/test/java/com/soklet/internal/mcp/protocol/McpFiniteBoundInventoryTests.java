@@ -119,7 +119,7 @@ public class McpFiniteBoundInventoryTests {
 		assertStrictlySorted(orderedBoundIds, "bound IDs");
 		Assertions.assertEquals(Set.of("BODY", "CONNECTION", "CURSOR", "HEADER",
 				"JSON", "OUTPUT", "PROFILE_1_COMPILER", "PROFILE_1_EVALUATOR",
-				"QUEUE_STREAM", "SERIALIZED_RESULT", "TIME", "TYPED_BINDING",
+				"QUEUE_STREAM", "SERIALIZED_RESULT", "SKILLS", "TIME", "TYPED_BINDING",
 				"URI_TEMPLATE"), categories);
 		Assertions.assertFalse(sourceOwnerKeys.isEmpty());
 		Assertions.assertEquals(sourceValues(), inventoriedValues);
@@ -409,6 +409,25 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "binding.diagnostic-segment-prefix-characters", staticNumber(
 				"com.soklet.internal.mcp.schema.McpTypedSchemaPath",
 				"MAXIMUM_ESCAPED_SEGMENT_PREFIX_LENGTH"));
+
+		put(values, "skills.bundle.maximum-files", staticNumber(
+				"com.soklet.internal.mcp.skills.SkillPaths", "MAXIMUM_FILES"));
+		put(values, "skills.bundle.maximum-path-bytes", staticNumber(
+				"com.soklet.internal.mcp.skills.SkillPaths", "MAXIMUM_PATH_UTF_8_BYTES"));
+		put(values, "skills.bundle.maximum-raw-bytes", staticNumber(
+				"com.soklet.internal.mcp.skills.SkillBundle", "MAXIMUM_TOTAL_BYTES"));
+		Object skillYamlLimits = staticValue(
+				"com.soklet.internal.mcp.skills.McpSkillRuntimeBridge", "YAML_LIMITS");
+		put(values, "skills.yaml.maximum-input-bytes", reflectedNumber(skillYamlLimits, "maximumInputBytes"));
+		put(values, "skills.yaml.maximum-nesting-depth", reflectedNumber(skillYamlLimits, "maximumNestingDepth"));
+		put(values, "skills.yaml.maximum-nodes", reflectedNumber(skillYamlLimits, "maximumNodes"));
+		put(values, "skills.yaml.maximum-scalar-characters", reflectedNumber(skillYamlLimits, "maximumScalarCharacters"));
+		put(values, "skills.yaml.maximum-total-scalar-characters", reflectedNumber(skillYamlLimits, "maximumTotalScalarCharacters"));
+		put(values, "skills.yaml.maximum-work", reflectedNumber(skillYamlLimits, "maximumWork"));
+		put(values, "skills.uri.maximum-ascii-bytes", staticNumber(
+				"com.soklet.internal.mcp.skills.SkillResourceUris", "MAXIMUM_URI_ASCII_BYTES"));
+		put(values, "skills.endpoint.maximum-file-owners", staticNumber(
+				"com.soklet.McpSkillEndpointIndex", "MAXIMUM_FILE_OWNERS"));
 
 		put(values, "uri.request-target-bytes",
 				McpEndpointPathLimit.MAXIMUM_REQUEST_TARGET_BYTES);

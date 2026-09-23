@@ -106,6 +106,9 @@ public final class SimulatorConfig {
 	 * An imported MCP server is reconstructed from its original build settings.
 	 * Runtime control-plane changes made after that server was built, such as key
 	 * rotation or localization invalidation, are deliberately not copied.
+	 * HTTP and SSE streaming lifecycle capacity, callback concurrency, and cleanup
+	 * timeout are copied from Soklet's built-in servers. The SSE connection queue
+	 * capacity is also copied. Custom transports use the simulator's defaults.
 	 *
 	 * @param sokletConfig source application configuration
 	 * @return a fresh, transport-isolated simulator-configuration builder
@@ -196,13 +199,15 @@ public final class SimulatorConfig {
 		private int activeTransportConfigurers;
 
 		private Builder() {
-			this.configurationGraph = new ConfigurationGraph();
+			this.configurationGraph = new ConfigurationGraph(null, null);
 			this.sokletConfigBuilder = new SokletConfig.Builder();
 		}
 
 		private Builder(@NonNull SokletConfig sokletConfig) {
-			this();
 			SokletConfig exactConfig = requireNonNull(sokletConfig);
+			this.configurationGraph = new ConfigurationGraph(exactConfig.getHttpServer().orElse(null),
+					exactConfig.getSseServer().orElse(null));
+			this.sokletConfigBuilder = new SokletConfig.Builder();
 			exactConfig.applyApplicationSettingsTo(this.sokletConfigBuilder);
 			if (exactConfig.getHttpServer().isPresent())
 				httpServer();
@@ -603,10 +608,10 @@ public final class SimulatorConfig {
 		private @Nullable DefaultMcpServer mcpServer;
 		private @Nullable McpBuilderLease activeMcpBuilderLease;
 
-		private ConfigurationGraph() {
+		private ConfigurationGraph(@Nullable HttpServer sourceHttpServer, @Nullable SseServer sourceSseServer) {
 			this.configurationIdentity = new Object();
-			this.httpServer = new MockHttpServer();
-			this.sseServer = new MockSseServer();
+			this.httpServer = new MockHttpServer(sourceHttpServer);
+			this.sseServer = new MockSseServer(sourceSseServer);
 			this.open = true;
 		}
 

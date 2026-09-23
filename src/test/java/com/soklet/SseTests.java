@@ -19,6 +19,8 @@ package com.soklet;
 import com.soklet.SseRequestResult.HandshakeAccepted;
 import com.soklet.SseRequestResult.HandshakeRejected;
 import com.soklet.SseRequestResult.RequestFailed;
+import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
+import com.soklet.internal.streaming.ManagedSseLifecycle;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.SseEventSource;
@@ -829,44 +831,46 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
-	public void clientInitializerCatchupIsBoundedBeforeActivation() {
-		DefaultSseServer.DefaultSseUnicaster unicaster =
-				new DefaultSseServer.DefaultSseUnicaster(
-						ResourcePath.fromPath("/catchup"), 2);
-
-		unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
-		unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
-
-		IllegalStateException exception = Assertions.assertThrows(
-				IllegalStateException.class, () -> unicaster.unicastEvent(
-						SseEvent.withData("catchup-2").build()));
-		Assertions.assertEquals(
-				"SSE connection write queue is at capacity", exception.getMessage());
+	public void clientInitializerCatchupIsBoundedBeforeActivation() throws Exception {
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1,
+				Duration.ofSeconds(1), ignored -> {});
+		ManagedSseLifecycle lifecycle = new ManagedSseLifecycle(coordinator.tryReserve(), () -> {});
+		try {
+			DefaultSseServer.DefaultSseUnicaster unicaster = new DefaultSseServer.DefaultSseUnicaster(
+					Request.withPath(HttpMethod.GET, "/catchup").build(), new ArrayBlockingQueue<>(2), lifecycle);
+			unicaster.beginInitializer();
+			unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
+			unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
+			IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+					() -> unicaster.unicastEvent(SseEvent.withData("catchup-2").build()));
+			Assertions.assertEquals("SSE connection write queue is at capacity", exception.getMessage());
+			Assertions.assertFalse(lifecycle.isOpen());
+			Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, lifecycle.termination().orElseThrow().getReason());
+		} finally {
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + SECONDS.toNanos(2)));
+		}
 	}
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
-	public void clientInitializerActivationRejectsInsufficientQueueCapacity()
-			throws Exception {
-		DefaultSseServer.DefaultSseUnicaster unicaster =
-				new DefaultSseServer.DefaultSseUnicaster(
-						ResourcePath.fromPath("/catchup"), 2);
-		unicaster.unicastEvent(SseEvent.withData("catchup-0").build());
-		unicaster.unicastEvent(SseEvent.withData("catchup-1").build());
-		BlockingQueue<Object> writeQueue = new ArrayBlockingQueue<>(1);
-		Method activate = DefaultSseServer.DefaultSseUnicaster.class
-				.getDeclaredMethod("activate", BlockingQueue.class);
-		activate.setAccessible(true);
-
-		InvocationTargetException exception = Assertions.assertThrows(
-				InvocationTargetException.class,
-				() -> activate.invoke(unicaster, writeQueue));
-		IllegalStateException cause = Assertions.assertInstanceOf(
-				IllegalStateException.class, exception.getCause());
-		Assertions.assertEquals(
-				"SSE connection write queue is at capacity", cause.getMessage());
-		Assertions.assertTrue(writeQueue.isEmpty(),
-				"Failed activation must not partially populate the live queue");
+	public void terminatedUnicasterCannotAcceptMoreWrites() throws Exception {
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1,
+				Duration.ofSeconds(1), ignored -> {});
+		ManagedSseLifecycle lifecycle = new ManagedSseLifecycle(coordinator.tryReserve(), () -> {});
+		try {
+			DefaultSseServer.DefaultSseUnicaster unicaster = new DefaultSseServer.DefaultSseUnicaster(
+					Request.withPath(HttpMethod.GET, "/catchup").build(), new ArrayBlockingQueue<>(2), lifecycle);
+			unicaster.beginInitializer();
+			lifecycle.terminate(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> unicaster.unicastEvent(SseEvent.withData("late").build()));
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> unicaster.unicastComment(SseComment.heartbeatInstance()));
+		} finally {
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + SECONDS.toNanos(2)));
+		}
 	}
 
 	@Test
@@ -1233,7 +1237,7 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
-	public void sseStopDrainsQueuedEventsBeforeClosingConnection() throws Exception {
+	public void sseStopTerminatesConnectionWithoutRequiringQueuedEventDelivery() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 		BackpressureLifecycle lifecycle = new BackpressureLifecycle();
@@ -1282,16 +1286,9 @@ public class SseTests {
 				awaitNoGlobalConnections((DefaultSseServer) sse, 2000);
 				lifecycle.releaseWriter();
 
-				String firstEvent = readNextEventBlock(socket, 4096);
-				String secondEvent = readNextEventBlock(socket, 4096);
-
-				Assertions.assertNotNull(firstEvent, "First queued event was not delivered");
-				Assertions.assertNotNull(secondEvent, "Second queued event was not delivered before stop closed the connection");
-				Assertions.assertTrue(firstEvent.contains("id: 1"), firstEvent);
-				Assertions.assertTrue(firstEvent.contains("data: one"), firstEvent);
-				Assertions.assertTrue(secondEvent.contains("id: 2"), secondEvent);
-				Assertions.assertTrue(secondEvent.contains("data: two"), secondEvent);
-				Assertions.assertTrue(waitForEof(socket, 6000), "Connection did not close after draining queued events");
+				// Queue acceptance is not delivery acknowledgement. Shutdown terminates
+				// ownership immediately; an already-entered write may still win.
+				Assertions.assertTrue(waitForEof(socket, 6000), "Connection did not close after termination");
 
 				stopThread.join(6000);
 				Assertions.assertFalse(stopThread.isAlive(), "SSE stop did not complete");
@@ -1331,15 +1328,17 @@ public class SseTests {
 		ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(request, ServerType.SSE).orElseThrow();
 		BlockingWriteSocketChannel socketChannel = new BlockingWriteSocketChannel();
 
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1,
+				Duration.ofSeconds(1), ignored -> {});
 		Class<?> connectionClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection");
 		Constructor<?> connectionConstructor = connectionClass.getDeclaredConstructor(
 				Request.class,
 				ResourceMethod.class,
 				Object.class,
 				Integer.class,
-				SocketChannel.class);
+				SocketChannel.class, StreamLifecycleCoordinator.Reservation.class);
 		connectionConstructor.setAccessible(true);
-		Object connection = connectionConstructor.newInstance(request, resourceMethod, null, 4, socketChannel);
+		Object connection = connectionConstructor.newInstance(request, resourceMethod, null, 4, socketChannel, coordinator.tryReserve());
 
 		Method registerMethod = DefaultSseServer.class.getDeclaredMethod(
 				"registerConnectionWithBroadcaster",
@@ -1403,6 +1402,8 @@ public class SseTests {
 							ServerType.SSE,
 							MetricsCollector.TransportFailureReason.WRITE_TIMEOUT)));
 		} finally {
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + SECONDS.toNanos(2)));
 			timeoutScheduler.shutdownNow();
 			socketChannel.close();
 		}

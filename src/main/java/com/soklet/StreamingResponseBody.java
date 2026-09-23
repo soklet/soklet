@@ -28,7 +28,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
 import java.util.concurrent.Flow;
-import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -37,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This type describes how response bytes are produced; it is not itself responsible for writing to a transport.
  * Descriptors are immutable and thread-safe, but caller-supplied writers, publishers, readers, input streams, and
- * suppliers are responsible for their own behavior.
+ * factories are responsible for their own behavior.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -70,6 +69,20 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * full, the subscriber's {@code onNext} path may block until space is available.
 	 * <p>
 	 * If the response is canceled before the publisher terminates, Soklet cancels the publisher subscription.
+	 * A publisher may deliver its first subscription asynchronously after {@code subscribe} returns normally.
+	 * Cancelation in that interval retains lifecycle capacity until the subscription arrives and its cancel attempt
+	 * physically finishes; no data is requested from that late subscription. If it never arrives, cleanup expiry
+	 * and shutdown report the pending obligation without releasing its capacity or retaining a waiting producer.
+	 * <p>
+	 * Entered subscription calls remain accounted for even if they synchronously publish a terminal signal before
+	 * returning. Successful response production waits for those calls to finish. Calls already claimed before
+	 * cancelation can finish concurrently with the subscription's cancel operation.
+	 * <p>
+	 * Publishers must follow the {@link Flow} signal protocol. If {@code subscribe} throws before delivering a
+	 * subscription, acquisition has failed and the publisher remains responsible for its partial resources; it
+	 * must not subsequently deliver a subscription. Signals before the first subscription are protocol failures.
+	 * Subscriptions supplied after a failed acquisition or completed lifetime are rejected before invoking their
+	 * methods, leaving cleanup with the publisher. A cleanup deadline cannot make arbitrary provider code return.
 	 *
 	 * @param publisher the publisher that emits response bytes
 	 * @return a streaming response body
@@ -80,65 +93,77 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	}
 
 	/**
-	 * Creates a streaming response body backed by an input stream supplier.
+	 * Creates a streaming response body backed by an input stream factory.
 	 * <p>
 	 * This adapter is intended for special cases where an existing streaming source is already exposed as an
 	 * {@link InputStream}. Dynamic application streaming should usually use {@link #fromWriter(StreamingResponseWriter)}
 	 * or {@link #fromPublisher(Flow.Publisher)}.
 	 * <p>
-	 * If the response is canceled while a read is blocked, Soklet closes the supplied input stream.
+	 * The factory is invoked lazily when response production starts, not when this descriptor is constructed, and
+	 * may throw a checked exception. Each invocation must open an independently owned input stream.
+	 * If the response is canceled while a read is blocked, Soklet closes the input stream. The source must support
+	 * close racing a read, including unblocking the read; {@code InputStream} alone does not guarantee this behavior.
 	 *
-	 * @param inputStreamSupplier supplies the input stream to copy
+	 * @param inputStreamFactory opens the input stream to copy
 	 * @return a streaming response body
 	 */
 	@NonNull
 	static StreamingResponseBody fromInputStream(
-			@NonNull Supplier<? extends @NonNull InputStream> inputStreamSupplier) {
-		return withInputStream(inputStreamSupplier).build();
+			@NonNull StreamResourceFactory<? extends @NonNull InputStream> inputStreamFactory) {
+		return withInputStream(inputStreamFactory).build();
 	}
 
 	/**
 	 * Acquires a builder for an input-stream-backed response body.
+	 * <p>
+	 * The factory remains lazy and follows the acquisition and concurrent-close contract of
+	 * {@link #fromInputStream(StreamResourceFactory)}.
 	 *
-	 * @param inputStreamSupplier supplies the input stream to copy
+	 * @param inputStreamFactory opens the input stream to copy
 	 * @return the builder
 	 */
 	@NonNull
 	static InputStreamBuilder withInputStream(
-			@NonNull Supplier<? extends @NonNull InputStream> inputStreamSupplier) {
-		return new InputStreamBuilder(inputStreamSupplier);
+			@NonNull StreamResourceFactory<? extends @NonNull InputStream> inputStreamFactory) {
+		return new InputStreamBuilder(inputStreamFactory);
 	}
 
 	/**
-	 * Creates a streaming response body backed by a reader supplier.
+	 * Creates a streaming response body backed by a reader factory.
 	 * <p>
 	 * The charset is required. Encoding errors default to {@link CodingErrorAction#REPORT}; use
-	 * {@link #withReader(Supplier, Charset)} to override the JDK encoder actions explicitly.
-	 * If the response is canceled while a read is blocked, Soklet closes the supplied reader.
+	 * {@link #withReader(StreamResourceFactory, Charset)} to override the JDK encoder actions explicitly.
+	 * The factory is invoked lazily when response production starts, not when this descriptor is constructed, and
+	 * may throw a checked exception. Each invocation must open an independently owned reader.
+	 * If the response is canceled while a read is blocked, Soklet closes the reader. The source must support close
+	 * racing a read, including unblocking the read; {@code Reader} alone does not guarantee this behavior.
 	 *
-	 * @param readerSupplier supplies the reader to copy
-	 * @param charset        charset used to encode characters to response bytes
+	 * @param readerFactory opens the reader to copy
+	 * @param charset       charset used to encode characters to response bytes
 	 * @return a streaming response body
 	 */
 	@NonNull
 	static StreamingResponseBody fromReader(
-			@NonNull Supplier<? extends @NonNull Reader> readerSupplier,
-																			@NonNull Charset charset) {
-		return withReader(readerSupplier, charset).build();
+			@NonNull StreamResourceFactory<? extends @NonNull Reader> readerFactory,
+			@NonNull Charset charset) {
+		return withReader(readerFactory, charset).build();
 	}
 
 	/**
 	 * Acquires a builder for a reader-backed response body.
+	 * <p>
+	 * The factory remains lazy and follows the acquisition and concurrent-close contract of
+	 * {@link #fromReader(StreamResourceFactory, Charset)}.
 	 *
-	 * @param readerSupplier supplies the reader to copy
-	 * @param charset        charset used to encode characters to response bytes
+	 * @param readerFactory opens the reader to copy
+	 * @param charset       charset used to encode characters to response bytes
 	 * @return the builder
 	 */
 	@NonNull
 	static ReaderBuilder withReader(
-			@NonNull Supplier<? extends @NonNull Reader> readerSupplier,
-																@NonNull Charset charset) {
-		return new ReaderBuilder(readerSupplier, charset);
+			@NonNull StreamResourceFactory<? extends @NonNull Reader> readerFactory,
+			@NonNull Charset charset) {
+		return new ReaderBuilder(readerFactory, charset);
 	}
 
 	/**
@@ -163,19 +188,19 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	}
 
 	/**
-	 * A streaming body backed by an {@link InputStream} supplier.
+	 * A streaming body backed by an {@link InputStream} factory.
 	 */
 	@ThreadSafe
 	final class InputStreamBody implements StreamingResponseBody {
 		@NonNull
-		private final Supplier<? extends InputStream> inputStreamSupplier;
+		private final StreamResourceFactory<? extends InputStream> inputStreamFactory;
 		@NonNull
 		private final Integer bufferSizeInBytes;
 
 		private InputStreamBody(@NonNull InputStreamBuilder builder) {
 			requireNonNull(builder);
 
-			this.inputStreamSupplier = builder.inputStreamSupplier;
+			this.inputStreamFactory = builder.inputStreamFactory;
 			this.bufferSizeInBytes = builder.bufferSizeInBytes == null
 					? DEFAULT_INPUT_STREAM_BUFFER_SIZE_IN_BYTES
 					: builder.bufferSizeInBytes;
@@ -185,13 +210,13 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		}
 
 		/**
-		 * The supplier that opens the source input stream.
+		 * The checked factory that opens an independently owned source input stream for each execution.
 		 *
-		 * @return the input stream supplier
+		 * @return the input stream factory
 		 */
 		@NonNull
-		public Supplier<? extends @NonNull InputStream> getInputStreamSupplier() {
-			return this.inputStreamSupplier;
+		public StreamResourceFactory<? extends @NonNull InputStream> getInputStreamFactory() {
+			return this.inputStreamFactory;
 		}
 
 		/**
@@ -206,12 +231,12 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	}
 
 	/**
-	 * A streaming body backed by a {@link Reader} supplier.
+	 * A streaming body backed by a {@link Reader} factory.
 	 */
 	@ThreadSafe
 	final class ReaderBody implements StreamingResponseBody {
 		@NonNull
-		private final Supplier<? extends Reader> readerSupplier;
+		private final StreamResourceFactory<? extends Reader> readerFactory;
 		@NonNull
 		private final Charset charset;
 		@NonNull
@@ -224,7 +249,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		private ReaderBody(@NonNull ReaderBuilder builder) {
 			requireNonNull(builder);
 
-			this.readerSupplier = builder.readerSupplier;
+			this.readerFactory = builder.readerFactory;
 			this.charset = builder.charset;
 			this.bufferSizeInCharacters = builder.bufferSizeInCharacters == null
 					? DEFAULT_READER_BUFFER_SIZE_IN_CHARACTERS
@@ -241,13 +266,13 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		}
 
 		/**
-		 * The supplier that opens the source reader.
+		 * The checked factory that opens an independently owned source reader for each execution.
 		 *
-		 * @return the reader supplier
+		 * @return the reader factory
 		 */
 		@NonNull
-		public Supplier<? extends @NonNull Reader> getReaderSupplier() {
-			return this.readerSupplier;
+		public StreamResourceFactory<? extends @NonNull Reader> getReaderFactory() {
+			return this.readerFactory;
 		}
 
 		/**
@@ -334,12 +359,12 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@NotThreadSafe
 	final class InputStreamBuilder {
 		@NonNull
-		private final Supplier<? extends InputStream> inputStreamSupplier;
+		private final StreamResourceFactory<? extends InputStream> inputStreamFactory;
 		@Nullable
 		private Integer bufferSizeInBytes;
 
-		private InputStreamBuilder(@NonNull Supplier<? extends InputStream> inputStreamSupplier) {
-			this.inputStreamSupplier = requireNonNull(inputStreamSupplier);
+		private InputStreamBuilder(@NonNull StreamResourceFactory<? extends InputStream> inputStreamFactory) {
+			this.inputStreamFactory = requireNonNull(inputStreamFactory);
 		}
 
 		/**
@@ -373,7 +398,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@NotThreadSafe
 	final class ReaderBuilder {
 		@NonNull
-		private final Supplier<? extends Reader> readerSupplier;
+		private final StreamResourceFactory<? extends Reader> readerFactory;
 		@NonNull
 		private final Charset charset;
 		@Nullable
@@ -383,9 +408,9 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		@Nullable
 		private CodingErrorAction unmappableCharacterAction;
 
-		private ReaderBuilder(@NonNull Supplier<? extends Reader> readerSupplier,
+		private ReaderBuilder(@NonNull StreamResourceFactory<? extends Reader> readerFactory,
 													@NonNull Charset charset) {
-			this.readerSupplier = requireNonNull(readerSupplier);
+			this.readerFactory = requireNonNull(readerFactory);
 			this.charset = requireNonNull(charset);
 		}
 

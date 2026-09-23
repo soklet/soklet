@@ -1,0 +1,44 @@
+EXPLORATORY_STREAM_LIFECYCLE_FOOTPRINT capacity=1024 callbacks=4 cleanupGraceMillis=5000
+java=17.0.20.1 vendor=Amazon.com Inc. os=Mac OS X arch=aarch64
+jvmArgs=[-Xms128m, -Xmx128m, -XX:+UseSerialGC]
+coordinatorCodeSource=file:/Users/Shared/ai-shared/soklet/.worktrees/streaming-scope-2026-09-21/target/classes/
+coordinatorBytecodeSha256=f69f413e7a8dd0bc1aaf44109643f47aca8f2ea913d639865edd77542ec0482d
+stage,usedHeapBytes,deltaFromBaselineBytes,reservations,callbackJobs,ownedCallbackThreads,ownedDiagnosticThreads,ownedSupervisorThreads,totalJvmThreads
+warmed-baseline,766304,0,0,0,0,0,0,6
+empty-accepting,780016,13712,0,0,0,0,0,6
+1024-idle-reservations,947984,181680,1024,0,0,0,0,6
+cancelations-drained-accepting,953096,186792,0,0,4,0,1,11
+terminated-retained,790216,23912,0,0,0,0,0,6
+released,767328,1024,0,0,0,0,0,6
+idleReservationIncrementBytes=167968 approximateBytesPerReservation=164.03 diagnostics=0
+LIMITS: approximate post-GC Java heap only; synthetic idle reservations and empty callbacks; no HTTP/application payloads/native stack/RSS/allocation-rate/backlog measurement; provisional limits are not qualified by this probe.
+
+EXPLORATORY_STREAM_LIFECYCLE_FOOTPRINT capacity=1024 callbacks=4 cleanupGraceMillis=5000
+java=17.0.20.1 vendor=Amazon.com Inc. os=Mac OS X arch=aarch64
+jvmArgs=[-Xms128m, -Xmx128m, -XX:+UseSerialGC]
+coordinatorCodeSource=file:/Users/Shared/ai-shared/soklet/.worktrees/streaming-scope-2026-09-21/target/classes/
+coordinatorBytecodeSha256=f69f413e7a8dd0bc1aaf44109643f47aca8f2ea913d639865edd77542ec0482d
+stage,usedHeapBytes,deltaFromBaselineBytes,reservations,callbackJobs,ownedCallbackThreads,ownedDiagnosticThreads,ownedSupervisorThreads,totalJvmThreads
+warmed-baseline,765896,0,0,0,0,0,0,6
+empty-accepting,779608,13712,0,0,0,0,0,6
+1024-idle-reservations,947968,182072,1024,0,0,0,0,6
+cancelations-drained-accepting,952912,187016,0,0,4,0,1,11
+terminated-retained,790032,24136,0,0,0,0,0,6
+released,767544,1648,0,0,0,0,0,6
+idleReservationIncrementBytes=168360 approximateBytesPerReservation=164.41 diagnostics=0
+LIMITS: approximate post-GC Java heap only; synthetic idle reservations and empty callbacks; no HTTP/application payloads/native stack/RSS/allocation-rate/backlog measurement; provisional limits are not qualified by this probe.
+
+EXPLORATORY_STREAM_LIFECYCLE_FOOTPRINT capacity=1024 callbacks=4 cleanupGraceMillis=5000
+java=17.0.20.1 vendor=Amazon.com Inc. os=Mac OS X arch=aarch64
+jvmArgs=[-Xms128m, -Xmx128m, -XX:+UseSerialGC]
+coordinatorCodeSource=file:/Users/Shared/ai-shared/soklet/.worktrees/streaming-scope-2026-09-21/target/classes/
+coordinatorBytecodeSha256=f69f413e7a8dd0bc1aaf44109643f47aca8f2ea913d639865edd77542ec0482d
+stage,usedHeapBytes,deltaFromBaselineBytes,reservations,callbackJobs,ownedCallbackThreads,ownedDiagnosticThreads,ownedSupervisorThreads,totalJvmThreads
+warmed-baseline,766384,0,0,0,0,0,0,6
+empty-accepting,780096,13712,0,0,0,0,0,6
+1024-idle-reservations,948456,182072,1024,0,0,0,0,6
+cancelations-drained-accepting,954696,188312,0,0,4,0,1,11
+terminated-retained,791872,25488,0,0,0,0,0,6
+released,768088,1704,0,0,0,0,0,6
+idleReservationIncrementBytes=168360 approximateBytesPerReservation=164.41 diagnostics=0
+LIMITS: approximate post-GC Java heap only; synthetic idle reservations and empty callbacks; no HTTP/application payloads/native stack/RSS/allocation-rate/backlog measurement; provisional limits are not qualified by this probe.

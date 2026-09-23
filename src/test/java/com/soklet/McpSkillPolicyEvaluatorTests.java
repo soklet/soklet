@@ -357,7 +357,7 @@ class McpSkillPolicyEvaluatorTests {
 			public Boolean isCanceled() { return canceled.get(); }
 			public Optional<StreamTerminationReason> getCancelationReason() { return Optional.empty(); }
 			public Optional<Throwable> getCancelationCause() { return Optional.empty(); }
-			public AutoCloseable onCancel(Runnable callback) { throw new AssertionError(); }
+			public CallbackRegistration onCancel(Runnable callback) { throw new AssertionError(); }
 		};
 	}
 	private static void assertRedacted(Executable operation) {

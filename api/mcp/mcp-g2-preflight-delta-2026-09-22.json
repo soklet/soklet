@@ -1,0 +1,2456 @@
+{
+  "formatVersion": 1,
+  "status": "preflight_classification_only_not_a_refreeze",
+  "recordedUtc": "2026-09-22T21:28:30Z",
+  "candidateMainJarSha256": "3bd93c5f449d2ab5970152b4a45997b5d79b4399ae0c7dc0dbee0f448e51ba24",
+  "fullJapicmpReport": {
+    "path": "target/japicmp/mcp-api-freeze.xml",
+    "sha256": "878f5da01fd153f66825efb61e80df9a64c9a63e10d43ac0e54fc6b7c2aca353"
+  },
+  "sources": [
+    {
+      "partition": "phase-4",
+      "includesPath": "api/mcp/phase-4.includes",
+      "includesSha256": "208af06ae2a26e6ede4d0408d1accb4216c4ce350fb231ed3d146d2c463b2807",
+      "reviewedPath": "api/mcp/phase-4.signatures.jsonl",
+      "reviewedSha256": "97fb8c075f1d5405fb8027fa277ba3b95b03a996da7b9f76ab5976d6b14edc23",
+      "reviewedCount": 1130,
+      "derivedCount": 1322
+    },
+    {
+      "partition": "phase-5",
+      "includesPath": "api/mcp/phase-5.includes",
+      "includesSha256": "17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f",
+      "reviewedPath": "api/mcp/phase-5.signatures.jsonl",
+      "reviewedSha256": "c7c3919bc688fc6a3119c010c510c3f97d976aab980bbc1fbf54ae065e6186c9",
+      "reviewedCount": 194,
+      "derivedCount": 240
+    },
+    {
+      "partition": "phase-6",
+      "includesPath": "api/mcp/phase-6.includes",
+      "includesSha256": "b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1",
+      "reviewedPath": "api/mcp/phase-6.signatures.jsonl",
+      "reviewedSha256": "06062c838bd8493a911a81afd0bf3a3ff0c5657de5faa20267cdd3b95dcde91f",
+      "reviewedCount": 425,
+      "derivedCount": 454
+    },
+    {
+      "partition": "provisional",
+      "includesPath": "api/mcp/provisional.includes",
+      "includesSha256": "ee87d92db2ee80694af5888955e132886f148c3c6a7b62f2031b166b37493908",
+      "reviewedPath": "api/mcp/provisional.signatures.jsonl",
+      "reviewedSha256": "70fae89216a6d0718c13212093f32777b0779a9beaf90cfb939cf74a7c3d1743",
+      "reviewedCount": 98,
+      "derivedCount": 98
+    }
+  ],
+  "partitionSummaries": [
+    {
+      "partition": "phase-4",
+      "currentOnly": 236,
+      "reviewedOnly": 44,
+      "changedCommon": 0
+    },
+    {
+      "partition": "phase-5",
+      "currentOnly": 53,
+      "reviewedOnly": 7,
+      "changedCommon": 0
+    },
+    {
+      "partition": "phase-6",
+      "currentOnly": 37,
+      "reviewedOnly": 8,
+      "changedCommon": 0
+    },
+    {
+      "partition": "provisional",
+      "currentOnly": 4,
+      "reviewedOnly": 4,
+      "changedCommon": 0
+    }
+  ],
+  "classificationCounts": {
+    "N0": {
+      "currentOnly": 47,
+      "reviewedOnly": 57
+    },
+    "P1b": {
+      "currentOnly": 80,
+      "reviewedOnly": 0
+    },
+    "P2": {
+      "currentOnly": 34,
+      "reviewedOnly": 0
+    },
+    "P3": {
+      "currentOnly": 78,
+      "reviewedOnly": 6
+    },
+    "P4": {
+      "currentOnly": 91,
+      "reviewedOnly": 0
+    }
+  },
+  "records": [
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getPromptRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getResourceRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getToolRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#promptRegistrations(Ljava/util/List;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#resourceRegistrations(Ljava/util/List;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#toolRegistrations(Ljava/util/List;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpIcon$Builder#sizes(Ljava/util/List;)Lcom/soklet/McpIcon$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpInvocationFeatures#getTaskCreationContext()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptOutput$Builder#messages(Ljava/util/List;)Lcom/soklet/McpPromptOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#arguments(Ljava/util/List;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#icons(Ljava/util/List;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#inputRequestDeclarations(Ljava/util/List;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourcePage#getResourceDescriptors()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourcePage$Builder#resourceDescriptors(Ljava/util/List;)Lcom/soklet/McpResourcePage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration$ExactBuilder#icons(Ljava/util/List;)Lcom/soklet/McpResourceRegistration$ExactBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration$ExactBuilder#inputRequestDeclarations(Ljava/util/List;)Lcom/soklet/McpResourceRegistration$ExactBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#icons(Ljava/util/List;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#inputRequestDeclarations(Ljava/util/List;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getLocalizationCatalogInvalidator()Lcom/soklet/McpLocalizationCatalogInvalidator;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getProtectionKeyringManager()Lcom/soklet/McpProtectionKeyringManager;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getTraceCorrelationKeyManager()Lcom/soklet/McpTraceCorrelationKeyManager;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolOutput$Builder#content(Ljava/util/List;)Lcom/soklet/McpToolOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration#getToolAnnotations()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$CompleteBuilder#icons(Ljava/util/List;)Lcom/soklet/McpToolRegistration$CompleteBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$CompleteBuilder#toolAnnotations(Lcom/soklet/McpToolAnnotations;)Lcom/soklet/McpToolRegistration$CompleteBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#icons(Ljava/util/List;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#inputRequestDeclarations(Ljava/util/List;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#toolAnnotations(Lcom/soklet/McpToolAnnotations;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint#getPrompts()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint#getResources()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint#getTools()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addPrompt(Lcom/soklet/McpPromptRegistration;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addPrompts(Ljava/util/Collection;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addResource(Lcom/soklet/McpResourceRegistration;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addResources(Ljava/util/Collection;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addTool(Lcom/soklet/McpToolRegistration;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#addTools(Ljava/util/Collection;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpIcon$Builder#sizes([Ljava/lang/String;)Lcom/soklet/McpIcon$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpInvocationFeatures#getTaskControl()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptOutput$Builder#addMessage(Lcom/soklet/McpPromptMessage;)Lcom/soklet/McpPromptOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptOutput$Builder#addMessages(Ljava/util/Collection;)Lcom/soklet/McpPromptOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#addArgument(Lcom/soklet/McpPromptArgumentDeclaration;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#addIcon(Lcom/soklet/McpIcon;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#addInputRequestDeclaration(Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#addInputRequestDeclarations([Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourcePage#getResources()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourcePage$Builder#addResource(Lcom/soklet/McpResourceDescriptor;)Lcom/soklet/McpResourcePage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourcePage$Builder#addResources(Ljava/util/Collection;)Lcom/soklet/McpResourcePage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$ExactBuilder#addIcon(Lcom/soklet/McpIcon;)Lcom/soklet/McpResourceRegistration$ExactBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$ExactBuilder#addInputRequestDeclaration(Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpResourceRegistration$ExactBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$ExactBuilder#addInputRequestDeclarations([Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpResourceRegistration$ExactBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#addIcon(Lcom/soklet/McpIcon;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#addInputRequestDeclaration(Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#addInputRequestDeclarations([Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpServer#getLocalizationControl()Lcom/soklet/McpLocalizationControl;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpServer#getProtectionControl()Lcom/soklet/McpProtectionControl;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpServer#getTraceCorrelationControl()Lcom/soklet/McpTraceCorrelationControl;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolOutput$Builder#addContent(Lcom/soklet/McpContentBlock;)Lcom/soklet/McpToolOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolOutput$Builder#addContents(Ljava/util/Collection;)Lcom/soklet/McpToolOutput$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration#getAnnotations()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$CompleteBuilder#addIcon(Lcom/soklet/McpIcon;)Lcom/soklet/McpToolRegistration$CompleteBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$CompleteBuilder#annotations(Lcom/soklet/McpToolAnnotations;)Lcom/soklet/McpToolRegistration$CompleteBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#addIcon(Lcom/soklet/McpIcon;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#addInputRequestDeclaration(Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#addInputRequestDeclarations([Lcom/soklet/McpInputRequestDeclaration;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#annotations(Lcom/soklet/McpToolAnnotations;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getSubscriptionAuthorizer()Lcom/soklet/McpSubscriptionAuthorizer;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getSubscriptionReconciler()Lcom/soklet/McpSubscriptionReconciler;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#maximumSubscriptionAuthorizationDuration(Ljava/time/Duration;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#subscriptionAuthorizationTimeout(Ljava/time/Duration;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#subscriptionAuthorizer(Lcom/soklet/McpSubscriptionAuthorizer;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#subscriptionCatalogProjectionTimeout(Ljava/time/Duration;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpArgumentCompletionResult"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpArgumentCompletionResult$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpCompletionContext"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpCompletionContext$Prompt"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpCompletionContext$Resource"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpCompletionHandler"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/annotation/McpPromptCompletion"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "C:com/soklet/annotation/McpResourceCompletion"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpOperationType#COMPLETION_COMPLETE:Lcom/soklet/McpOperationType;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#fromValues(Ljava/util/List;)Lcom/soklet/McpArgumentCompletionResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#getHasMore()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#getMetadata()Lcom/soklet/McpJsonObject;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#getTotal()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#getValues()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult#withValues(Ljava/util/List;)Lcom/soklet/McpArgumentCompletionResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult$Builder#build()Lcom/soklet/McpArgumentCompletionResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult$Builder#hasMore(Ljava/lang/Boolean;)Lcom/soklet/McpArgumentCompletionResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpArgumentCompletionResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpArgumentCompletionResult$Builder#total(Ljava/lang/Long;)Lcom/soklet/McpArgumentCompletionResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionContext#getArgumentName()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionContext#getArgumentValue()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionContext#getContextArguments()Ljava/util/Map;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionContext$Prompt#getPromptRegistration()Lcom/soklet/McpPromptRegistration;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionContext$Resource#getResourceRegistration()Lcom/soklet/McpResourceRegistration;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompletionHandler#handle(Lcom/soklet/McpRequestContext;Lcom/soklet/McpCompletionContext;Lcom/soklet/McpInvocationFeatures;)Lcom/soklet/McpArgumentCompletionResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptRegistration#getCompletionHandler()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpPromptRegistration$Builder#completionHandler(Lcom/soklet/McpCompletionHandler;)Lcom/soklet/McpPromptRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration#getCompletionHandler()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceRegistration$TemplateBuilder#completionHandler(Lcom/soklet/McpCompletionHandler;)Lcom/soklet/McpResourceRegistration$TemplateBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/annotation/McpPromptCompletion#name()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P2",
+      "state": "currentOnly",
+      "id": "M:com/soklet/annotation/McpResourceCompletion#uri()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppResourceMetadata"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppResourceMetadata$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppResourceMetadata$Permission"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppToolMetadata"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppToolMetadata$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpAppToolMetadata$Visibility"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpCompleteResult$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpToolResultSanitizer"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "C:com/soklet/annotation/McpAppTool"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppResourceMetadata$Permission#CAMERA:Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppResourceMetadata$Permission#CLIPBOARD_WRITE:Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppResourceMetadata$Permission#GEOLOCATION:Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppResourceMetadata$Permission#MICROPHONE:Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppToolMetadata$Visibility#APP:Lcom/soklet/McpAppToolMetadata$Visibility;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpAppToolMetadata$Visibility#MODEL:Lcom/soklet/McpAppToolMetadata$Visibility;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#builder()Lcom/soklet/McpAppResourceMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#getContentSecurityPolicy()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#getDomain()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#getPermissions()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#getPrefersBorder()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Builder#build()Lcom/soklet/McpAppResourceMetadata;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Builder#contentSecurityPolicy(Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy;)Lcom/soklet/McpAppResourceMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Builder#domain(Ljava/lang/String;)Lcom/soklet/McpAppResourceMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Builder#permissions(Ljava/util/Set;)Lcom/soklet/McpAppResourceMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Builder#prefersBorder(Ljava/lang/Boolean;)Lcom/soklet/McpAppResourceMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#builder()Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#getBaseUriDomains()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#getConnectDomains()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#getFrameDomains()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#getResourceDomains()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder#baseUriDomains(Ljava/util/Set;)Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder#build()Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder#connectDomains(Ljava/util/Set;)Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder#frameDomains(Ljava/util/Set;)Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder#resourceDomains(Ljava/util/Set;)Lcom/soklet/McpAppResourceMetadata$ContentSecurityPolicy$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Permission#valueOf(Ljava/lang/String;)Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppResourceMetadata$Permission#values()[Lcom/soklet/McpAppResourceMetadata$Permission;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#builder()Lcom/soklet/McpAppToolMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#getResourceUri()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#getVisibility()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata$Builder#build()Lcom/soklet/McpAppToolMetadata;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata$Builder#resourceUri(Ljava/net/URI;)Lcom/soklet/McpAppToolMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata$Builder#visibility(Ljava/util/Set;)Lcom/soklet/McpAppToolMetadata$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata$Visibility#valueOf(Ljava/lang/String;)Lcom/soklet/McpAppToolMetadata$Visibility;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpAppToolMetadata$Visibility#values()[Lcom/soklet/McpAppToolMetadata$Visibility;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpBlobResourceContents#getAppResourceMetadata()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpBlobResourceContents$Builder#appResourceMetadata(Lcom/soklet/McpAppResourceMetadata;)Lcom/soklet/McpBlobResourceContents$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpClientCapabilities#supportsAppMimeType(Ljava/lang/String;)Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult#toBuilder()Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult#withPromptOutput(Lcom/soklet/McpPromptOutput;)Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult#withResourceOutput(Lcom/soklet/McpResourceOutput;)Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult#withToolOutput(Lcom/soklet/McpToolOutput;)Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult$Builder#build()Lcom/soklet/McpCompleteResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpCompleteResult$Builder#payload(Lcom/soklet/McpCompletePayload;)Lcom/soklet/McpCompleteResult$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpResourceContents#getAppResourceMetadata()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getToolResultSanitizer()Lcom/soklet/McpToolResultSanitizer;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#toolResultSanitizer(Lcom/soklet/McpToolResultSanitizer;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTextResourceContents#getAppResourceMetadata()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTextResourceContents$Builder#appResourceMetadata(Lcom/soklet/McpAppResourceMetadata;)Lcom/soklet/McpTextResourceContents$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration#getAppToolMetadata()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$CompleteBuilder#appToolMetadata(Lcom/soklet/McpAppToolMetadata;)Lcom/soklet/McpToolRegistration$CompleteBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolRegistration$OperationBuilder#appToolMetadata(Lcom/soklet/McpAppToolMetadata;)Lcom/soklet/McpToolRegistration$OperationBuilder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolResultSanitizer#nonSanitizingInstance()Lcom/soklet/McpToolResultSanitizer;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpToolResultSanitizer#sanitize(Lcom/soklet/McpRequestContext;Ljava/lang/String;Lcom/soklet/McpJsonObject;Lcom/soklet/McpCompleteResult;)Lcom/soklet/McpCompleteResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/annotation/McpAppTool#resourceUri()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "currentOnly",
+      "id": "M:com/soklet/annotation/McpAppTool#visibility()[Lcom/soklet/McpAppToolMetadata$Visibility;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "C:com/soklet/McpToolOutputSanitizer"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpCompleteResult#withMetadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpCompleteResult;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpServer#getToolOutputSanitizer()Lcom/soklet/McpToolOutputSanitizer;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpServer$Builder#toolOutputSanitizer(Lcom/soklet/McpToolOutputSanitizer;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolOutputSanitizer#passThroughInstance()Lcom/soklet/McpToolOutputSanitizer;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P3",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpToolOutputSanitizer#sanitize(Lcom/soklet/McpRequestContext;Ljava/lang/String;Lcom/soklet/McpJsonObject;Lcom/soklet/McpToolOutput;)Lcom/soklet/McpToolOutput;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillAccessPolicy"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillAccessPolicy$AccessEvaluator"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillAccessPolicy$DiscoveryEvaluator"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillBundle"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillGroup"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillListContext"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillListHandler"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillPage"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillPage$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillRegistration"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillRegistration$Builder"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillRegistration$Resource"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillVariantSelectionContext"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSkillVariantSelector"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpOperationType#SKILLS_GET:Lcom/soklet/McpOperationType;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpOperationType#SKILLS_LIST:Lcom/soklet/McpOperationType;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getSkillGroups()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getSkillListCachePolicy()Lcom/soklet/McpCachePolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getSkillListHandler()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint#getSkillRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#skillGroups(Ljava/util/List;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#skillListCachePolicy(Lcom/soklet/McpCachePolicy;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#skillListHandler(Lcom/soklet/McpSkillListHandler;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpoint$Builder#skillRegistrations(Ljava/util/List;)Lcom/soklet/McpEndpoint$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpointRegistry#withSkillGroups(Ljava/lang/Class;Ljava/util/List;)Lcom/soklet/McpEndpointRegistry;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpEndpointRegistry#withSkillRegistrations(Ljava/lang/Class;Ljava/util/List;)Lcom/soklet/McpEndpointRegistry;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getSkillAccessPolicy()Lcom/soklet/McpSkillAccessPolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer#getSkillVariantSelector()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#skillAccessPolicy(Lcom/soklet/McpSkillAccessPolicy;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpServer$Builder#skillVariantSelector(Lcom/soklet/McpSkillVariantSelector;)Lcom/soklet/McpServer$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillAccessPolicy#allowAllInstance()Lcom/soklet/McpSkillAccessPolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillAccessPolicy#fromEvaluators(Lcom/soklet/McpSkillAccessPolicy$AccessEvaluator;Lcom/soklet/McpSkillAccessPolicy$DiscoveryEvaluator;)Lcom/soklet/McpSkillAccessPolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillAccessPolicy#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillAccessPolicy$AccessEvaluator#isSkillAccessible(Lcom/soklet/McpRequestContext;Lcom/soklet/McpSkillRegistration;Lcom/soklet/McpInvocationFeatures;)Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillAccessPolicy$DiscoveryEvaluator#isSkillDiscoverable(Lcom/soklet/McpRequestContext;Lcom/soklet/McpSkillRegistration;Lcom/soklet/McpInvocationFeatures;)Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#findFileBytes(Ljava/lang/String;)Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#fromFiles(Ljava/util/Map;)Lcom/soklet/McpSkillBundle;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#getDescription()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#getDocumentMetadata()Lcom/soklet/McpJsonObject;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#getFilePaths()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#getName()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillBundle#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#fromKeyAndSkillRegistrations(Ljava/lang/String;Ljava/util/List;)Lcom/soklet/McpSkillGroup;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#getKey()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#getSkillRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillGroup#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillListContext#getCursor()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillListContext#getInitialSkillRegistrations()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillListContext#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillListHandler#handle(Lcom/soklet/McpRequestContext;Lcom/soklet/McpSkillListContext;Lcom/soklet/McpInvocationFeatures;)Lcom/soklet/McpSkillPage;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#builder()Lcom/soklet/McpSkillPage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#getCacheTimeToLiveOverride()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#getMetadata()Lcom/soklet/McpJsonObject;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#getNextCursor()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#getSkillRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage$Builder#build()Lcom/soklet/McpSkillPage;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage$Builder#cacheTimeToLiveOverride(Ljava/time/Duration;)Lcom/soklet/McpSkillPage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpSkillPage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage$Builder#nextCursor(Ljava/lang/String;)Lcom/soklet/McpSkillPage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillPage$Builder#skillRegistrations(Ljava/util/List;)Lcom/soklet/McpSkillPage$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#getCachePolicy()Lcom/soklet/McpCachePolicy;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#getLocale()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#getResources()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#getSkillBundle()Lcom/soklet/McpSkillBundle;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#getUri()Ljava/net/URI;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration#withUriAndSkillBundle(Ljava/net/URI;Lcom/soklet/McpSkillBundle;)Lcom/soklet/McpSkillRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Builder#build()Lcom/soklet/McpSkillRegistration;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Builder#cachePolicy(Lcom/soklet/McpCachePolicy;)Lcom/soklet/McpSkillRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Builder#locale(Ljava/util/Locale;)Lcom/soklet/McpSkillRegistration$Builder;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#getDigest()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#getSizeInBytes()Ljava/lang/Long;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#getUri()Ljava/net/URI;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#hashCode()I"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillRegistration$Resource#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillVariantSelectionContext#getLanguageRanges()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillVariantSelectionContext#getSkillGroupKey()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillVariantSelectionContext#getSkillRegistrations()Ljava/util/List;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillVariantSelectionContext#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-4",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSkillVariantSelector#select(Lcom/soklet/McpRequestContext;Lcom/soklet/McpSkillVariantSelectionContext;Lcom/soklet/McpInvocationFeatures;)Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpProtectionKeyringManager"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#activateStagedKey(Ljava/lang/String;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#getKeyringSnapshot()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#getProtectionMode()Lcom/soklet/McpProtectionMode;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#removeVerificationKey(Ljava/lang/String;)Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#rotateActiveKey(Lcom/soklet/McpProtectionKey;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpProtectionKeyringManager#stageVerificationKey(Lcom/soklet/McpProtectionKey;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "C:com/soklet/McpProtectionControl"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#activateStagedKey(Ljava/lang/String;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#getKeyringSnapshot()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#getProtectionMode()Lcom/soklet/McpProtectionMode;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#removeVerificationKey(Ljava/lang/String;)Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#rotateActiveKey(Lcom/soklet/McpProtectionKey;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpProtectionControl#stageVerificationKey(Lcom/soklet/McpProtectionKey;)V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorization"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorization$Allowed"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorization$Allowed$Builder"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorization$Denied"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorizationContext"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionAuthorizer"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionEvent$PromptsListChanged"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionEvent$ToolsListChanged"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpSubscriptionReconciler"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpSubscriptionNotificationType#PROMPTS_LIST_CHANGED:Lcom/soklet/McpSubscriptionNotificationType;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpSubscriptionNotificationType#TOOLS_LIST_CHANGED:Lcom/soklet/McpSubscriptionNotificationType;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization#deniedInstance()Lcom/soklet/McpSubscriptionAuthorization$Denied;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#fromValidUntil(Ljava/time/Instant;)Lcom/soklet/McpSubscriptionAuthorization$Allowed;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#getApplicationContext()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#getValidUntil()Ljava/time/Instant;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#hashCode()I"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed#withValidUntil(Ljava/time/Instant;)Lcom/soklet/McpSubscriptionAuthorization$Allowed$Builder;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed$Builder#applicationContext(Ljava/lang/Object;)Lcom/soklet/McpSubscriptionAuthorization$Allowed$Builder;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Allowed$Builder#build()Lcom/soklet/McpSubscriptionAuthorization$Allowed;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Denied#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Denied#hashCode()I"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorization$Denied#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getApplicationContext()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getDeadline()Ljava/time/Instant;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getInitialRequestContext()Lcom/soklet/McpRequestContext;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getPreviousValidUntil()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getResourceSubscriptionUris()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#getTaskIds()Ljava/util/Set;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#isPromptsListChangedIncluded()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#isResourcesListChangedIncluded()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizationContext#isToolsListChangedIncluded()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizer#authorize(Lcom/soklet/McpSubscriptionAuthorizationContext;Lcom/soklet/McpInvocationFeatures;)Lcom/soklet/McpSubscriptionAuthorization;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionAuthorizer#denyAllInstance()Lcom/soklet/McpSubscriptionAuthorizer;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent#promptsListChanged()Lcom/soklet/McpSubscriptionEvent$PromptsListChanged;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent#toolsListChanged()Lcom/soklet/McpSubscriptionEvent$ToolsListChanged;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$PromptsListChanged#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$PromptsListChanged#hashCode()I"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$PromptsListChanged#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$ToolsListChanged#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$ToolsListChanged#hashCode()I"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEvent$ToolsListChanged#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEventPublisher#publishPromptsListChanged()V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionEventPublisher#publishToolsListChanged()V"
+    },
+    {
+      "partition": "phase-5",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpSubscriptionReconciler#reconcileSubscriptions()V"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpLocalizationCatalogInvalidator"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpTraceCorrelationKeyManager"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpLocalizationCatalogInvalidator#invalidateCatalogs()V"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpLocalizationCatalogInvalidator#isEnabled()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTraceCorrelationKeyManager#getActiveKeyId()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTraceCorrelationKeyManager#getFingerprint()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTraceCorrelationKeyManager#isEnabled()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTraceCorrelationKeyManager#rotateActiveKey(Lcom/soklet/McpTraceCorrelationKey;)V"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "C:com/soklet/McpLocalizationControl"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "C:com/soklet/McpTraceCorrelationControl"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpLocalizationControl#invalidateCatalogs()V"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpLocalizationControl#isEnabled()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTraceCorrelationControl#getActiveKeyId()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTraceCorrelationControl#getFingerprint()Ljava/util/Optional;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTraceCorrelationControl#isEnabled()Ljava/lang/Boolean;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTraceCorrelationControl#rotateActiveKey(Lcom/soklet/McpTraceCorrelationKey;)V"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpMetricsEvent$SubscriptionMaintenance"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#CAPACITY_REJECTED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#COALESCED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#DENIED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#FAILED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#STALE_RESULT_DISCARDED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#SUCCEEDED:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#TIMED_OUT:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work#AUTHORIZATION:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work#CATALOG_PROJECTION:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work#RECONCILIATION:Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpStreamTerminationReason#SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED:Lcom/soklet/McpStreamTerminationReason;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpStreamTerminationReason#SUBSCRIPTION_AUTHORIZATION_DENIED:Lcom/soklet/McpStreamTerminationReason;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpStreamTerminationReason#SUBSCRIPTION_AUTHORIZATION_EXPIRED:Lcom/soklet/McpStreamTerminationReason;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "F:com/soklet/McpStreamTerminationReason#SUBSCRIPTION_RECONCILIATION_FAILED:Lcom/soklet/McpStreamTerminationReason;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent#subscriptionMaintenance(Ljava/lang/String;Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;)Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#equals(Ljava/lang/Object;)Z"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#getEndpointPath()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#getOutcome()Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#getWork()Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#hashCode()I"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance#toString()Ljava/lang/String;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#valueOf(Ljava/lang/String;)Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome#values()[Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Outcome;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work#valueOf(Ljava/lang/String;)Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P1b",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpMetricsEvent$SubscriptionMaintenance$Work#values()[Lcom/soklet/McpMetricsEvent$SubscriptionMaintenance$Work;"
+    },
+    {
+      "partition": "phase-6",
+      "classification": "P4",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpLocalizationRequest#getSkillListCursor()Ljava/util/Optional;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "C:com/soklet/McpTaskCreationContext"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpInMemoryTaskManager#createTask(Lcom/soklet/McpTaskCreationContext;)Lcom/soklet/McpTask;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTaskCreationContext#getRequestContext()Lcom/soklet/McpRequestContext;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "currentOnly",
+      "id": "M:com/soklet/McpTaskCreationContext#getTaskOrigin()Lcom/soklet/McpTaskOrigin;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "C:com/soklet/McpTaskControl"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpInMemoryTaskManager#createTask(Lcom/soklet/McpTaskControl;)Lcom/soklet/McpTask;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTaskControl#getRequestContext()Lcom/soklet/McpRequestContext;"
+    },
+    {
+      "partition": "provisional",
+      "classification": "N0",
+      "state": "reviewedOnly",
+      "id": "M:com/soklet/McpTaskControl#getTaskOrigin()Lcom/soklet/McpTaskOrigin;"
+    }
+  ]
+}

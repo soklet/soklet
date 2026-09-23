@@ -197,6 +197,12 @@ public interface HttpServer {
 		@Nullable
 		Supplier<@NonNull ExecutorService> streamingExecutorServiceSupplier;
 		@Nullable
+		Integer streamingLifecycleCapacity;
+		@Nullable
+		Integer streamingCallbackConcurrency;
+		@Nullable
+		Duration streamingCleanupTimeout;
+		@Nullable
 		Integer streamingQueueCapacityInBytes;
 		@Nullable
 		Integer streamingChunkSizeInBytes;
@@ -574,6 +580,13 @@ public interface HttpServer {
 		 * effective event-loop concurrency when virtual threads are available and four
 		 * times it otherwise, with a minimum of one; its task queue holds 64 times
 		 * that concurrency, also with a minimum of one.
+		 * <p>
+		 * The executor must dispatch tasks asynchronously and reject unavailable work
+		 * with {@link java.util.concurrent.RejectedExecutionException}. Running a task
+		 * inline, including through a caller-runs rejection policy, is rejected before
+		 * invoking the streaming producer. Soklet submits a framework execution envelope
+		 * before committing streaming headers; application production waits for transport
+		 * activation. Admission or executor rejection yields a failsafe {@code 503} response.
 		 *
 		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
 		 * @return this builder
@@ -583,6 +596,65 @@ public interface HttpServer {
 				@Nullable Supplier<@NonNull ExecutorService>
 						streamingExecutorServiceSupplier) {
 			this.streamingExecutorServiceSupplier = streamingExecutorServiceSupplier;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum number of admitted streaming response lifetimes.
+		 * <p>
+		 * A lifetime includes production, transport delivery, and outstanding managed cleanup or callbacks.
+		 * A cleanup deadline does not release its slot while physical work remains. Exhausted admission yields
+		 * a failsafe {@code 503} response before streaming headers are committed or the producer is invoked.
+		 * Passing {@code null} restores the built-in default of 256.
+		 * <p>
+		 * At {@link #build()}, the effective capacity must be between 1 and {@code Integer.MAX_VALUE / 2}, inclusive,
+		 * and must be at least the effective {@link #streamingCallbackConcurrency(Integer) callback concurrency}.
+		 *
+		 * @param streamingLifecycleCapacity the lifecycle capacity, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingLifecycleCapacity(@Nullable Integer streamingLifecycleCapacity) {
+			this.streamingLifecycleCapacity = streamingLifecycleCapacity;
+			return this;
+		}
+
+		/**
+		 * Sets the worker concurrency for streaming cancelation and termination callbacks.
+		 * <p>
+		 * These workers are separate from response producers and transport event loops. Normal resource finalization
+		 * still runs on the producer thread. Passing {@code null} restores the built-in default of four workers.
+		 * <p>
+		 * At {@link #build()}, the effective concurrency must be positive and no greater than the effective
+		 * {@link #streamingLifecycleCapacity(Integer) lifecycle capacity}. When configuring a capacity below four,
+		 * also configure a callback concurrency that fits that capacity.
+		 *
+		 * @param streamingCallbackConcurrency the callback concurrency, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingCallbackConcurrency(@Nullable Integer streamingCallbackConcurrency) {
+			this.streamingCallbackConcurrency = streamingCallbackConcurrency;
+			return this;
+		}
+
+		/**
+		 * Sets the finite timeout for streaming cleanup supervision.
+		 * <p>
+		 * Passing {@code null} restores the built-in default of five seconds. At {@link #build()}, the effective
+		 * duration must be positive and representable in nanoseconds; zero does not disable supervision.
+		 * No ordering relative to response or shutdown timeouts is required.
+		 * <p>
+		 * Expiry bounds the supervisor's wait and permits failure reporting; it cannot make blocking application
+		 * cleanup return. Outstanding physical work remains accounted for and retains its lifecycle slot until it
+		 * exits. Cleanup supervision does not replace the response or idle timeout during healthy transport delivery.
+		 *
+		 * @param streamingCleanupTimeout the cleanup timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingCleanupTimeout(@Nullable Duration streamingCleanupTimeout) {
+			this.streamingCleanupTimeout = streamingCleanupTimeout;
 			return this;
 		}
 
@@ -660,6 +732,7 @@ public interface HttpServer {
 		 * Builds one stopped, one-shot HTTP transport.
 		 *
 		 * @return configured HTTP server
+		 * @throws IllegalArgumentException if the effective configuration is invalid
 		 */
 		@NonNull
 		public HttpServer build() {

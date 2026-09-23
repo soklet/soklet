@@ -11,6 +11,13 @@ import java.util.function.Consumer;
 @FunctionalInterface
 public interface Handler {
 
+    /** How a committed streaming response treats client input while monitoring for disconnects. */
+    enum StreamingResponseInputPolicy {
+        NONE,
+        DISCARD,
+        RETAIN
+    }
+
     /**
      * Handle HTTP request.
      * This method is called on the event loop thread. It must be non-blocking!
@@ -84,6 +91,23 @@ public interface Handler {
      */
     default boolean monitorClientDisconnectsDuringStreamingResponse(MicrohttpRequest request) {
         return false;
+    }
+
+    /**
+     * Selects post-commit disconnect monitoring for a streaming response.
+     * {@link StreamingResponseInputPolicy#DISCARD} retains the existing long-lived protocol behavior:
+     * client bytes are bounded and discarded. {@link StreamingResponseInputPolicy#RETAIN}
+     * instead retains bounded bytes for ordinary HTTP pipelining after the response completes. In both
+     * modes, an input half-close leaves the response writable. A silent network loss with no socket
+     * signal still requires an application timeout or heartbeat for detection.
+     *
+     * <p>The default preserves the behavior of handlers that already override
+     * {@link #monitorClientDisconnectsDuringStreamingResponse(MicrohttpRequest)}.</p>
+     */
+    default StreamingResponseInputPolicy streamingResponseInputPolicy(MicrohttpRequest request) {
+        return monitorClientDisconnectsDuringStreamingResponse(request)
+                ? StreamingResponseInputPolicy.DISCARD
+                : StreamingResponseInputPolicy.NONE;
     }
 
 }

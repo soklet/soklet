@@ -124,6 +124,37 @@ changes; source completeness and strict semantic equality checks remain active.
 The relevant behavioral tests, inventory verification, and negative self-tests
 passed as development checks. They are not immutable-candidate receipts.
 
+### September 22 streaming and source-inventory reconciliation
+
+The next current-only review accounts for the streaming lifecycle surface and
+Skills source that was already present but missing from these inventories.
+It preserves the previous review above, all historical approval hashes, the
+matrix row universe and release dispositions.
+
+| Current inventory | Previous semantic SHA-256 | New semantic SHA-256 |
+| --- | --- | --- |
+| Finite bounds | `8b415ad021c9ecad2589ce9facb86ced0133847132eb25d3da414b290783f0e0` | `6a250750ad2d99c61bf837bc039138179f8c119870471b15af268fd9d5757232` |
+| Privacy boundary | `a71344faab2b73538d496d2104989de9533c90d54fe37bf507061f5607e920f4` | `7d0754025f0b69c3f3d501a68176d4805906b2b4d9144bb9e8dcad4f4e758b00` |
+
+The finite review adds four Skills contracts covering eleven source candidates:
+bundle/file/path limits, the shared YAML budget profile, resource-URI projection
+and canonical file-owner fan-in. Existing limits, enforcement, exclusions and
+matcher rules remain unchanged. The new `SKILLS` category requires these
+contracts to remain represented.
+
+The privacy review classifies 416 additions and removes 65 obsolete occurrences.
+Streaming contributes 193 additions and 52 removals; the remaining drift already
+existed at the exact starting commit. Exact application carriers and fuzz seeds
+remain distinct from fixed/redacted renderers and bounded numeric metadata.
+Fourteen new exclusions identify exact non-telemetry receivers; they do not
+expand generic matcher exceptions. The framework cleanup diagnostic has a new
+secret-seeding canary while exact application failure delivery remains intact.
+
+See the [slice report](../docs/streaming-api-milestone-6b.md) for source-specific
+attribution, validator results, test evidence and remaining release conditions.
+These semantic anchors are current development review records; they neither
+refreeze the independent MCP API nor accept an immutable release candidate.
+
 ## Required owner disposition record
 
 No historical-source retention-gap acceptance is asserted by this document.

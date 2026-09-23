@@ -88,15 +88,37 @@ The harness rotates scenario order on each iteration, prints per-iteration reque
 
 Useful properties:
 
-- `soklet.e2e.scenarios`: comma-separated list of `plaintext`, `json`, and `post-json`; defaults to all three
+- `soklet.e2e.scenarios`: comma-separated list of `plaintext`, `json`, `post-json`, `streaming`, `streaming-bulk`, and `streaming-paced`; defaults to the first three. The optional streaming scenarios use chunked keep-alive responses: `streaming` writes 13 bytes once, `streaming-bulk` writes 256 KiB in 64 writes of 4 KiB, and `streaming-paced` writes 32 KiB in 32 writes of 1 KiB, requesting a 1 ms sleep before each write. Actual pacing includes JVM/OS scheduling delay.
+- The same selector also accepts `output-native`, `output-scalar`, and `output-mixed`. Each produces the same 64 KiB Unicode body from pre-encoded UTF-8 bytes: eight native 8 KiB writes, 65,536 scalar view writes, or mixed scalar/slice/heap/direct/read-only buffer/view writes. Exact body validation applies to all three.
 - `soklet.e2e.warmupSeconds`: warmup seconds per scenario per iteration; defaults to `3`
 - `soklet.e2e.durationSeconds`: measurement seconds per scenario per iteration; defaults to `10`
 - `soklet.e2e.iterations`: repeated measurement iterations with rotated scenario order; defaults to `3`
 - `soklet.e2e.clients`: concurrent keep-alive client sockets; defaults to `availableProcessors * 4`
 - `soklet.e2e.serverConcurrency`: embedded HTTP server event-loop concurrency; defaults to `availableProcessors`
 - `soklet.e2e.handlerConcurrency`: request handler concurrency; defaults to `serverConcurrency * 16`
+- `soklet.e2e.socketPendingConnectionLimit`: listen backlog; defaults to `0` (the OS default). Size explicitly for bursts of simultaneous client connections, for example `256` with 128 clients.
 - `soklet.e2e.metrics`: `true` to include the default metrics collector; defaults to `false`
 - `soklet.e2e.output`: JSON output path; defaults to `target/e2e-results.json`
+- `soklet.e2e.requireAllocationMetrics`: fail qualification if the JVM's total thread-allocation counter is unavailable; defaults to `false`. JSON records allocated bytes per successful request and validated body byte, plus GC collection count/time. These are whole-JVM measurements including colocated clients, server work, observer tails, and measurement bookkeeping; they are not server-only allocation figures. Unavailable counters remain `null`.
+
+Only responses with the expected status and exact complete body count as successful
+requests. JSON also records workload sizes, requested pacing, validated byte totals,
+and body throughput. Validation runs on the measured client path; these are
+end-to-end measurements, not isolated producer throughput. Eight fixed error
+categories retain counts and one bounded example each, including the connection,
+request-write, or response-read phase; response errors remain excluded from
+successful throughput. See the
+[streaming lifecycle qualification](docs/streaming-lifecycle-qualification.md)
+for the baseline comparison and memory-probe commands.
+
+The current harness uses the one-argument streaming writer API. It cannot run
+against a historical two-argument runtime by swapping only the runtime classpath;
+historical comparisons require a compatible harness for each ABI. The current
+equal-body output scenarios compare API paths within the same runtime.
+The [HTTP streaming API qualification](docs/streaming-api-qualification-2026-09-22.md)
+preserves the earlier output-path throughput/allocation and full-capacity heap
+results. Its UTF-8 helper measurements predate removal of `writeUtf8`; rerun the
+remaining workloads before treating those results as current qualification.
 
 ## Startup And Memory Footprint Run
 
@@ -179,3 +201,14 @@ Public release baselines should be produced only from a stable managed runner, s
 Soklet 3.5.0 introduced the local benchmark harnesses. Soklet 4.0.0 adds the
 candidate-bound MCP comparison and its reviewed evidence path; neither release
 claims public benchmark numbers without results from the stable managed runner.
+
+## SSE connection-lifetime qualification
+
+The standalone [SSE connection harness](docs/sse-connection-qualification.md)
+checks paced delivery to 256 live clients, overload rejection, subscription churn,
+and physical teardown. The separate [SSE heap probe](docs/sse-lifecycle-footprint-probe.md)
+measures idle connections, distinct full queues, retained terminated runtimes, and
+released references. Both compile with Java 17 and require Java 21 or newer for
+live SSE. Their standalone commands avoid the recorded MCP benchmark-module
+compile blocker. See the [milestone 5b report](docs/streaming-api-milestone-5b.md)
+for the tested workloads, selected defaults, raw evidence, and limitations.

@@ -30,10 +30,10 @@ const MAXIMUM_ROLE_BYTES = 128 * 1024 * 1024;
 const APPROVED_REGISTRY_SHA256 =
   '9276535363b871dcd73e1e20d0e65a5885e70b0b6d0e253b64b175af2db8a51a';
 // Current pins include the source-compatible nightly-profile correction and
-// the owner-requested scanner refresh and exact current filter. Keep the U7 approval identity
+// the owner-requested scanner refresh and narrowed current filter. Keep the U7 approval identity
 // separate: refreshing these pins is not a new scan result or release approval.
 const CURRENT_REGISTRY_SHA256 =
-  '7b01562857fb6d02885997bbe075a08c87c0c2a9fff153e3717ac597ad1baec3';
+  '637d14c3559366a9b215ea6241e6ff216399810d0adc9279e14c2f5771b293a3';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',

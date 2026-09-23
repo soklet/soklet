@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CallbackRegistration;
+import com.soklet.McpStreamTerminationReason;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import org.junit.jupiter.api.Assertions;
@@ -27,11 +29,24 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @NotThreadSafe
 public class McpProgressAndCancelationRuntimeTests {
+	@Test
+	public void cleanup_timeout_maps_to_internal_error_without_reclassifying_request_deadlines() {
+		Assertions.assertEquals(McpStreamTerminationReason.INTERNAL_ERROR,
+				McpServerRuntimeBridge.toPublicTerminationReason(StreamTerminationReason.CLEANUP_TIMEOUT));
+		Assertions.assertEquals(McpStreamTerminationReason.DEADLINE_EXCEEDED,
+				McpServerRuntimeBridge.toPublicTerminationReason(StreamTerminationReason.RESPONSE_TIMEOUT));
+	}
+
 	@Test
 	public void every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause()
 			throws Exception {
@@ -69,15 +84,14 @@ public class McpProgressAndCancelationRuntimeTests {
 	}
 
 	@Test
-	public void cancelation_token_fixes_first_reason_and_contains_callbacks()
-			throws Exception {
+	public void cancelation_token_fixes_first_reason_and_contains_callbacks() {
 		McpApplicationCancellationState cancellation =
 				new McpApplicationCancellationState();
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				cancellation.cancel(StreamTerminationReason.COMPLETED));
 		AtomicInteger callbacks = new AtomicInteger();
-		AutoCloseable removed = cancellation.onCancel(() ->
-				Assertions.fail("A removed callback must not run."));
+		AtomicInteger removedCallbacks = new AtomicInteger();
+		CallbackRegistration removed = cancellation.onCancel(removedCallbacks::incrementAndGet);
 		removed.close();
 		cancellation.onCancel(() -> {
 			throw new IllegalStateException("contained");
@@ -95,6 +109,7 @@ public class McpProgressAndCancelationRuntimeTests {
 		Assertions.assertTrue(cancellation.getCancelationCause().isEmpty());
 		Assertions.assertEquals(1, callbacks.get(),
 				"One callback failure must not prevent later callbacks.");
+		Assertions.assertEquals(0, removedCallbacks.get());
 
 		cancellation.onCancel(callbacks::incrementAndGet);
 		Assertions.assertEquals(2, callbacks.get(),
@@ -102,8 +117,7 @@ public class McpProgressAndCancelationRuntimeTests {
 	}
 
 	@Test
-	public void normal_completion_releases_callbacks_without_canceling_the_token()
-			throws Exception {
+	public void normal_completion_releases_callbacks_without_canceling_the_token() {
 		McpApplicationCancellationState cancellation =
 				new McpApplicationCancellationState();
 		AtomicInteger callbacks = new AtomicInteger();
@@ -117,13 +131,125 @@ public class McpProgressAndCancelationRuntimeTests {
 		Assertions.assertFalse(cancellation.isCanceled());
 		Assertions.assertTrue(cancellation.getCancelationReason().isEmpty());
 		Assertions.assertEquals(0, callbacks.get());
-		AutoCloseable lateRegistration = cancellation.onCancel(
+		CallbackRegistration lateRegistration = cancellation.onCancel(
 				callbacks::incrementAndGet);
 		lateRegistration.close();
 		Assertions.assertEquals(0, callbacks.get());
 		Assertions.assertFalse(cancellation.cancel(
 				StreamTerminationReason.CLIENT_DISCONNECTED));
 		Assertions.assertEquals(0, callbacks.get());
+	}
+
+	@Test
+	public void duplicate_callbacks_have_independent_unchecked_registrations() {
+		McpApplicationCancellationState cancellation =
+				new McpApplicationCancellationState();
+		AtomicInteger callbacks = new AtomicInteger();
+		Runnable callback = callbacks::incrementAndGet;
+		CallbackRegistration removed = cancellation.onCancel(callback);
+		try (CallbackRegistration retained = cancellation.onCancel(callback)) {
+			Assertions.assertNotSame(removed, retained);
+			removed.close();
+			removed.close();
+			Assertions.assertTrue(cancellation.cancel(StreamTerminationReason.CLIENT_DISCONNECTED));
+			Assertions.assertEquals(1, callbacks.get(),
+					"Removing one registration must not remove the same callback's other entry.");
+		}
+		Assertions.assertFalse(cancellation.cancel(StreamTerminationReason.SERVER_STOPPING));
+		Assertions.assertEquals(1, callbacks.get());
+		try (CallbackRegistration late = cancellation.onCancel(callback)) {
+			Assertions.assertEquals(2, callbacks.get(),
+					"A late registration on the released canceled token is delivered once.");
+		}
+		Assertions.assertEquals(2, callbacks.get());
+	}
+
+	@Test
+	public void fixing_cancelation_reason_keeps_callbacks_deferred_and_removable() {
+		McpApplicationCancellationState cancellation =
+				new McpApplicationCancellationState();
+		AtomicInteger callbacks = new AtomicInteger();
+		cancellation.onCancel(callbacks::incrementAndGet);
+		Assertions.assertTrue(cancellation.fixReason(StreamTerminationReason.SERVER_STOPPING));
+		Assertions.assertTrue(cancellation.isCanceled());
+		Assertions.assertEquals(0, callbacks.get());
+
+		CallbackRegistration deferredRegistration = cancellation.onCancel(callbacks::incrementAndGet);
+		deferredRegistration.close();
+		Assertions.assertEquals(0, callbacks.get(),
+				"Registering after reason reservation must not bypass MCP's delivery gate.");
+		Assertions.assertFalse(cancellation.fixReason(StreamTerminationReason.RESPONSE_TIMEOUT));
+		cancellation.releaseCallbacks();
+		cancellation.releaseCallbacks();
+		Assertions.assertEquals(1, callbacks.get());
+		Assertions.assertEquals(Optional.of(StreamTerminationReason.SERVER_STOPPING),
+				cancellation.getCancelationReason());
+	}
+
+	@Test
+	public void removal_after_batch_release_suppresses_unclaimed_callback_without_waiting_for_claimed_callback()
+			throws Exception {
+		McpApplicationCancellationState cancellation =
+				new McpApplicationCancellationState();
+		AtomicInteger callbacks = new AtomicInteger();
+		AtomicInteger firstCallbackIndex = new AtomicInteger(-1);
+		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+		CountDownLatch callbackEntered = new CountDownLatch(1);
+		CountDownLatch releaseCallback = new CountDownLatch(1);
+		List<CallbackRegistration> registrations = new ArrayList<>();
+		for (int index = 0; index < 2; index++) {
+			int callbackIndex = index;
+			registrations.add(cancellation.onCancel(() -> {
+				callbacks.incrementAndGet();
+				firstCallbackIndex.compareAndSet(-1, callbackIndex);
+				callbackEntered.countDown();
+				try {
+					Assertions.assertTrue(releaseCallback.await(5, TimeUnit.SECONDS),
+							"The test must release the claimed callback.");
+				} catch (Throwable throwable) {
+					callbackFailure.compareAndSet(null, throwable);
+				}
+			}));
+		}
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			Assertions.assertTrue(cancellation.fixReason(StreamTerminationReason.CLIENT_DISCONNECTED));
+			Future<?> delivery = executor.submit(cancellation::releaseCallbacks);
+			Assertions.assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+			int claimedIndex = firstCallbackIndex.get();
+			registrations.get(1 - claimedIndex).close();
+			registrations.get(claimedIndex).close();
+			Assertions.assertEquals(1L, releaseCallback.getCount(),
+					"Registration removal must return while the claimed callback is still blocked.");
+			releaseCallback.countDown();
+			delivery.get(5, TimeUnit.SECONDS);
+			Assertions.assertNull(callbackFailure.get());
+			Assertions.assertEquals(1, callbacks.get(),
+					"The unclaimed callback remains removable after the batch was detached.");
+		} finally {
+			releaseCallback.countDown();
+			for (CallbackRegistration registration : registrations)
+				registration.close();
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void discarding_callbacks_preserves_the_fixed_reason_without_delivering_pending_entries() {
+		McpApplicationCancellationState cancellation =
+				new McpApplicationCancellationState();
+		AtomicInteger callbacks = new AtomicInteger();
+		CallbackRegistration registration = cancellation.onCancel(callbacks::incrementAndGet);
+		Assertions.assertTrue(cancellation.fixReason(StreamTerminationReason.SERVER_STOPPING));
+		cancellation.discardCallbacks();
+		cancellation.releaseCallbacks();
+		registration.close();
+		Assertions.assertEquals(0, callbacks.get());
+		Assertions.assertTrue(cancellation.isCanceled());
+		Assertions.assertEquals(Optional.of(StreamTerminationReason.SERVER_STOPPING),
+				cancellation.getCancelationReason());
+		Assertions.assertTrue(cancellation.getCancelationCause().isEmpty());
 	}
 
 	@Test

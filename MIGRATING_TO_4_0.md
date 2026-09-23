@@ -84,7 +84,7 @@ The remaining 4.0 naming cleanup removes the old names without aliases:
 
 | Previous API | Replacement |
 | --- | --- |
-| `MarshaledResponse.stream(...)`, `getStream()`, `withoutStream()` | `streamingResponseBody(...)`, `getStreamingResponseBody()`, `withoutStreamingResponseBody()` (builder/copier where applicable) |
+| `MarshaledResponse` descriptor setter `stream(StreamingResponseBody)`, `getStream()`, `withoutStream()` | `streamingResponseBody(...)`, `getStreamingResponseBody()`, `withoutStreamingResponseBody()` (builder/copier where applicable); the new `stream(StreamingResponseWriter)` convenience accepts a writer callback |
 | HTTP/SSE attachment `getTerminationSignal()` | `getTransportTerminationSignal()` |
 | `ResourcePathDeclaration.Component.with(...)` | `fromValueAndType(...)` |
 | Servlet response `fromRequest(HttpServletRequest)` | `fromHttpServletRequest(HttpServletRequest)`; the Soklet `Request` + `ServletContext` overload stays `fromRequest(...)` |
@@ -104,6 +104,208 @@ empty; null elements fail atomically. Replace `.addTool(a).addTool(b)` with
 Loops should collect values first. Required resource-output contents and
 subscription notification sets remain nonempty. Resource-descriptor/link
 `addIcon(...)` and `McpJsonArray.Builder.add(...)` are unchanged.
+
+### HTTP streaming callbacks and sources
+
+`StreamingResponseWriter.writeTo` now takes one `ResponseStream` argument;
+the separate public `StreamingResponseContext` is removed. Move request,
+deadline, and idle-timeout access to `responseStream.getRequest()`,
+`getDeadline()`, and `getIdleTimeout()`. Use
+`responseStream.getCancelationToken()` for cancelation checks and callback
+registration. `CancelationToken.onCancel(...)` returns `CallbackRegistration`,
+whose `close()` removes an unclaimed callback without checked exceptions.
+
+Use `.stream(responseStream -> { ... })` on `MarshaledResponse.Builder` or
+`Copier` to register a writer without wrapping it in `StreamingResponseBody`.
+The callback is non-null and remains lazy. This method does not remove a
+known-length body: call `withoutBody()` when switching body modes. The existing
+`streamingResponseBody(...)` descriptor setter remains, including its `null`
+clearing behavior; `withoutStreamingResponseBody()` also removes the stream.
+Finish construction with builder `build()` or copier `finish()`.
+
+Input-stream and reader descriptors now accept `StreamResourceFactory`, whose
+`open()` can throw checked exceptions, in place of `Supplier`. Rename getter
+calls to `getInputStreamFactory()` and `getReaderFactory()`, and invoke the
+returned factory with `open()`. Acquisition remains lazy; each execution must
+receive its own resource, and the provider must support close racing a blocked
+read. Buffer, charset, and encoder-error settings are unchanged.
+
+`ResponseStream` now manages resources with `open(factory)`, `open(factory, aborter)`,
+`own(resource)`, and both `using` overloads. `open(factory)` requires a provider
+whose close can safely abort concurrent consumption; close is attempted once.
+A separate aborter and final close are independent operations, each attempted
+once, so `open(factory, Resource::close)` can close twice. `own` finalizes only
+on the producer thread. Normal finalization of a `using` block closes all resources
+acquired or adopted inside it in reverse order before returning. Cancelation callbacks
+may close resources earlier and have no guaranteed global order. Do not manually
+close a resource after transferring ownership.
+
+Native output and resource operations now enforce the producer thread and
+lifetime. Cleanup can write trailing bytes on success; afterward, retained native
+write/flush calls fail with `IllegalStateException`. A new `own(resource)` call
+outside the active producer lifetime rejects before transfer, leaving cleanup
+to the caller. Resources returned by acquisitions that began before cancelation
+are still disposed and remain accounted for until cleanup exits. A caught output
+failure stays terminal. An unclassified producer interruption is
+`APPLICATION_CANCELED`, preserving an already-winning specific reason when present.
+
+Use `write(bytes, offset, length)` for a byte-array slice,
+`write(string.getBytes(StandardCharsets.UTF_8))` for a short UTF-8 text chunk,
+and `asOutputStream()` with a `Writer` for sustained text or other Java I/O. The slice's
+offset and length use non-null `Integer` parameters, matching Soklet's public
+conventions. Bounds are validated before accepting bytes or draining prior staged
+output, and caller `ByteBuffer` position/limit remain unchanged even on failure.
+There is no text-encoding shorthand on `ResponseStream`; the application chooses
+the charset. `String.getBytes(StandardCharsets.UTF_8)` replaces malformed
+surrogate sequences with `?`.
+
+All output views share a bounded, lazily allocated scalar-write buffer. Older
+staged bytes drain before native/bulk writes, preserving mixed-call order.
+Closing a view flushes shared staging and closes that view even if flush fails;
+other views and native output remain usable while the response permits writes.
+Repeated close on the producer thread is a no-op. A view does not own the socket
+or finish the HTTP response. Transfer an encoder or `Writer` with `own(...)` if
+Soklet should finalize it after the producer callback returns. Successful managed
+cleanup precedes the final staging flush; failed production discards staging.
+
+Closed or expired view writes/flushes throw `IOException`; native operations
+outside their lifetime throw `IllegalStateException`. Both remain confined to
+the producer thread. A view translates a framework output interruption to
+`InterruptedIOException`, retaining its cause and restoring the interrupt flag.
+Its `bytesTransferred` reports the prefix accepted by Soklet from that call,
+excluding earlier staged bytes; it is not a delivery acknowledgment. A typed
+cancelation already elected when interruption is handled takes precedence.
+`SocketTimeoutException` is not translated as a bridge interruption. I/O failure
+or interruption during an otherwise valid output operation stays terminal even
+when caught; do not retry partial writes. Argument, thread, and lifetime
+validation failures do not invalidate otherwise usable output.
+
+HTTP and simulated streams supervise cleanup with finite lifecycle accounting.
+Expiry can end the supervisor's wait and report `CLEANUP_TIMEOUT`; it does not
+move, retry, or forcibly stop an arbitrary `close()`, or free its lifecycle slot
+before physical exit. Simulation keeps producer execution synchronous and tracks
+its caller until it exits. Simulation termination observers run on bounded
+callback workers; the request caller waits for their delivery. An application
+that blocks its own producer or observer can still block that synchronous call;
+scoped shutdown records the outstanding work within its own deadline.
+
+Configure the built-in HTTP server's streaming lifecycle with:
+
+```java
+HttpServer httpServer = HttpServer.withPort(8080)
+    .streamingLifecycleCapacity(256)
+    .streamingCallbackConcurrency(4)
+    .streamingCleanupTimeout(Duration.ofSeconds(5))
+    .build();
+```
+
+These are also the defaults. All three setters accept `null` to restore the
+default and validate effective values at `build()`, independent of setter order.
+Capacity must be between 1 and `Integer.MAX_VALUE / 2`; callback concurrency must
+be positive and no greater than capacity. A capacity below four therefore also
+requires a smaller callback concurrency. Cleanup grace must be positive and
+representable in nanoseconds; zero does not disable supervision. Response and
+shutdown timeouts impose no construction-time ordering on cleanup grace.
+
+Admission includes outstanding cleanup and callbacks through physical exit, so
+cleanup expiry does not free a slot. Exhausted admission returns HTTP 503 before
+invoking the producer or committing streaming headers. Callback workers are
+separate from producer execution; normal managed finalization still runs on the
+producer thread.
+
+`SimulatorConfig.fromSokletConfig(...)`, `withSokletConfig(...)`, and the
+corresponding `SokletSimulator.run(...)` overload inherit these immutable values
+from a built-in HTTP server while creating fresh simulation state. Derivation
+does not start or otherwise change the source transport, which is not retained
+by that state. Deriving again
+from a simulator configuration preserves the values. A simulator created without
+a source, or derived from a custom HTTP transport, uses the defaults above.
+
+Publisher bodies share the same lifecycle accounting in HTTP and simulation.
+If `subscribe()` returns normally before delivering its first subscription,
+cancelation retains that pending acquisition until the subscription arrives and
+its once-only cancel attempt finishes. It receives no new demand after cancelation.
+A subscription that never arrives remains an overdue lifecycle obligation and
+consumes capacity; it does not require a waiting producer or callback worker.
+Shutdown reports this as outstanding stream/callback work. Successful production
+also waits for entered provider calls to return, including calls that synchronously
+publish completion before returning.
+
+A throwing `subscribe()` before the first subscription is a failed acquisition;
+the publisher owns cleanup of its partial resources and must not send later
+callbacks. Signals before the first subscription are protocol failures. A
+subscription offered after failed acquisition or completed lifetime is rejected
+before Soklet invokes its methods, leaving cleanup with the publisher. Late
+cleanup/provider failures use the existing bounded first-diagnostic policy and
+do not replace the original cancelation reason.
+
+### SSE client initialization and connection admission
+
+`SseHandshakeResult.Accepted.Builder.clientInitializer(...)` now accepts the
+standalone `SseClientInitializer`, whose
+`initialize(SseUnicaster sseUnicaster)` method can throw checked exceptions.
+The old `Consumer<SseUnicaster>` signature is removed without an overload or
+deprecated alias. Change stored callback types to `SseClientInitializer` and
+replace explicit `accept(...)` calls with `initialize(...)`. The accepted
+result's `getClientInitializer()` returns `Optional<SseClientInitializer>`;
+passing `null` to the builder still clears it.
+
+`SseUnicaster` remains the short-lived initializer's way to queue events or
+comments for this client. Run the initializer synchronously for bounded setup
+or finite catch-up, then return. Do not retain the unicaster or register it as
+an upstream event callback. Use `SseBroadcaster` for ongoing delivery to
+connected clients. The initializer's queued events are sent before broadcasts
+begin, but a successful unicast is queue acceptance, not a delivery receipt.
+Broadcasts published before this client joins the broadcaster are not buffered
+for it. Applications needing gap-free `Last-Event-ID` replay must coordinate
+their own replay-to-live handoff; the initializer guarantees ordering only.
+
+The initializer can throw a checked exception, for example when loading a
+catch-up page. Its events remain buffered until successful return. It cannot
+host an indefinite upstream loop. Queue overflow terminates with `BACKPRESSURE`
+even if application code catches the
+thrown `IllegalStateException`. An escaping initializer exception terminates
+with `PRODUCER_FAILED` unless another reason already won. After termination,
+unicast rejects; successful earlier queue acceptance does not guarantee client
+delivery.
+
+Configure SSE lifecycle supervision separately from its per-connection queue:
+
+```java
+SseServer sseServer = SseServer.withPort(8081)
+    .streamingLifecycleCapacity(256)
+    .connectionQueueCapacity(128)
+    .build();
+```
+
+Lifecycle capacity defaults to 256 and connection queue capacity separately
+defaults to 128 application writes. Passing `null` to the lifecycle-capacity
+setter restores its default; positive capacity is validated at `build()`.
+Exhausted lifecycle admission returns HTTP 503 before accepted handshake
+headers or initializer invocation.
+
+Lifecycle capacity is independent of the 8,192 default transport connection
+limit: the two defaults together admit at most 256 SSE lifetimes, including
+pending initialization. Applications needing more clients must raise lifecycle
+capacity and size their payload queues accordingly. Queue capacity counts
+events, not bytes; it is not a total memory bound.
+
+Derived simulators copy lifecycle capacity and connection queue capacity
+from a built-in SSE server into fresh state, without starting or changing the
+source transport. Re-derivation preserves them; default or custom source
+transports use the simulator defaults. `SseRequestResult.HandshakeAccepted`
+now implements `AutoCloseable` with unchecked, idempotent `close()`, which
+simulates `CLIENT_DISCONNECTED`. Simulator teardown terminates remaining
+connections with `SERVER_STOPPING`, even when no event/comment consumers were
+registered. The first outcome wins. Closing removes delivery registrations,
+rejects new consumers and writes, and retains any physically unfinished work.
+
+SSE shutdown now signals `SERVER_STOPPING` during quiesce and closes the
+connection immediately. Accepted events may be discarded; queue acceptance is
+not a delivery acknowledgment. The configured graceful and forced shutdown
+budgets still bound waiting for admitted initializer and connection work to
+exit. A blocked initializer appears as residual activity rather than extending
+the shutdown deadline.
 
 ### SSE broadcast callback counts
 
@@ -398,11 +600,13 @@ The built-in SSE server now hard-bounds client-initializer catch-up buffering
 with `SseServer.Builder.connectionQueueCapacity(...)`, using the same 128-write
 default as the active connection queue. An initializer may use all configured
 application slots; the optional framework verification heartbeat is accounted
-separately. Initializers that can replay more than the configured capacity must
+separately. Leave headroom for live broadcasts arriving before a catch-up page
+drains. Initializers that can replay more than the configured capacity must
 page or cap that work before accepting the handshake. Overflow throws
-`IllegalStateException`; if it escapes the initializer, Soklet closes the
-already-accepted connection and emits both an SSE log event and a
-transport-failure metric.
+`IllegalStateException` and terminates the already-accepted connection with
+`BACKPRESSURE`, even when caught by the initializer. See
+[SSE client initialization and connection admission](#sse-client-initialization-and-connection-admission)
+for the revised callback and admission contract.
 
 For accepted SSE handshakes, Soklet now ignores application-provided
 `Connection` and `Keep-Alive` headers and emits its canonical

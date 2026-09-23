@@ -8,6 +8,11 @@ import com.soklet.SokletConfig;
 import com.soklet.SokletStartupException;
 import com.soklet.SseServer;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -55,6 +60,8 @@ public final class ConsumerSmoke {
           .timeout(Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
       require(hello.statusCode() == 200 && hello.body().equals("consumer-ok"),
           "Generated HTTP route failed: " + hello.statusCode() + " " + hello.body());
+      get(client, httpPort, "/stream", "packaged-stream");
+      get(client, httpPort, "/source", "packaged-source");
       post(client, mcpPort, "server/discover", null, "", "2026-07-28");
       post(client, mcpPort, "tools/call", "catalog.search",
           "\"name\":\"catalog.search\",\"arguments\":{\"query\":\"sprocket\"},",
@@ -68,9 +75,29 @@ public final class ConsumerSmoke {
             HttpResponse.BodyHandlers.ofInputStream());
         try (var body = stream.body()) {
           require(stream.statusCode() == 200, "Generated SSE route failed: " + stream.statusCode());
+          CompletableFuture<Void> delivery = CompletableFuture.runAsync(() -> {
+            try {
+              BufferedReader input = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
+              String line;
+              do {
+                line = input.readLine();
+                require(line != null, "SSE ended before its initialization event");
+              } while (line.isEmpty() || line.startsWith(":"));
+              require(line.equals("data: packaged-sse") && "".equals(input.readLine()),
+                  "SSE event payload or framing changed");
+            } catch (java.io.IOException failure) {
+              throw new RuntimeException(failure);
+            }
+          });
+          delivery.get(5, TimeUnit.SECONDS);
+          require(ConsumerOwnership.initialized.await(5, TimeUnit.SECONDS), "SSE initializer did not finish setup");
+          require(soklet.shutdown().toCompletableFuture().get(10, TimeUnit.SECONDS).isComplete(),
+              "Packaged SSE shutdown left residual activity");
         }
       }
     }
+    require(ConsumerOwnership.sourceCloses.get() == 1 && ConsumerOwnership.inputCloses.get() == 1,
+        "Packaged HTTP resource/source cleanup was not exactly once");
     System.out.println("Consumer HTTP/MCP" + (supportsSse ? "/SSE" : "")
         + " packaged routing passed on Java " + Runtime.version().feature());
   }
@@ -129,6 +156,14 @@ public final class ConsumerSmoke {
     try (ServerSocket socket = new ServerSocket(port, 0, InetAddress.getByName("127.0.0.1"))) {
       require(socket.isBound(), "Port could not be rebound after failed startup: " + port);
     }
+  }
+
+  private static void get(HttpClient client, int port, String path, String expected) throws Exception {
+    HttpResponse<String> response = client.send(HttpRequest.newBuilder(
+        URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(5)).GET().build(),
+        HttpResponse.BodyHandlers.ofString());
+    require(response.statusCode() == 200 && response.body().equals(expected),
+        "Generated streaming route failed: " + path + " " + response.statusCode() + " " + response.body());
   }
 
   private static void post(HttpClient client, int port, String method, String name,

@@ -521,7 +521,7 @@ public class McpCrossFeatureSoakTests {
 					return McpCompleteResult.fromToolText(
 							"protected request state accepted");
 				})
-				.addInputRequestDeclarations(form)
+				.inputRequestDeclarations(List.of(form))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpToolRegistration<McpJsonObject> blockingTool = McpToolRegistration
@@ -617,13 +617,9 @@ public class McpCrossFeatureSoakTests {
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-mcp-soak", "4.0.0").build())
-				.addTool(progressTool)
-				.addTool(protectedTool)
-				.addTool(blockingTool)
-				.addTool(simulatorJsonTool)
-				.addTool(simulatorCaptureTool)
-				.addTool(simulatorResidualTool)
-				.addResource(resource)
+				.toolRegistrations(List.of(progressTool, protectedTool, blockingTool,
+						simulatorJsonTool, simulatorCaptureTool, simulatorResidualTool))
+				.resourceRegistrations(List.of(resource))
 				.subscriptionConfig(subscriptions)
 				.build();
 	}

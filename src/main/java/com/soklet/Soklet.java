@@ -18,11 +18,15 @@ package com.soklet;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
+import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
 
 import com.soklet.SseRequestResult.HandshakeAccepted;
 import com.soklet.SseRequestResult.HandshakeRejected;
 import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+import com.soklet.internal.streaming.ManagedResponseStream;
+import com.soklet.internal.streaming.ManagedSseLifecycle;
+import com.soklet.internal.streaming.PublisherResponseStream;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -47,6 +51,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -54,10 +59,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,6 +68,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
@@ -1283,6 +1287,10 @@ public final class Soklet implements AutoCloseable {
 		private final Object scopeStateLock;
 		private volatile @Nullable SimulationSession mcpSimulationSession;
 		private volatile @Nullable SimulationSession rejectedMcpSimulationSession;
+		private volatile @Nullable StreamLifecycleCoordinator streamLifecycleCoordinator;
+		private @Nullable Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
+		private volatile @Nullable StreamLifecycleCoordinator sseLifecycleCoordinator;
+		private @Nullable Supplier<StreamLifecycleCoordinator> sseLifecycleCoordinatorFactoryForTests;
 		@NonNull
 		private final AtomicBoolean closed;
 
@@ -1397,6 +1405,167 @@ public final class Soklet implements AutoCloseable {
 			SimulationSession session = mcpSimulationSession();
 			if (session != null)
 				session.quiesce();
+		}
+
+		void quiesceHttpScope() {
+			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+			if (coordinator != null)
+				coordinator.stopAdmission();
+		}
+
+		void forceHttpScope() {
+			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+			if (coordinator != null)
+				coordinator.force();
+		}
+
+		boolean awaitHttpScopeTermination(long absoluteDeadlineNanos,
+				@NonNull NanoClock clock) throws InterruptedException {
+			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+			if (coordinator == null)
+				return true;
+			long remaining = absoluteDeadlineNanos - requireNonNull(clock).nanoTime();
+			return coordinator.awaitTermination(System.nanoTime() + Math.max(0L, remaining));
+		}
+
+		boolean httpScopeTerminationProven() {
+			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+			return coordinator == null || coordinator.isTerminated();
+		}
+
+		@NonNull
+		Set<InternalResidualActivityType> httpScopeResidualActivity() {
+			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+			if (coordinator == null || coordinator.isTerminated())
+				return Set.of();
+			StreamLifecycleCoordinator.Snapshot snapshot = coordinator.snapshot();
+			EnumSet<InternalResidualActivityType> residual = EnumSet.noneOf(InternalResidualActivityType.class);
+			if (snapshot.reservations() > 0)
+				residual.add(InternalResidualActivityType.STREAM);
+			if (snapshot.queuedProducers() > 0 || snapshot.runningProducers() > 0 || snapshot.reservations() == 0)
+				residual.add(InternalResidualActivityType.EXECUTOR_TASK);
+			if (snapshot.callbacks() > 0 || snapshot.diagnostics() > 0 || snapshot.publisherLifetimes() > 0)
+				residual.add(InternalResidualActivityType.CALLBACK);
+			return Collections.unmodifiableSet(residual);
+		}
+
+		void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> factory) {
+			synchronized (this.scopeStateLock) {
+				requireScopeOpenWhileLocked();
+				if (this.streamLifecycleCoordinator != null)
+					throw new IllegalStateException("Streaming lifecycle coordinator was already created");
+				this.streamLifecycleCoordinatorFactoryForTests = requireNonNull(factory);
+			}
+		}
+
+		@NonNull
+		Optional<StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
+			return Optional.ofNullable(this.streamLifecycleCoordinator);
+		}
+
+		@Nullable
+		private StreamLifecycleCoordinator.Reservation reserveHttpStream() {
+			synchronized (this.scopeStateLock) {
+				if (this.closed.get())
+					return null;
+				if (this.streamLifecycleCoordinator == null) {
+					MockHttpServer server = requireNonNull(this.server);
+					LifecycleObserver observer = server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver();
+					this.streamLifecycleCoordinator = this.streamLifecycleCoordinatorFactoryForTests == null
+							? new StreamLifecycleCoordinator(server.streamingLifecycleCapacity,
+									server.streamingCallbackConcurrency, server.streamingCleanupTimeout, throwable -> {
+								try {
+									observer.didReceiveLogEvent(LogEvent.with(LogEventType.RESPONSE_STREAM_CLOSE_FAILED,
+											"A simulated streaming response cleanup operation failed or exceeded its deadline")
+											.throwable(throwable).build());
+								} catch (Throwable observerFailure) {
+									LifecycleObserverLogFallback.report(observerFailure);
+								}
+							})
+							: requireNonNull(this.streamLifecycleCoordinatorFactoryForTests.get());
+				}
+				return this.streamLifecycleCoordinator.tryReserve();
+			}
+		}
+
+		void quiesceSseScope() {
+			MockSseServer server = this.sseServer;
+			if (server != null)
+				server.stop();
+			StreamLifecycleCoordinator coordinator = this.sseLifecycleCoordinator;
+			if (coordinator != null)
+				coordinator.force();
+		}
+
+		void forceSseScope() {
+			quiesceSseScope();
+		}
+
+		boolean awaitSseScopeTermination(long absoluteDeadlineNanos,
+				@NonNull NanoClock clock) throws InterruptedException {
+			StreamLifecycleCoordinator coordinator = this.sseLifecycleCoordinator;
+			return coordinator == null || coordinator.awaitTermination(System.nanoTime()
+					+ Math.max(0L, absoluteDeadlineNanos - requireNonNull(clock).nanoTime()));
+		}
+
+		boolean sseScopeTerminationProven() {
+			StreamLifecycleCoordinator coordinator = this.sseLifecycleCoordinator;
+			return coordinator == null || coordinator.isTerminated();
+		}
+
+		@NonNull
+		Set<InternalResidualActivityType> sseScopeResidualActivity() {
+			StreamLifecycleCoordinator coordinator = this.sseLifecycleCoordinator;
+			if (coordinator == null || coordinator.isTerminated())
+				return Set.of();
+			StreamLifecycleCoordinator.Snapshot snapshot = coordinator.snapshot();
+			EnumSet<InternalResidualActivityType> residual = EnumSet.noneOf(InternalResidualActivityType.class);
+			if (snapshot.reservations() > 0)
+				residual.add(InternalResidualActivityType.STREAM);
+			if (snapshot.queuedProducers() > 0 || snapshot.runningProducers() > 0 || snapshot.reservations() == 0)
+				residual.add(InternalResidualActivityType.EXECUTOR_TASK);
+			if (snapshot.callbacks() > 0 || snapshot.diagnostics() > 0 || snapshot.retainedWork() > 0)
+				residual.add(InternalResidualActivityType.CALLBACK);
+			return Collections.unmodifiableSet(residual);
+		}
+
+		void setSseLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> factory) {
+			synchronized (this.scopeStateLock) {
+				requireScopeOpenWhileLocked();
+				if (this.sseLifecycleCoordinator != null)
+					throw new IllegalStateException("SSE lifecycle coordinator was already created");
+				this.sseLifecycleCoordinatorFactoryForTests = requireNonNull(factory);
+			}
+		}
+
+		@NonNull
+		Optional<StreamLifecycleCoordinator> getSseLifecycleCoordinatorForTests() {
+			return Optional.ofNullable(this.sseLifecycleCoordinator);
+		}
+
+		@Nullable
+		private StreamLifecycleCoordinator.Reservation reserveSseStream() {
+			synchronized (this.scopeStateLock) {
+				if (this.closed.get())
+					return null;
+				if (this.sseLifecycleCoordinator == null) {
+					MockSseServer server = requireNonNull(this.sseServer);
+					LifecycleObserver observer = server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver();
+					this.sseLifecycleCoordinator = this.sseLifecycleCoordinatorFactoryForTests == null
+							? new StreamLifecycleCoordinator(server.streamingLifecycleCapacity,
+									DefaultSseServer.STREAMING_COORDINATOR_CALLBACK_CONCURRENCY,
+									DefaultSseServer.STREAMING_COORDINATOR_CLEANUP_GRACE, throwable -> {
+								try {
+									observer.didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+											"A simulated SSE cleanup operation failed or exceeded its deadline")
+											.throwable(throwable).build());
+								} catch (Throwable observerFailure) {
+									LifecycleObserverLogFallback.report(observerFailure);
+								}
+							}) : requireNonNull(this.sseLifecycleCoordinatorFactoryForTests.get());
+				}
+				return this.sseLifecycleCoordinator.tryReserve();
+			}
 		}
 
 		void forceMcpScope() {
@@ -1538,26 +1707,72 @@ public final class Soklet implements AutoCloseable {
 			if (stream == null)
 				return requestResult;
 
+			StreamLifecycleCoordinator.Reservation reservation = reserveHttpStream();
+			if (reservation == null)
+				return requestResult.copy()
+						.marshaledResponse(MarshaledResponse.withStatusCode(503).build())
+						.finish();
+			AtomicReference<HttpRequestResult> result = new AtomicReference<>();
+			AtomicReference<Throwable> failure = new AtomicReference<>();
+			boolean entered = reservation.executeInline(() -> {
+				try {
+					result.set(materializeStreamingResponseWhileReserved(request, requestResult, stream, reservation));
+				} catch (Throwable throwable) {
+					failure.set(throwable);
+				} finally {
+					reservation.complete();
+				}
+			});
+			if (!entered) {
+				StreamTerminationReason reason = reservation.reason().orElse(StreamTerminationReason.SERVER_STOPPING);
+				Throwable cause = reservation.cause().orElse(null);
+				try {
+					notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, Instant.now(),
+							Duration.ZERO, reason, cause);
+				} finally {
+					reservation.complete();
+				}
+				throw new IllegalStateException("Simulated streaming response was canceled: " + reason.name(),
+						new StreamingResponseCanceledException(reason, cause));
+			}
+			Throwable throwable = failure.get();
+			if (throwable instanceof RuntimeException exception)
+				throw exception;
+			if (throwable instanceof Error error)
+				throw error;
+			if (throwable != null)
+				throw new IllegalStateException("Simulated streaming response failed.", throwable);
+			return requireNonNull(result.get());
+		}
+
+		@NonNull
+		private HttpRequestResult materializeStreamingResponseWhileReserved(@NonNull Request request,
+				@NonNull HttpRequestResult requestResult, @NonNull StreamingResponseBody stream,
+				@NonNull StreamLifecycleCoordinator.Reservation reservation) {
+
 			byte[] bytes;
 			Instant streamStarted = Instant.now();
 
 			try {
-				bytes = materializeStreamingResponseBody(request, requestResult, stream);
-				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+				bytes = materializeStreamingResponseBody(request, requestResult, stream, reservation);
+				if (!reservation.completeTransport())
+					throw new StreamingResponseCanceledException(reservation.reason().orElse(StreamTerminationReason.SERVER_STOPPING),
+							reservation.cause().orElse(null));
+				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
 						Duration.between(streamStarted, Instant.now()), null, null);
 			} catch (StreamingResponseCanceledException e) {
 				StreamTerminationReason cancelationReason = e.getCancelationReason();
 				Throwable cause = e.getCancelationCause().orElse(null);
-				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
 						Duration.between(streamStarted, Instant.now()), cancelationReason, cause);
 				throw new IllegalStateException("Simulated streaming response was canceled: " + cancelationReason.name(), e);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
-				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
-						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.CLIENT_DISCONNECTED, e);
-				throw new IllegalStateException("Simulated streaming response was canceled: CLIENT_DISCONNECTED", e);
+				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
+						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.APPLICATION_CANCELED, e);
+				throw new IllegalStateException("Simulated streaming response was canceled: APPLICATION_CANCELED", e);
 			} catch (Throwable t) {
-				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
 						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.PRODUCER_FAILED, t);
 
 				if (t instanceof Error error)
@@ -1574,6 +1789,35 @@ public final class Soklet implements AutoCloseable {
 			return requestResult.copy()
 					.marshaledResponse(marshaledResponse)
 					.finish();
+		}
+
+		private void notifyDidTerminateSimulatorResponseStream(@NonNull StreamLifecycleCoordinator.Reservation reservation,
+				@NonNull Request request, @NonNull HttpRequestResult requestResult,
+				@NonNull Instant establishedAt, @NonNull Duration streamDuration,
+				@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable) {
+			CountDownLatch delivered = new CountDownLatch(1);
+			reservation.dispatchTermination(() -> {
+				try {
+					notifyDidTerminateSimulatorResponseStream(request, requestResult, establishedAt,
+							streamDuration, cancelationReason, throwable);
+				} finally {
+					delivered.countDown();
+				}
+			});
+			boolean interrupted = false;
+			try {
+				for (;;) {
+					try {
+						delivered.await();
+						return;
+					} catch (InterruptedException ignored) {
+						interrupted = true;
+					}
+				}
+			} finally {
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			}
 		}
 
 		private void notifyDidTerminateSimulatorResponseStream(@NonNull Request request,
@@ -1669,51 +1913,62 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private byte[] materializeStreamingResponseBody(@NonNull Request request,
 																										@NonNull HttpRequestResult requestResult,
-																										@NonNull StreamingResponseBody stream) throws Exception {
+				@NonNull StreamingResponseBody stream,
+				@NonNull StreamLifecycleCoordinator.Reservation reservation) throws Exception {
 			requireNonNull(request);
 			requireNonNull(requestResult);
 			requireNonNull(stream);
 
-			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(throwable ->
-					notifyDidReceiveSimulatorStreamCancelationCallbackFailure(request, requestResult, throwable));
-			SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(request, cancelationToken);
-			SimulatorResponseStream output = new SimulatorResponseStream(getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), cancelationToken);
+			Consumer<Throwable> cleanupFailureConsumer = throwable ->
+					notifyDidReceiveSimulatorStreamCancelationCallbackFailure(request, requestResult, throwable);
+			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(cleanupFailureConsumer, reservation);
+			reservation.bindTermination(cancelationToken::deliverCancelation);
+			SimulatorResponseOutput output = new SimulatorResponseOutput(cancelationToken,
+					getSimulatorOptions().getStreamingResponseBodyLimitInBytes());
 
 			try {
-				if (stream instanceof StreamingResponseBody.WriterBody writerBody) {
-					writerBody.getWriter().writeTo(output, context);
-				} else if (stream instanceof StreamingResponseBody.InputStreamBody inputStreamBody) {
-					try (java.io.InputStream inputStream = requireNonNull(inputStreamBody.getInputStreamSupplier().get());
-							 AutoCloseable ignored = context.onCancel(() -> closeQuietly(inputStream))) {
-						byte[] buffer = new byte[inputStreamBody.getBufferSizeInBytes()];
-						int read;
-
-						while ((read = inputStream.read(buffer)) >= 0) {
-							context.throwIfCanceled();
-							if (read > 0)
-								output.write(ByteBuffer.wrap(buffer, 0, read));
-						}
-					}
-				} else if (stream instanceof StreamingResponseBody.ReaderBody readerBody) {
-					try (java.io.Reader reader = requireNonNull(readerBody.getReaderSupplier().get());
-							 AutoCloseable ignored = context.onCancel(() -> closeQuietly(reader))) {
-						materializeReader(readerBody, reader, output, context);
-					}
-				} else if (stream instanceof StreamingResponseBody.PublisherBody publisherBody) {
-					materializePublisher(publisherBody, output, context);
+				cancelationToken.throwIfCanceled();
+				if (stream instanceof StreamingResponseBody.PublisherBody publisherBody) {
+					materializePublisher(publisherBody, output, cancelationToken, reservation);
 				} else {
-					throw new IllegalStateException(format("Unsupported streaming response body type: %s", stream.getClass().getName()));
+					ManagedResponseStream managedResponseStream = new ManagedResponseStream(request, cancelationToken,
+							null, null, output, reservation::beginCleanup,
+							throwable -> cancelSimulatorStream(cancelationToken, throwable), reservation::reportCleanupFailure);
+					managedResponseStream.run(responseStream -> {
+						if (stream instanceof StreamingResponseBody.WriterBody writerBody) {
+							writerBody.getWriter().writeTo(responseStream);
+						} else if (stream instanceof StreamingResponseBody.InputStreamBody inputStreamBody) {
+							java.io.InputStream inputStream = responseStream.open(inputStreamBody.getInputStreamFactory());
+							byte[] buffer = new byte[inputStreamBody.getBufferSizeInBytes()];
+							int read;
+
+							while ((read = inputStream.read(buffer)) >= 0) {
+								responseStream.getCancelationToken().throwIfCanceled();
+								if (read > 0)
+									responseStream.write(ByteBuffer.wrap(buffer, 0, read));
+							}
+						} else if (stream instanceof StreamingResponseBody.ReaderBody readerBody) {
+							Reader reader = responseStream.open(readerBody.getReaderFactory());
+							materializeReader(readerBody, reader, responseStream);
+						} else {
+							throw new IllegalStateException(format("Unsupported streaming response body type: %s", stream.getClass().getName()));
+						}
+					});
 				}
-			} catch (StreamingResponseCanceledException e) {
-				cancelationToken.cancel(e.getCancelationReason(), e.getCancelationCause().orElse(null));
-				throw e;
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				cancelationToken.cancel(cancelationToken.getCancelationReason()
-						.orElse(StreamTerminationReason.CLIENT_DISCONNECTED), e);
-				throw e;
 			} catch (Throwable t) {
-				cancelationToken.cancel(StreamTerminationReason.PRODUCER_FAILED, t);
+				cancelSimulatorStream(cancelationToken, t);
+				StreamTerminationReason reason = cancelationToken.getCancelationReason()
+						.orElse(StreamTerminationReason.PRODUCER_FAILED);
+				if (reason != StreamTerminationReason.PRODUCER_FAILED
+						&& !(t instanceof InterruptedException && reason == StreamTerminationReason.APPLICATION_CANCELED)
+						&& !(t instanceof StreamingResponseCanceledException canceledException
+						&& canceledException.getCancelationReason() == reason)) {
+					Throwable cause = cancelationToken.getCancelationCause().orElse(null);
+					StreamingResponseCanceledException canceledException = new StreamingResponseCanceledException(reason, cause);
+					if (t != cause && !(t instanceof InterruptedException))
+						canceledException.addSuppressed(t);
+					throw canceledException;
+				}
 
 				if (t instanceof Exception exception)
 					throw exception;
@@ -1724,36 +1979,58 @@ public final class Soklet implements AutoCloseable {
 				throw new RuntimeException(t);
 			}
 
-			return output.toByteArray();
+			byte[] bytes = output.toByteArray();
+			if (!reservation.completeProduction())
+				cancelationToken.throwIfCanceled();
+			cancelationToken.complete();
+			return bytes;
+		}
+
+		private void cancelSimulatorStream(@NonNull SimulatorCancelationToken cancelationToken,
+				@NonNull Throwable throwable) {
+			if (throwable instanceof StreamingResponseCanceledException canceledException) {
+				cancelationToken.cancel(canceledException.getCancelationReason(), canceledException.getCancelationCause().orElse(null));
+			} else if (throwable instanceof InterruptedException) {
+				Thread.currentThread().interrupt();
+				cancelationToken.cancel(cancelationToken.getCancelationReason()
+						.orElse(StreamTerminationReason.APPLICATION_CANCELED), throwable);
+			} else {
+				cancelationToken.cancel(StreamTerminationReason.PRODUCER_FAILED, throwable);
+			}
 		}
 
 		private void materializeReader(com.soklet.StreamingResponseBody.@NonNull ReaderBody readerBody,
 																	 @NonNull Reader reader,
-																	 @NonNull SimulatorResponseStream output,
-																	 @NonNull SimulatorStreamingResponseContext context) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
+																	 @NonNull ResponseStream responseStream) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
 			requireNonNull(readerBody);
 			requireNonNull(reader);
-			requireNonNull(output);
-			requireNonNull(context);
+			requireNonNull(responseStream);
 
 			CharsetEncoder encoder = readerBody.newEncoder();
-			CharBuffer charBuffer = CharBuffer.allocate(readerBody.getBufferSizeInCharacters());
-			ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(128, (int) Math.ceil(readerBody.getBufferSizeInCharacters() * encoder.maxBytesPerChar())));
+			int readSize = readerBody.getBufferSizeInCharacters();
+			// Preserve single-character reads while leaving room for a carried high surrogate.
+			CharBuffer charBuffer = CharBuffer.allocate(Math.max(2, readSize));
+			ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(128, (int) Math.ceil(readSize * encoder.maxBytesPerChar())));
 
-			while (reader.read(charBuffer) >= 0) {
-				context.throwIfCanceled();
+			while (true) {
+				charBuffer.limit(charBuffer.position() + Math.min(readSize, charBuffer.remaining()));
+				int read = reader.read(charBuffer);
+				charBuffer.limit(charBuffer.capacity());
+				if (read < 0)
+					break;
+				responseStream.getCancelationToken().throwIfCanceled();
 				charBuffer.flip();
-				encodeCharsForSimulator(encoder, charBuffer, byteBuffer, false, output);
+				encodeCharsForSimulator(encoder, charBuffer, byteBuffer, false, responseStream);
 				charBuffer.compact();
 			}
 
 			charBuffer.flip();
-			encodeCharsForSimulator(encoder, charBuffer, byteBuffer, true, output);
+			encodeCharsForSimulator(encoder, charBuffer, byteBuffer, true, responseStream);
 
 			CoderResult result;
 			do {
 				result = encoder.flush(byteBuffer);
-				writeEncodedBytesForSimulator(byteBuffer, output);
+				writeEncodedBytesForSimulator(byteBuffer, responseStream);
 				if (result.isError())
 					result.throwException();
 			} while (result.isOverflow());
@@ -1763,7 +2040,7 @@ public final class Soklet implements AutoCloseable {
 																				 @NonNull CharBuffer charBuffer,
 																				 @NonNull ByteBuffer byteBuffer,
 																				 boolean endOfInput,
-																				 @NonNull SimulatorResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
+																				 @NonNull ResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
 			CoderResult result;
 
 			do {
@@ -1776,7 +2053,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		private void writeEncodedBytesForSimulator(@NonNull ByteBuffer byteBuffer,
-																							 @NonNull SimulatorResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException {
+																							 @NonNull ResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException {
 			byteBuffer.flip();
 			if (byteBuffer.hasRemaining())
 				output.write(byteBuffer);
@@ -1784,109 +2061,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		private void materializePublisher(com.soklet.StreamingResponseBody.@NonNull PublisherBody publisherBody,
-																			@NonNull SimulatorResponseStream output,
-																			@NonNull SimulatorStreamingResponseContext context) throws Exception {
-			requireNonNull(publisherBody);
-			requireNonNull(output);
-			requireNonNull(context);
-
-			CountDownLatch completed = new CountDownLatch(1);
-			AtomicBoolean publisherTerminated = new AtomicBoolean(false);
-			AtomicReference<Throwable> failure = new AtomicReference<>();
-			AtomicReference<Flow.Subscription> subscriptionRef = new AtomicReference<>();
-
-			try (AutoCloseable cancelationRegistration = context.onCancel(() -> {
-				Flow.Subscription subscription = subscriptionRef.get();
-
-				if (subscription != null)
-					subscription.cancel();
-			})) {
-				publisherBody.getPublisher().subscribe(new Flow.Subscriber<>() {
-					@Override
-					public void onSubscribe(Flow.Subscription subscription) {
-						requireNonNull(subscription);
-
-						if (!subscriptionRef.compareAndSet(null, subscription)) {
-							subscription.cancel();
-							return;
-						}
-
-						subscription.request(1L);
-					}
-
-					@Override
-					public void onNext(ByteBuffer item) {
-						Flow.Subscription subscription = subscriptionRef.get();
-
-						try {
-							context.throwIfCanceled();
-							output.write(requireNonNull(item));
-							context.throwIfCanceled();
-						} catch (Throwable t) {
-							failure.compareAndSet(null, t);
-							publisherTerminated.set(true);
-
-							if (subscription != null)
-								subscription.cancel();
-
-							completed.countDown();
-							return;
-						}
-
-						if (subscription != null)
-							subscription.request(1L);
-					}
-
-					@Override
-					public void onError(Throwable throwable) {
-						publisherTerminated.set(true);
-						failure.compareAndSet(null, throwable == null
-								? new IllegalStateException("Publisher failed without an error")
-								: throwable);
-						completed.countDown();
-					}
-
-					@Override
-					public void onComplete() {
-						publisherTerminated.set(true);
-						completed.countDown();
-					}
-				});
-
-				while (!completed.await(100L, TimeUnit.MILLISECONDS))
-					context.throwIfCanceled();
-			} finally {
-				if (!publisherTerminated.get()) {
-					Flow.Subscription subscription = subscriptionRef.get();
-
-					if (subscription != null)
-						subscription.cancel();
-				}
-			}
-
-			Throwable throwable = failure.get();
-
-			if (throwable != null) {
-				if (throwable instanceof Exception exception)
-					throw exception;
-
-				if (throwable instanceof Error error)
-					throw error;
-
-				throw new RuntimeException(throwable);
-			}
-		}
-
-		private void closeQuietly(@NonNull AutoCloseable closeable) {
-			requireNonNull(closeable);
-
-			try {
-				closeable.close();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			} catch (Throwable ignored) {
-				// Best effort only. The producer will observe cancelation separately.
-			}
+				@NonNull SimulatorResponseOutput output,
+				@NonNull SimulatorCancelationToken cancelationToken,
+				@NonNull StreamLifecycleCoordinator.Reservation reservation) throws Exception {
+			PublisherResponseStream.copy(publisherBody, cancelationToken, output, reservation,
+					reservation::beginCleanup, throwable -> cancelSimulatorStream(cancelationToken, throwable),
+					reservation::reportCleanupFailure);
 		}
 
 		@NonNull
@@ -1929,19 +2109,40 @@ public final class Soklet implements AutoCloseable {
 				return new SseRequestResult.RequestFailed(requestResult);
 
 			if (sseHandshakeResult instanceof SseHandshakeResult.Accepted acceptedHandshake) {
-				Consumer<SseUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
+				SseClientInitializer clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
+				StreamLifecycleCoordinator.Reservation reservation = reserveSseStream();
+				if (reservation == null) {
+					MarshaledResponse unavailable = sseServer.getSokletConfig().orElseThrow()
+							.getResponseMarshaler().forServiceUnavailable(request, requestResult.getResourceMethod().orElse(null));
+					return new SseRequestResult.RequestFailed(requestResult.copy()
+							.marshaledResponse(unavailable)
+							.response(Response.withStatusCode(unavailable.getStatusCode()).build())
+							.sseHandshakeResult(null).finish());
+				}
 
-				// Create a synthetic logical response using values from the accepted handshake
-				if (requestResult.getResponse().isEmpty())
-					requestResult = requestResult.copy()
-							.response(Response.withStatusCode(200)
-									.headers(acceptedHandshake.getHeaders())
-									.cookies(acceptedHandshake.getCookies())
-									.build())
-							.finish();
-
-				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, request.getResourcePath(), requestResult, this, clientInitializer);
-				return handshakeAccepted;
+				try {
+					// Create a synthetic logical response using values from the accepted handshake.
+					if (requestResult.getResponse().isEmpty())
+						requestResult = requestResult.copy()
+								.response(Response.withStatusCode(200)
+										.headers(acceptedHandshake.getHeaders())
+										.cookies(acceptedHandshake.getCookies()).build()).finish();
+					HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, request,
+							requestResult, sseServer, reservation);
+					if (!handshakeAccepted.initialize(clientInitializer))
+						throw new IllegalStateException("The simulated SSE connection terminated before activation");
+					return handshakeAccepted;
+				} catch (Throwable failure) {
+					// An initializer already elected PRODUCER_FAILED; construction/activation
+					// failures need the same reservation cleanup without replacing that winner.
+					reservation.cancel(StreamTerminationReason.INTERNAL_ERROR, failure);
+					reservation.complete();
+					if (failure instanceof RuntimeException runtimeException)
+						throw runtimeException;
+					if (failure instanceof Error error)
+						throw error;
+					throw new IllegalStateException("The simulated SSE client initializer failed", failure);
+				}
 			}
 
 			if (sseHandshakeResult instanceof SseHandshakeResult.Rejected rejectedHandshake)
@@ -2031,7 +2232,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NotThreadSafe
-	private static final class SimulatorResponseStream implements ResponseStream {
+	private static final class SimulatorResponseOutput implements ManagedResponseStream.Output {
 		@NonNull
 		private final ByteArrayOutputStream byteArrayOutputStream;
 		@NonNull
@@ -2040,17 +2241,11 @@ public final class Soklet implements AutoCloseable {
 		private final SimulatorCancelationToken cancelationToken;
 		private boolean closed;
 
-		private SimulatorResponseStream(@NonNull Integer limitInBytes,
-																		@NonNull SimulatorCancelationToken cancelationToken) {
+		private SimulatorResponseOutput(@NonNull SimulatorCancelationToken cancelationToken,
+				@NonNull Integer limitInBytes) {
 			this.byteArrayOutputStream = new ByteArrayOutputStream();
 			this.limitInBytes = requireNonNull(limitInBytes);
 			this.cancelationToken = requireNonNull(cancelationToken);
-		}
-
-		@Override
-		public void write(@NonNull byte[] bytes) throws IOException, StreamingResponseCanceledException {
-			requireNonNull(bytes);
-			write(ByteBuffer.wrap(bytes));
 		}
 
 		@Override
@@ -2072,6 +2267,12 @@ public final class Soklet implements AutoCloseable {
 			byte[] bytes = new byte[bytesToWrite];
 			source.get(bytes);
 			this.byteArrayOutputStream.write(bytes);
+			byteBuffer.position(byteBuffer.position() + bytesToWrite);
+		}
+
+		@Override
+		public int stagingCapacityInBytes() {
+			return Math.max(1, Math.min(8_192, this.limitInBytes));
 		}
 
 		@Override
@@ -2080,8 +2281,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		@NonNull
-		public Boolean isOpen() {
+		public boolean isOpen() {
 			return !this.closed && !this.cancelationToken.isCanceled();
 		}
 
@@ -2094,141 +2294,180 @@ public final class Soklet implements AutoCloseable {
 
 	@ThreadSafe
 	private static final class SimulatorCancelationToken implements CancelationToken {
-		@NonNull
-		private final AtomicBoolean canceled;
-		@NonNull
-		private final CopyOnWriteArrayList<Runnable> callbacks;
+		private static final Runnable NO_CALLBACKS = () -> {};
+		private boolean canceled;
+		private boolean completed;
+		@Nullable
+		private final StreamLifecycleCoordinator.Reservation reservation;
+		@Nullable
+		private Set<CancelationCallbackRegistration> callbacks;
 		@NonNull
 		private final Consumer<Throwable> callbackFailureConsumer;
 		@Nullable
-		private volatile StreamTerminationReason reason;
+		private StreamTerminationReason reason;
 		@Nullable
-		private volatile Throwable cause;
+		private Throwable cause;
 
 		private SimulatorCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer) {
-			this.canceled = new AtomicBoolean(false);
-			this.callbacks = new CopyOnWriteArrayList<>();
+			this(callbackFailureConsumer, null);
+		}
+
+		private SimulatorCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer,
+				@Nullable StreamLifecycleCoordinator.Reservation reservation) {
 			this.callbackFailureConsumer = requireNonNull(callbackFailureConsumer);
+			this.reservation = reservation;
 		}
 
 		@Override
 		@NonNull
-		public Boolean isCanceled() {
-			return this.canceled.get();
+		public synchronized Boolean isCanceled() {
+			boolean canceled = this.canceled || this.reservation != null && this.reservation.isCanceled();
+			return !isCompleted() && canceled;
 		}
 
 		@Override
 		@NonNull
-		public Optional<StreamTerminationReason> getCancelationReason() {
-			return Optional.ofNullable(this.reason);
+		public synchronized Optional<StreamTerminationReason> getCancelationReason() {
+			Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
+					? this.reservation.reason() : Optional.ofNullable(this.reason);
+			return isCompleted() ? Optional.empty() : reason;
 		}
 
 		@Override
 		@NonNull
-		public Optional<Throwable> getCancelationCause() {
-			return Optional.ofNullable(this.cause);
+		public synchronized Optional<Throwable> getCancelationCause() {
+			Optional<Throwable> cause = this.reason == null && this.reservation != null
+					? this.reservation.cause() : Optional.ofNullable(this.cause);
+			return isCompleted() ? Optional.empty() : cause;
 		}
 
 		@Override
 		@NonNull
-		public AutoCloseable onCancel(@NonNull Runnable callback) {
+		public CallbackRegistration onCancel(@NonNull Runnable callback) {
 			requireNonNull(callback);
-
+			CancelationCallbackRegistration registration = new CancelationCallbackRegistration(callback);
 			boolean runImmediately;
 
 			synchronized (this) {
-				runImmediately = this.canceled.get();
-
-				if (!runImmediately)
-					this.callbacks.add(callback);
-			}
-
-			if (runImmediately) {
-				runCallback(callback);
-				return () -> {
-					// No-op
-				};
-			}
-
-			return () -> {
-				synchronized (this) {
-					this.callbacks.remove(callback);
+				if (isCompleted()) {
+					registration.callback = null;
+					return registration;
 				}
-			};
+				runImmediately = this.canceled;
+				if (!runImmediately) {
+					if (this.callbacks == null)
+						this.callbacks = new LinkedHashSet<>();
+					this.callbacks.add(registration);
+				}
+			}
+			if (runImmediately)
+				registration.invoke();
+			return registration;
 		}
 
 		private boolean cancel(@NonNull StreamTerminationReason reason,
-													 @Nullable Throwable cause) {
+				@Nullable Throwable cause) {
 			requireNonNull(reason);
-
 			if (reason == StreamTerminationReason.COMPLETED)
 				throw new IllegalArgumentException("Cancelation reason cannot be COMPLETED");
-
-			List<Runnable> callbacksToRun;
-
-			synchronized (this) {
-				if (this.canceled.get())
-					return false;
-
-				this.reason = reason;
-				this.cause = cause;
-				this.canceled.set(true);
-				callbacksToRun = List.copyOf(this.callbacks);
-				this.callbacks.clear();
-			}
-
-			for (Runnable callback : callbacksToRun)
-				runCallback(callback);
-
+			if (this.reservation != null)
+				return this.reservation.cancel(reason, cause);
+			Runnable callbacks = reserveCancelation(reason, cause);
+			if (callbacks == null)
+				return false;
+			callbacks.run();
 			return true;
 		}
 
-		private void runCallback(@NonNull Runnable callback) {
-			requireNonNull(callback);
+		private void deliverCancelation(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+			Runnable callbacks = reserveCancelation(reason, cause);
+			if (callbacks != null && callbacks != NO_CALLBACKS)
+				requireNonNull(this.reservation).dispatchCallbacks(callbacks);
+		}
 
-			try {
-				callback.run();
-			} catch (Throwable t) {
-				this.callbackFailureConsumer.accept(t);
+		@Nullable
+		private Runnable reserveCancelation(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+
+			Set<CancelationCallbackRegistration> callbacksToRun;
+			synchronized (this) {
+				if (this.canceled || isCompleted())
+					return null;
+				this.reason = reason;
+				this.cause = cause;
+				this.canceled = true;
+				callbacksToRun = this.callbacks;
+				this.callbacks = null;
+			}
+			if (callbacksToRun == null || callbacksToRun.isEmpty())
+				return NO_CALLBACKS;
+			return () -> {
+				for (CancelationCallbackRegistration registration : callbacksToRun)
+					registration.invoke();
+				callbacksToRun.clear();
+			};
+		}
+
+		private void complete() {
+			Set<CancelationCallbackRegistration> completedCallbacks;
+			synchronized (this) {
+				if (this.canceled || this.completed || this.reservation != null
+						&& !this.reservation.isProductionComplete() && this.reservation.isCanceled())
+					return;
+				this.completed = true;
+				completedCallbacks = this.callbacks;
+				this.callbacks = null;
+			}
+			// Completion may release many application registrations. Keep traversal
+			// outside the token monitor used by framework cancellation signals.
+			if (completedCallbacks != null) {
+				for (CancelationCallbackRegistration registration : completedCallbacks)
+					registration.callback = null;
+				completedCallbacks.clear();
 			}
 		}
-	}
 
-	@ThreadSafe
-	private static final class SimulatorStreamingResponseContext implements StreamingResponseContext {
-		@NonNull
-		private final Request request;
-		@NonNull
-		private final CancelationToken cancelationToken;
-
-		private SimulatorStreamingResponseContext(@NonNull Request request,
-																							@NonNull CancelationToken cancelationToken) {
-			this.request = requireNonNull(request);
-			this.cancelationToken = requireNonNull(cancelationToken);
+		private synchronized boolean isCompleted() {
+			return this.completed || this.reservation != null && this.reservation.isProductionComplete();
 		}
 
-		@Override
-		@NonNull
-		public CancelationToken getCancelationToken() {
-			return this.cancelationToken;
+		private void runCallback(@NonNull Runnable callback) {
+			try {
+				callback.run();
+			} catch (Throwable throwable) {
+				try {
+					this.callbackFailureConsumer.accept(throwable);
+				} catch (Throwable ignored) {
+					// Diagnostic observers cannot suppress remaining callbacks.
+				}
+			}
 		}
 
-		@Override
-		@NonNull
-		public Request getRequest() {
-			return this.request;
-		}
+		private final class CancelationCallbackRegistration implements CallbackRegistration {
+			@Nullable
+			private volatile Runnable callback;
 
-		@Override
-		@NonNull
-		public Optional<Instant> getDeadline() {
-			return Optional.empty();
-		}
+			private CancelationCallbackRegistration(@NonNull Runnable callback) {
+				this.callback = callback;
+			}
 
-		@Override
-		@NonNull
-		public Optional<Duration> getIdleTimeout() {
-			return Optional.empty();
+			@Override
+			public void close() {
+				synchronized (SimulatorCancelationToken.this) {
+					this.callback = null;
+					if (SimulatorCancelationToken.this.callbacks != null)
+						SimulatorCancelationToken.this.callbacks.remove(this);
+				}
+			}
+
+			private void invoke() {
+				Runnable callback;
+				synchronized (SimulatorCancelationToken.this) {
+					callback = this.callback;
+					this.callback = null;
+				}
+				if (callback != null)
+					runCallback(callback);
+			}
 		}
 	}
 
@@ -2241,9 +2480,33 @@ public final class Soklet implements AutoCloseable {
 	static class MockHttpServer implements HttpServer {
 		@NonNull
 		private final TransportIdentity transportIdentity = TransportIdentity.create();
+		private final int streamingLifecycleCapacity;
+		private final int streamingCallbackConcurrency;
+		@NonNull
+		private final Duration streamingCleanupTimeout;
 		@Nullable
 		private volatile SokletConfig sokletConfig;
 		private volatile HttpServer.@Nullable RequestHandler requestHandler;
+
+		MockHttpServer() {
+			this(null);
+		}
+
+		MockHttpServer(@Nullable HttpServer sourceHttpServer) {
+			if (sourceHttpServer instanceof DefaultHttpServer defaultHttpServer) {
+				this.streamingLifecycleCapacity = defaultHttpServer.getStreamingLifecycleCapacity();
+				this.streamingCallbackConcurrency = defaultHttpServer.getStreamingCallbackConcurrency();
+				this.streamingCleanupTimeout = defaultHttpServer.getStreamingCleanupTimeout();
+			} else if (sourceHttpServer instanceof MockHttpServer mockHttpServer) {
+				this.streamingLifecycleCapacity = mockHttpServer.streamingLifecycleCapacity;
+				this.streamingCallbackConcurrency = mockHttpServer.streamingCallbackConcurrency;
+				this.streamingCleanupTimeout = mockHttpServer.streamingCleanupTimeout;
+			} else {
+				this.streamingLifecycleCapacity = DefaultHttpServer.DEFAULT_STREAMING_LIFECYCLE_CAPACITY;
+				this.streamingCallbackConcurrency = DefaultHttpServer.DEFAULT_STREAMING_CALLBACK_CONCURRENCY;
+				this.streamingCleanupTimeout = DefaultHttpServer.DEFAULT_STREAMING_CLEANUP_TIMEOUT;
+			}
+		}
 
 		@NonNull
 		@Override
@@ -2326,99 +2589,41 @@ public final class Soklet implements AutoCloseable {
 	 */
 	@ThreadSafe
 	static class MockSseUnicaster implements SseUnicaster {
-		@NonNull
-		private final ResourcePath resourcePath;
-		@NonNull
+		private final Request request;
 		private final Consumer<SseEvent> eventConsumer;
-		@NonNull
 		private final Consumer<SseComment> commentConsumer;
-		@NonNull
-		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
-		@NonNull
-		private final Consumer<LogEvent> logEventConsumer;
+		private final Object initializerLock = new Object();
+		private boolean initializing;
 
-		public MockSseUnicaster(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<SseEvent> eventConsumer,
-																				@NonNull Consumer<SseComment> commentConsumer,
-																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler,
-																				@NonNull Consumer<LogEvent> logEventConsumer) {
-			requireNonNull(resourcePath);
-			requireNonNull(eventConsumer);
-			requireNonNull(commentConsumer);
-			requireNonNull(unicastErrorHandler);
-			requireNonNull(logEventConsumer);
-
-			this.resourcePath = resourcePath;
-			this.eventConsumer = eventConsumer;
-			this.commentConsumer = commentConsumer;
-			this.unicastErrorHandler = unicastErrorHandler;
-			this.logEventConsumer = logEventConsumer;
+		MockSseUnicaster(@NonNull Request request,
+				@NonNull Consumer<SseEvent> eventConsumer, @NonNull Consumer<SseComment> commentConsumer) {
+			this.request = requireNonNull(request);
+			this.eventConsumer = requireNonNull(eventConsumer);
+			this.commentConsumer = requireNonNull(commentConsumer);
 		}
 
-		@Override
-		public void unicastEvent(@NonNull SseEvent sseEvent) {
-			requireNonNull(sseEvent);
-			try {
-				getEventConsumer().accept(sseEvent);
-			} catch (Throwable throwable) {
-				handleUnicastError(throwable);
+		void beginInitializer() {
+			synchronized (this.initializerLock) { this.initializing = true; }
+		}
+		void finishInitializer() {
+			synchronized (this.initializerLock) { this.initializing = false; }
+		}
+
+		@Override public void unicastEvent(@NonNull SseEvent event) {
+			synchronized (this.initializerLock) {
+				if (!this.initializing)
+					throw new IllegalStateException("The SSE unicaster is available only during client initialization");
+				this.eventConsumer.accept(requireNonNull(event));
 			}
 		}
-
-		@Override
-		public void unicastComment(@NonNull SseComment sseComment) {
-			requireNonNull(sseComment);
-			try {
-				getCommentConsumer().accept(sseComment);
-			} catch (Throwable throwable) {
-				handleUnicastError(throwable);
+		@Override public void unicastComment(@NonNull SseComment comment) {
+			synchronized (this.initializerLock) {
+				if (!this.initializing)
+					throw new IllegalStateException("The SSE unicaster is available only during client initialization");
+				this.commentConsumer.accept(requireNonNull(comment));
 			}
 		}
-
-		@NonNull
-		@Override
-		public ResourcePath getResourcePath() {
-			return this.resourcePath;
-		}
-
-		@NonNull
-		protected Consumer<SseEvent> getEventConsumer() {
-			return this.eventConsumer;
-		}
-
-		@NonNull
-		protected Consumer<SseComment> getCommentConsumer() {
-			return this.commentConsumer;
-		}
-
-		protected void handleUnicastError(@NonNull Throwable throwable) {
-			requireNonNull(throwable);
-			Consumer<Throwable> handler = this.unicastErrorHandler.get();
-
-			if (handler != null) {
-				try {
-					handler.accept(throwable);
-					return;
-				} catch (Throwable ignored) {
-					// Fall through to default behavior
-				}
-			}
-
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-							"SSE simulator unicast consumer failed")
-					.throwable(throwable)
-					.build());
-		}
-
-		protected void safelyLog(@NonNull LogEvent logEvent) {
-			requireNonNull(logEvent);
-
-			try {
-				this.logEventConsumer.accept(logEvent);
-			} catch (Throwable ignored) {
-				// No safe fallback sink is available here.
-			}
-		}
+		@Override public @NonNull ResourcePath getResourcePath() { return this.request.getResourcePath(); }
 	}
 
 	/**
@@ -2441,6 +2646,7 @@ public final class Soklet implements AutoCloseable {
 		// Same goes for comments
 		@NonNull
 		private final Map<@NonNull Consumer<SseComment>, @NonNull Object> commentConsumers;
+		private final Set<HandshakeAccepted> connections = ConcurrentHashMap.newKeySet();
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 		@NonNull
@@ -2468,8 +2674,8 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		@Override
-		public Long getClientCount() {
-			return Long.valueOf(getEventConsumers().size() + getCommentConsumers().size());
+		public synchronized Long getClientCount() {
+			return Long.valueOf(getEventConsumers().size() + getCommentConsumers().size() - this.connections.size());
 		}
 
 		@Override
@@ -2608,7 +2814,22 @@ public final class Soklet implements AutoCloseable {
 			return this.commentConsumers;
 		}
 
-		void releaseSimulationScopeState() {
+		synchronized void registerConnection(HandshakeAccepted connection, Consumer<SseEvent> events,
+				Consumer<SseComment> comments, @Nullable Object context) {
+			this.connections.add(connection);
+			registerEventConsumer(events, context);
+			registerCommentConsumer(comments, context);
+		}
+
+		synchronized void unregisterConnection(HandshakeAccepted connection, Consumer<SseEvent> events,
+				Consumer<SseComment> comments) {
+			unregisterEventConsumer(events);
+			unregisterCommentConsumer(comments);
+			this.connections.remove(connection);
+		}
+
+		synchronized void releaseSimulationScopeState() {
+			this.connections.clear();
 			this.eventConsumers.clear();
 			this.commentConsumers.clear();
 		}
@@ -2652,6 +2873,8 @@ public final class Soklet implements AutoCloseable {
 	static class MockSseServer implements SseServer {
 		@NonNull
 		private final TransportIdentity transportIdentity;
+		final int streamingLifecycleCapacity;
+		final int connectionQueueCapacity;
 		@Nullable
 		private volatile SokletConfig sokletConfig;
 		private volatile SseServer.@Nullable RequestHandler requestHandler;
@@ -2666,7 +2889,19 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
-		public MockSseServer() {
+		public MockSseServer() { this(null); }
+
+		MockSseServer(@Nullable SseServer sourceSseServer) {
+			if (sourceSseServer instanceof DefaultSseServer server) {
+				this.streamingLifecycleCapacity = server.getStreamingLifecycleCapacity();
+				this.connectionQueueCapacity = server.getConnectionQueueCapacity();
+			} else if (sourceSseServer instanceof MockSseServer server) {
+				this.streamingLifecycleCapacity = server.streamingLifecycleCapacity;
+				this.connectionQueueCapacity = server.connectionQueueCapacity;
+			} else {
+				this.streamingLifecycleCapacity = DefaultSseServer.DEFAULT_STREAMING_LIFECYCLE_CAPACITY;
+				this.connectionQueueCapacity = 128;
+			}
 			this.transportIdentity = TransportIdentity.create();
 			this.broadcastersByResourcePath = new ConcurrentHashMap<>();
 			this.broadcastErrorHandler = new AtomicReference<>();
@@ -2742,6 +2977,20 @@ public final class Soklet implements AutoCloseable {
 					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler, this::safelyLog));
 
 			return Optional.of(broadcaster);
+		}
+
+		void registerConnection(HandshakeAccepted connection, ResourcePath resourcePath,
+				Consumer<SseEvent> events, Consumer<SseComment> comments, @Nullable Object context) {
+			this.broadcastersByResourcePath.computeIfAbsent(resourcePath,
+					rp -> new MockSseBroadcaster(rp, this.broadcastErrorHandler, this::safelyLog))
+					.registerConnection(connection, events, comments, context);
+		}
+
+		void unregisterConnection(HandshakeAccepted connection, ResourcePath resourcePath,
+				Consumer<SseEvent> events, Consumer<SseComment> comments) {
+			MockSseBroadcaster broadcaster = this.broadcastersByResourcePath.get(resourcePath);
+			if (broadcaster != null)
+				broadcaster.unregisterConnection(connection, events, comments);
 		}
 
 		public void registerEventConsumer(@NonNull ResourcePath resourcePath,
@@ -2869,6 +3118,11 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		protected ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
+		}
+
+		@NonNull
+		protected AtomicReference<Consumer<Throwable>> getBroadcastErrorHandler() {
+			return this.broadcastErrorHandler;
 		}
 
 		@NonNull

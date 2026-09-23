@@ -278,8 +278,8 @@ class McpLocalizationSoakTests {
 						"soklet-mcp-localization-soak", "4.0.0")
 						.title(SERVER_TITLE)
 						.build())
-				.addTool(tool)
-				.addResource(resource)
+				.toolRegistrations(List.of(tool))
+				.resourceRegistrations(List.of(resource))
 				.subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),

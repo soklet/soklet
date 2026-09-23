@@ -50,8 +50,11 @@ Use checksum-verified tool distributions, not an unpinned wrapper download.
 
 The smoke checks both generated indexes and uses the default framework resolver
 to execute HTTP, MCP discovery,
-typed tool binding, required/optional prompt binding, and (on Java 21+) SSE
-through real loopback listeners. It exercises ordinary classpath packaging with
+typed tool binding, required/optional prompt binding, managed HTTP streaming
+with a checked source factory and neutral callback registration, and (on Java 21+)
+SSE initialization through real loopback listeners. It requires exact
+streamed bodies, once-only HTTP source cleanup, an SSE event delivered after
+initializer setup, and complete SSE shutdown. It exercises ordinary classpath packaging with
 only the consumer JAR and Soklet at runtime. Port reservations are released
 immediately before startup; a bind collision fails the run rather than hiding
 it as a successful smoke.

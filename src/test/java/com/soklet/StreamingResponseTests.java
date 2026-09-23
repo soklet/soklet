@@ -379,7 +379,7 @@ public class StreamingResponseTests {
 	}
 
 	@Test
-	public void simulator_preserves_client_disconnected_reason_for_interrupted_producers() {
+	public void simulator_uses_application_canceled_reason_for_unclassified_interrupted_producers() {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
 				SokletSimulator.run(SimulatorConfig.builder().httpServer()
@@ -394,8 +394,10 @@ public class StreamingResponseTests {
 						.build(), simulator ->
 						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/interrupt").build())));
 
-		Assertions.assertInstanceOf(InterruptedException.class, exception.getCause());
-		Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, cancelationReasonRef.get());
+		StreamingResponseCanceledException canceledException = Assertions.assertInstanceOf(
+				StreamingResponseCanceledException.class, exception.getCause());
+		Assertions.assertInstanceOf(InterruptedException.class, canceledException.getCancelationCause().orElseThrow());
+		Assertions.assertEquals(StreamTerminationReason.APPLICATION_CANCELED, cancelationReasonRef.get());
 	}
 
 	@Test
@@ -537,10 +539,10 @@ public class StreamingResponseTests {
 		public MarshaledResponse writer() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
-						output.write("hello ".getBytes(StandardCharsets.UTF_8));
-						output.flush();
-						output.write(ByteBuffer.wrap("world".getBytes(StandardCharsets.UTF_8)));
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
+						responseStream.write("hello ".getBytes(StandardCharsets.UTF_8));
+						responseStream.flush();
+						responseStream.write(ByteBuffer.wrap("world".getBytes(StandardCharsets.UTF_8)));
 					}))
 					.build();
 		}
@@ -585,9 +587,9 @@ public class StreamingResponseTests {
 		public MarshaledResponse contextRequest(@NonNull Request request) {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
-						boolean sameRequest = request.getId().equals(context.getRequest().getId());
-						output.write((sameRequest ? "same" : "missing").getBytes(StandardCharsets.UTF_8));
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
+						boolean sameRequest = request.getId().equals(responseStream.getRequest().getId());
+						responseStream.write((sameRequest ? "same" : "missing").getBytes(StandardCharsets.UTF_8));
 					}))
 					.build();
 		}
@@ -596,7 +598,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse interrupt() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						throw new InterruptedException("simulated interrupt");
 					}))
 					.build();
@@ -606,12 +608,13 @@ public class StreamingResponseTests {
 		public MarshaledResponse cancelCallbackFailure() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
-						try (AutoCloseable ignored = context.onCancel(() -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
+						// Keep this callback registered for the response lifetime. Closing an
+						// unclaimed registration here can legitimately suppress async delivery.
+						responseStream.getCancelationToken().onCancel(() -> {
 							throw new IllegalStateException("callback failed");
-						})) {
-							output.write("hello world".getBytes(StandardCharsets.UTF_8));
-						}
+						});
+						responseStream.write("hello world".getBytes(StandardCharsets.UTF_8));
 					}))
 					.build();
 		}
@@ -628,8 +631,8 @@ public class StreamingResponseTests {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type",
 							Set.of("text/plain; charset=UTF-8")))
-					.streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
-						context.onCancel(() -> {
+					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
+						responseStream.getCancelationToken().onCancel(() -> {
 							throw new IllegalStateException(
 									"Expected cancelation callback failure");
 						});

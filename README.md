@@ -651,20 +651,47 @@ public MarshaledResponse tokens(TokenService tokenService) {
       "Content-Type", Set.of("text/plain; charset=UTF-8"),
       "Cache-Control", Set.of("no-transform")
     ))
-    .streamingResponseBody(StreamingResponseBody.fromWriter((output, context) -> {
-      try (AutoCloseable ignored = context.onCancel(tokenService::stop)) {
+    .stream(responseStream -> {
+      CancelationToken cancelationToken = responseStream.getCancelationToken();
+      try (CallbackRegistration callbackRegistration = cancelationToken.onCancel(tokenService::stop)) {
         tokenService.generate(token -> {
-          context.throwIfCanceled();
-          output.write(token.getBytes(StandardCharsets.UTF_8));
-          output.flush();
+          cancelationToken.throwIfCanceled();
+          responseStream.write(token.getBytes(StandardCharsets.UTF_8));
+          responseStream.flush();
         });
       }
-    }))
+    })
     .build();
 }
 ```
 
-Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a [`StreamingResponseContext`](https://javadoc.soklet.com/com/soklet/StreamingResponseContext.html) so upstream work can be canceled when the client disconnects, the server shuts down, or a streaming timeout fires. That context also exposes the originating [`Request`](https://javadoc.soklet.com/com/soklet/Request.html), so producers can use [`Request::getId`](<https://javadoc.soklet.com/com/soklet/Request.html#getId()>) for correlation without ambient thread-local state.
+`TokenService` is an application-defined, per-request provider in this example.
+Its `generate` method invokes a checked token callback synchronously on the
+producer thread; that callback can throw `Exception`. Its `stop` method must be
+safe to call concurrently to unblock generation. An asynchronous provider must
+hand events back to the producer thread before writing to `ResponseStream`.
+
+Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer one [`ResponseStream`](https://javadoc.soklet.com/com/soklet/ResponseStream.html) for output and runtime metadata. Its `getCancelationToken()` allows upstream work to react when Soklet observes a client disconnect, the server shuts down, or a streaming timeout fires. `getRequest()`, `getDeadline()`, and `getIdleTimeout()` expose the originating request and timing policy; producers can use [`Request::getId`](<https://javadoc.soklet.com/com/soklet/Request.html#getId()>) for correlation without ambient thread-local state. Closing a [`CallbackRegistration`](https://javadoc.soklet.com/com/soklet/CallbackRegistration.html) removes the cancelation callback if it has not already been claimed.
+
+`ResponseStream` also owns producer resources. `open(factory)` coordinates one close attempt for normal cleanup or cancelation; use it only when the provider supports close racing consumption. `open(factory, aborter)` uses a separate provider abort operation and final close. `own(resource)` finalizes on the producer thread and is suitable for resources whose close writes trailing response bytes. Both `using(factory, consumer)` and `using(factory, aborter, consumer)` close their resource and nested acquisitions before the block returns. Normal cleanup runs in reverse ownership order; Soklet seals successful output only after root cleanup finishes. Do not also close transferred resources yourself. Output and ownership operations are confined to the producer thread.
+
+Encode text explicitly with `write(string.getBytes(StandardCharsets.UTF_8))`, use `write(bytes, offset, length)` for array slices, or use `asOutputStream()` with a `Writer` for sustained text or other Java I/O libraries. Each output view has its own closed state; closing one flushes shared staging without ending the response. Transfer encoder ownership so Soklet writes its trailer before completing the response:
+
+```java
+return MarshaledResponse.withStatusCode(200)
+    .stream(responseStream -> {
+        var zipOutputStream = responseStream.own(
+            new java.util.zip.ZipOutputStream(responseStream.asOutputStream()));
+        zipOutputStream.putNextEntry(new java.util.zip.ZipEntry("report.txt"));
+        zipOutputStream.write(reportBytes);
+        zipOutputStream.closeEntry();
+    })
+    .build();
+```
+
+Publisher bodies also retain pending asynchronous subscription acquisition and entered provider calls. A subscription delivered after cancelation is canceled without requesting data, and its lifecycle slot remains occupied until that cancel attempt finishes. If the first subscription never arrives, shutdown reports the retained obligation. See the [publisher lifecycle contract](MIGRATING_TO_4_0.md#http-streaming-callbacks-and-sources) for failed-acquisition and protocol requirements.
+
+Configure streaming admission and cleanup on `HttpServer.Builder` with `streamingLifecycleCapacity(...)`, `streamingCallbackConcurrency(...)`, and `streamingCleanupTimeout(...)`. Their defaults are 256 admitted lifetimes, four callback workers, and five seconds of cleanup grace. Outstanding physical work retains admission capacity after cleanup expiry; exhausted admission returns HTTP 503 before starting a producer. These settings accept `null` to restore their defaults and are validated together at `build()`. Simulators derived from a built-in HTTP server inherit all three settings.
 
 Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 
@@ -711,8 +738,8 @@ public class ChatResource {
   @SseEventSource("/chat")
   public SseHandshakeResult chat() {
     return SseHandshakeResult.Accepted.builder()
-      .clientInitializer(unicaster -> {
-        unicaster.unicastEvent(SseEvent.withEvent("hello")
+      .clientInitializer(sseUnicaster -> {
+        sseUnicaster.unicastEvent(SseEvent.withEvent("hello")
           .data("welcome")
           .build());
       })
@@ -736,11 +763,33 @@ public class ChatResource {
 Client-initializer writes are buffered until the SSE connection becomes active
 and are hard-bounded by `SseServer.Builder.connectionQueueCapacity(...)` (128
 application writes by default). Size the queue for the largest catch-up page
-and paginate larger `Last-Event-ID` replays; exceeding the bound throws
-`IllegalStateException`. If that exception escapes the initializer, Soklet
-closes the accepted connection and records the failure in logs and metrics. The
-optional framework connection-verification heartbeat does not use an
-application queue slot.
+plus headroom for live broadcasts that may arrive before that page drains, and
+paginate larger `Last-Event-ID` replays. Exceeding the bound throws
+`IllegalStateException` and terminates the connection with `BACKPRESSURE`, even
+if the initializer catches the exception. The optional framework
+connection-verification heartbeat does not use an application queue slot.
+
+`clientInitializer(...)` accepts the checked `SseClientInitializer` callback.
+Use it only for synchronous, bounded setup or catch-up work; queued events are
+delivered after it returns successfully and before broadcaster events. Do not
+retain its `SseUnicaster` or use it as an ongoing event callback. Successful
+unicast accepts a queued write; it does not acknowledge delivery. Use
+[`SseBroadcaster`](https://javadoc.soklet.com/com/soklet/SseBroadcaster.html)
+for ongoing delivery to connected clients. Broadcasts published before this
+client joins the broadcaster are not buffered for it; initializer ordering
+alone does not make `Last-Event-ID` replay gap-free. Applications needing that
+guarantee must coordinate the replay-to-live handoff themselves.
+
+`SseServer.Builder.streamingLifecycleCapacity(...)` separately limits admitted
+SSE connections to 256 by default. Exhausted admission returns HTTP 503 before
+accepted handshake headers or initializer invocation. Passing `null` restores
+the default. Simulators derived from a built-in SSE server inherit this setting
+and its connection queue capacity.
+
+The lifecycle limit is independent of `concurrentConnectionLimit(...)`, whose
+default is 8,192; together the defaults admit at most 256 SSE connections.
+Increase lifecycle capacity when the application needs more clients, accounting
+for their payloads. The queue bounds event count, not bytes.
 
 Because this example exposes both an SSE event source and a regular `POST /chat`
 resource method, it needs both servers:
@@ -762,8 +811,8 @@ SSE test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.h
 (see [`SseRequestResult`](https://javadoc.soklet.com/com/soklet/SseRequestResult.html)):
 
 ```java
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 @Test
 public void sseTest() {
@@ -774,23 +823,36 @@ public void sseTest() {
     SseRequestResult result = simulator.performSseRequest(request);
 
     if (result instanceof SseRequestResult.HandshakeAccepted accepted) {
-      accepted.registerEventConsumer(events::add);
+      try (accepted) {
+        accepted.registerEventConsumer(events::add);
 
-      SseBroadcaster broadcaster = simulator.getSseServer().orElseThrow()
-        .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
-      broadcaster.broadcastEvent(SseEvent.withEvent("message")
-        .data("hello")
-        .build());
+        SseBroadcaster broadcaster = simulator.getSseServer().orElseThrow()
+          .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
+        broadcaster.broadcastEvent(SseEvent.withEvent("message")
+          .data("hello")
+          .build());
+      }
     } else {
       throw new IllegalStateException("SSE handshake failed: " + result);
     }
   });
 
-  Assert.assertEquals(List.of("welcome", "hello"), events.stream()
+  Assertions.assertEquals(List.of("welcome", "hello"), events.stream()
     .map(event -> event.getData().orElse(null))
     .toList());
 }
 ```
+
+The simulated accepted result is `AutoCloseable`. Its unchecked, idempotent
+`close()` simulates `CLIENT_DISCONNECTED`; simulator teardown terminates
+remaining connections with `SERVER_STOPPING`, including connections with no
+registered consumers. The first termination reason wins. Closing rejects later
+writes and consumer registration while cleanup remains supervised.
+
+The [streaming documentation fixture](src/test/java/com/soklet/StreamingDocumentationExamplesTests.java)
+compiles the HTTP, ZIP, SSE, and settings snippets directly from these docs and
+exercises them through the simulator, including ZIP finalization and SSE
+initializer delivery.
 
 #### Model Context Protocol (MCP)
 

@@ -198,6 +198,57 @@ run('manual generation file hash is independent authority', () => {
     /override is stale/u);
 });
 
+run('streaming helper generations retain independent two- and four-owner authority', () => {
+  for (const [name, expected, allowance] of [
+    ['mixedOutputKeepsOrderAndCopiesCallerBuffersBeforeReturning', 2, 8_000],
+    ['checkedSourcesAreLazyAndReopenedForEachExecution', 4, 18_060],
+  ]) {
+    const row = rowByName(INVENTORY, name);
+    assert.equal(row.review.generationCount, expected);
+    assert.equal(row.review.controlJoinMillis, allowance);
+    assert.ok(row.review.reserveMillis > 0);
+    const rows = clone(INVENTORY.lifecycleScopes);
+    rowByName({ lifecycleScopes: rows }, name).review.generationCount = 1;
+    expectFailure(() => verifyRequiredExecutingRows(rows),
+      /Required reviewed lifecycle generation topology drifted/u);
+  }
+});
+
+run('streaming helper-only wait and policy edits invalidate unchanged caller proofs', () => {
+  for (const [path, name, before, after] of [
+    ['src/test/java/com/soklet/StreamingSourceFactoryRuntimeTests.java',
+      'checkedSourcesAreLazyAndReopenedForEachExecution',
+      'socket.setSoTimeout(3000);', 'socket.setSoTimeout(6000);'],
+    ['src/test/java/com/soklet/StreamingLifecycleTests.java',
+      'exhaustedLifecycleCapacityRejectsBeforeHeadersWithoutInvokingBodies',
+      '.forcedShutdownTimeout(Duration.ofMillis(200)).build();',
+      '.forcedShutdownTimeout(Duration.ofSeconds(20)).build();'],
+  ]) {
+    const texts = sourceTexts(path);
+    assert.ok(texts.get(path).includes(before));
+    const original = buildLifecycleScopeObservations(texts)
+      .find((scope) => scope.scopeName === name);
+    texts.set(path, texts.get(path).replace(before, after));
+    const observations = buildLifecycleScopeObservations(texts);
+    const changed = observations.find((scope) => scope.scopeName === name);
+    assert.equal(changed.scopeSha256, original.scopeSha256,
+      'The test callable is unchanged; its owning-file pin must protect helper semantics.');
+    assert.notEqual(changed.fileSha256, original.fileSha256);
+    expectFailure(() => buildReviewedLifecycleScopeRows(observations,
+      { requireRegistryCompleteness: false }), /override is stale/u);
+  }
+});
+
+run('SSE admission saturation composes its finite controls under a larger outer guard', () => {
+  const row = rowByName(INVENTORY,
+    'defaultConnectionAdmissionSaturatesAt256AndRecoversAfterDisconnect');
+  assert.equal(row.review.controlJoinMillis, 20_000);
+  assert.equal(row.review.lifecycleCoreBranchBoundsMillis.INCOMPLETE_CORE, 36_000);
+  assert.equal(row.review.totalComposedBoundMillis, 56_000);
+  assert.equal(row.review.outerGuard.millis, 90_000);
+  assert.equal(row.review.reserveMillis, 34_000);
+});
+
 run('configured policy understatement rejected', () => {
   const document = clone(INVENTORY);
   const row = document.lifecycleScopes.find((candidate) =>

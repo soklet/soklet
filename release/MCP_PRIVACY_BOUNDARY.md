@@ -75,6 +75,18 @@ boundaries, not redacted MCP telemetry. Dedicated MCP log records use the
 restricted behavior above, although their bounded messages are still emitted
 by the configured observer and therefore remain subject to operator retention.
 
+The shared HTTP/SSE streaming supervisor has a narrower framework-created
+diagnostic: cleanup deadline evidence contains a numeric reservation ID, fixed
+phase and execution-state vocabulary, and counts of outstanding work. Its
+snapshot contains counts and an admission flag. Neither renders the retained
+producer, request, application failure, or resource payload. A secret-seeding
+test checks the diagnostic message, stack, cause/suppressed chain and snapshot
+while application work and an exact failure remain retained. This property
+applies to that framework-created evidence only: cleanup failures reported as
+application Throwables and application callbacks still carry exact values.
+Internal resource, consumer and delivery records likewise are not redacted
+merely because they are private or short-lived.
+
 ## Built-in metrics
 
 Core defines 23 sealed `McpMetricsEvent` variants and the default collector

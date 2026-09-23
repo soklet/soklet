@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
@@ -883,7 +884,7 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 	@NonNull
 	private final Object callbacksLock;
 	@NonNull
-	private final List<@NonNull CallbackRegistration> callbackRegistrations;
+	private final List<@NonNull CancelationCallbackRegistration> callbackRegistrations;
 	private boolean callbacksReleased;
 
 	McpApplicationCancellationState() {
@@ -913,8 +914,8 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 
 	@Override
 	@NonNull
-	public AutoCloseable onCancel(@NonNull Runnable callback) {
-		CallbackRegistration registration = new CallbackRegistration(
+	public CallbackRegistration onCancel(@NonNull Runnable callback) {
+		CancelationCallbackRegistration registration = new CancelationCallbackRegistration(
 				requireNonNull(callback));
 		boolean runImmediately;
 		boolean completed;
@@ -955,7 +956,7 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 	}
 
 	void complete() {
-		List<CallbackRegistration> registrations;
+		List<CancelationCallbackRegistration> registrations;
 		synchronized (callbacksLock) {
 			if (reason.get() != null)
 				throw new IllegalStateException(
@@ -966,12 +967,12 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 			registrations = List.copyOf(callbackRegistrations);
 			callbackRegistrations.clear();
 		}
-		for (CallbackRegistration registration : registrations)
+		for (CancelationCallbackRegistration registration : registrations)
 			registration.close();
 	}
 
 	void releaseCallbacks() {
-		List<CallbackRegistration> registrations;
+		List<CancelationCallbackRegistration> registrations;
 		synchronized (callbacksLock) {
 			if (callbacksReleased)
 				return;
@@ -982,7 +983,7 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 			registrations = List.copyOf(callbackRegistrations);
 			callbackRegistrations.clear();
 		}
-		for (CallbackRegistration registration : registrations)
+		for (CancelationCallbackRegistration registration : registrations)
 			registration.runIfOpen();
 	}
 
@@ -993,7 +994,7 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 	 * executor teardown.
 	 */
 	void discardCallbacks() {
-		List<CallbackRegistration> registrations;
+		List<CancelationCallbackRegistration> registrations;
 		synchronized (callbacksLock) {
 			if (callbacksReleased)
 				return;
@@ -1004,7 +1005,7 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 			registrations = List.copyOf(callbackRegistrations);
 			callbackRegistrations.clear();
 		}
-		for (CallbackRegistration registration : registrations)
+		for (CancelationCallbackRegistration registration : registrations)
 			registration.close();
 	}
 
@@ -1014,20 +1015,17 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	private final class CallbackRegistration implements AutoCloseable {
+	private final class CancelationCallbackRegistration implements CallbackRegistration {
 		@NonNull
-		private final Runnable callback;
-		@NonNull
-		private final AtomicBoolean open;
+		private final AtomicReference<@Nullable Runnable> callback;
 
-		private CallbackRegistration(@NonNull Runnable callback) {
-			this.callback = requireNonNull(callback);
-			this.open = new AtomicBoolean(true);
+		private CancelationCallbackRegistration(@NonNull Runnable callback) {
+			this.callback = new AtomicReference<>(requireNonNull(callback));
 		}
 
 		@Override
 		public void close() {
-			if (!open.compareAndSet(true, false))
+			if (this.callback.getAndSet(null) == null)
 				return;
 			synchronized (callbacksLock) {
 				callbackRegistrations.remove(this);
@@ -1035,7 +1033,8 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 		}
 
 		private void runIfOpen() {
-			if (!open.compareAndSet(true, false))
+			Runnable callback = this.callback.getAndSet(null);
+			if (callback == null)
 				return;
 			try {
 				callback.run();
@@ -2000,7 +1999,7 @@ final class McpApplicationExecution {
 
 		@Override
 		@NonNull
-		public AutoCloseable onCancel(@NonNull Runnable callback) {
+		public CallbackRegistration onCancel(@NonNull Runnable callback) {
 			return this.state.onCancel(requireNonNull(callback));
 		}
 

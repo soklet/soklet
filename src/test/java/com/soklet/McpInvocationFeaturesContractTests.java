@@ -131,7 +131,7 @@ class McpInvocationFeaturesContractTests {
 			}
 
 			@Override
-			public AutoCloseable onCancel(Runnable callback) {
+			public CallbackRegistration onCancel(Runnable callback) {
 				requireNonNull(callback);
 				return () -> {};
 			}

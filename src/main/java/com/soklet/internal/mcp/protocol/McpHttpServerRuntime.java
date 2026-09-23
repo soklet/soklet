@@ -23,6 +23,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskSnapshot;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CatalogAccessSession;
+import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.Cors;
 import com.soklet.CorsPreflight;
@@ -6385,7 +6386,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			case CLIENT_DISCONNECTED -> McpRequestOutcome.CLIENT_DISCONNECTED;
 			case RESPONSE_TIMEOUT -> McpRequestOutcome.DEADLINE_EXCEEDED;
 			case RESPONSE_IDLE_TIMEOUT, WRITE_FAILED -> McpRequestOutcome.WRITE_FAILED;
-			case PRODUCER_FAILED, INTERNAL_ERROR, UNKNOWN ->
+			case CLEANUP_TIMEOUT, PRODUCER_FAILED, INTERNAL_ERROR, UNKNOWN ->
 					McpRequestOutcome.INTERNAL_ERROR;
 			case SERVER_STOPPING, PROTOCOL_UNSUPPORTED, APPLICATION_CANCELED,
 					BACKPRESSURE, SIMULATOR_LIMIT_EXCEEDED ->
@@ -10904,7 +10905,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 				@Override
 				@NonNull
-				public AutoCloseable onCancel(@NonNull Runnable callback) {
+				public CallbackRegistration onCancel(@NonNull Runnable callback) {
 					return catalogAccessCancellation.onCancel(
 							requireNonNull(callback));
 				}

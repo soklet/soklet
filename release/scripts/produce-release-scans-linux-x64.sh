@@ -126,7 +126,7 @@ spotbugs_filter="$provenance_root/spotbugs-exclude.xml"
 git -C "$candidate_root" show \
 	"$candidate_commit:config/spotbugs-exclude.xml" > "$spotbugs_filter"
 printf '%s  %s\n' \
-	65e286664f80f29f803448f63c50620e23d6d1252d1536c8a3c7e98287511f58 \
+	87fb30137fc2a7636caf59f0ab534e567a4eacd495d0ee04a1d880d16be3b808 \
 	"$spotbugs_filter" | sha256sum --check --strict
 
 # Materialize and verify the two registry-pinned executable SpotBugs artifacts before

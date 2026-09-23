@@ -247,7 +247,7 @@ public class ConnectionEventLoopDispatchTests {
 		List<MetricsCollector.TransportFailureReason> recordedFailures =
 				new CopyOnWriteArrayList<>();
 		StreamingResponseBody body = StreamingResponseBody.fromWriter(
-				(output, context) -> {
+				responseStream -> {
 					throw producerFailure;
 				});
 		MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(

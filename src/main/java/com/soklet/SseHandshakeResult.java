@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static java.lang.String.format;
@@ -37,7 +36,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Represents the result of a {@link com.soklet.annotation.SseEventSource} "handshake".
  * <p>
- * Once a handshake has been accepted, you may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)} - the client whose handshake was accepted will then receive Server-Sent Events broadcast via {@link SseBroadcaster#broadcastEvent(SseEvent)}.
+ * Once a handshake has been accepted, you may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)}. After any configured client initializer returns successfully and the connection joins that broadcaster, it can receive subsequently broadcast Server-Sent Events. Broadcasts published before the connection joins are not buffered for it.
  * <p>
  * You might have a JavaScript Server-Sent Event client that looks like this:
  * <pre>{@code // Register an event source
@@ -180,7 +179,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			@Nullable
 			private Object clientContext;
 			@Nullable
-			private Consumer<@NonNull SseUnicaster> clientInitializer;
+			private SseClientInitializer clientInitializer;
 
 			private Builder() {
 				// Only permit construction through Handshake builder methods
@@ -243,9 +242,17 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * application queue slot. An initializer that exceeds the configured
 			 * capacity fails with {@link IllegalStateException}, so larger catch-up
 			 * histories must be paginated or otherwise limited before returning the
-			 * accepted result. If that exception escapes the initializer, Soklet closes
-			 * the already-accepted connection before delivering the buffered writes and
-			 * records the failure in logs and metrics.
+			 * accepted result. Overflow terminates the connection with
+			 * {@link StreamTerminationReason#BACKPRESSURE}, even if the initializer catches
+			 * the exception. Buffered writes may be discarded.
+			 * <p>
+			 * The checked initializer supports bounded setup and catch-up before connection activation; it must not
+			 * run an indefinite upstream loop. Queued writes are delivered only after it returns successfully.
+			 * The unicaster is for this one-time initialization and must not be retained.
+			 * Broadcasts published before this client joins the broadcaster are not
+			 * buffered for it; gap-free replay-to-live handoff requires application
+			 * coordination beyond initializer ordering.
+			 * Passing {@code null} clears a previously configured initializer.
 			 * <p>
 			 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
 			 *
@@ -253,7 +260,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder clientInitializer(@Nullable Consumer<@NonNull SseUnicaster> clientInitializer) {
+			public Builder clientInitializer(@Nullable SseClientInitializer clientInitializer) {
 				this.clientInitializer = clientInitializer;
 				return this;
 			}
@@ -271,7 +278,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		@Nullable
 		private final Object clientContext;
 		@Nullable
-		private final Consumer<@NonNull SseUnicaster> clientInitializer;
+		private final SseClientInitializer clientInitializer;
 
 		private Accepted(@NonNull Builder builder) {
 			requireNonNull(builder);
@@ -324,7 +331,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<@NonNull Consumer<@NonNull SseUnicaster>> getClientInitializer() {
+		public Optional<@NonNull SseClientInitializer> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
 

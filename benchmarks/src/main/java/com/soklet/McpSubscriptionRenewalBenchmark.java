@@ -164,7 +164,7 @@ public final class McpSubscriptionRenewalBenchmark {
 						"subscription-renewal-benchmark", "4.0.0")
 						.build())
 				.subscriptionConfig(subscriptions)
-				.addResource(McpResourceRegistration
+				.resourceRegistrations(List.of(McpResourceRegistration
 						.withUriAndName(
 								java.net.URI.create("benchmark://subscription-renewal"),
 								"Subscription renewal benchmark resource")
@@ -175,7 +175,7 @@ public final class McpSubscriptionRenewalBenchmark {
 														read.getUri(), "benchmark")
 														.build())
 												.build()))
-						.build())
+						.build()))
 				.build();
 
 		McpServer.Builder builder = McpServer.withPort(0)

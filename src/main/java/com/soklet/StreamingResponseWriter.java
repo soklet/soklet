@@ -22,19 +22,24 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Callback that writes a streaming HTTP response body.
+ * <p>
+ * A response execution invokes this callback with its own {@link ResponseStream}. Application output work
+ * belongs to this callback's thread. After it returns, Soklet performs remaining normal finalization on the same
+ * thread; those finalizers may write trailing bytes before successful output is sealed. Cancelation callbacks may
+ * already have closed resources opened with coordinated close-as-abort. A writer reused across
+ * responses may be invoked concurrently; the application is responsible for synchronizing any mutable
+ * state shared by those invocations.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@FunctionalInterface
 @ThreadSafe
+@FunctionalInterface
 public interface StreamingResponseWriter {
 	/**
-	 * Writes response bytes to the provided output stream.
+	 * Writes response bytes using the provided response stream and its runtime metadata.
 	 *
-	 * @param output  the response stream
-	 * @param context runtime context for this streaming response
+	 * @param responseStream the response stream
 	 * @throws Exception if the stream producer fails
 	 */
-	void writeTo(@NonNull ResponseStream output,
-							 @NonNull StreamingResponseContext context) throws Exception;
+	void writeTo(@NonNull ResponseStream responseStream) throws Exception;
 }

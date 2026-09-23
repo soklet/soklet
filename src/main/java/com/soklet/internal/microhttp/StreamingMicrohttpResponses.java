@@ -16,13 +16,15 @@
 
 package com.soklet.internal.microhttp;
 
+import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.Request;
 import com.soklet.ResponseStream;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseBody;
 import com.soklet.StreamingResponseCanceledException;
-import com.soklet.StreamingResponseContext;
+import com.soklet.internal.streaming.ManagedResponseStream;
+import com.soklet.internal.streaming.PublisherResponseStream;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -42,15 +44,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Flow;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -113,12 +112,40 @@ public final class StreamingMicrohttpResponses {
 	}
 
 	interface TestHooks {
+		default long nanoTime() { return System.nanoTime(); }
+		default void beforeResponseTimeoutScheduled() {
+			// No-op by default
+		}
 		default void beforeTerminalCompletion(@NonNull Runnable failWithResponseTimeout) {
 			// No-op by default
 		}
 
 		default void afterFailureReserved(@NonNull Runnable closeAsClientDisconnected) {
 			// No-op by default
+		}
+
+		default void beforeFailureApplied() {
+			// No-op by default
+		}
+	}
+
+	/** Starts supervision before a managed writer begins producer-thread resource finalization. */
+	public static void beginFinalization(@NonNull ResponseStream responseStream) {
+		requireNonNull(responseStream);
+		if (responseStream.getCancelationToken() instanceof DefaultCancelationToken cancelationToken
+				&& cancelationToken.reservation != null)
+			cancelationToken.reservation.beginCleanup();
+	}
+
+	/** Disposes an uncommitted/duplicate streaming response without invoking its producer. */
+	public static void discard(@NonNull MicrohttpResponse microhttpResponse) {
+		requireNonNull(microhttpResponse);
+		if (!microhttpResponse.streaming())
+			return;
+		try {
+			microhttpResponse.closeBody(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+		} catch (IOException ignored) {
+			// The source owns termination accounting; discarding must not replace the caller's failure.
 		}
 	}
 
@@ -154,9 +181,27 @@ public final class StreamingMicrohttpResponses {
 																	 @NonNull Integer chunkSizeInBytes,
 																	 @Nullable Instant deadline,
 																	 @Nullable Duration idleTimeout,
-																	 @NonNull BooleanSupplier forcedShutdownStarted,
-																	 @NonNull TerminationListener terminationListener,
-																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+									 @NonNull BooleanSupplier forcedShutdownStarted,
+									 @NonNull TerminationListener terminationListener,
+									 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+		return withStreamingBody(status, reason, headers, request, body, executorService,
+				timeoutExecutorService, queueCapacityInBytes, chunkSizeInBytes, deadline, idleTimeout,
+				forcedShutdownStarted, terminationListener, cancelationCallbackFailureConsumer, null);
+	}
+
+	/** Uses a lifecycle reservation acquired before response commitment by the owning HTTP server. */
+	@NonNull
+	public static MicrohttpResponse withStreamingBody(@NonNull Integer status,
+			@NonNull String reason, @NonNull List<@NonNull Header> headers,
+			@NonNull Request request, @NonNull StreamingResponseBody body,
+			@NonNull ExecutorService executorService,
+			@NonNull ScheduledExecutorService timeoutExecutorService,
+			@NonNull Integer queueCapacityInBytes, @NonNull Integer chunkSizeInBytes,
+			@Nullable Instant deadline, @Nullable Duration idleTimeout,
+			@NonNull BooleanSupplier forcedShutdownStarted,
+			@NonNull TerminationListener terminationListener,
+			@NonNull Consumer<Throwable> cancelationCallbackFailureConsumer,
+			StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 		requireNonNull(status);
 		requireNonNull(reason);
 		requireNonNull(headers);
@@ -176,7 +221,7 @@ public final class StreamingMicrohttpResponses {
 		if (chunkSizeInBytes < 1)
 			throw new IllegalArgumentException("Streaming chunk size must be > 0");
 
-		return MicrohttpResponse.withStreamingBody(status, reason, headers, () -> new StreamingWritableSource(
+		Supplier<StreamingWritableSource> sourceSupplier = () -> new StreamingWritableSource(
 				request,
 				body,
 				executorService,
@@ -187,7 +232,22 @@ public final class StreamingMicrohttpResponses {
 				idleTimeout,
 				forcedShutdownStarted,
 				terminationListener,
-				cancelationCallbackFailureConsumer));
+				cancelationCallbackFailureConsumer,
+				reservation);
+		if (reservation != null) {
+			// Binding before commitment makes forced shutdown/discard observable even if the
+			// transport never requests a source. No application acquisition occurs until start.
+			StreamingWritableSource source = sourceSupplier.get();
+			try {
+				MicrohttpResponse response = MicrohttpResponse.withStreamingBody(status, reason, headers, () -> source);
+				source.prepareProducer();
+				return response;
+			} catch (RuntimeException | Error throwable) {
+				source.close(StreamTerminationReason.PRODUCER_FAILED, throwable);
+				throw throwable;
+			}
+		}
+		return MicrohttpResponse.withStreamingBody(status, reason, headers, sourceSupplier::get);
 	}
 
 	/**
@@ -199,18 +259,6 @@ public final class StreamingMicrohttpResponses {
 											@NonNull Duration streamDuration,
 											@Nullable StreamTerminationReason cancelationReason,
 											@Nullable Throwable throwable);
-	}
-
-	private static void closeQuietly(@NonNull AutoCloseable closeable) {
-		requireNonNull(closeable);
-
-		try {
-			closeable.close();
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		} catch (Throwable ignored) {
-			// Best effort only. The producer will observe cancelation separately.
-		}
 	}
 
 	@NotThreadSafe
@@ -239,7 +287,9 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final DefaultCancelationToken cancelationToken;
 		@NonNull
-		private final StreamingResponseContext context;
+		private final Request request;
+		@Nullable
+		private final StreamLifecycleCoordinator.Reservation reservation;
 		@NonNull
 		private final Object lock;
 		@NonNull
@@ -259,11 +309,15 @@ public final class StreamingMicrohttpResponses {
 		@Nullable
 		private Throwable failure;
 		@Nullable
-		private Future<?> producerFuture;
+		private Thread producerThread;
+		private boolean producerEntered;
+		private boolean producerStartReleased;
 		private boolean producerDone;
 		private boolean closed;
 		private boolean completed;
 		private int queuedPayloadBytes;
+		private volatile long lastIdleActivityNanos;
+		private boolean timeoutsStopped;
 		@NonNull
 		private final Instant streamStarted;
 
@@ -277,7 +331,8 @@ public final class StreamingMicrohttpResponses {
 																						@Nullable Duration idleTimeout,
 																						@NonNull BooleanSupplier forcedShutdownStarted,
 																						@NonNull TerminationListener terminationListener,
-																		@NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer,
+																	 StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			requireNonNull(request);
 			this.body = requireNonNull(body);
 			this.executorService = requireNonNull(executorService);
@@ -288,8 +343,9 @@ public final class StreamingMicrohttpResponses {
 			this.idleTimeout = idleTimeout;
 			this.forcedShutdownStarted = requireNonNull(forcedShutdownStarted);
 			this.terminationListener = requireNonNull(terminationListener);
-			this.cancelationToken = new DefaultCancelationToken(cancelationCallbackFailureConsumer);
-			this.context = new DefaultStreamingResponseContext(request, this.cancelationToken, deadline, idleTimeout);
+			this.reservation = reservation;
+			this.cancelationToken = new DefaultCancelationToken(cancelationCallbackFailureConsumer, reservation);
+			this.request = request;
 			this.lock = new Object();
 			this.chunks = new ArrayDeque<>();
 			this.started = new AtomicBoolean(false);
@@ -300,24 +356,60 @@ public final class StreamingMicrohttpResponses {
 				// No-op until the event loop provides a wakeup callback.
 			};
 			this.streamStarted = Instant.now();
+			if (reservation != null)
+				reservation.bindTermination(this::applyFailure);
 		}
 
 		@Override
 		public void start() throws IOException {
 			if (!this.started.compareAndSet(false, true))
 				return;
+			synchronized (this.lock) {
+				if (this.closed || this.failure != null)
+					return;
+			}
 
 			scheduleResponseTimeoutIfNeeded();
 			resetIdleTimeoutIfNeeded();
+			if (this.reservation != null) {
+				synchronized (this.lock) {
+					this.producerStartReleased = true;
+					this.lock.notifyAll();
+				}
+				return;
+			}
 
 			try {
-				this.producerFuture = this.executorService.submit(this::runProducer);
+				this.executorService.execute(this::runProducer);
 			} catch (RejectedExecutionException e) {
 				boolean serverStopping = this.forcedShutdownStarted.getAsBoolean();
 				fail(serverStopping
 						? StreamTerminationReason.SERVER_STOPPING
 						: StreamTerminationReason.PRODUCER_FAILED,
 						serverStopping ? null : e);
+			}
+		}
+
+		private void prepareProducer() {
+			StreamLifecycleCoordinator.Reservation reservation = requireNonNull(this.reservation);
+			if (!reservation.execute(this.executorService, this::awaitStartAndRun))
+				throw new RejectedExecutionException("Streaming production was canceled before admission");
+		}
+
+		private void awaitStartAndRun() {
+			try {
+				synchronized (this.lock) {
+					while (!this.producerStartReleased && !this.closed && this.failure == null)
+						this.lock.wait();
+					if (this.closed || this.failure != null)
+						return;
+				}
+				runProducer();
+			} catch (InterruptedException interruptedException) {
+				Thread.currentThread().interrupt();
+				fail(this.forcedShutdownStarted.getAsBoolean()
+						? StreamTerminationReason.SERVER_STOPPING
+						: StreamTerminationReason.APPLICATION_CANCELED, interruptedException);
 			}
 		}
 
@@ -376,6 +468,9 @@ public final class StreamingMicrohttpResponses {
 						this.currentChunk = null;
 
 						if (terminal && !this.closed && this.failure == null && !this.completed) {
+							if (this.reservation != null && !this.reservation.completeTransport())
+								throw new StreamingResponseCanceledException(
+										this.reservation.reason().orElseThrow(), this.reservation.cause().orElse(null));
 							this.completed = true;
 							notifyCompleted = true;
 						}
@@ -422,48 +517,44 @@ public final class StreamingMicrohttpResponses {
 			StreamTerminationReason defaultedCancelationReason =
 					cancelationReason == null ? StreamTerminationReason.CLIENT_DISCONNECTED : cancelationReason;
 			cancelTimeouts();
-
-			StreamTerminationReason effectiveReason = null;
-			Throwable effectiveCause = null;
+			boolean cancel;
 
 			synchronized (this.lock) {
 				if (this.closed)
 					return;
-
+				cancel = !this.completed && this.failure == null;
+			}
+			if (cancel)
+				fail(defaultedCancelationReason, cause);
+			synchronized (this.lock) {
 				this.closed = true;
-
-				if (!this.completed && this.failure == null) {
-					effectiveReason = this.cancelationToken.getCancelationReason().orElse(defaultedCancelationReason);
-					effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
-				}
-
 				this.chunks.clear();
 				this.currentChunk = null;
 				this.lock.notifyAll();
 			}
+		}
 
-			if (effectiveReason != null)
-				this.cancelationToken.cancel(effectiveReason, effectiveCause);
-
-			Future<?> producerFuture = this.producerFuture;
-
-			if (producerFuture != null && !producerFuture.isDone())
-				producerFuture.cancel(true);
-
-			if (effectiveReason != null)
-				notifyTerminated(effectiveReason, effectiveCause);
+		private void beginFinalization() {
+			if (this.reservation != null)
+				this.reservation.beginCleanup();
 		}
 
 		private void runProducer() {
+			synchronized (this.lock) {
+				if (this.closed || this.failure != null || this.producerEntered)
+					return;
+				this.producerEntered = true;
+				this.producerThread = Thread.currentThread();
+			}
 			try {
 				StreamingResponseBody body = this.body;
 
 				if (body instanceof StreamingResponseBody.WriterBody writerBody) {
-					writerBody.getWriter().writeTo(new ResponseStreamAdapter(), this.context);
+					newManagedResponseStream().run(writerBody.getWriter());
 				} else if (body instanceof StreamingResponseBody.InputStreamBody inputStreamBody) {
-					copyInputStream(inputStreamBody);
+					newManagedResponseStream().run(responseStream -> copyInputStream(inputStreamBody, responseStream));
 				} else if (body instanceof StreamingResponseBody.ReaderBody readerBody) {
-					copyReader(readerBody);
+					newManagedResponseStream().run(responseStream -> copyReader(readerBody, responseStream));
 				} else if (body instanceof StreamingResponseBody.PublisherBody publisherBody) {
 					copyPublisher(publisherBody);
 				} else {
@@ -471,80 +562,102 @@ public final class StreamingMicrohttpResponses {
 				}
 
 				completeProducer();
-			} catch (StreamingResponseCanceledException e) {
-				fail(e.getCancelationReason(), e.getCancelationCause().orElse(null));
-			} catch (InterruptedException e) {
+			} catch (Throwable t) {
+				failProducer(t);
+			} finally {
+				synchronized (this.lock) {
+					this.producerThread = null;
+					this.lock.notifyAll();
+				}
+			}
+		}
+
+		private void failProducer(@NonNull Throwable throwable) {
+			// A transport outcome can precede producer exit. Preserve later application
+			// failure evidence even though a second terminal signal cannot replace it.
+			if (this.cancelationToken.isCanceled()
+					&& throwable != this.cancelationToken.getCancelationCause().orElse(null)
+					&& !(throwable instanceof InterruptedException)
+					&& (!(throwable instanceof StreamingResponseCanceledException)
+							|| throwable.getSuppressed().length != 0))
+				reportCleanupFailure(throwable);
+			if (throwable instanceof StreamingResponseCanceledException canceledException) {
+				fail(canceledException.getCancelationReason(), canceledException.getCancelationCause().orElse(null));
+			} else if (throwable instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
 				boolean serverStopping = this.forcedShutdownStarted.getAsBoolean();
 				fail(this.cancelationToken.getCancelationReason().orElse(serverStopping
 						? StreamTerminationReason.SERVER_STOPPING
-						: StreamTerminationReason.CLIENT_DISCONNECTED),
-						serverStopping ? null : e);
-			} catch (Throwable t) {
-				if (this.forcedShutdownStarted.getAsBoolean())
-					fail(StreamTerminationReason.SERVER_STOPPING, null);
-				else
-					fail(StreamTerminationReason.PRODUCER_FAILED, t);
+						: StreamTerminationReason.APPLICATION_CANCELED), serverStopping ? null : throwable);
+			} else if (this.forcedShutdownStarted.getAsBoolean()) {
+				fail(StreamTerminationReason.SERVER_STOPPING, null);
+			} else {
+				fail(StreamTerminationReason.PRODUCER_FAILED, throwable);
 			}
 		}
 
-		private void copyInputStream(com.soklet.StreamingResponseBody.@NonNull InputStreamBody body) throws Exception {
-			requireNonNull(body);
+		private void reportCleanupFailure(@NonNull Throwable throwable) {
+			if (this.reservation != null)
+				this.reservation.reportCleanupFailure(throwable);
+			else
+				this.cancelationToken.reportCallbackFailure(throwable);
+		}
 
-			try (InputStream inputStream = requireNonNull(body.getInputStreamSupplier().get());
-					 AutoCloseable cancelationRegistration = this.context.onCancel(() -> closeQuietly(inputStream))) {
-				byte[] buffer = new byte[body.getBufferSizeInBytes()];
-				int read;
-				ResponseStreamAdapter responseStream = new ResponseStreamAdapter();
+		private ManagedResponseStream newManagedResponseStream() {
+			return new ManagedResponseStream(this.request, this.cancelationToken, this.deadline,
+					this.idleTimeout, new ResponseStreamAdapter(), this::beginFinalization,
+					this::failProducer, this::reportCleanupFailure);
+		}
 
-				this.context.throwIfCanceled();
-
-				while ((read = inputStream.read(buffer)) >= 0) {
-					this.context.throwIfCanceled();
-
-					if (read > 0)
-						responseStream.write(Arrays.copyOf(buffer, read));
-				}
+		private void copyInputStream(com.soklet.StreamingResponseBody.@NonNull InputStreamBody body,
+				@NonNull ResponseStream responseStream) throws Exception {
+			InputStream inputStream = responseStream.open(body.getInputStreamFactory());
+			byte[] buffer = new byte[body.getBufferSizeInBytes()];
+			int read;
+			while ((read = inputStream.read(buffer)) >= 0) {
+				this.cancelationToken.throwIfCanceled();
+				if (read > 0)
+					responseStream.write(ByteBuffer.wrap(buffer, 0, read));
 			}
 		}
 
-		private void copyReader(com.soklet.StreamingResponseBody.@NonNull ReaderBody body) throws Exception {
-			requireNonNull(body);
-
-			try (Reader reader = requireNonNull(body.getReaderSupplier().get());
-					 AutoCloseable cancelationRegistration = this.context.onCancel(() -> closeQuietly(reader))) {
-				CharsetEncoder encoder = body.newEncoder();
-				CharBuffer charBuffer = CharBuffer.allocate(body.getBufferSizeInCharacters());
-				ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(128, (int) Math.ceil(body.getBufferSizeInCharacters() * encoder.maxBytesPerChar())));
-				ResponseStreamAdapter responseStream = new ResponseStreamAdapter();
-
-				this.context.throwIfCanceled();
-
-				while (reader.read(charBuffer) >= 0) {
-					this.context.throwIfCanceled();
-					charBuffer.flip();
-					encodeChars(encoder, charBuffer, byteBuffer, false, responseStream);
-					charBuffer.compact();
-				}
-
+		private void copyReader(com.soklet.StreamingResponseBody.@NonNull ReaderBody body,
+				@NonNull ResponseStream responseStream) throws Exception {
+			Reader reader = responseStream.open(body.getReaderFactory());
+			CharsetEncoder encoder = body.newEncoder();
+			int readSize = body.getBufferSizeInCharacters();
+			// An encoder can leave a high surrogate unconsumed. Keep one extra slot when
+			// callers request single-character reads so its low surrogate can arrive.
+			CharBuffer charBuffer = CharBuffer.allocate(Math.max(2, readSize));
+			ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(128,
+					(int) Math.ceil(readSize * encoder.maxBytesPerChar())));
+			while (true) {
+				charBuffer.limit(charBuffer.position() + Math.min(readSize, charBuffer.remaining()));
+				int read = reader.read(charBuffer);
+				charBuffer.limit(charBuffer.capacity());
+				if (read < 0)
+					break;
+				this.cancelationToken.throwIfCanceled();
 				charBuffer.flip();
-				encodeChars(encoder, charBuffer, byteBuffer, true, responseStream);
-
-				CoderResult result;
-				do {
-					result = encoder.flush(byteBuffer);
-					writeEncodedBytes(byteBuffer, responseStream);
-					if (result.isError())
-						result.throwException();
-				} while (result.isOverflow());
+				encodeChars(encoder, charBuffer, byteBuffer, false, responseStream);
+				charBuffer.compact();
 			}
+			charBuffer.flip();
+			encodeChars(encoder, charBuffer, byteBuffer, true, responseStream);
+			CoderResult result;
+			do {
+				result = encoder.flush(byteBuffer);
+				writeEncodedBytes(byteBuffer, responseStream);
+				if (result.isError())
+					result.throwException();
+			} while (result.isOverflow());
 		}
 
 		private void encodeChars(@NonNull CharsetEncoder encoder,
 														 @NonNull CharBuffer charBuffer,
 														 @NonNull ByteBuffer byteBuffer,
 														 boolean endOfInput,
-														 @NonNull ResponseStreamAdapter responseStream) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
+														 @NonNull ResponseStream responseStream) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
 			CoderResult result;
 
 			do {
@@ -557,7 +670,7 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private void writeEncodedBytes(@NonNull ByteBuffer byteBuffer,
-																	 @NonNull ResponseStreamAdapter responseStream) throws IOException, InterruptedException, StreamingResponseCanceledException {
+																	 @NonNull ResponseStream responseStream) throws IOException, InterruptedException, StreamingResponseCanceledException {
 			byteBuffer.flip();
 			if (byteBuffer.hasRemaining())
 				responseStream.write(byteBuffer);
@@ -565,118 +678,55 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private void copyPublisher(com.soklet.StreamingResponseBody.@NonNull PublisherBody body) throws Exception {
-			requireNonNull(body);
-
-			CountDownLatch completed = new CountDownLatch(1);
-			AtomicBoolean publisherTerminated = new AtomicBoolean(false);
-			AtomicReference<Throwable> failure = new AtomicReference<>();
-			AtomicReference<Flow.Subscription> subscriptionRef = new AtomicReference<>();
-			ResponseStreamAdapter responseStream = new ResponseStreamAdapter();
-
-			try (AutoCloseable cancelationRegistration = this.context.onCancel(() -> {
-				Flow.Subscription subscription = subscriptionRef.get();
-
-				if (subscription != null)
-					subscription.cancel();
-			})) {
-				body.getPublisher().subscribe(new Flow.Subscriber<>() {
-					@Override
-					public void onSubscribe(Flow.Subscription subscription) {
-						requireNonNull(subscription);
-
-						if (!subscriptionRef.compareAndSet(null, subscription)) {
-							subscription.cancel();
-							return;
-						}
-
-						subscription.request(1L);
-					}
-
-					@Override
-					public void onNext(ByteBuffer item) {
-						Flow.Subscription subscription = subscriptionRef.get();
-
-						try {
-							context.throwIfCanceled();
-							responseStream.write(requireNonNull(item));
-							context.throwIfCanceled();
-						} catch (Throwable t) {
-							failure.compareAndSet(null, t);
-							publisherTerminated.set(true);
-
-							if (subscription != null)
-								subscription.cancel();
-
-							completed.countDown();
-							return;
-						}
-
-						if (subscription != null)
-							subscription.request(1L);
-					}
-
-					@Override
-					public void onError(Throwable throwable) {
-						publisherTerminated.set(true);
-						failure.compareAndSet(null, throwable == null
-								? new IllegalStateException("Publisher failed without an error")
-								: throwable);
-						completed.countDown();
-					}
-
-					@Override
-					public void onComplete() {
-						publisherTerminated.set(true);
-						completed.countDown();
-					}
-				});
-
-				while (!completed.await(100L, TimeUnit.MILLISECONDS))
-					this.context.throwIfCanceled();
-			} finally {
-				if (!publisherTerminated.get()) {
-					Flow.Subscription subscription = subscriptionRef.get();
-
-					if (subscription != null)
-						subscription.cancel();
-				}
-			}
-
-			Throwable throwable = failure.get();
-
-			if (throwable != null) {
-				if (throwable instanceof Exception exception)
-					throw exception;
-
-				if (throwable instanceof Error error)
-					throw error;
-
-				throw new RuntimeException(throwable);
-			}
+			PublisherResponseStream.copy(body, this.cancelationToken, new ResponseStreamAdapter(),
+					this.reservation, this::beginFinalization, this::failProducer, this::reportCleanupFailure);
 		}
 
 		private void completeProducer() {
+			// Owned finalizers start supervision before calling application cleanup.
+			// Only framework bookkeeping remains here; observer dispatch has its own grace.
+			Runnable releaseCallbacks;
 			synchronized (this.lock) {
 				if (this.closed || this.failure != null || this.completed)
 					return;
+				if (this.reservation != null && !this.reservation.completeProduction())
+					return;
 
+				releaseCallbacks = this.cancelationToken.complete();
+				if (releaseCallbacks == null)
+					return;
 				this.producerDone = true;
 				this.chunks.add(QueuedChunk.terminal());
 				this.lock.notifyAll();
 			}
-
+			releaseCallbacks.run();
 			wakeWriter();
 		}
 
 		private void fail(@NonNull StreamTerminationReason reason,
 											@Nullable Throwable cause) {
 			requireNonNull(reason);
+			synchronized (this.lock) {
+				if (this.closed || this.completed || this.failure != null)
+					return;
+			}
+			if (this.reservation != null) {
+				this.reservation.cancel(reason, cause);
+				return;
+			}
+			applyFailure(reason, cause);
+		}
+
+		private void applyFailure(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+			requireNonNull(reason);
+			StreamingMicrohttpResponses.testHooks.beforeFailureApplied();
 
 			StreamTerminationReason effectiveReason;
 			Throwable effectiveCause;
+			Runnable cancelationCallbacks;
 
 			synchronized (this.lock) {
-				if (this.closed || this.completed || this.failure != null)
+				if (this.completed || this.failure != null)
 					return;
 
 				effectiveReason = this.cancelationToken.getCancelationReason().orElse(reason);
@@ -686,14 +736,25 @@ public final class StreamingMicrohttpResponses {
 				// termination from a socket write failure by this exception type.
 				this.failure = new StreamingResponseCanceledException(effectiveReason,
 						effectiveCause);
+				cancelationCallbacks = this.cancelationToken.reserveCancelation(effectiveReason, effectiveCause);
 				this.producerDone = true;
 				this.lock.notifyAll();
+				// Pair the interrupt with physical producer ownership, never Future completion.
+				// Clearing producerThread in the same lock prevents interrupting a reused worker.
+				if (this.reservation == null && !this.cancelationToken.isCompleted()
+						&& this.producerThread != null && this.producerThread != Thread.currentThread())
+					this.producerThread.interrupt();
 			}
 
 			StreamingMicrohttpResponses.testHooks.afterFailureReserved(() ->
 					close(StreamTerminationReason.CLIENT_DISCONNECTED, null));
-			this.cancelationToken.cancel(effectiveReason, effectiveCause);
 			cancelTimeouts();
+			if (cancelationCallbacks != null) {
+				if (this.reservation != null)
+					this.reservation.dispatchCallbacks(cancelationCallbacks);
+				else
+					cancelationCallbacks.run();
+			}
 			notifyTerminated(effectiveReason, effectiveCause);
 			wakeWriter();
 		}
@@ -705,15 +766,26 @@ public final class StreamingMicrohttpResponses {
 				return;
 
 			long delayMillis = Math.max(0L, Duration.between(Instant.now(), deadline).toMillis());
+			testHooks.beforeResponseTimeoutScheduled();
 
-			ScheduledFuture<?> newResponseTimeoutFuture = this.timeoutExecutorService.schedule(() ->
-							fail(StreamTerminationReason.RESPONSE_TIMEOUT, null),
-					delayMillis,
-					TimeUnit.MILLISECONDS);
-			ScheduledFuture<?> previousResponseTimeoutFuture = this.responseTimeoutFuture.getAndSet(newResponseTimeoutFuture);
+			synchronized (this.lock) {
+				if (this.timeoutsStopped)
+					return;
+				ScheduledFuture<?> newResponseTimeoutFuture = this.timeoutExecutorService.schedule(() ->
+								fail(StreamTerminationReason.RESPONSE_TIMEOUT, null),
+						delayMillis,
+						TimeUnit.MILLISECONDS);
+				// A scheduler can invoke a due task before returning its future. A reentrant
+				// termination must cancel that future instead of publishing it after stop.
+				if (this.timeoutsStopped) {
+					newResponseTimeoutFuture.cancel(false);
+					return;
+				}
+				ScheduledFuture<?> previousResponseTimeoutFuture = this.responseTimeoutFuture.getAndSet(newResponseTimeoutFuture);
 
-			if (previousResponseTimeoutFuture != null)
-				previousResponseTimeoutFuture.cancel(false);
+				if (previousResponseTimeoutFuture != null)
+					previousResponseTimeoutFuture.cancel(false);
+			}
 		}
 
 		private void resetIdleTimeoutIfNeeded() {
@@ -722,26 +794,51 @@ public final class StreamingMicrohttpResponses {
 			if (idleTimeout == null)
 				return;
 
-			ScheduledFuture<?> newIdleTimeoutFuture = this.timeoutExecutorService.schedule(() ->
-							fail(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null),
-					Math.max(1L, idleTimeout.toMillis()),
-					TimeUnit.MILLISECONDS);
-			ScheduledFuture<?> previousIdleTimeoutFuture = this.idleTimeoutFuture.getAndSet(newIdleTimeoutFuture);
+			synchronized (this.lock) {
+				if (this.timeoutsStopped) return;
+				this.lastIdleActivityNanos = testHooks.nanoTime();
+				if (this.idleTimeoutFuture.get() == null)
+					scheduleIdleCheck(idleTimeoutNanos());
+			}
+		}
 
-			if (previousIdleTimeoutFuture != null)
-				previousIdleTimeoutFuture.cancel(false);
+		private long idleTimeoutNanos() {
+			try { return Math.max(TimeUnit.MILLISECONDS.toNanos(1), requireNonNull(this.idleTimeout).toNanos()); }
+			catch (ArithmeticException overflow) { return Long.MAX_VALUE; }
+		}
+
+		private void scheduleIdleCheck(long delayNanos) {
+			ScheduledFuture<?> idleTimeoutFuture = this.timeoutExecutorService.schedule(this::checkIdleTimeout,
+					delayNanos, TimeUnit.NANOSECONDS);
+			if (this.timeoutsStopped)
+				idleTimeoutFuture.cancel(false);
+			else
+				this.idleTimeoutFuture.set(idleTimeoutFuture);
+		}
+
+		private void checkIdleTimeout() {
+			synchronized (this.lock) {
+				if (this.timeoutsStopped) return;
+				long elapsed = testHooks.nanoTime() - this.lastIdleActivityNanos;
+				long timeout = idleTimeoutNanos();
+				if (elapsed < timeout) {
+					scheduleIdleCheck(timeout - Math.max(0L, elapsed));
+					return;
+				}
+			}
+			fail(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null);
 		}
 
 		private void cancelTimeouts() {
-			ScheduledFuture<?> responseTimeoutFuture = this.responseTimeoutFuture.getAndSet(null);
-
-			if (responseTimeoutFuture != null)
-				responseTimeoutFuture.cancel(false);
-
-			ScheduledFuture<?> idleTimeoutFuture = this.idleTimeoutFuture.getAndSet(null);
-
-			if (idleTimeoutFuture != null)
-				idleTimeoutFuture.cancel(false);
+			synchronized (this.lock) {
+				this.timeoutsStopped = true;
+				ScheduledFuture<?> responseTimeoutFuture = this.responseTimeoutFuture.getAndSet(null);
+				if (responseTimeoutFuture != null)
+					responseTimeoutFuture.cancel(false);
+				ScheduledFuture<?> idleTimeoutFuture = this.idleTimeoutFuture.getAndSet(null);
+				if (idleTimeoutFuture != null)
+					idleTimeoutFuture.cancel(false);
+			}
 		}
 
 		private void wakeWriter() {
@@ -754,7 +851,14 @@ public final class StreamingMicrohttpResponses {
 				return;
 
 			cancelTimeouts();
-			this.terminationListener.didTerminate(this.streamStarted, Duration.between(this.streamStarted, Instant.now()), reason, throwable);
+			Duration streamDuration = Duration.between(this.streamStarted, Instant.now());
+			Runnable notification = () -> this.terminationListener.didTerminate(
+					this.streamStarted, streamDuration, reason, throwable);
+			if (this.reservation != null) {
+				this.reservation.dispatchTermination(notification);
+				this.reservation.complete();
+			} else
+				notification.run();
 		}
 
 		private IOException toIOException(@NonNull Throwable throwable) {
@@ -767,38 +871,43 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		@NotThreadSafe
-		private final class ResponseStreamAdapter implements ResponseStream {
-			@Override
-			public void write(@NonNull byte[] bytes) throws IOException, InterruptedException, StreamingResponseCanceledException {
-				requireNonNull(bytes);
-				write(ByteBuffer.wrap(bytes));
-			}
-
+		private final class ResponseStreamAdapter implements ManagedResponseStream.Output {
 			@Override
 			public void write(@NonNull ByteBuffer byteBuffer) throws IOException, InterruptedException, StreamingResponseCanceledException {
 				requireNonNull(byteBuffer);
 
-				ByteBuffer source = byteBuffer.asReadOnlyBuffer();
+				StreamingWritableSource.this.cancelationToken.throwIfCanceled();
+				while (byteBuffer.hasRemaining()) {
+					StreamingWritableSource.this.cancelationToken.throwIfCanceled();
 
-				while (source.hasRemaining()) {
-					StreamingWritableSource.this.context.throwIfCanceled();
-
-					int payloadSize = Math.min(source.remaining(), Math.min(StreamingWritableSource.this.chunkSizeInBytes, StreamingWritableSource.this.queueCapacityInBytes));
+					int payloadSize = Math.min(byteBuffer.remaining(), Math.min(StreamingWritableSource.this.chunkSizeInBytes, StreamingWritableSource.this.queueCapacityInBytes));
 					byte[] payload = new byte[payloadSize];
-					source.get(payload);
-					enqueue(payload);
+					byteBuffer.duplicate().get(payload);
+					enqueue(payload, byteBuffer);
 				}
 			}
 
 			@Override
+			public int stagingCapacityInBytes() {
+				return Math.min(8_192, Math.min(StreamingWritableSource.this.chunkSizeInBytes,
+						StreamingWritableSource.this.queueCapacityInBytes));
+			}
+
+			@Override
+			public void didStageBytes() {
+				// Scalar writes update activity without allocating or replacing a timer.
+				if (StreamingWritableSource.this.idleTimeout != null)
+					StreamingWritableSource.this.lastIdleActivityNanos = testHooks.nanoTime();
+			}
+
+			@Override
 			public void flush() throws IOException, InterruptedException, StreamingResponseCanceledException {
-				StreamingWritableSource.this.context.throwIfCanceled();
+				StreamingWritableSource.this.cancelationToken.throwIfCanceled();
 				wakeWriter();
 			}
 
 			@Override
-			@NonNull
-			public Boolean isOpen() {
+			public boolean isOpen() {
 				synchronized (StreamingWritableSource.this.lock) {
 					return !StreamingWritableSource.this.closed
 							&& !StreamingWritableSource.this.completed
@@ -807,20 +916,23 @@ public final class StreamingMicrohttpResponses {
 				}
 			}
 
-			private void enqueue(@NonNull byte[] payload) throws IOException, InterruptedException, StreamingResponseCanceledException {
+			private void enqueue(@NonNull byte[] payload, @NonNull ByteBuffer acceptedSource) throws IOException, InterruptedException, StreamingResponseCanceledException {
 				requireNonNull(payload);
 
 				if (payload.length == 0)
 					return;
 
 				synchronized (StreamingWritableSource.this.lock) {
+					if (Thread.currentThread().isInterrupted())
+						throw new InterruptedException("Response producer is interrupted");
 					while (!StreamingWritableSource.this.closed
 							&& StreamingWritableSource.this.failure == null
 							&& !StreamingWritableSource.this.cancelationToken.isCanceled()
-							&& StreamingWritableSource.this.queuedPayloadBytes + payload.length > StreamingWritableSource.this.queueCapacityInBytes)
+							&& (long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
+								> StreamingWritableSource.this.queueCapacityInBytes)
 						StreamingWritableSource.this.lock.wait();
 
-					StreamingWritableSource.this.context.throwIfCanceled();
+					StreamingWritableSource.this.cancelationToken.throwIfCanceled();
 
 					if (StreamingWritableSource.this.closed)
 						throw new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
@@ -830,6 +942,9 @@ public final class StreamingMicrohttpResponses {
 
 					StreamingWritableSource.this.chunks.add(QueuedChunk.payload(payload));
 					StreamingWritableSource.this.queuedPayloadBytes += payload.length;
+					// Acceptance means queue ownership, not copying into a temporary
+					// payload. Preserve this prefix even if a following wakeup fails.
+					acceptedSource.position(acceptedSource.position() + payload.length);
 					StreamingWritableSource.this.lock.notifyAll();
 				}
 
@@ -913,93 +1028,135 @@ public final class StreamingMicrohttpResponses {
 
 	@ThreadSafe
 	private static final class DefaultCancelationToken implements CancelationToken {
-		@NonNull
-		private final AtomicBoolean canceled;
-		@NonNull
-		private final CopyOnWriteArrayList<Runnable> callbacks;
+		private static final Runnable NO_CALLBACKS = () -> {};
+		private boolean canceled;
+		private boolean completed;
+		@Nullable
+		private Set<CancelationCallbackRegistration> callbacks;
 		@NonNull
 		private final Consumer<Throwable> callbackFailureConsumer;
+		@Nullable
+		private final StreamLifecycleCoordinator.Reservation reservation;
 		@Nullable
 		private volatile StreamTerminationReason reason;
 		@Nullable
 		private volatile Throwable cause;
 
-		private DefaultCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer) {
-			this.canceled = new AtomicBoolean(false);
-			this.callbacks = new CopyOnWriteArrayList<>();
+		private DefaultCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer,
+				StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			this.callbackFailureConsumer = requireNonNull(callbackFailureConsumer);
+			this.reservation = reservation;
 		}
 
 		@Override
 		@NonNull
-		public Boolean isCanceled() {
-			return this.canceled.get();
+		public synchronized Boolean isCanceled() {
+			boolean canceled = this.canceled
+					|| this.reservation != null && this.reservation.isCanceled();
+			// Production may complete while the coordinator is publishing a later
+			// transport failure. Check completion after reading its cancelation state.
+			return !isCompleted() && canceled;
+		}
+
+		@Override
+		public void throwIfCanceled() throws StreamingResponseCanceledException {
+			// Healthy output only polls monotonic status. The exceptional path uses
+			// locked getters to read the complete reserved reason/cause pair.
+			if (isCanceled())
+				CancelationToken.super.throwIfCanceled();
 		}
 
 		@Override
 		@NonNull
-		public Optional<StreamTerminationReason> getCancelationReason() {
-			return Optional.ofNullable(this.reason);
+		public synchronized Optional<StreamTerminationReason> getCancelationReason() {
+			Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
+					? this.reservation.reason() : Optional.ofNullable(this.reason);
+			return isCompleted() ? Optional.empty() : reason;
 		}
 
 		@Override
 		@NonNull
-		public Optional<Throwable> getCancelationCause() {
-			return Optional.ofNullable(this.cause);
+		public synchronized Optional<Throwable> getCancelationCause() {
+			Optional<Throwable> cause = this.reason == null && this.reservation != null
+					? this.reservation.cause() : Optional.ofNullable(this.cause);
+			return isCompleted() ? Optional.empty() : cause;
 		}
 
 		@Override
 		@NonNull
-		public AutoCloseable onCancel(@NonNull Runnable callback) {
+		public CallbackRegistration onCancel(@NonNull Runnable callback) {
 			requireNonNull(callback);
-
+			CancelationCallbackRegistration registration = new CancelationCallbackRegistration(callback);
 			boolean runImmediately;
 
 			synchronized (this) {
-				runImmediately = this.canceled.get();
-
-				if (!runImmediately)
-					this.callbacks.add(callback);
-			}
-
-			if (runImmediately) {
-				runCallback(callback);
-				return () -> {
-					// No-op
-				};
-			}
-
-			return () -> {
-				synchronized (this) {
-					this.callbacks.remove(callback);
+				if (isCompleted()) {
+					registration.callback = null;
+					return registration;
 				}
-			};
+				runImmediately = this.canceled;
+				if (!runImmediately) {
+					if (this.callbacks == null)
+						this.callbacks = new LinkedHashSet<>();
+					this.callbacks.add(registration);
+				}
+			}
+			if (runImmediately)
+				registration.invoke();
+			return registration;
 		}
 
-		private boolean cancel(@NonNull StreamTerminationReason reason,
+		@Nullable
+		private Runnable reserveCancelation(@NonNull StreamTerminationReason reason,
 													 @Nullable Throwable cause) {
 			requireNonNull(reason);
 
 			if (reason == StreamTerminationReason.COMPLETED)
 				throw new IllegalArgumentException("Cancelation reason cannot be COMPLETED");
 
-			List<Runnable> callbacksToRun;
+			Set<CancelationCallbackRegistration> callbacksToRun;
 
 			synchronized (this) {
-				if (this.canceled.get())
-					return false;
+				if (this.canceled || isCompleted())
+					return null;
 
 				this.reason = reason;
 				this.cause = cause;
-				this.canceled.set(true);
-				callbacksToRun = List.copyOf(this.callbacks);
-				this.callbacks.clear();
+				this.canceled = true;
+				// Detach in constant time; traverse only on managed callback execution.
+				callbacksToRun = this.callbacks;
+				this.callbacks = null;
 			}
+			if (callbacksToRun == null || callbacksToRun.isEmpty())
+				return null;
+			return () -> {
+				for (CancelationCallbackRegistration registration : callbacksToRun)
+					registration.invoke();
+				callbacksToRun.clear();
+			};
+		}
 
-			for (Runnable callback : callbacksToRun)
-				runCallback(callback);
+		@Nullable
+		private synchronized Runnable complete() {
+			if (this.canceled || this.reservation != null
+					&& !this.reservation.isProductionComplete() && this.reservation.isCanceled())
+				return null;
+			if (this.completed)
+				return NO_CALLBACKS;
+			this.completed = true;
+			Set<CancelationCallbackRegistration> completedCallbacks = this.callbacks;
+			this.callbacks = null;
+			if (completedCallbacks == null || completedCallbacks.isEmpty())
+				return NO_CALLBACKS;
+			return () -> {
+				for (CancelationCallbackRegistration registration : completedCallbacks)
+					registration.callback = null;
+				completedCallbacks.clear();
+			};
+		}
 
-			return true;
+		private synchronized boolean isCompleted() {
+			return this.completed || this.reservation != null && this.reservation.isProductionComplete();
 		}
 
 		private void runCallback(@NonNull Runnable callback) {
@@ -1008,54 +1165,45 @@ public final class StreamingMicrohttpResponses {
 			try {
 				callback.run();
 			} catch (Throwable t) {
-				this.callbackFailureConsumer.accept(t);
+				reportCallbackFailure(t);
+			}
+		}
+
+		private void reportCallbackFailure(@NonNull Throwable throwable) {
+			try {
+				this.callbackFailureConsumer.accept(throwable);
+			} catch (Throwable ignored) {
+				// Diagnostic observers cannot suppress remaining cleanup callbacks.
+			}
+		}
+
+		private final class CancelationCallbackRegistration implements CallbackRegistration {
+			@Nullable
+			private volatile Runnable callback;
+
+			private CancelationCallbackRegistration(@NonNull Runnable callback) {
+				this.callback = callback;
+			}
+
+			@Override
+			public void close() {
+				synchronized (DefaultCancelationToken.this) {
+					this.callback = null;
+					if (DefaultCancelationToken.this.callbacks != null)
+						DefaultCancelationToken.this.callbacks.remove(this);
+				}
+			}
+
+			private void invoke() {
+				Runnable callback;
+				synchronized (DefaultCancelationToken.this) {
+					callback = this.callback;
+					this.callback = null;
+				}
+				if (callback != null)
+					runCallback(callback);
 			}
 		}
 	}
 
-	@ThreadSafe
-	private static final class DefaultStreamingResponseContext implements StreamingResponseContext {
-		@NonNull
-		private final Request request;
-		@NonNull
-		private final CancelationToken cancelationToken;
-		@Nullable
-		private final Instant deadline;
-		@Nullable
-		private final Duration idleTimeout;
-
-		private DefaultStreamingResponseContext(@NonNull Request request,
-																						@NonNull CancelationToken cancelationToken,
-																						@Nullable Instant deadline,
-																						@Nullable Duration idleTimeout) {
-			this.request = requireNonNull(request);
-			this.cancelationToken = requireNonNull(cancelationToken);
-			this.deadline = deadline;
-			this.idleTimeout = idleTimeout;
-		}
-
-		@Override
-		@NonNull
-		public CancelationToken getCancelationToken() {
-			return this.cancelationToken;
-		}
-
-		@Override
-		@NonNull
-		public Request getRequest() {
-			return this.request;
-		}
-
-		@Override
-		@NonNull
-		public Optional<Instant> getDeadline() {
-			return Optional.ofNullable(this.deadline);
-		}
-
-		@Override
-		@NonNull
-		public Optional<Duration> getIdleTimeout() {
-			return Optional.ofNullable(this.idleTimeout);
-		}
-	}
 }

@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Event;
+import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
@@ -123,7 +124,7 @@ public final class McpServerRuntimeBridge {
 
 				@Override
 				@NonNull
-				public AutoCloseable onCancel(@NonNull Runnable callback) {
+				public CallbackRegistration onCancel(@NonNull Runnable callback) {
 					requireNonNull(callback);
 					return () -> {};
 				}
@@ -4976,7 +4977,7 @@ public final class McpServerRuntimeBridge {
 			case WRITE_FAILED -> McpStreamTerminationReason.WRITE_FAILED;
 			case BACKPRESSURE -> McpStreamTerminationReason.BACKPRESSURE;
 			case SERVER_STOPPING -> McpStreamTerminationReason.SERVER_STOPPING;
-			case PROTOCOL_UNSUPPORTED, PRODUCER_FAILED, INTERNAL_ERROR,
+			case CLEANUP_TIMEOUT, PROTOCOL_UNSUPPORTED, PRODUCER_FAILED, INTERNAL_ERROR,
 					SIMULATOR_LIMIT_EXCEEDED, UNKNOWN ->
 					McpStreamTerminationReason.INTERNAL_ERROR;
 		};

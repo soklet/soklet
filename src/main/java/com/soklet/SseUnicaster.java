@@ -37,26 +37,27 @@ import javax.annotation.concurrent.ThreadSafe;
  *   if (chat == null)
  *     throw new NoSuchChatException();
  *
- *   // If a Last-Event-ID header was sent, pull data to "catch up" the client
+ *   // If a Last-Event-ID header was sent, pull one bounded replay page.
+ *   // This example assumes connectionQueueCapacity is at least 128.
  *   List<ChatMessage> catchupMessages = new ArrayList<>();
  *
  *   if(lastEventId != null)
- *     catchupMessages.addAll(myChatService.findCatchups(chatId, lastEventId));
+ *     catchupMessages.addAll(myChatService.findCatchups(chatId, lastEventId, 64));
  *
  *   // Customize "accept" handshake with a client initializer
  *   return SseHandshakeResult.Accepted.builder()
- *     .clientInitializer((unicaster) -> {
+ *     .clientInitializer(sseUnicaster -> {
  *       // Unicast "catchup" initialization events to this specific client.
- *       // The unicaster is guaranteed to write these events before any
- *       // other broadcaster does, allowing clients to safely catch up
- *       // without the risk of event interleaving
+ *       // If delivered, these events precede broadcaster events to this client.
+ *       // Continue additional pages through your application replay protocol;
+ *       // application-level coordination is needed for gap-free replay.
  *       catchupMessages.stream()
  *         .map(catchupMessage -> SseEvent.withEvent("chat-message")
  *           .id(catchupMessage.id())
  *           .data(catchupMessage.toJson())
  *           .retry(Duration.ofSeconds(5))
  *           .build())
- *         .forEach(event -> unicaster.unicastEvent(event));
+ *         .forEach(event -> sseUnicaster.unicastEvent(event));
  *     })
  *     .build();
  * }}</pre>
@@ -64,12 +65,17 @@ import javax.annotation.concurrent.ThreadSafe;
  * Client-initializer writes are buffered before the connection becomes active
  * and are therefore limited to the configured
  * {@link SseServer.Builder#connectionQueueCapacity(Integer)}. Configure that
- * capacity for the largest expected catch-up page, and paginate or otherwise
- * limit larger replays before returning the accepted result. If an overflow
- * escapes the initializer, Soklet closes the already-accepted connection
- * before delivering the buffered writes and records the failure in logs and
- * metrics. Soklet's optional one-time connection-verification heartbeat does
+ * capacity for the largest expected catch-up page plus headroom for live broadcasts
+ * arriving before that page drains; paginate or otherwise limit larger replays
+ * before returning the accepted result. Overflow terminates the already-accepted connection with
+ * {@link StreamTerminationReason#BACKPRESSURE}, even if the initializer catches
+ * the exception. Buffered writes may be discarded. Soklet's optional one-time connection-verification heartbeat does
  * not consume an application queue slot.
+ * <p>
+ * The initializer is one-time, bounded setup or catch-up work. Its queued events are not delivered until it
+ * returns successfully. Do not retain this unicaster or use the initializer as an indefinite upstream producer.
+ * Broadcasts published before the client joins its broadcaster are not buffered for it. Initializer ordering
+ * alone does not guarantee a gap-free handoff from replay to live events.
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events#client-initialization">https://www.soklet.com/docs/server-sent-events#client-initialization</a> for detailed documentation.
  * <p>
@@ -82,14 +88,14 @@ public interface SseUnicaster {
 	/**
 	 * Unicasts a single Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
-	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
+	 * During client initialization this method queues the event. Soklet delivers queued events after the
+	 * initializer returns successfully; returning from this method does not acknowledge socket delivery.
 	 * <p>
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
 	 * @param sseEvent the Server-Sent Event payload to unicast
-	 * @throws IllegalStateException if the client initializer or active
-	 * connection already has the configured maximum number of pending
-	 * application writes
+	 * @throws IllegalStateException if the initializer queue is full, the connection has terminated,
+	 * or the initializer has returned
 	 */
 	void unicastEvent(@NonNull SseEvent sseEvent);
 
@@ -98,14 +104,14 @@ public interface SseUnicaster {
 	 * <p>
 	 * Use {@link SseComment#heartbeatInstance()} to emit a heartbeat comment.
 	 * <p>
-	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
+	 * During client initialization this method queues the comment. Soklet delivers queued comments after the
+	 * initializer returns successfully; returning from this method does not acknowledge socket delivery.
 	 * <p>
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
 	 * @param sseComment the comment payload to unicast
-	 * @throws IllegalStateException if the client initializer or active
-	 * connection already has the configured maximum number of pending
-	 * application writes
+	 * @throws IllegalStateException if the initializer queue is full, the connection has terminated,
+	 * or the initializer has returned
 	 */
 	void unicastComment(@NonNull SseComment sseComment);
 
@@ -114,10 +120,11 @@ public interface SseUnicaster {
 	 * <p>
 	 * For example, a client may successfully complete a Server-Sent Event handshake for <em>Resource Method</em> {@code @SseEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}. The server, immediately after accepting the handshake, might then acquire a unicaster to "catch up" the client according to the {@code Last-Event-ID} header value (for example).
 	 * <p>
-	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicastEvent(SseEvent)}.
+	 * During that client's initializer, Soklet provides a unicaster for {@code /examples/123}. It can queue catch-up payloads for that client via {@link #unicastEvent(SseEvent)} and becomes unusable when the initializer returns.
 	 *
 	 * @return the runtime Resource Path instance with which this unicaster is associated
 	 */
 	@NonNull
 	ResourcePath getResourcePath();
+
 }

@@ -16,18 +16,14 @@
 
 package com.soklet;
 
-import com.soklet.Soklet.DefaultSimulator;
+import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
+import com.soklet.internal.streaming.ManagedSseLifecycle;
 import com.soklet.Soklet.MockSseUnicaster;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -50,279 +46,219 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */
 	@ThreadSafe
-	final class HandshakeAccepted implements SseRequestResult {
-		private final SseHandshakeResult.@NonNull Accepted sseHandshakeResult;
-		@NonNull
-		private final ResourcePath resourcePath;
-		@NonNull
+	final class HandshakeAccepted implements SseRequestResult, AutoCloseable {
+		private final SseHandshakeResult.Accepted sseHandshakeResult;
+		private final Request request;
 		private final HttpRequestResult requestResult;
-		@NonNull
-		private final DefaultSimulator simulator;
-		@NonNull
-		private final AtomicReference<@Nullable Consumer<Throwable>> unicastErrorHandler;
-		@NonNull
-		private List<@NonNull SseEvent> clientInitializerEvents;
-		@NonNull
-		private List<@NonNull SseComment> clientInitializerComments;
-		@NonNull
-		private final ReentrantLock lock;
-		@Nullable
-		private Consumer<SseEvent> eventConsumer;
-		@Nullable
-		private Consumer<SseComment> commentConsumer;
+		private final Soklet.MockSseServer server;
+		private final Object lock = new Object();
+		private final Channel<SseEvent> events = new Channel<>();
+		private final Channel<SseComment> comments = new Channel<>();
+		private final Consumer<SseEvent> broadcastEvents = event -> broadcast(this.events, event);
+		private final Consumer<SseComment> broadcastComments = comment -> broadcast(this.comments, comment);
+		private final ManagedSseLifecycle lifecycle;
+		private final MockSseUnicaster unicaster;
+		private boolean active;
 
 		HandshakeAccepted(SseHandshakeResult.@NonNull Accepted sseHandshakeResult,
-											@NonNull ResourcePath resourcePath,
-											@NonNull HttpRequestResult requestResult,
-											@NonNull DefaultSimulator simulator,
-											@Nullable Consumer<SseUnicaster> clientInitializer) {
-			requireNonNull(sseHandshakeResult);
-			requireNonNull(resourcePath);
-			requireNonNull(requestResult);
-			requireNonNull(simulator);
-
-			this.sseHandshakeResult = sseHandshakeResult;
-			this.resourcePath = resourcePath;
-			this.requestResult = requestResult;
-			this.simulator = simulator;
-			this.unicastErrorHandler = simulator.getSimulatedSseServer()
-					.map(sseServer -> sseServer.getUnicastErrorHandler())
-					.orElseGet(AtomicReference::new);
-			this.eventConsumer = null;
-			this.commentConsumer = null;
-			this.lock = new ReentrantLock();
-
-			this.clientInitializerEvents = new CopyOnWriteArrayList<>();
-			this.clientInitializerComments = new CopyOnWriteArrayList<>();
-
-			if (clientInitializer != null) {
-				clientInitializer.accept(new MockSseUnicaster(
-						getResourcePath(),
-						(sseEvent) -> {
-							requireNonNull(sseEvent);
-
-							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
-							// If we do have the event consumer registered, send immediately
-							Consumer<SseEvent> eventConsumer = getEventConsumer().orElse(null);
-
-							if (eventConsumer == null)
-								clientInitializerEvents.add(sseEvent);
-							else {
-								try {
-									eventConsumer.accept(sseEvent);
-								} catch (Throwable throwable) {
-									handleUnicastError(throwable);
-								}
-							}
-						},
-						(sseComment) -> {
-							requireNonNull(sseComment);
-
-							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
-							// If we do have the event consumer registered, send immediately
-							Consumer<SseComment> commentConsumer = getCommentConsumer().orElse(null);
-
-							if (commentConsumer == null)
-								clientInitializerComments.add(sseComment);
-							else {
-								try {
-									commentConsumer.accept(sseComment);
-								} catch (Throwable throwable) {
-									handleUnicastError(throwable);
-								}
-							}
-						},
-						getUnicastErrorHandler(),
-						this::safelyLog)
-				);
-			}
+				@NonNull Request request, @NonNull HttpRequestResult requestResult,
+				Soklet.@NonNull MockSseServer server,
+				StreamLifecycleCoordinator.@NonNull Reservation reservation) {
+			this.sseHandshakeResult = requireNonNull(sseHandshakeResult);
+			this.request = requireNonNull(request);
+			this.requestResult = requireNonNull(requestResult);
+			this.server = requireNonNull(server);
+			this.lifecycle = new ManagedSseLifecycle(requireNonNull(reservation), this::releaseConnection);
+			this.unicaster = new MockSseUnicaster(request,
+					event -> enqueue(this.events, event, false), comment -> enqueue(this.comments, comment, false));
 		}
 
-		/**
-		 * Registers a {@link SseEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events.
-		 * <p>
-		 * Each connection may have at most 1 event consumer.
-		 * <p>
-		 * See documentation at <a href="https://www.soklet.com/docs/testing#server-sent-events">https://www.soklet.com/docs/testing#server-sent-events</a>.
-		 *
-		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
-		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
-		 */
-		public void registerEventConsumer(
-				@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
-			requireNonNull(eventConsumer);
-
-			getLock().lock();
-
-			try {
-				if (getEventConsumer().isPresent())
-					throw new IllegalStateException(format("You cannot specify more than one event consumer for the same %s", HandshakeAccepted.class.getSimpleName()));
-
-				this.eventConsumer = eventConsumer;
-
-				// Send client initializer unicast events immediately, before any broadcasts can make it through
-				for (SseEvent event : getClientInitializerEvents()) {
-					try {
-						eventConsumer.accept(event);
-					} catch (Throwable throwable) {
-						handleUnicastError(throwable);
-					}
+		boolean initialize(@Nullable SseClientInitializer initializer) throws Exception {
+			if (!this.lifecycle.executeInitializer(() -> {
+				this.unicaster.beginInitializer();
+				try {
+					if (initializer != null)
+						initializer.initialize(this.unicaster);
+				} finally {
+					this.unicaster.finishInitializer();
 				}
-
-				// Register with the mock SSE server broadcaster, preserving client context
-				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getSimulatedSseServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
-			} finally {
-				getLock().unlock();
-			}
-		}
-
-		/**
-		 * Registers a Server-Sent comment "consumer" for this connection - similar to how a real client would listen for Server-Sent comment payloads.
-		 * <p>
-		 * Each connection may have at most 1 comment consumer.
-		 * <p>
-		 * See documentation at <a href="https://www.soklet.com/docs/testing#server-sent-events">https://www.soklet.com/docs/testing#server-sent-events</a>.
-		 *
-		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
-		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
-		 */
-		public void registerCommentConsumer(
-				@NonNull Consumer<@NonNull SseComment> commentConsumer) {
-			requireNonNull(commentConsumer);
-
-			getLock().lock();
-
+			}))
+				return false;
 			try {
-				if (getCommentConsumer().isPresent())
-					throw new IllegalStateException(format("You cannot specify more than one comment consumer for the same %s", HandshakeAccepted.class.getSimpleName()));
-
-				this.commentConsumer = commentConsumer;
-
-				// Send client initializer unicast comments immediately, before any broadcasts can make it through
-				for (SseComment comment : getClientInitializerComments()) {
-					try {
-						commentConsumer.accept(comment);
-					} catch (Throwable throwable) {
-						handleUnicastError(throwable);
+				return this.lifecycle.whileOpen(() -> {
+					synchronized (this.lock) {
+						this.server.registerConnection(this, this.request.getResourcePath(),
+								this.broadcastEvents, this.broadcastComments,
+								this.sseHandshakeResult.getClientContext().orElse(null));
+						this.active = true;
+						return true;
 					}
-				}
-
-				// Register with the mock SSE server broadcaster, preserving client context
-				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getSimulatedSseServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
-			} finally {
-				getLock().unlock();
-			}
-		}
-
-		void unregisterConsumers() {
-			getLock().lock();
-
-			try {
-				getEventConsumer().ifPresent((eventConsumer ->
-						getSimulator().getSimulatedSseServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
-
-				getCommentConsumer().ifPresent((commentConsumer ->
-						getSimulator().getSimulatedSseServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
-			} finally {
-				getLock().unlock();
+				});
+			} catch (IllegalStateException closedBeforeActivation) {
+				if (this.lifecycle.isOpen())
+					throw closedBeforeActivation;
+				return false;
 			}
 		}
 
 		/**
-		 * Gets the data provided when the handshake was accepted by the {@link com.soklet.annotation.SseEventSource}-annotated <em>Resource Method</em>.
-		 *
-		 * @return the data provided when the handshake was accepted
+		 * Disconnects this simulated client. Repeated calls are harmless.
+		 * Handshake metadata remains available.
 		 */
-		public SseHandshakeResult.@NonNull Accepted getSseHandshakeResult() {
-			return this.sseHandshakeResult;
-		}
-
 		@Override
-		@NonNull
-		public String toString() {
-			return format("%s{sseHandshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getSseHandshakeResult());
+		public void close() {
+			this.lifecycle.terminate(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 		}
 
 		/**
-		 * The initial result of the handshake, as written back to the client (note that the connection remains open).
-		 * <p>
-		 * Useful for examining headers/cookies written via {@link HttpRequestResult#getMarshaledResponse()}.
-		 *
-		 * @return the result of this request
+		 * Registers the sole event consumer and delivers buffered events in order.
+		 * @throws IllegalStateException if a consumer is already registered or this connection has terminated
 		 */
-		@NonNull
-		public HttpRequestResult getHttpRequestResult() {
-			return this.requestResult;
+		public void registerEventConsumer(@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
+			register(this.events, requireNonNull(eventConsumer));
 		}
 
-		@NonNull
-		private ResourcePath getResourcePath() {
-			return this.resourcePath;
+		/**
+		 * Registers the sole comment consumer and delivers buffered comments in order.
+		 * @throws IllegalStateException if a consumer is already registered or this connection has terminated
+		 */
+		public void registerCommentConsumer(@NonNull Consumer<@NonNull SseComment> commentConsumer) {
+			register(this.comments, requireNonNull(commentConsumer));
 		}
 
-		@NonNull
-		private DefaultSimulator getSimulator() {
-			return this.simulator;
+		private <T> void register(Channel<T> channel, Consumer<T> consumer) {
+			boolean drain = this.lifecycle.whileOpen(() -> {
+				synchronized (this.lock) {
+					if (channel.consumer != null)
+						throw new IllegalStateException("This simulated SSE connection already has a consumer of this type");
+					channel.consumer = consumer;
+					return claimDrain(channel);
+				}
+			});
+			if (drain)
+				drain(channel);
 		}
 
-		@NonNull
-		private AtomicReference<@Nullable Consumer<Throwable>> getUnicastErrorHandler() {
-			return this.unicastErrorHandler;
+		private <T> void broadcast(Channel<T> channel, T payload) {
+			try {
+				enqueue(channel, payload, true);
+			} catch (IllegalStateException failure) {
+				// A broadcaster may have snapshotted this connection just before it
+				// disconnected. The terminal hook has already released its state.
+				if (this.lifecycle.isOpen())
+					throw failure;
+			}
 		}
 
-		private void handleUnicastError(@NonNull Throwable throwable) {
-			requireNonNull(throwable);
-			Consumer<Throwable> handler = getUnicastErrorHandler().get();
+		private <T> void enqueue(Channel<T> channel, T payload, boolean broadcast) {
+			requireNonNull(payload);
+			boolean drain;
+			try {
+				drain = this.lifecycle.whileOpen(() -> {
+					synchronized (this.lock) {
+						if (this.events.pending.size() + this.comments.pending.size() >= this.server.connectionQueueCapacity)
+							throw new QueueCapacityExceededException();
+						channel.pending.addLast(new Pending<>(payload, broadcast));
+						return claimDrain(channel);
+					}
+				});
+			} catch (QueueCapacityExceededException overflow) {
+				this.lifecycle.terminate(StreamTerminationReason.BACKPRESSURE, overflow);
+				throw overflow;
+			}
+			if (drain)
+				drain(channel);
+		}
 
+		private <T> boolean claimDrain(Channel<T> channel) {
+			if (channel.draining || channel.consumer == null || channel.pending.isEmpty())
+				return false;
+			channel.draining = true;
+			return true;
+		}
+
+		private <T> void drain(Channel<T> channel) {
+			StreamLifecycleCoordinator.Reservation.Work work = this.lifecycle.retainWork();
+			if (work == null)
+				return;
+			try (work) {
+				for (;;) {
+					Delivery<T> delivery;
+					try {
+						delivery = this.lifecycle.whileOpen(() -> {
+							synchronized (this.lock) {
+								if (channel.consumer == null || channel.pending.isEmpty()) {
+									channel.draining = false;
+									return null;
+								}
+								Pending<T> pending = channel.pending.removeFirst();
+								return new Delivery<>(channel.consumer, pending.payload, pending.broadcast);
+							}
+						});
+					} catch (IllegalStateException terminated) {
+						return;
+					}
+					if (delivery == null)
+						return;
+					try {
+						delivery.consumer.accept(delivery.payload);
+					} catch (Throwable failure) {
+						handleConsumerError(failure, delivery.broadcast);
+					}
+				}
+			}
+		}
+
+		private void releaseConnection() {
+			synchronized (this.lock) {
+				this.events.clear();
+				this.comments.clear();
+				if (this.active) {
+					this.server.unregisterConnection(this, this.request.getResourcePath(),
+							this.broadcastEvents, this.broadcastComments);
+					this.active = false;
+				}
+			}
+		}
+
+		private void handleConsumerError(Throwable throwable, boolean broadcast) {
+			Consumer<Throwable> handler = (broadcast ? this.server.getBroadcastErrorHandler()
+					: this.server.getUnicastErrorHandler()).get();
 			if (handler != null) {
 				try {
 					handler.accept(throwable);
 					return;
 				} catch (Throwable ignored) {
-					// Fall through to default behavior
+					// Fall through to the lifecycle log sink.
 				}
 			}
-
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-							"SSE simulator unicast consumer failed")
-					.throwable(throwable)
-					.build());
+			this.server.safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+					"SSE simulator consumer failed").throwable(throwable).build());
 		}
 
-		private void safelyLog(@NonNull LogEvent logEvent) {
-			requireNonNull(logEvent);
+		/** Returns the original accepted handshake, including its headers and cookies. */
+		public SseHandshakeResult.@NonNull Accepted getSseHandshakeResult() { return this.sseHandshakeResult; }
 
-			getSimulator().getSimulatedSseServer().ifPresent(sseServer -> sseServer.safelyLog(logEvent));
+		/** Returns the initial handshake response; remains available after {@link #close()}. */
+		public @NonNull HttpRequestResult getHttpRequestResult() { return this.requestResult; }
+
+		@Override public @NonNull String toString() {
+			return format("%s{sseHandshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), this.sseHandshakeResult);
 		}
 
-		@NonNull
-		private List<@NonNull SseEvent> getClientInitializerEvents() {
-			return this.clientInitializerEvents;
+		private static final class Channel<T> {
+			private final java.util.ArrayDeque<Pending<T>> pending = new java.util.ArrayDeque<>();
+			private @Nullable Consumer<T> consumer;
+			private boolean draining;
+			private void clear() { this.pending.clear(); this.consumer = null; this.draining = false; }
 		}
 
-		@NonNull
-		private List<@NonNull SseComment> getClientInitializerComments() {
-			return this.clientInitializerComments;
-		}
-
-		@NonNull
-		private Optional<Consumer<SseEvent>> getEventConsumer() {
-			return Optional.ofNullable(this.eventConsumer);
-		}
-
-		@NonNull
-		private Optional<Consumer<SseComment>> getCommentConsumer() {
-			return Optional.ofNullable(this.commentConsumer);
-		}
-
-		@NonNull
-		private ReentrantLock getLock() {
-			return this.lock;
+		private record Pending<T>(T payload, boolean broadcast) {}
+		private record Delivery<T>(Consumer<T> consumer, T payload, boolean broadcast) {}
+		private static final class QueueCapacityExceededException extends IllegalStateException {
+			private QueueCapacityExceededException() { super("The simulated SSE connection queue is full"); }
 		}
 	}
-
 	/**
 	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>

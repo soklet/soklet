@@ -53,11 +53,13 @@ public interface SseBroadcaster {
 	/**
 	 * The runtime Resource Path with which this broadcaster is associated.
 	 * <p>
-	 * Soklet guarantees exactly one {@link SseBroadcaster} instance exists per {@link ResourcePath}.
+	 * The built-in server may return distinct handles for the same {@link ResourcePath};
+	 * their object identity is not a connection or broadcaster identity.
 	 * <p>
 	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @SseEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
 	 * <p>
-	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcastEvent(SseEvent)}.
+	 * A handle for {@code /examples/123} can be used to send SSE payloads to all
+	 * currently connected clients on that path via {@link #broadcastEvent(SseEvent)}.
 	 *
 	 * @return the runtime Resource Path instance with which this broadcaster is associated
 	 */

@@ -30,13 +30,13 @@ import static org.junit.jupiter.api.Assertions.*;
 public class PublicNamingContractTests {
 	@Test
 	void streamingResponseBodyBuilderAndCopierPreserveBodyRules() throws Exception {
-		StreamingResponseWriter writer = (output, context) -> {};
-		StreamingResponseBody body = StreamingResponseBody.fromWriter(writer);
+		StreamingResponseWriter streamingResponseWriter = responseStream -> {};
+		StreamingResponseBody body = StreamingResponseBody.fromWriter(streamingResponseWriter);
 		ResponseCookie cookie = ResponseCookie.with("example", "value").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 				.streamingResponseBody(body).cookies(Set.of(cookie)).build();
 		assertSame(body, response.getStreamingResponseBody().orElseThrow());
-		assertSame(writer, ((StreamingResponseBody.WriterBody) body).getWriter());
+		assertSame(streamingResponseWriter, ((StreamingResponseBody.WriterBody) body).getWriter());
 		assertSame(body, response.copy().finish().getStreamingResponseBody().orElseThrow());
 		assertEquals(Set.of(cookie), response.copy().withoutStreamingResponseBody().finish().getCookies());
 		assertTrue(response.copy().streamingResponseBody(null).finish().getStreamingResponseBody().isEmpty());
@@ -53,7 +53,69 @@ public class PublicNamingContractTests {
 			assertThrows(NoSuchMethodException.class, () -> owner.getMethod("withoutStream"));
 			assertParameter(owner.getMethod("streamingResponseBody", StreamingResponseBody.class),
 					StreamingResponseBody.class, "streamingResponseBody");
+			assertParameter(owner.getMethod("stream", StreamingResponseWriter.class),
+					StreamingResponseWriter.class, "streamingResponseWriter");
 		}
+	}
+
+	@Test
+	void streamingWriterReceivesOneResponseStreamWithItsMetadata() throws Exception {
+		assertParameter(StreamingResponseWriter.class.getMethod("writeTo", ResponseStream.class),
+				ResponseStream.class, "responseStream");
+		assertEquals(Request.class, ResponseStream.class.getMethod("getRequest").getReturnType());
+		assertEquals(CancelationToken.class,
+				ResponseStream.class.getMethod("getCancelationToken").getReturnType());
+		assertNotNull(ResponseStream.class.getMethod("getDeadline"));
+		assertNotNull(ResponseStream.class.getMethod("getIdleTimeout"));
+		assertThrows(ClassNotFoundException.class, () -> Class.forName("com.soklet.StreamingResponseContext"));
+	}
+
+	@Test
+	void httpStreamingLifecycleSettingsUseTheSelectedNamesAndBoxedTypes() throws Exception {
+		for (String name : List.of("streamingLifecycleCapacity", "streamingCallbackConcurrency")) {
+			Method method = HttpServer.Builder.class.getMethod(name, Integer.class);
+			assertParameter(method, Integer.class, name);
+			assertEquals(HttpServer.Builder.class, method.getReturnType());
+			assertThrows(NoSuchMethodException.class, () -> HttpServer.Builder.class.getMethod(name, int.class));
+		}
+		Method timeout = HttpServer.Builder.class.getMethod("streamingCleanupTimeout", java.time.Duration.class);
+		assertParameter(timeout, java.time.Duration.class, "streamingCleanupTimeout");
+		assertEquals(HttpServer.Builder.class, timeout.getReturnType());
+		for (String name : List.of("getStreamingLifecycleCapacity", "getStreamingCallbackConcurrency", "getStreamingCleanupTimeout"))
+			assertThrows(NoSuchMethodException.class, () -> HttpServer.class.getMethod(name));
+	}
+
+	@Test
+	void streamingOutputHelpersPreserveTheSelectedSignatures() throws Exception {
+		Method write = ResponseStream.class.getMethod("write", byte[].class, Integer.class, Integer.class);
+		assertArrayEquals(new String[]{"bytes", "offset", "length"},
+				java.util.Arrays.stream(write.getParameters()).map(Parameter::getName).toArray(String[]::new));
+		assertTrue(java.util.Arrays.stream(write.getParameters()).allMatch(Parameter::isNamePresent));
+		assertArrayEquals(new Class<?>[]{java.io.IOException.class, InterruptedException.class}, write.getExceptionTypes());
+		assertThrows(NoSuchMethodException.class,
+				() -> ResponseStream.class.getMethod("write", byte[].class, int.class, int.class));
+		assertThrows(NoSuchMethodException.class, () -> ResponseStream.class.getMethod("writeUtf8", String.class));
+		assertEquals(java.io.OutputStream.class, ResponseStream.class.getMethod("asOutputStream").getReturnType());
+	}
+
+	@Test
+	void resourceOwnershipUsesTheSelectedNamesAndCheckedCallbacks() throws Exception {
+		assertParameter(ResponseStream.class.getMethod("open", StreamResourceFactory.class),
+				StreamResourceFactory.class, "streamResourceFactory");
+		assertParameter(ResponseStream.class.getMethod("open", StreamResourceFactory.class, ResponseStream.ResourceAborter.class),
+				ResponseStream.ResourceAborter.class, "resourceAborter");
+		assertParameter(ResponseStream.class.getMethod("own", AutoCloseable.class), AutoCloseable.class, "resource");
+		assertParameter(ResponseStream.class.getMethod("using", StreamResourceFactory.class, ResponseStream.ResourceConsumer.class),
+				ResponseStream.ResourceConsumer.class, "resourceConsumer");
+		assertParameter(ResponseStream.class.getMethod("using", StreamResourceFactory.class,
+				ResponseStream.ResourceAborter.class, ResponseStream.ResourceConsumer.class),
+				ResponseStream.ResourceConsumer.class, "resourceConsumer");
+		assertArrayEquals(new Class<?>[]{Exception.class},
+				ResponseStream.ResourceAborter.class.getMethod("abort", AutoCloseable.class).getExceptionTypes());
+		assertArrayEquals(new Class<?>[]{Exception.class},
+				ResponseStream.ResourceConsumer.class.getMethod("accept", AutoCloseable.class).getExceptionTypes());
+		assertThrows(NoSuchMethodException.class,
+				() -> ResponseStream.class.getMethod("openWithCloseOnCancel", StreamResourceFactory.class));
 	}
 
 	@Test
