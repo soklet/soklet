@@ -63,6 +63,10 @@
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
         {
+          "owner": "com.soklet.internal.microhttp.Handler#streamingResponseInputPolicy",
+          "path": "src/main/java/com/soklet/internal/microhttp/Handler.java"
+        },
+        {
           "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadable",
           "path": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java"
         },
@@ -80,7 +84,7 @@
         }
       ],
       "id": "MCP-TRANSPORT-003",
-      "statement": "The live MCP handler opts into committed-stream disconnect monitoring; subsequent input is discarded and the connection is closed rather than parsed as another request."
+      "statement": "The live MCP handler selects DISCARD for committed-stream input; subsequent input is bounded, discarded, and closes the connection rather than being parsed as another request."
     },
     {
       "evidence": [
@@ -235,6 +239,10 @@
   },
   "directMicrohttpDependencies": [
     {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "type": "com.soklet.internal.microhttp.StreamLifecycleCoordinator"
+    },
+    {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
       "type": "com.soklet.internal.microhttp.MicrohttpRequest"
     },
@@ -368,9 +376,9 @@
   "formatVersion": 2,
   "summary": {
     "directMicrohttp": {
-      "fileCount": 7,
-      "pairCount": 25,
-      "typeCount": 12
+      "fileCount": 8,
+      "pairCount": 26,
+      "typeCount": 13
     },
     "directSocketEventLoop": {
       "fileCount": 6,

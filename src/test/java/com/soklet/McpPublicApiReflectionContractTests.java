@@ -311,7 +311,7 @@ public class McpPublicApiReflectionContractTests {
 					.allMatch(constructor -> Modifier.isPrivate(constructor.getModifiers())));
 		}
 		Method files = McpSkillBundle.class.getMethod("fromFiles", Map.class);
-		assertRequiredFactory(files, McpSkillBundle.class, "files");
+		assertRequiredFactory(files, McpSkillBundle.class, "fileContentsByLogicalPath");
 		assertParameterizedType(files.getGenericParameterTypes()[0], null, Map.class, String.class, byte[].class);
 		AnnotatedType[] fileTypes = ((AnnotatedParameterizedType) files.getAnnotatedParameterTypes()[0])
 				.getAnnotatedActualTypeArguments();
@@ -327,7 +327,7 @@ public class McpPublicApiReflectionContractTests {
 				.getAnnotatedActualTypeArguments()[0], NonNull.class));
 		Method find = McpSkillBundle.class.getMethod("findFileBytes", String.class);
 		assertNonNullOptionalPayload(find, byte[].class);
-		assertParameterNames(find, "filePath");
+		assertParameterNames(find, "logicalFilePath");
 		Assertions.assertTrue(hasExactNullness(find.getAnnotatedParameterTypes()[0], NonNull.class));
 
 		Method groupFactory = McpSkillGroup.class.getMethod("fromKeyAndSkillRegistrations", String.class, List.class);
@@ -1262,10 +1262,10 @@ public class McpPublicApiReflectionContractTests {
 			throws Exception {
 		assertParameterNames(McpToolHandler.class.getMethod("handle",
 				McpRequestContext.class, McpToolArguments.class,
-				McpInvocationFeatures.class), "requestContext", "arguments", "invocationFeatures");
+				McpInvocationFeatures.class), "requestContext", "toolArguments", "invocationFeatures");
 		assertParameterNames(McpCompleteToolHandler.class.getMethod("handle",
 				McpRequestContext.class, McpToolArguments.class,
-				McpInvocationFeatures.class), "requestContext", "arguments", "invocationFeatures");
+				McpInvocationFeatures.class), "requestContext", "toolArguments", "invocationFeatures");
 		assertParameterNames(McpPromptHandler.class.getMethod("handle",
 				McpRequestContext.class, McpPromptGetContext.class,
 				McpInvocationFeatures.class), "requestContext", "promptGetContext", "invocationFeatures");
@@ -1292,9 +1292,9 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterNames(McpInMemoryTaskManager.class.getMethod("createTask",
 				McpTaskCreationContext.class), "taskCreationContext");
 		assertParameterNames(McpAdmissionController.class.getMethod("admit",
-				McpAdmissionContext.class), "context");
+				McpAdmissionContext.class), "admissionContext");
 		assertParameterNames(McpRateLimiter.class.getMethod("acquire",
-				McpRateLimitContext.class), "context");
+				McpRateLimitContext.class), "rateLimitContext");
 		assertParameterNames(McpToolResultSanitizer.class.getMethod("sanitize",
 				McpRequestContext.class, String.class, McpJsonObject.class,
 				McpCompleteResult.class), "requestContext", "toolName", "rawArguments",
@@ -1314,13 +1314,13 @@ public class McpPublicApiReflectionContractTests {
 				"willStopMcpServer", McpServer.class), "mcpServer");
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"didStopMcpServer", McpServer.class, ShutdownComponentResult.class),
-				"mcpServer", "result");
+				"mcpServer", "shutdownComponentResult");
 		assertParameterNames(LifecycleObserver.class.getMethod(
-				"didStartMcpRequestHandling", McpRequestContext.class), "context");
+				"didStartMcpRequestHandling", McpRequestContext.class), "requestContext");
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"didFinishMcpRequestHandling", McpRequestContext.class,
 				McpRequestOutcome.class, McpJsonRpcError.class, Duration.class,
-				List.class), "context", "outcome", "error", "duration",
+				List.class), "requestContext", "requestOutcome", "jsonRpcError", "requestDuration",
 				"throwables");
 		assertParameterNames(MetricsCollector.class.getMethod(
 				"didRecordMcpMetricsEvent", McpMetricsEvent.class), "event");
@@ -1346,16 +1346,16 @@ public class McpPublicApiReflectionContractTests {
 				"removeVerificationKey", String.class), "keyId");
 		assertParameterNames(McpRequestStateProtector.class.getMethod("seal",
 				McpRequestStateProtectionContext.class, byte[].class),
-				"context", "plaintext");
+				"requestStateProtectionContext", "plaintext");
 		assertParameterNames(McpRequestStateProtector.class.getMethod("open",
 				McpRequestStateProtectionContext.class, String.class),
-				"context", "protectedState");
+				"requestStateProtectionContext", "protectedState");
 		assertParameterNames(McpSubscriptionEventListener.class.getMethod(
-				"onEvent", McpSubscriptionEvent.class), "event");
+				"onEvent", McpSubscriptionEvent.class), "subscriptionEvent");
 		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
 				"subscribe", McpSubscriptionEventListener.class), "listener");
 		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
-				"publish", McpSubscriptionEvent.class), "event");
+				"publish", McpSubscriptionEvent.class), "subscriptionEvent");
 		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
 				"publishResourceUpdated", java.net.URI.class), "resourceUri");
 		assertParameterNames(
@@ -1901,7 +1901,7 @@ public class McpPublicApiReflectionContractTests {
 				String.class);
 		assertFactory(McpMetricsEvent.class, "requestFinished",
 				McpMetricsEvent.RequestFinished.class,
-				List.of("endpointPath", "jsonRpcMethod", "outcome", "duration"),
+				List.of("endpointPath", "jsonRpcMethod", "requestOutcome", "requestDuration"),
 				String.class, String.class, McpRequestOutcome.class, Duration.class);
 		assertFactory(McpMetricsEvent.class, "requestStreamOpened",
 				McpMetricsEvent.RequestStreamOpened.class,
@@ -1909,7 +1909,7 @@ public class McpPublicApiReflectionContractTests {
 				String.class);
 		assertFactory(McpMetricsEvent.class, "requestStreamClosed",
 				McpMetricsEvent.RequestStreamClosed.class,
-				List.of("endpointPath", "jsonRpcMethod", "reason", "duration"),
+				List.of("endpointPath", "jsonRpcMethod", "streamTerminationReason", "streamDuration"),
 				String.class, String.class, McpStreamTerminationReason.class,
 				Duration.class);
 		assertFactory(McpMetricsEvent.class, "subscriptionOpened",
@@ -1917,11 +1917,11 @@ public class McpPublicApiReflectionContractTests {
 				String.class);
 		assertFactory(McpMetricsEvent.class, "subscriptionClosed",
 				McpMetricsEvent.SubscriptionClosed.class,
-				List.of("endpointPath", "reason", "duration"), String.class,
+				List.of("endpointPath", "streamTerminationReason", "subscriptionDuration"), String.class,
 				McpStreamTerminationReason.class, Duration.class);
 		assertFactory(McpMetricsEvent.class, "subscriptionMaintenance",
 				McpMetricsEvent.SubscriptionMaintenance.class,
-				List.of("endpointPath", "work", "outcome"), String.class,
+				List.of("endpointPath", "maintenanceWork", "maintenanceOutcome"), String.class,
 				McpMetricsEvent.SubscriptionMaintenance.Work.class,
 				McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
 		assertFactory(McpMetricsEvent.class, "cancelationSignaled",
@@ -2004,17 +2004,17 @@ public class McpPublicApiReflectionContractTests {
 				String.class);
 		assertFactory(McpMetricsSnapshot.RequestOutcomeKey.class,
 				"fromDimensions", McpMetricsSnapshot.RequestOutcomeKey.class,
-				List.of("endpointPath", "jsonRpcMethod", "outcome"), String.class,
+				List.of("endpointPath", "jsonRpcMethod", "requestOutcome"), String.class,
 				String.class, McpRequestOutcome.class);
 		assertFactory(McpMetricsSnapshot.RequestStreamTerminationKey.class,
 				"fromDimensions",
 				McpMetricsSnapshot.RequestStreamTerminationKey.class,
-				List.of("endpointPath", "jsonRpcMethod", "reason"), String.class,
+				List.of("endpointPath", "jsonRpcMethod", "streamTerminationReason"), String.class,
 				String.class, McpStreamTerminationReason.class);
 		assertFactory(McpMetricsSnapshot.SubscriptionTerminationKey.class,
 				"fromDimensions",
 				McpMetricsSnapshot.SubscriptionTerminationKey.class,
-				List.of("endpointPath", "reason"), String.class,
+				List.of("endpointPath", "streamTerminationReason"), String.class,
 				McpStreamTerminationReason.class);
 
 		assertRoutedMetricsGetters(McpMetricsSnapshot.EndpointMethodKey.class);

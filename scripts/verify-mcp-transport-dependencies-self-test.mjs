@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 80;
+const EXPECTED_CASE_COUNT = 82;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -50,6 +50,7 @@ const FIXTURE_SOURCES = Object.freeze([
   'src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java',
   'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java',
   'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java',
+  'src/main/java/com/soklet/internal/microhttp/Handler.java',
   'src/main/java/com/soklet/internal/microhttp/WritableSource.java',
 ]);
 
@@ -63,6 +64,7 @@ const BRIDGE =
   'src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java';
 const EVENT_LOOP =
   'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java';
+const HANDLER = 'src/main/java/com/soklet/internal/microhttp/Handler.java';
 
 function write(root, path, value) {
   const absolute = resolve(root, path);
@@ -208,7 +210,7 @@ try {
     assert.deepEqual(result.directSocketEventLoop,
       baseline.summary.directSocketEventLoop);
     assert.deepEqual(result.directMicrohttp,
-      { fileCount: 7, pairCount: 25, typeCount: 12 });
+      { fileCount: 8, pairCount: 26, typeCount: 13 });
     assert.deepEqual(result.directSocketEventLoop,
       { fileCount: 6, pairCount: 7, typeCount: 3 });
     assert.equal(result.characterizationCount, 5);
@@ -581,7 +583,7 @@ try {
   expectRejected('request-stream subscription offer cannot bypass its channel',
     (root) => {
       mutateSource(root, REQUEST_STREAM, (source) => source.replace(
-        'return channel.offerCoalescing(frame(requireNonNull(message)),\n'
+        'return channel.offerCoalescing(frame,\n'
         + '\t\t\t\trequireNonNull(coalescingKey));',
         'requireNonNull(message);\n\t\trequireNonNull(coalescingKey);\n'
         + '\t\treturn McpOutboundChannel.OfferResult.ACCEPTED;'));
@@ -626,32 +628,49 @@ try {
         '// return true;\n\t\t\t\t\treturn false;'));
     }, /live MCP handler must opt in/u);
 
+  expectRejected('MCP monitor opt-in cannot retain pipelined input',
+    (root) => {
+      mutateSource(root, HANDLER, (source) => replaceAfter(source,
+        'default StreamingResponseInputPolicy streamingResponseInputPolicy(',
+        '? StreamingResponseInputPolicy.DISCARD',
+        '? StreamingResponseInputPolicy.RETAIN'));
+    }, /monitor opt-in must select DISCARD/u);
+
   expectRejected('prepare path must invoke the streaming-monitor opt-in',
     (root) => {
       mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
         'private void prepareToWriteResponse(',
-        'handler.monitorClientDisconnectsDuringStreamingResponse(dispatch.request)',
-        'false /* handler.monitorClientDisconnectsDuringStreamingResponse(dispatch.request) */'));
-    }, /must call the handler streaming-monitor opt-in/u);
+        'handler.streamingResponseInputPolicy(dispatch.request)',
+        'Handler.StreamingResponseInputPolicy.NONE /* handler.streamingResponseInputPolicy(dispatch.request) */'));
+    }, /must call the handler streaming-input policy/u);
 
   expectRejected('prepare path cannot reset the installed monitor decision',
     (root) => {
       mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
         'private void prepareToWriteResponse(',
-        'monitorClientDisconnectsDuringStreamingResponse = monitorStreamingResponse;',
-        'monitorClientDisconnectsDuringStreamingResponse = monitorStreamingResponse;\n'
-        + '                monitorClientDisconnectsDuringStreamingResponse = false;'));
-    }, /install the streaming-monitor decision exactly once without resetting/u);
+        'streamingResponseInputPolicy = nextStreamingInputPolicy;',
+        'streamingResponseInputPolicy = nextStreamingInputPolicy;\n'
+        + '                streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;'));
+    }, /install the streaming-input policy exactly once without resetting/u);
 
   expectRejected('live readable dispatcher cannot bypass streaming discard',
     (root) => {
       mutateSource(root, EVENT_LOOP, (source) => source.replace(
-        '            if (monitorClientDisconnectsDuringStreamingResponse && writableSource != null) {\n'
+        '            if (streamingResponseInputPolicy != Handler.StreamingResponseInputPolicy.NONE\n'
+        + '                    && writableSource != null) {\n'
         + '                doOnReadableDuringStreamingResponse();\n'
         + '                return;\n'
         + '            }\n\n',
         ''));
     }, /live readable dispatcher must route committed monitored streams/u);
+
+  expectRejected('streaming input must retain the request-size read bound',
+    (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
+        'private void doOnReadableDuringStreamingResponse(',
+        'int remainingCapacity = options.maxRequestSize() - bufferedBytes;',
+        'int remainingCapacity = Integer.MAX_VALUE - bufferedBytes;'));
+    }, /streaming input reads must remain bounded/u);
 
   expectRejected('discard accounting cannot be restored by a comment decoy',
     (root) => {
@@ -667,7 +686,7 @@ try {
         'private void doOnReadableDuringStreamingResponse(',
         'closeAfterResponse = true;',
         'closeAfterResponse = false; // closeAfterResponse = true;'));
-    }, /only closeAfterResponse assignment forces true/u);
+    }, /final closeAfterResponse assignment forces true/u);
 
   expectRejected('discard close behavior cannot be reset after its anchor',
     (root) => {
@@ -675,7 +694,7 @@ try {
         'private void doOnReadableDuringStreamingResponse(',
         'closeAfterResponse = true;',
         'closeAfterResponse = true;\n            closeAfterResponse = false;'));
-    }, /only closeAfterResponse assignment forces true/u);
+    }, /final closeAfterResponse assignment forces true/u);
 
   expectRejected('response completion must consume closeAfterResponse by closing',
     (root) => {
@@ -689,7 +708,7 @@ try {
       'private void doOnReadableDuringStreamingResponse(',
       'streamingResponseBytesDiscarded += numBytes;',
       'streamingResponseBytesDiscarded += numBytes;\n            byteTokenizer.add(buffer);'));
-  }, /must bypass ByteTokenizer/u);
+  }, /DISCARD input must bypass ByteTokenizer/u);
 
   expectRejected('live Microhttp handler must submit admitted MCP requests',
     (root) => {

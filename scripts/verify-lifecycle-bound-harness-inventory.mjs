@@ -511,7 +511,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SokletDirectTerminationPrecedenceTests.java", "fa53b1ea0174a65ed9900203fe2f0f17f05f1dbc8518ca513201c1992c9e58e9", [
     ["ownerShutdownIntentWinsFormerGroupFanoutGap","da9453ddd92e3d10cfe8cb15476bf271efd399c14e41292a2edf1ac54b142ef9",{"phasePolicy":{"forcedShutdownMillis":30000,"gracefulShutdownMillis":30000,"startupCancellationMillis":30000,"startupMillis":5000},"controlledLifecycleCoreMillis":5000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "1fd57fe7c9e11243e75aab73940c17552e1701e3a3a0217385426dd5ddf0c610", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "11aa4b6988332290bd549ae2e3b780b56ad5d2b40b22630f93543523d119595c", [
     ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","3e3b5ad4ea82946356b53bacd01456586c1061d238075018d12ce690f1e41dc1",{"phasePolicy":{"startupMillis":2000,"startupCancellationMillis":1000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":2000}}],
     ["concurrentFreshScopesDoNotCrossDeliverCallbacks","3ed0428c59239dff98ab82c223aa9e17fe9f6552b79d08e56810b98f98f5a1b9",{"generation":{"count":2,"mode":"CONCURRENT_OR_ALTERNATIVE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":15000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
     ["customParameterAndInstanceProvidersAreFreshPerConfiguration","f10665e6611be5b47db4c751ecb9cdebeb9a2001355f48a6088f708f61c9070c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
@@ -644,14 +644,13 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
 ], 'lifecycle scope topology');
 
 const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
-  ...reviewedPhasePolicyFile("src/test/java/com/soklet/LifecyclePolicyTests.java", "7f916bf1421ee2e824cee0ef575e15f84c4e0fd87468f441ae6d2a501d1e6c59", [
-    ["defaultPolicyHasFourFiniteTimeouts","2ec478d330452750459eeae6c9137894c3616d515f468d39033f789276b36cd4",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/LifecyclePolicyTests.java", "1e913492fed46f7dc26e621a325f89e0afe58cbb5f66d63332c2879fa4993143", [
     ["negativeAndNanosecondOverflowingTimeoutsAreRejected","5e09609efbdc80c4bca9d987e57fd31bb400ae72fe94586f3265640c211609fd",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["nullRestoresEachBuiltInDefault","70e57c423a1c12469ae46b5767b017a23f583e9bcb790522f57d5a7b305383c3",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["policiesUseStructuralEqualityAcrossAllFourTimeouts","854da36425d693c070eb7b6ab139b2f628070d79abacd765f787c75503d4a479",{"forcedShutdownMillis":5000,"gracefulShutdownMillis":5000,"startupCancellationMillis":5000,"startupMillis":5000}],
     ["zeroRemainsAnImmediateBoundary","e137b16cbc06b0fe4d5700ea7053284884ded79e7d3ef904b71c956e58859323",{"forcedShutdownMillis":0,"gracefulShutdownMillis":0,"startupCancellationMillis":0,"startupMillis":0}],
   ]),
-  ...reviewedPhasePolicyFile("src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java", "da1697af1e16d022b7dbc51d4dbd8116d7c3345b1328f95153cc976acad62811", [
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java", "31207fb6c22e74018bd64d5fc58b51ef1763a65da8a02cc8c4c8b00b673311af", [
     ["defaultCollectorAggregatesConfiguredZerosRendersFiltersAndResets","1519ae9fd7f36f20cbb74dfcc21cb194cd490754293ccacd40e866037f45d0c9",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["sokletOwnedSaturatedListenerEmitsExactServerWideTransitions","4aea13bb236c46f47cd6292abcb1b30ed6170f9a95ac5a9ecc0989ae252ed635",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["queuedDeadlineDequeuesWithoutExecutionAndRetainsActiveGauge","072447bdc3fac24aeb356e1707048174fa8010606d15ca4ef6dd5ac6e4986ce4",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
@@ -704,7 +703,7 @@ const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
     ["shutdownMetricsCollectorFailureIsContainedAndLoggedOnce","68922c414ce532a2e73d80a216e4d697e5822369c88e9a80da8e8bd3c5b9dda8",{"forcedShutdownMillis":1000,"gracefulShutdownMillis":2000,"startupCancellationMillis":2000,"startupMillis":5000}],
     ["residualStopAndLaterExitDoNotDuplicateLifecycleOrMetricsOutcome","65b7ea9b199c3fb633d0349f93ed156e8a805d14cf2b1780ab3fddc7c1c4ebd8",{"forcedShutdownMillis":100,"gracefulShutdownMillis":100,"startupCancellationMillis":100,"startupMillis":5000}],
   ]),
-  ...reviewedPhasePolicyFile("src/test/java/com/soklet/SimulatorConfigDerivationTests.java", "73854f602cfee1cad13bd86a1715bd4f1a8960f03b73f1ba3ac1a335d9cf9a5e", [
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/SimulatorConfigDerivationTests.java", "206b7bd5e745757cd81c7daa6df753c430d74f589ee6f3d4c09ab19bce9ecf43", [
     ["derivationCreatesFreshTransportsAndLeavesSourceReusable","e8c100e7fcd7c1d73c30f731fec4de8d067815b4974714b9b5dbf96244128b13",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
     ["importedMcpConstructionIsClonedAndCanBeCustomized","bc53753592d591e6a55ef5d17d6f544888f5bfdbdaa59fd4fbdd149ffc71251b",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
     ["directRunCreatesAConfigurationPerInvocationAndBuilderAcceptsOptions","b6dbc0f825a131dbb475c79cf3b174275089bcb27b801374f09763543f4de8e9",{"startupMillis":5000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":1000}],
@@ -878,7 +877,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["blockedLifecycleCallDoesNotPreventAnotherParticipantPhaseSubmission","4206c710a70e1c2a9198e219d085020449c7f653f70586b93c0de2ca47d67666",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":2000}],
     ["graceExpiryCancelsBlockedQuiesceBeforeSubmittingForce","600ac5c14550d27da74baa83f9b5500ee370b0fb06cc21a9a7381b1338d158d0",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":0}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java", "da1697af1e16d022b7dbc51d4dbd8116d7c3345b1328f95153cc976acad62811", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java", "31207fb6c22e74018bd64d5fc58b51ef1763a65da8a02cc8c4c8b00b673311af", [
     ["queuedDeadlineDequeuesWithoutExecutionAndRetainsActiveGauge","072447bdc3fac24aeb356e1707048174fa8010606d15ca4ef6dd5ac6e4986ce4",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":45000}],
     ["managedResidualShutdownDequeuesAndFreezesGaugeAcrossLateExit","4681101ac6e14f0dde692d5ba2d481450422cf0d7bd7e381c309949dce6ffea1",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":35000}],
     ["unexpectedTerminationDefersQueueCallbackAndFreezesTerminalGauge","4c0c33330fbd8c8c8d749894f8267d1a569d6fd5e75537c1cfd597c9f1bd6ba4",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":55000}],
@@ -963,7 +962,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SokletMcpLifecycleTests.java", "fbdd2f202557a9c8f5cf722723f64892e4b32a425812f9452b0cacfbc6ebb35f", [
     ["noncooperativeMcpHandlerFreezesOneResidualOutcomeAcrossLaterCalls","e5184878ef3094285094f3b3bd798ccb990a74a12a0715f4389f5ca748f12f21",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":20000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "1fd57fe7c9e11243e75aab73940c17552e1701e3a3a0217385426dd5ddf0c610", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "11aa4b6988332290bd549ae2e3b780b56ad5d2b40b22630f93543523d119595c", [
     ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","3e3b5ad4ea82946356b53bacd01456586c1061d238075018d12ce690f1e41dc1",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":15000}],
     ["concurrentConfigurationReuseLetsExactlyOneRunClaimIt","5579f354b0e00bb9359ba6b607e9e803ea670e7c723448103ae2ab25fd364b9e",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":25000}],
     ["liveMcpStartQuiescesBeforeCancellationAndCatchesUpToForce","37b14f522e8065b3983c1b55e79f9930e5b4756ed89c67534386cb02e9ee3896",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":15000}],

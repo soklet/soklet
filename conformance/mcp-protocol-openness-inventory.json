@@ -152,7 +152,7 @@
     },
     {
       "closureAuthority": "SOKLET_POLICY",
-      "compatibleOptionalMemberBehavior": "The Tasks-extension request set is closed deliberately so only implemented task operations are installed as framework handlers; a new task operation requires an explicit router change.",
+      "compatibleOptionalMemberBehavior": "The framework-routed request set is deliberately closed to the implemented Tasks, Skills, and resource-read operations; adding a routed method requires an explicit router and handler review.",
       "conformanceRows": [
         "MCP-DISC-001",
         "MCP-PAGE-005",
@@ -162,9 +162,9 @@
       ],
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
       "id": "OPEN-056",
-      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#isFrameworkTaskMethod",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#isFrameworkRoutedMethod",
       "matcherRuleId": "OPEN-MATCH-003",
-      "method": "isFrameworkTaskMethod",
+      "method": "isFrameworkRoutedMethod",
       "owner": "com.soklet.internal.mcp.protocol.McpApplicationRequestRouter",
       "phase": "deferred-r2c",
       "roadmapNegativeInventoryKeys": [
@@ -679,6 +679,21 @@
       "method": "validateKeywordNames",
       "owner": "com.soklet.internal.mcp.schema.McpToolSchemaProfileCompiler.Compilation",
       "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "YAML and TAG directives have explicit bounded parsing; other directive names are reserved and do not gain execution or schema semantics without a reviewed Skills parser change.",
+      "conformanceRows": [
+        "FINITE-SKILLS-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java",
+      "id": "OPEN-059",
+      "key": "src/main/java/com/soklet/internal/mcp/skills/SkillYamlParser.java#com.soklet.internal.mcp.skills.SkillYamlParser#directive",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "directive",
+      "owner": "com.soklet.internal.mcp.skills.SkillYamlParser",
+      "phase": "deferred-r2c",
       "roadmapNegativeInventoryKeys": []
     }
   ]

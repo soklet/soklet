@@ -30,10 +30,10 @@ below records the subsequent non-MCP enum correction. The
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
-`current-incompatibilities.jsonl` retains the reviewed pre-P1b MCP compatibility
-snapshot between the released `com.soklet:soklet:3.5.1` artifact and the
-4.0.0 development tree, with five separately reviewed non-MCP gzip-policy
-removals added by the 2026-09-19 response-compression change. The 4.0 streaming
+`current-incompatibilities.jsonl` compares the released
+`com.soklet:soklet:3.5.1` artifact with the 4.0.0 development tree. It includes
+five separately reviewed non-MCP gzip-policy removals added by the 2026-09-19
+response-compression change. The 4.0 streaming
 redesign contributed 47 non-MCP HTTP/SSE incompatibilities at its September 22
 checkpoint. The optional `ResponseStream.writeUtf8(String)` addition and four
 provisional `SseUnicaster` methods were later removed from the final surface. The
@@ -43,14 +43,17 @@ the ledger contained 706 records and had SHA-256
 `d09dd3b74137e8a181fa9732ffa236dfd383d302ba22fa16a842cc287a5409b9`.
 The [separate route-component amendment](route-component-api-amendment-2026-09-22.md)
 adds one independently reviewed non-MCP removal. After removing the streaming
-helper and narrowing the SSE initializer to synchronous catch-up, the current
-ledger contains 702 records and has SHA-256
+helper and narrowing the SSE initializer to synchronous catch-up, that
+checkpoint's ledger contained 702 records and had SHA-256
 `0c997ec0c53f3891126ddd2a7e8eaf8d9d82c68722f5689c64eb72beee08e427`.
-The MCP portion remains unchanged while the 2026-09-18 P1b current-source
-foundation awaits the P0-C disposition and MCP-G2 refreeze. This narrowly
-scoped non-MCP work does not qualify the later MCP changes. At refreeze,
-the API-diff gate will regenerate the set and compare it in both directions,
-so an unexpected addition, removal, or changed record fails.
+The [2026-09-24 bounded MCP-G2 review](mcp-g2-bounded-refreeze-2026-09-24.md)
+reconciles the exact current incompatibility set to 707 records, SHA-256
+`24bbed473a6c4d9807cfce776a7353ffc3c99fd052d342fec5914355e1220808`.
+It also accepts only the N0, P1b, and P2 signature differences into the
+reviewed snapshots. P3 Apps and P4 Skills remain provisional; the aggregate
+API-freeze gate remains red until their qualifications and final review.
+The API-diff gate regenerates the incompatibility set and compares it in both
+directions, so an unexpected addition, removal, or changed record fails.
 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
 It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
@@ -115,14 +118,13 @@ scope has exactly one owner:
 | `phase-4.includes` | 168 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
-| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; their last pre-P1b signature snapshot remains frozen |
-| `non-mcp-public-api.allowlist` | 85 | reviewed lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
+| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
+| `non-mcp-public-api.allowlist` | 83 | reviewed lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 294-entry current-source MCP union plus the 85-entry non-MCP allowlist owns
-exactly 379 current types. Ownership alone does not freeze a type. The phase
-and provisional signature ledgers remain the last reviewed pre-P1b snapshots;
-the updated include inventories establish current-source ownership without
-claiming a refreeze.
+The 294-entry current-source MCP union plus the 83-entry non-MCP allowlist owns
+exactly 377 current types. Ownership alone does not freeze a type. The phase
+and provisional signature ledgers contain the bounded N0/P1b/P2 review;
+the P3/P4 differences remain outside the reviewed snapshots.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `208af06ae2a26e6ede4d0408d1accb4216c4ce350fb231ed3d146d2c463b2807`,
@@ -137,6 +139,15 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-09-24 bounded MCP-G2 review (aggregate HOLD)
+
+The [bounded review](mcp-g2-bounded-refreeze-2026-09-24.md) records the exact
+707-record current compatibility set and accepts 161 current-only plus 57
+reviewed-only N0/P1b/P2 signature IDs. P3 Apps and P4 Skills remain outside
+the reviewed signature snapshots, with 170 current-only and six reviewed-only
+IDs still to resolve. This later review supersedes the snapshot-status language
+in the dated historical sections below; it does not assert MCP-G2 completion.
 
 ### 2026-09-22 route-component compatibility amendment
 

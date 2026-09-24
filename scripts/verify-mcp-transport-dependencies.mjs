@@ -156,13 +156,14 @@ const CHARACTERIZATIONS = Object.freeze([
   {
     evidence: [
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#startWhileMetricsDeferred::<anonymous Handler>#monitorClientDisconnectsDuringStreamingResponse', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.microhttp.Handler#streamingResponseInputPolicy', path: 'src/main/java/com/soklet/internal/microhttp/Handler.java' },
       { owner: 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadable', path: 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java' },
       { owner: 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection#prepareToWriteResponse', path: 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java' },
       { owner: 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadableDuringStreamingResponse', path: 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java' },
       { owner: 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnWritable', path: 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java' },
     ],
     id: 'MCP-TRANSPORT-003',
-    statement: 'The live MCP handler opts into committed-stream disconnect monitoring; subsequent input is discarded and the connection is closed rather than parsed as another request.',
+    statement: 'The live MCP handler selects DISCARD for committed-stream input; subsequent input is bounded, discarded, and closes the connection rather than being parsed as another request.',
   },
   {
     evidence: [
@@ -891,6 +892,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const outboundPath = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
   const writablePath = 'src/main/java/com/soklet/internal/microhttp/WritableSource.java';
   const eventLoopPath = 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java';
+  const handlerPath = 'src/main/java/com/soklet/internal/microhttp/Handler.java';
   const serverPath = 'src/main/java/com/soklet/McpServer.java';
   const request = sourceBundle(root, requestPath, cache);
   const runtime = sourceBundle(root, runtimePath, cache);
@@ -899,6 +901,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const outbound = sourceBundle(root, outboundPath, cache);
   const writable = sourceBundle(root, writablePath, cache);
   const eventLoop = sourceBundle(root, eventLoopPath, cache);
+  const handler = sourceBundle(root, handlerPath, cache);
   const server = sourceBundle(root, serverPath, cache);
   const process = oneMethod(runtime.lexed, runtimePath,
     'com.soklet.internal.mcp.protocol.McpHttpServerRuntime',
@@ -1004,7 +1007,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const requestOfferCoalescing = oneMethod(request.lexed, requestPath,
     'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'offerCoalescingMessage');
-  if (!/^\s*return\s+channel\s*\.\s*offerCoalescing\s*\(\s*frame\s*\(\s*requireNonNull\s*\(\s*message\s*\)\s*\)\s*,\s*requireNonNull\s*\(\s*coalescingKey\s*\)\s*\)\s*;\s*$/u
+  if (!/^\s*Frame\s+frame\s*=\s*frame\s*\(\s*requireNonNull\s*\(\s*message\s*\)\s*\)\s*;\s*testHooks\s*\.\s*beforeCoalescingMessageOffer\s*\(\s*\)\s*;\s*return\s+channel\s*\.\s*offerCoalescing\s*\(\s*frame\s*,\s*requireNonNull\s*\(\s*coalescingKey\s*\)\s*\)\s*;\s*$/u
     .test(requestOfferCoalescing.bodyCode)) {
     fail('Transport characterization structural assertion failed: McpRequestSseStream.offerCoalescingMessage must use its installed channel');
   }
@@ -1081,36 +1084,57 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const monitor = oneAnonymousMethod(start, 'Handler',
     'monitorClientDisconnectsDuringStreamingResponse');
   if (!/^\s*return\s+true\s*;\s*$/u.test(monitor.bodyCode)) fail('Transport characterization structural assertion failed: live MCP handler must opt into streaming disconnect monitoring');
+  const inputPolicy = oneMethod(handler.lexed, handlerPath,
+    'com.soklet.internal.microhttp.Handler', 'streamingResponseInputPolicy');
+  if (!/^\s*return\s+monitorClientDisconnectsDuringStreamingResponse\s*\(\s*request\s*\)\s*\?\s*StreamingResponseInputPolicy\s*\.\s*DISCARD\s*:\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*;\s*$/u
+    .test(inputPolicy.bodyCode)) {
+    fail('Transport characterization structural assertion failed: the MCP monitor opt-in must select DISCARD through the Handler default');
+  }
   const prepare = oneMethod(eventLoop.lexed, eventLoopPath, 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection', 'prepareToWriteResponse');
-  requireStructural(prepare, /monitorStreamingResponse\s*=\s*handler\s*\.\s*monitorClientDisconnectsDuringStreamingResponse\s*\(\s*dispatch\s*\.\s*request\s*\)/u, 'prepareToWriteResponse must call the handler streaming-monitor opt-in');
-  requireExactSimpleAssignments(prepare, 'monitorStreamingResponse', [
-    'false',
-    'handler.monitorClientDisconnectsDuringStreamingResponse(dispatch.request)',
-  ], 'prepareToWriteResponse must derive exactly one streaming-monitor decision from the handler opt-in');
+  requireStructural(prepare, /if\s*\(\s*microhttpResponse\s*\.\s*streaming\s*\(\s*\)\s*\)\s*\{\s*nextStreamingInputPolicy\s*=\s*handler\s*\.\s*streamingResponseInputPolicy\s*\(\s*dispatch\s*\.\s*request\s*\)\s*;/u, 'prepareToWriteResponse must call the handler streaming-input policy for a streaming response');
+  requireExactSimpleAssignments(prepare, 'nextStreamingInputPolicy', [
+    'Handler.StreamingResponseInputPolicy.NONE',
+    'handler.streamingResponseInputPolicy(dispatch.request)',
+  ], 'prepareToWriteResponse must derive exactly one streaming-input policy from the handler');
   requireExactSimpleAssignments(prepare,
-    'monitorClientDisconnectsDuringStreamingResponse',
-    ['monitorStreamingResponse'],
-    'prepareToWriteResponse must install the streaming-monitor decision exactly once without resetting it');
+    'streamingResponseInputPolicy',
+    ['nextStreamingInputPolicy'],
+    'prepareToWriteResponse must install the streaming-input policy exactly once without resetting it');
+  requireStructural(prepare,
+    /streamingResponseInputPolicy\s*=\s*nextStreamingInputPolicy\s*;\s*streamingResponseBytesDiscarded\s*=\s*0\s*;\s*if\s*\(\s*nextStreamingInputPolicy\s*!=\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*\)\s*\{\s*enableReadInterestForDisconnectMonitoring\s*\(\s*\)\s*;/u,
+    'prepareToWriteResponse must arm reads only for the installed streaming-input policy');
   const readable = oneMethod(eventLoop.lexed, eventLoopPath,
     'com.soklet.internal.microhttp.ConnectionEventLoop.Connection',
     'doOnReadable');
   requireStructural(readable,
-    /if\s*\(\s*monitorClientDisconnectsDuringStreamingResponse\s*&&\s*writableSource\s*!=\s*null\s*\)\s*\{\s*doOnReadableDuringStreamingResponse\s*\(\s*\)\s*;\s*return\s*;\s*\}/u,
+    /if\s*\(\s*streamingResponseInputPolicy\s*!=\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*&&\s*writableSource\s*!=\s*null\s*\)\s*\{\s*doOnReadableDuringStreamingResponse\s*\(\s*\)\s*;\s*return\s*;\s*\}/u,
     'the live readable dispatcher must route committed monitored streams to the discard path');
   const discard = oneMethod(eventLoop.lexed, eventLoopPath, 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection', 'doOnReadableDuringStreamingResponse');
-  requireStructural(discard, /if\s*\(\s*!\s*monitorClientDisconnectsDuringStreamingResponse\s*\|\|\s*writableSource\s*==\s*null\s*\)/u, 'streaming readable path must be guarded by the active monitor and source');
+  requireStructural(discard, /if\s*\(\s*streamingResponseInputPolicy\s*==\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*\|\|\s*writableSource\s*==\s*null\s*\)/u, 'streaming readable path must be guarded by the active input policy and source');
   requireStructural(discard, /socketChannel\s*\.\s*read\s*\(\s*buffer\s*\)/u, 'streaming readable path must consume client bytes');
-  const discardIncrement = discard.bodyCode.search(/streamingResponseBytesDiscarded\s*\+=\s*numBytes\s*;/u);
-  const closeAssignments = [...discard.bodyCode.matchAll(
-    /\bcloseAfterResponse\s*([&|^]?=)(?!=)\s*([^;]+);/gu)];
-  const closeAfter = closeAssignments[0]?.index ?? -1;
-  if (discardIncrement < 0 || closeAssignments.length !== 1
-    || closeAssignments[0][1] !== '='
-    || closeAssignments[0][2].trim() !== 'true'
-    || closeAfter < discardIncrement) {
-    fail('Transport characterization structural assertion failed: discarded bytes must be counted before the method\'s only closeAfterResponse assignment forces true');
+  requireStructural(discard,
+    /boolean\s+retainPipelinedRequests\s*=\s*streamingResponseInputPolicy\s*==\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*RETAIN\s*;/u,
+    'only RETAIN may buffer pipelined streaming input');
+  requireStructural(discard,
+    /int\s+remainingCapacity\s*=\s*options\s*\.\s*maxRequestSize\s*\(\s*\)\s*-\s*bufferedBytes\s*;[\s\S]*?buffer\s*\.\s*limit\s*\(\s*overflowProbe\s*\?\s*1\s*:\s*Math\s*\.\s*min\s*\(\s*buffer\s*\.\s*capacity\s*\(\s*\)\s*,\s*remainingCapacity\s*\)\s*\)\s*;/u,
+    'streaming input reads must remain bounded by the request-size limit');
+  const retainBranch = oneConditionalBlock(discard,
+    /\bif\s*\(\s*retainPipelinedRequests\s*\)\s*\{/gu,
+    'the streaming RETAIN branch must remain unique');
+  if (!/\bbyteTokenizer\s*\.\s*add\s*\(\s*buffer\s*\)\s*;/u.test(retainBranch)
+      || !/\breturn\s*;\s*$/u.test(retainBranch.trim())
+      || [...discard.bodyCode.matchAll(/\bbyteTokenizer\s*\.\s*add\s*\(/gu)].length !== 1) {
+    fail('Transport characterization structural assertion failed: DISCARD input must bypass ByteTokenizer');
   }
-  if (/byteTokenizer\s*\.\s*add\s*\(/u.test(discard.bodyCode)) fail('Transport characterization structural assertion failed: streaming input must bypass ByteTokenizer');
+  const discardIncrement = discard.bodyCode.search(/streamingResponseBytesDiscarded\s*\+=\s*numBytes\s*;/u);
+  const closeAssignments = assignmentsTo(discard, 'closeAfterResponse');
+  if (discardIncrement < 0 || closeAssignments.length !== 2
+    || closeAssignments.some(({ operator, rightHandSide }) =>
+      operator !== '=' || rightHandSide !== 'true')
+    || closeAssignments[0].index >= discardIncrement
+    || closeAssignments[1].index <= discardIncrement) {
+    fail('Transport characterization structural assertion failed: discarded bytes must be counted before the final closeAfterResponse assignment forces true');
+  }
   const writableCompletion = oneMethod(eventLoop.lexed, eventLoopPath,
     'com.soklet.internal.microhttp.ConnectionEventLoop.Connection',
     'doOnWritable');
