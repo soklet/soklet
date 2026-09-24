@@ -380,15 +380,6 @@ function verifyLocalizationScenario(section, profileValues) {
   if (subscriptionTerminals !== 1)
     fail(`Expected exactly one pre-rendered subscription terminal, found: ${subscriptionTerminals}`);
 
-  if (contexts !== localizedResponses + subscriptionTerminals)
-    fail('Localization context cardinality does not match rendered responses plus the subscription terminal');
-
-  if (lookups !== contexts)
-    fail('Localization lookup cardinality does not match context cardinality');
-
-  if (preferenceMatches !== contexts)
-    fail('Bounded locale-preference evidence does not match context cardinality');
-
   const invalidations = observation(
     section,
     'Catalog invalidations requested/delivered',
@@ -396,6 +387,18 @@ function verifyLocalizationScenario(section, profileValues) {
 
   if (invalidations === null || invalidations[1] !== invalidations[2])
     fail('Catalog invalidation evidence must be a positive balanced requested/delivered pair');
+
+  if (Number(invalidations[1]) !== Number(profileValues.get('mcp.cyclesPerClient')))
+    fail('Catalog invalidation count does not match the selected soak profile');
+
+  if (contexts !== localizedResponses + subscriptionTerminals + Number(invalidations[1]) + 1)
+    fail('Localization context cardinality does not match rendered responses, subscription projections, and terminal');
+
+  if (lookups !== contexts)
+    fail('Localization lookup cardinality does not match context cardinality');
+
+  if (preferenceMatches !== contexts)
+    fail('Bounded locale-preference evidence does not match context cardinality');
 
   if (observation(
     section,

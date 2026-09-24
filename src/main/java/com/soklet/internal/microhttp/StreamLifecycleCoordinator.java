@@ -40,6 +40,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -554,7 +555,8 @@ public final class StreamLifecycleCoordinator {
 			this.reason = reason;
 			this.cause = cause;
 			beginCleanupLocked();
-			if (!this.productionComplete && this.producerThread != null && this.producerThread != Thread.currentThread())
+			if (!this.productionComplete && this.producerThread != null
+					&& !sameInstance(this.producerThread, Thread.currentThread()))
 				this.producerThread.interrupt();
 			return true;
 		}
@@ -887,7 +889,7 @@ public final class StreamLifecycleCoordinator {
 		@Override
 		public void run() {
 			synchronized (lock) {
-				if (this.reservation.submissionPending && Thread.currentThread() == this.submittingThread)
+				if (this.reservation.submissionPending && sameInstance(Thread.currentThread(), this.submittingThread))
 					throw new RejectedExecutionException("Streaming producer executor must not run submitted work inline");
 				if (this.reservation.producerState != ProducerState.SUBMITTING
 						&& this.reservation.producerState != ProducerState.QUEUED)

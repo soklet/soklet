@@ -400,11 +400,9 @@ final class DefaultHttpServer implements HttpServer {
 				? builder.streamingCleanupTimeout
 				: DEFAULT_STREAMING_CLEANUP_TIMEOUT;
 
-		if (this.streamingCleanupTimeout.isNegative() || this.streamingCleanupTimeout.isZero())
-			throw new IllegalArgumentException("Streaming cleanup timeout must be > 0");
-
 		try {
-			this.streamingCleanupTimeout.toNanos();
+			if (this.streamingCleanupTimeout.toNanos() <= 0L)
+				throw new IllegalArgumentException("Streaming cleanup timeout must be > 0");
 		} catch (ArithmeticException overflow) {
 			throw new IllegalArgumentException("Streaming cleanup timeout must be representable in nanoseconds", overflow);
 		}
@@ -2775,8 +2773,8 @@ final class DefaultHttpServer implements HttpServer {
 					|| !terminated(snapshot.streamingExecutor())
 					|| !terminated(snapshot.streamingTimeoutExecutor())
 					|| !terminated(snapshot.requestTimeoutScheduler())
-					|| (snapshot.streamLifecycleCoordinator() != null
-							&& !snapshot.streamLifecycleCoordinator().isTerminated()))
+				|| (streamLifecycleCoordinator != null
+							&& !streamLifecycleCoordinator.isTerminated()))
 				kinds.add(InternalResidualActivityType.EXECUTOR_TASK);
 			return Collections.unmodifiableSet(kinds);
 		}

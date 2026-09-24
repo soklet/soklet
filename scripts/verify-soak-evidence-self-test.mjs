@@ -79,10 +79,10 @@ function reportText() {
     const localizationEvidence = scenario === 'MCP localization render and invalidation churn'
       ? '- Localized catalog responses: 8\n'
         + '- Subscription terminals pre-rendered: 1\n'
-        + '- Localization contexts created: 9\n'
-        + '- Localization lookups completed: 9\n'
-        + '- Bounded locale preferences matched: 9\n'
-        + '- Catalog invalidations requested/delivered: 2/2\n'
+        + '- Localization contexts created: 110\n'
+        + '- Localization lookups completed: 110\n'
+        + '- Bounded locale preferences matched: 110\n'
+        + '- Catalog invalidations requested/delivered: 100/100\n'
         + '- Final active handlers/queued/streams/subscriptions: 0/0/0/0\n'
         + '- Final MCP status: TERMINATED\n'
         + '- Lifecycle core shutdown bound: PT11S\n'
@@ -234,7 +234,7 @@ try {
 
   restore = overwrite(
     reportPath,
-    (report) => report.replace('- Localization contexts created: 9', '- Localization contexts created: 8'),
+    (report) => report.replace('- Localization contexts created: 110', '- Localization contexts created: 109'),
   );
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /context cardinality/);
   restore();
@@ -242,8 +242,8 @@ try {
   restore = overwrite(
     reportPath,
     (report) => report.replace(
-      '- Catalog invalidations requested/delivered: 2/2',
-      '- Catalog invalidations requested/delivered: 2/1',
+      '- Catalog invalidations requested/delivered: 100/100',
+      '- Catalog invalidations requested/delivered: 100/99',
     ),
   );
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /positive balanced/);

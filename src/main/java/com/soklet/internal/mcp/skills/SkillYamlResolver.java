@@ -85,10 +85,11 @@ final class SkillYamlResolver {
 
 			chargeNode(depth, jsonNode, position);
 			Anchor anchor = null;
-			if (node.properties().anchor() != null) {
-				budget.work(node.properties().anchor().length(), position);
+			String anchorName = node.properties().anchor();
+			if (anchorName != null) {
+				budget.work(anchorName.length(), position);
 				anchor = new Anchor();
-				anchors.put(node.properties().anchor(), anchor);
+				anchors.put(anchorName, anchor);
 			}
 
 			String tag = resolvedTag(node);

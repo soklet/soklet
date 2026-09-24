@@ -46,7 +46,7 @@ public final class ManagedSseLifecycle {
 	@Nullable
 	private volatile StreamTermination termination;
 
-	public ManagedSseLifecycle(@NonNull StreamLifecycleCoordinator.Reservation reservation,
+	public ManagedSseLifecycle(StreamLifecycleCoordinator.@NonNull Reservation reservation,
 			@NonNull Runnable transportTermination) {
 		this.reservation = requireNonNull(reservation);
 		this.transportTermination = requireNonNull(transportTermination);
@@ -90,8 +90,7 @@ public final class ManagedSseLifecycle {
 	}
 
 	/** The caller closes this proof after actual execution or proven pre-entry retirement. */
-	@Nullable
-	public StreamLifecycleCoordinator.Reservation.Work retainWork() {
+	public StreamLifecycleCoordinator.Reservation.@Nullable Work retainWork() {
 		return this.reservation.retainWork();
 	}
 

@@ -195,6 +195,11 @@ public final class GenericLocalizationProviderExample
 			}
 
 			@Override
+			public Optional<String> getSkillListCursor() {
+				return Optional.empty();
+			}
+
+			@Override
 			public Locale getFallbackLocale() {
 				return Locale.ENGLISH;
 			}

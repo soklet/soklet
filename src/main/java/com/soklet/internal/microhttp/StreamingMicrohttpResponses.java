@@ -60,6 +60,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -288,8 +289,7 @@ public final class StreamingMicrohttpResponses {
 		private final DefaultCancelationToken cancelationToken;
 		@NonNull
 		private final Request request;
-		@Nullable
-		private final StreamLifecycleCoordinator.Reservation reservation;
+		private final StreamLifecycleCoordinator.@Nullable Reservation reservation;
 		@NonNull
 		private final Object lock;
 		@NonNull
@@ -576,7 +576,7 @@ public final class StreamingMicrohttpResponses {
 			// A transport outcome can precede producer exit. Preserve later application
 			// failure evidence even though a second terminal signal cannot replace it.
 			if (this.cancelationToken.isCanceled()
-					&& throwable != this.cancelationToken.getCancelationCause().orElse(null)
+					&& !sameInstance(throwable, this.cancelationToken.getCancelationCause().orElse(null))
 					&& !(throwable instanceof InterruptedException)
 					&& (!(throwable instanceof StreamingResponseCanceledException)
 							|| throwable.getSuppressed().length != 0))
@@ -742,7 +742,7 @@ public final class StreamingMicrohttpResponses {
 				// Pair the interrupt with physical producer ownership, never Future completion.
 				// Clearing producerThread in the same lock prevents interrupting a reused worker.
 				if (this.reservation == null && !this.cancelationToken.isCompleted()
-						&& this.producerThread != null && this.producerThread != Thread.currentThread())
+						&& this.producerThread != null && !sameInstance(this.producerThread, Thread.currentThread()))
 					this.producerThread.interrupt();
 			}
 
@@ -1029,14 +1029,14 @@ public final class StreamingMicrohttpResponses {
 	@ThreadSafe
 	private static final class DefaultCancelationToken implements CancelationToken {
 		private static final Runnable NO_CALLBACKS = () -> {};
+		private final Object lock = new Object();
 		private boolean canceled;
 		private boolean completed;
 		@Nullable
 		private Set<CancelationCallbackRegistration> callbacks;
 		@NonNull
 		private final Consumer<Throwable> callbackFailureConsumer;
-		@Nullable
-		private final StreamLifecycleCoordinator.Reservation reservation;
+		private final StreamLifecycleCoordinator.@Nullable Reservation reservation;
 		@Nullable
 		private volatile StreamTerminationReason reason;
 		@Nullable
@@ -1050,12 +1050,14 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		@NonNull
-		public synchronized Boolean isCanceled() {
-			boolean canceled = this.canceled
-					|| this.reservation != null && this.reservation.isCanceled();
-			// Production may complete while the coordinator is publishing a later
-			// transport failure. Check completion after reading its cancelation state.
-			return !isCompleted() && canceled;
+		public Boolean isCanceled() {
+			synchronized (this.lock) {
+				boolean canceled = this.canceled
+						|| this.reservation != null && this.reservation.isCanceled();
+				// Production may complete while the coordinator is publishing a later
+				// transport failure. Check completion after reading its cancelation state.
+				return !isCompleted() && canceled;
+			}
 		}
 
 		@Override
@@ -1068,18 +1070,22 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		@NonNull
-		public synchronized Optional<StreamTerminationReason> getCancelationReason() {
-			Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
-					? this.reservation.reason() : Optional.ofNullable(this.reason);
-			return isCompleted() ? Optional.empty() : reason;
+		public Optional<StreamTerminationReason> getCancelationReason() {
+			synchronized (this.lock) {
+				Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
+						? this.reservation.reason() : Optional.ofNullable(this.reason);
+				return isCompleted() ? Optional.empty() : reason;
+			}
 		}
 
 		@Override
 		@NonNull
-		public synchronized Optional<Throwable> getCancelationCause() {
-			Optional<Throwable> cause = this.reason == null && this.reservation != null
-					? this.reservation.cause() : Optional.ofNullable(this.cause);
-			return isCompleted() ? Optional.empty() : cause;
+		public Optional<Throwable> getCancelationCause() {
+			synchronized (this.lock) {
+				Optional<Throwable> cause = this.reason == null && this.reservation != null
+						? this.reservation.cause() : Optional.ofNullable(this.cause);
+				return isCompleted() ? Optional.empty() : cause;
+			}
 		}
 
 		@Override
@@ -1089,7 +1095,7 @@ public final class StreamingMicrohttpResponses {
 			CancelationCallbackRegistration registration = new CancelationCallbackRegistration(callback);
 			boolean runImmediately;
 
-			synchronized (this) {
+			synchronized (this.lock) {
 				if (isCompleted()) {
 					registration.callback = null;
 					return registration;
@@ -1116,7 +1122,7 @@ public final class StreamingMicrohttpResponses {
 
 			Set<CancelationCallbackRegistration> callbacksToRun;
 
-			synchronized (this) {
+			synchronized (this.lock) {
 				if (this.canceled || isCompleted())
 					return null;
 
@@ -1137,26 +1143,30 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		@Nullable
-		private synchronized Runnable complete() {
-			if (this.canceled || this.reservation != null
-					&& !this.reservation.isProductionComplete() && this.reservation.isCanceled())
-				return null;
-			if (this.completed)
-				return NO_CALLBACKS;
-			this.completed = true;
-			Set<CancelationCallbackRegistration> completedCallbacks = this.callbacks;
-			this.callbacks = null;
-			if (completedCallbacks == null || completedCallbacks.isEmpty())
-				return NO_CALLBACKS;
-			return () -> {
-				for (CancelationCallbackRegistration registration : completedCallbacks)
-					registration.callback = null;
-				completedCallbacks.clear();
-			};
+		private Runnable complete() {
+			synchronized (this.lock) {
+				if (this.canceled || this.reservation != null
+						&& !this.reservation.isProductionComplete() && this.reservation.isCanceled())
+					return null;
+				if (this.completed)
+					return NO_CALLBACKS;
+				this.completed = true;
+				Set<CancelationCallbackRegistration> completedCallbacks = this.callbacks;
+				this.callbacks = null;
+				if (completedCallbacks == null || completedCallbacks.isEmpty())
+					return NO_CALLBACKS;
+				return () -> {
+					for (CancelationCallbackRegistration registration : completedCallbacks)
+						registration.callback = null;
+					completedCallbacks.clear();
+				};
+			}
 		}
 
-		private synchronized boolean isCompleted() {
-			return this.completed || this.reservation != null && this.reservation.isProductionComplete();
+		private boolean isCompleted() {
+			synchronized (this.lock) {
+				return this.completed || this.reservation != null && this.reservation.isProductionComplete();
+			}
 		}
 
 		private void runCallback(@NonNull Runnable callback) {
@@ -1187,7 +1197,7 @@ public final class StreamingMicrohttpResponses {
 
 			@Override
 			public void close() {
-				synchronized (DefaultCancelationToken.this) {
+				synchronized (DefaultCancelationToken.this.lock) {
 					this.callback = null;
 					if (DefaultCancelationToken.this.callbacks != null)
 						DefaultCancelationToken.this.callbacks.remove(this);
@@ -1196,7 +1206,7 @@ public final class StreamingMicrohttpResponses {
 
 			private void invoke() {
 				Runnable callback;
-				synchronized (DefaultCancelationToken.this) {
+				synchronized (DefaultCancelationToken.this.lock) {
 					callback = this.callback;
 					this.callback = null;
 				}

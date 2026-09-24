@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -41,7 +42,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	private final Runnable beginFinalization;
 	private final Consumer<Throwable> failureConsumer;
 	private final Consumer<Throwable> cleanupFailureConsumer;
-	@Nullable private final StreamLifecycleCoordinator.PublisherWork publisherWork;
+	private final StreamLifecycleCoordinator.@Nullable PublisherWork publisherWork;
 	private final CountDownLatch completed = new CountDownLatch(1);
 	private final CountDownLatch released = new CountDownLatch(1);
 	private final CountDownLatch cancelCompleted = new CountDownLatch(1);
@@ -56,7 +57,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	private int enteredCalls;
 
 	private PublisherResponseStream(CancelationToken cancelationToken, ManagedResponseStream.Output output,
-			@Nullable StreamLifecycleCoordinator.Reservation reservation, Runnable beginFinalization,
+			StreamLifecycleCoordinator.@Nullable Reservation reservation, Runnable beginFinalization,
 			Consumer<Throwable> failureConsumer, Consumer<Throwable> cleanupFailureConsumer) {
 		this.cancelationToken = requireNonNull(cancelationToken);
 		this.output = requireNonNull(output);
@@ -67,7 +68,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	}
 
 	public static void copy(StreamingResponseBody.PublisherBody body, CancelationToken cancelationToken,
-			ManagedResponseStream.Output output, @Nullable StreamLifecycleCoordinator.Reservation reservation,
+			ManagedResponseStream.Output output, StreamLifecycleCoordinator.@Nullable Reservation reservation,
 			Runnable beginFinalization, Consumer<Throwable> failureConsumer,
 			Consumer<Throwable> cleanupFailureConsumer) throws Exception {
 		requireNonNull(body);
@@ -154,7 +155,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 				throw new IllegalStateException("Publisher supplied a subscription after its acquisition or lifetime ended");
 			this.enteredCalls++;
 			duplicate = this.subscription != null;
-			same = this.subscription == subscription;
+			same = sameInstance(this.subscription, subscription);
 			if (!duplicate) {
 				this.subscription = subscription;
 				if (this.publisherWork != null) this.publisherWork.subscriptionReceived();
@@ -290,7 +291,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		if (first) this.failureConsumer.accept(throwable);
 		// A provider frame may fail after the canceled producer has already exited.
 		// Keep its actual failure as bounded evidence without replacing the winner.
-		if ((!first && throwable != this.failure.get() || first && alreadyCanceled)
+		if ((!first && !sameInstance(throwable, this.failure.get()) || first && alreadyCanceled)
 				&& !(throwable instanceof InterruptedException)
 				&& !(throwable instanceof StreamingResponseCanceledException))
 			this.cleanupFailureConsumer.accept(throwable);

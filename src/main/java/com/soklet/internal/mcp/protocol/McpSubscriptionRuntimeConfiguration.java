@@ -78,7 +78,7 @@ record McpSubscriptionRuntimeConfiguration(int streamQueueCapacity,
 		maximumAuthorizationDuration = requirePositive(
 				maximumAuthorizationDuration,
 				"Maximum subscription authorization duration");
-		authorizer = requireNonNull(authorizer);
+		requireNonNull(authorizer);
 		if (keepAliveInterval.compareTo(writeTimeout) >= 0)
 			throw new IllegalArgumentException(
 					"Keep-alive interval must be shorter than write timeout.");

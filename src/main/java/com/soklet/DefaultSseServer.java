@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -3079,7 +3080,7 @@ final class DefaultSseServer implements SseServer {
 																						@Nullable Object clientContext,
 																						@NonNull Integer connectionQueueCapacity,
 																						@NonNull SocketChannel socketChannel,
-				@NonNull StreamLifecycleCoordinator.Reservation reservation) {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
 			requireNonNull(connectionQueueCapacity);
@@ -3098,8 +3099,14 @@ final class DefaultSseServer implements SseServer {
 				// No application code, channel lock, or wait for an initializer/finalizer.
 				this.closing.set(true);
 				this.writeQueue.clear();
-				this.writeQueue.offer(WriteQueueElement.poisonPill());
-				try { this.socketChannel.close(); } catch (IOException ignored) { }
+				boolean poisonQueued = this.writeQueue.offer(WriteQueueElement.poisonPill());
+				try {
+					this.socketChannel.close();
+				} catch (IOException exception) {
+					throw new UncheckedIOException("Unable to close terminated SSE connection", exception);
+				}
+				if (!poisonQueued)
+					throw new IllegalStateException("Unable to signal terminated SSE connection writer");
 			});
 		}
 

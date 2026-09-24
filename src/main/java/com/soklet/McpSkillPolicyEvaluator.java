@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -77,7 +78,7 @@ final class McpSkillPolicyEvaluator {
 					selected = requireNonNull(this.selector.select(requestContext, context, features));
 					// Public registrations are structural values. Authorization membership
 					// is deliberately stronger: only an exact supplied instance is valid.
-					if (selected.isPresent() && candidates.stream().noneMatch(candidate -> candidate == selected.get()))
+					if (selected.isPresent() && candidates.stream().noneMatch(candidate -> sameInstance(candidate, selected.get())))
 						throw failure();
 				} catch (Throwable throwable) {
 					if (throwable instanceof InterruptedException) {
@@ -149,7 +150,7 @@ final class McpSkillPolicyEvaluator {
 		for (McpSkillRegistration registration : page) {
 			McpSkillRegistration canonical = this.endpoint.skillIndex()
 					.findRegistration(registration.getUri()).orElse(null);
-			if (canonical != registration || !uris.add(registration.getUri())
+			if (!sameInstance(canonical, registration) || !uris.add(registration.getUri())
 					|| !names.add(registration.getSkillBundle().getName())) throw failure();
 		}
 
@@ -157,7 +158,7 @@ final class McpSkillPolicyEvaluator {
 			List<McpSkillRegistration> initial = initialSkillRegistrations.orElseThrow();
 			int initialIndex = 0;
 			for (McpSkillRegistration registration : page) {
-				while (initialIndex < initial.size() && initial.get(initialIndex) != registration)
+				while (initialIndex < initial.size() && !sameInstance(initial.get(initialIndex), registration))
 					++initialIndex;
 				if (initialIndex == initial.size()) throw failure();
 				++initialIndex;

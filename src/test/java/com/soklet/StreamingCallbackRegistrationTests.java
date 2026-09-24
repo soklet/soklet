@@ -200,13 +200,10 @@ public class StreamingCallbackRegistrationTests {
 
 		private TokenFixture create(Consumer<Throwable> failureConsumer) throws Exception {
 			Class<?> tokenClass = Class.forName(this.className);
-			Constructor<?> constructor = this == HTTP
-					? tokenClass.getDeclaredConstructor(Consumer.class, StreamLifecycleCoordinator.Reservation.class)
-					: tokenClass.getDeclaredConstructor(Consumer.class);
+			Constructor<?> constructor = tokenClass.getDeclaredConstructor(Consumer.class,
+					StreamLifecycleCoordinator.Reservation.class);
 			constructor.setAccessible(true);
-			CancelationToken token = (CancelationToken) (this == HTTP
-					? constructor.newInstance(failureConsumer, null)
-					: constructor.newInstance(failureConsumer));
+			CancelationToken token = (CancelationToken) constructor.newInstance(failureConsumer, null);
 			Method cancel = tokenClass.getDeclaredMethod(this.cancelMethodName, StreamTerminationReason.class, Throwable.class);
 			Method complete = tokenClass.getDeclaredMethod("complete");
 			cancel.setAccessible(true);

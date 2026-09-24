@@ -8325,8 +8325,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final Object lock;
 		@NonNull
 		private final Object streamObservationTransitionLock;
-		@NonNull
-		private final McpApplicationExecution.BoundedPolicyCancellation
+		private final McpApplicationExecution.@NonNull BoundedPolicyCancellation
 				catalogAccessCancellation;
 		private @Nullable FutureTask<@Nullable Void> protocolTask;
 		private @Nullable Consumer<@NonNull MicrohttpResponse> responseCallback;
@@ -8617,7 +8616,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								.canceledPhysicalWorkOutstanding()) {
 					boolean retryMayRemainPossible;
 					synchronized (lock) {
-						retryMayRemainPossible = subscriptionAuthorizationCheck == check
+						retryMayRemainPossible = sameInstance(subscriptionAuthorizationCheck, check)
 								&& !terminal && !canceled
 								&& subscriptionCapReservation != null;
 					}
@@ -8875,7 +8874,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			SubscriptionAuthorizationResult result = executionResult;
 			synchronized (catalogOfferLock) {
 				synchronized (lock) {
-					if (subscriptionAuthorizationCheck != check)
+					if (!sameInstance(subscriptionAuthorizationCheck, check))
 						return SubscriptionAuthorizationResult.stale();
 					boolean generationStale = check.generation()
 							!= subscriptionAuthorizationGeneration
@@ -9092,7 +9091,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean signalTotalLifetime = false;
 			SubscriptionAuthorizationFailure authorizationFailure = null;
 			synchronized (lock) {
-				if (subscriptionAuthorizationCheck != requiredCheck
+				if (!sameInstance(subscriptionAuthorizationCheck, requiredCheck)
 						|| !subscriptionAuthorizationCallbackCompletionDeferred)
 					return;
 				subscriptionAuthorizationCallbackCompletionDeferred = false;
@@ -9233,7 +9232,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean owned;
 			SubscriptionAuthorizationFailure failure = null;
 			synchronized (lock) {
-				owned = subscriptionAuthorizationCheck == requireNonNull(check);
+				owned = sameInstance(subscriptionAuthorizationCheck, requireNonNull(check));
 				if (owned) {
 					subscriptionAuthorizationCheck = null;
 					SubscriptionAuthorizationResult rejected =
@@ -9458,7 +9457,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								.canceledPhysicalWorkOutstanding()) {
 					boolean retryMayRemainPossible;
 					synchronized (lock) {
-						retryMayRemainPossible = catalogProjectionCheck == reserved
+						retryMayRemainPossible = sameInstance(catalogProjectionCheck, reserved)
 								&& !terminal && !canceled
 								&& subscriptionCapReservation != null;
 					}
@@ -9470,7 +9469,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 				CatalogProjectionDisposition disposition;
 				synchronized (lock) {
-					if (catalogProjectionCheck != reserved) {
+				if (!sameInstance(catalogProjectionCheck, reserved)) {
 						disposition = CatalogProjectionDisposition.STALE_RESULT;
 					} else {
 						catalogProjectionCheck = null;
@@ -9556,7 +9555,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requiredCheck.physicalExit().markExited();
 			boolean submitAgain = false;
 			synchronized (lock) {
-				if (catalogProjectionCheck != requiredCheck
+				if (!sameInstance(catalogProjectionCheck, requiredCheck)
 						|| !catalogProjectionCallbackCompletionDeferred)
 					return;
 				catalogProjectionCallbackCompletionDeferred = false;
@@ -10167,7 +10166,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			CatalogProjectionDisposition disposition = execution.disposition();
 			synchronized (catalogOfferLock) {
 				synchronized (lock) {
-					boolean ownsCheck = catalogProjectionCheck == check;
+				boolean ownsCheck = sameInstance(catalogProjectionCheck, check);
 					boolean ownerActive = catalogProjectionOwnerActiveWhileLocked();
 					if (!ownsCheck || !catalogProjectionQueue.owns(projection)) {
 						disposition = ownerActive
@@ -10252,7 +10251,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					}
 
 					synchronized (lock) {
-						boolean ownsCheck = catalogProjectionCheck == check;
+				boolean ownsCheck = sameInstance(catalogProjectionCheck, check);
 						if (ownsCheck) {
 							catalogProjectionCallbackCompletionDeferred = false;
 							catalogProjectionCheck = null;
@@ -10632,7 +10631,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						if (!subscriptionOwned || terminal || canceled
 								|| streamAbortOwned || streamTerminalResponseOwned
 								|| responseStream != stream
-								|| subscriptionRegistration != registration
+								|| !sameInstance(subscriptionRegistration, registration)
 								|| !subscriptionAuthorizationAllowsDeliveryWhileLocked())
 							return;
 						result = stream.offerCoalescingMessage(notification,
@@ -12437,7 +12436,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull String endpointPath,
 			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpRequestContext requestContext,
-			@NonNull McpApplicationExecution.BoundedPolicyCancellation cancellation,
+			McpApplicationExecution.@NonNull BoundedPolicyCancellation cancellation,
 			@NonNull BoundedPolicyPhysicalExit physicalExit,
 			long deadlineNanos) {
 		private CatalogProjectionCheck {
@@ -12558,7 +12557,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpJsonRpcId subscriptionId,
 			@NonNull AcceptedSubscriptionFilter filter,
 			@NonNull SubscriptionAuthorizationContextSnapshot context,
-			@NonNull McpApplicationExecution.BoundedPolicyCancellation cancellation,
+			McpApplicationExecution.@NonNull BoundedPolicyCancellation cancellation,
 			@NonNull BoundedPolicyPhysicalExit physicalExit,
 			long deadlineNanos, long lifetimeDeadlineNanos) {
 		private SubscriptionAuthorizationCheck {
@@ -12693,13 +12692,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return new SubscriptionAuthorizationResult(
 					SubscriptionAuthorizationDisposition.ALLOWED,
 					requireNonNull(acceptedTaskIds), null, false);
-		}
-
-		@NonNull
-		private static SubscriptionAuthorizationResult denied() {
-			return new SubscriptionAuthorizationResult(
-					SubscriptionAuthorizationDisposition.DENIED, Set.of(),
-					null, false);
 		}
 
 		@NonNull

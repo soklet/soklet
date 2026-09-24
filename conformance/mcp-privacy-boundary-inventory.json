@@ -36888,6 +36888,24 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.DefaultSseConnection",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection#DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)->Throwable.UncheckedIOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "DefaultSseConnection(Request,ResourceMethod,Object,Integer,SocketChannel,StreamLifecycleCoordinator.Reservation)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer.DefaultSseConnection",
+          "sink": "Throwable.UncheckedIOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer.DefaultSseConnection.PreSerializedPayload#PreSerializedPayload(SseEvent,SseComment,byte[])->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "PreSerializedPayload(SseEvent,SseComment,byte[])",

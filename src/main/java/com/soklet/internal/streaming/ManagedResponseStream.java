@@ -40,8 +40,10 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 import static java.util.Objects.checkFromIndexSize;
 
@@ -83,9 +85,9 @@ public final class ManagedResponseStream implements ResponseStream {
 	private volatile Thread owner;
 	private volatile Throwable failure;
 	private volatile Throwable pendingLexicalFailure;
-	private int cleanupDepth;
+	private final AtomicInteger cleanupDepth = new AtomicInteger();
 	private byte[] staging;
-	private int stagedBytes;
+	private volatile int stagedBytes;
 
 	public ManagedResponseStream(@NonNull Request request,
 			@NonNull CancelationToken cancelationToken,
@@ -361,7 +363,7 @@ public final class ManagedResponseStream implements ResponseStream {
 	public <T extends AutoCloseable> T own(@NonNull T resource) throws Exception {
 		requireNonNull(resource);
 		checkOwner();
-		if (this.phase != Phase.ACTIVE || this.cleanupDepth != 0)
+		if (this.phase != Phase.ACTIVE || this.cleanupDepth.get() != 0)
 			throw new IllegalStateException("Resource adoption is outside its lifetime; ownership remains with the caller");
 		return adopt(resource, AbortMode.NONE, null);
 	}
@@ -397,7 +399,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			if (this.phase != Phase.CLOSED)
 				recordFailure(invalid);
 			entry.finish(true);
-			addSuppressed(invalid, entry.cleanupFailure);
+			addSuppressed(invalid, entry.cleanupFailure());
 			rethrow(invalid);
 			throw new AssertionError("Unreachable");
 		}
@@ -445,7 +447,7 @@ public final class ManagedResponseStream implements ResponseStream {
 	}
 
 	private void checkOwner() {
-		if (Thread.currentThread() != this.owner)
+		if (!sameInstance(Thread.currentThread(), this.owner))
 			throw new IllegalStateException("Response stream operations belong to the producer thread");
 	}
 
@@ -470,7 +472,7 @@ public final class ManagedResponseStream implements ResponseStream {
 	}
 
 	private Throwable acquisitionFailure() {
-		if (this.phase != Phase.ACTIVE || this.cleanupDepth != 0)
+		if (this.phase != Phase.ACTIVE || this.cleanupDepth.get() != 0)
 			return new IllegalStateException("Resource acquisition is outside its lifetime");
 		Throwable outcome = outcome();
 		if (outcome != null)
@@ -484,12 +486,12 @@ public final class ManagedResponseStream implements ResponseStream {
 	}
 
 	private void closeFrom(int mark) {
-		this.cleanupDepth++;
+		this.cleanupDepth.incrementAndGet();
 		boolean restoreInterrupt = Thread.interrupted();
 		try {
 			while (this.owned.size() > mark) {
 				Owned<?> entry = this.owned.remove(this.owned.size() - 1);
-				AutoCloseable resource = entry.resource;
+				AutoCloseable resource = entry.resource();
 				try {
 					entry.finish(false);
 				} finally {
@@ -497,7 +499,7 @@ public final class ManagedResponseStream implements ResponseStream {
 				}
 			}
 		} finally {
-			this.cleanupDepth--;
+			this.cleanupDepth.decrementAndGet();
 			restoreInterrupt |= Thread.interrupted();
 			if (restoreInterrupt)
 				Thread.currentThread().interrupt();
@@ -517,7 +519,7 @@ public final class ManagedResponseStream implements ResponseStream {
 	private void recordFailure(Throwable throwable) {
 		if (this.phase == Phase.CLOSED)
 			return;
-		if (Thread.currentThread() == this.owner)
+		if (sameInstance(Thread.currentThread(), this.owner))
 			discardStaging();
 		boolean first;
 		synchronized (this.failureLock) {
@@ -581,6 +583,14 @@ public final class ManagedResponseStream implements ResponseStream {
 			this.resource = resource;
 			this.abortMode = abortMode;
 			this.resourceAborter = resourceAborter;
+		}
+
+		private synchronized T resource() {
+			return this.resource;
+		}
+
+		private synchronized Throwable cleanupFailure() {
+			return this.cleanupFailure;
 		}
 
 		private void cancel() {
@@ -703,7 +713,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		remaining.push(root);
 		while (!remaining.isEmpty()) {
 			Throwable current = remaining.pop();
-			if (current == target)
+			if (sameInstance(current, target))
 				return true;
 			if (visited.put(current, Boolean.TRUE) != null)
 				continue;

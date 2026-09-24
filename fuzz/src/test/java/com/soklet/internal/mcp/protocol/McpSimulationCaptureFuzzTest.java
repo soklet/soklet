@@ -642,7 +642,7 @@ public class McpSimulationCaptureFuzzTest {
 			if (this.channelTerminal)
 				return new ExpectedOffer(McpOutboundChannel.OfferResult.CLOSED, null);
 			if (duplicate)
-				return new ExpectedOffer(McpOutboundChannel.OfferResult.ACCEPTED, null);
+				return new ExpectedOffer(McpOutboundChannel.OfferResult.COALESCED, null);
 			if (this.pendingItems.size() >= this.itemCapacity)
 				return new ExpectedOffer(McpOutboundChannel.OfferResult.CLOSED,
 						McpStreamTerminationReason

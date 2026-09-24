@@ -1463,8 +1463,7 @@ public final class Soklet implements AutoCloseable {
 			return Optional.ofNullable(this.streamLifecycleCoordinator);
 		}
 
-		@Nullable
-		private StreamLifecycleCoordinator.Reservation reserveHttpStream() {
+		private StreamLifecycleCoordinator.@Nullable Reservation reserveHttpStream() {
 			synchronized (this.scopeStateLock) {
 				if (this.closed.get())
 					return null;
@@ -1543,8 +1542,7 @@ public final class Soklet implements AutoCloseable {
 			return Optional.ofNullable(this.sseLifecycleCoordinator);
 		}
 
-		@Nullable
-		private StreamLifecycleCoordinator.Reservation reserveSseStream() {
+		private StreamLifecycleCoordinator.@Nullable Reservation reserveSseStream() {
 			synchronized (this.scopeStateLock) {
 				if (this.closed.get())
 					return null;
@@ -1748,7 +1746,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private HttpRequestResult materializeStreamingResponseWhileReserved(@NonNull Request request,
 				@NonNull HttpRequestResult requestResult, @NonNull StreamingResponseBody stream,
-				@NonNull StreamLifecycleCoordinator.Reservation reservation) {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation) {
 
 			byte[] bytes;
 			Instant streamStarted = Instant.now();
@@ -1791,7 +1789,7 @@ public final class Soklet implements AutoCloseable {
 					.finish();
 		}
 
-		private void notifyDidTerminateSimulatorResponseStream(@NonNull StreamLifecycleCoordinator.Reservation reservation,
+		private void notifyDidTerminateSimulatorResponseStream(StreamLifecycleCoordinator.@NonNull Reservation reservation,
 				@NonNull Request request, @NonNull HttpRequestResult requestResult,
 				@NonNull Instant establishedAt, @NonNull Duration streamDuration,
 				@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable) {
@@ -1914,7 +1912,7 @@ public final class Soklet implements AutoCloseable {
 		private byte[] materializeStreamingResponseBody(@NonNull Request request,
 																										@NonNull HttpRequestResult requestResult,
 				@NonNull StreamingResponseBody stream,
-				@NonNull StreamLifecycleCoordinator.Reservation reservation) throws Exception {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation) throws Exception {
 			requireNonNull(request);
 			requireNonNull(requestResult);
 			requireNonNull(stream);
@@ -1965,7 +1963,7 @@ public final class Soklet implements AutoCloseable {
 						&& canceledException.getCancelationReason() == reason)) {
 					Throwable cause = cancelationToken.getCancelationCause().orElse(null);
 					StreamingResponseCanceledException canceledException = new StreamingResponseCanceledException(reason, cause);
-					if (t != cause && !(t instanceof InterruptedException))
+					if (!sameInstance(t, cause) && !(t instanceof InterruptedException))
 						canceledException.addSuppressed(t);
 					throw canceledException;
 				}
@@ -2063,7 +2061,7 @@ public final class Soklet implements AutoCloseable {
 		private void materializePublisher(com.soklet.StreamingResponseBody.@NonNull PublisherBody publisherBody,
 				@NonNull SimulatorResponseOutput output,
 				@NonNull SimulatorCancelationToken cancelationToken,
-				@NonNull StreamLifecycleCoordinator.Reservation reservation) throws Exception {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation) throws Exception {
 			PublisherResponseStream.copy(publisherBody, cancelationToken, output, reservation,
 					reservation::beginCleanup, throwable -> cancelSimulatorStream(cancelationToken, throwable),
 					reservation::reportCleanupFailure);
@@ -2295,10 +2293,10 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	private static final class SimulatorCancelationToken implements CancelationToken {
 		private static final Runnable NO_CALLBACKS = () -> {};
+		private final Object lock = new Object();
 		private boolean canceled;
 		private boolean completed;
-		@Nullable
-		private final StreamLifecycleCoordinator.Reservation reservation;
+		private final StreamLifecycleCoordinator.@Nullable Reservation reservation;
 		@Nullable
 		private Set<CancelationCallbackRegistration> callbacks;
 		@NonNull
@@ -2308,37 +2306,39 @@ public final class Soklet implements AutoCloseable {
 		@Nullable
 		private Throwable cause;
 
-		private SimulatorCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer) {
-			this(callbackFailureConsumer, null);
-		}
-
 		private SimulatorCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer,
-				@Nullable StreamLifecycleCoordinator.Reservation reservation) {
+				StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			this.callbackFailureConsumer = requireNonNull(callbackFailureConsumer);
 			this.reservation = reservation;
 		}
 
 		@Override
 		@NonNull
-		public synchronized Boolean isCanceled() {
-			boolean canceled = this.canceled || this.reservation != null && this.reservation.isCanceled();
-			return !isCompleted() && canceled;
+		public Boolean isCanceled() {
+			synchronized (this.lock) {
+				boolean canceled = this.canceled || this.reservation != null && this.reservation.isCanceled();
+				return !isCompleted() && canceled;
+			}
 		}
 
 		@Override
 		@NonNull
-		public synchronized Optional<StreamTerminationReason> getCancelationReason() {
-			Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
-					? this.reservation.reason() : Optional.ofNullable(this.reason);
-			return isCompleted() ? Optional.empty() : reason;
+		public Optional<StreamTerminationReason> getCancelationReason() {
+			synchronized (this.lock) {
+				Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
+						? this.reservation.reason() : Optional.ofNullable(this.reason);
+				return isCompleted() ? Optional.empty() : reason;
+			}
 		}
 
 		@Override
 		@NonNull
-		public synchronized Optional<Throwable> getCancelationCause() {
-			Optional<Throwable> cause = this.reason == null && this.reservation != null
-					? this.reservation.cause() : Optional.ofNullable(this.cause);
-			return isCompleted() ? Optional.empty() : cause;
+		public Optional<Throwable> getCancelationCause() {
+			synchronized (this.lock) {
+				Optional<Throwable> cause = this.reason == null && this.reservation != null
+						? this.reservation.cause() : Optional.ofNullable(this.cause);
+				return isCompleted() ? Optional.empty() : cause;
+			}
 		}
 
 		@Override
@@ -2348,7 +2348,7 @@ public final class Soklet implements AutoCloseable {
 			CancelationCallbackRegistration registration = new CancelationCallbackRegistration(callback);
 			boolean runImmediately;
 
-			synchronized (this) {
+			synchronized (this.lock) {
 				if (isCompleted()) {
 					registration.callback = null;
 					return registration;
@@ -2381,7 +2381,7 @@ public final class Soklet implements AutoCloseable {
 
 		private void deliverCancelation(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 			Runnable callbacks = reserveCancelation(reason, cause);
-			if (callbacks != null && callbacks != NO_CALLBACKS)
+			if (callbacks != null && !sameInstance(callbacks, NO_CALLBACKS))
 				requireNonNull(this.reservation).dispatchCallbacks(callbacks);
 		}
 
@@ -2389,7 +2389,7 @@ public final class Soklet implements AutoCloseable {
 		private Runnable reserveCancelation(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 
 			Set<CancelationCallbackRegistration> callbacksToRun;
-			synchronized (this) {
+			synchronized (this.lock) {
 				if (this.canceled || isCompleted())
 					return null;
 				this.reason = reason;
@@ -2409,7 +2409,7 @@ public final class Soklet implements AutoCloseable {
 
 		private void complete() {
 			Set<CancelationCallbackRegistration> completedCallbacks;
-			synchronized (this) {
+			synchronized (this.lock) {
 				if (this.canceled || this.completed || this.reservation != null
 						&& !this.reservation.isProductionComplete() && this.reservation.isCanceled())
 					return;
@@ -2426,8 +2426,10 @@ public final class Soklet implements AutoCloseable {
 			}
 		}
 
-		private synchronized boolean isCompleted() {
-			return this.completed || this.reservation != null && this.reservation.isProductionComplete();
+		private boolean isCompleted() {
+			synchronized (this.lock) {
+				return this.completed || this.reservation != null && this.reservation.isProductionComplete();
+			}
 		}
 
 		private void runCallback(@NonNull Runnable callback) {
@@ -2452,7 +2454,7 @@ public final class Soklet implements AutoCloseable {
 
 			@Override
 			public void close() {
-				synchronized (SimulatorCancelationToken.this) {
+				synchronized (SimulatorCancelationToken.this.lock) {
 					this.callback = null;
 					if (SimulatorCancelationToken.this.callbacks != null)
 						SimulatorCancelationToken.this.callbacks.remove(this);
@@ -2461,7 +2463,7 @@ public final class Soklet implements AutoCloseable {
 
 			private void invoke() {
 				Runnable callback;
-				synchronized (SimulatorCancelationToken.this) {
+				synchronized (SimulatorCancelationToken.this.lock) {
 					callback = this.callback;
 					this.callback = null;
 				}

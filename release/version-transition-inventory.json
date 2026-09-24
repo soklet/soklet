@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "b4f707f26c89839a0949e5dedb742a4b43c7941723d5de6f631c10ac7ea26e34",
+    "censusSha256": "470b89e23ff4d507dcb18ea10044aa981eb2034e9649ed3c686724cb1d0d14eb",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4159,8 +4159,8 @@
       "scripts/verify-surefire-reports-self-test.mjs\t390b4bdb67d76def8a276191243ceb033cb134abb43f9c08a58d0162184ecb58",
       "soak/MANUAL_SOAKS.md\t4b24811f79ea851f9d31533b8b2fc911a46f8d722e3353549f5f937c4f5bc933",
       "soak/pom.xml\t21085688e53fe607dd81c9ec0f0547daca9bb28bc5d36483663dfde094021203",
-      "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t92ecb4d55082d3e5d2470b4174d412023c104d0b5dc5b04968b6f6aed7651729",
-      "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t7fd440d948c1c26e74823ce9b084d2f246d54fe2d90590c35ddbf006817b0828",
+      "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t8497bea2801742d7d4ba53c2758d1ab8ddb9227423a3020b4903802c24d42c14",
+      "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t109c6136b3a6b51b0866bf8a58a09d64ef2fffc4dc74251e132cebc48d5a7d73",
       "src/main/java/com/soklet/McpAdmissionContext.java\tcfcc33712b5fa46f164b3fbf91598a0c195b0d71069e1d063ae4d921eabcb517",
       "src/main/java/com/soklet/McpAppResourceMetadata.java\tee866958358cde18a37e392b1d7169fe0471fd97b4bb72b83db5f7aaa6a0349d",
       "src/main/java/com/soklet/McpAppToolMetadata.java\t392c21cd8a86333d39b2ba4cd62b2d0927fd2273e589dcd1bf6f2b7910d19cab",
@@ -4913,8 +4913,8 @@
       "REPLACED\tsoak/pom.xml\t9\t13\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/pom.xml\t9\t0",
       "EXTERNAL_DEPENDENCY\tsoak/pom.xml\t81\t25\t0\t3.6\t3.6\tsoak/pom.xml\t81\t0",
       "EXTERNAL_DEPENDENCY\tsoak/pom.xml\t117\t25\t0\t3.6.0\t3.6.0\t-\t-\t-",
-      "REPLACED\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t619\t26\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t571\t0",
-      "REPLACED\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t278\t39\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t273\t0",
+      "REPLACED\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t620\t26\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t571\t0",
+      "REPLACED\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t280\t39\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t273\t0",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAdmissionContext.java\t42\t40\t0\t4.0\t4.0\t-\t-\t-",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAppResourceMetadata.java\t133\t33\t0\t4.0\t4.0\t-\t-\t-",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAppToolMetadata.java\t99\t43\t0\t4.0\t4.0\t-\t-\t-",

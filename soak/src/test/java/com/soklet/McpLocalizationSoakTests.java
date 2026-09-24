@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -83,14 +84,15 @@ class McpLocalizationSoakTests {
 		LocalizationCounts measured = state.snapshot().minus(warmCounts);
 		int localizedCatalogResponses = PROFILE.concurrentClients()
 				* PROFILE.cyclesPerClient();
-		int localizationCapableResponses = localizedCatalogResponses + 1;
+		int localizationCapableResponses = localizedCatalogResponses
+				+ PROFILE.cyclesPerClient() + 2;
 
 		Assertions.assertEquals(localizedCatalogResponses,
 				measured.localizedCatalogResponses());
 		Assertions.assertEquals(localizationCapableResponses,
 				measured.contextsCreated(),
-				"Every tools/list response and the subscription terminal must "
-						+ "create exactly one context.");
+				"Every tools/list response, initial subscription projection, "
+						+ "invalidation projection, and subscription terminal must create one context.");
 		Assertions.assertEquals(localizationCapableResponses,
 				measured.localizationLookups(),
 				"The fixture exposes exactly one localizable field per response.");
@@ -307,8 +309,9 @@ class McpLocalizationSoakTests {
 						PROFILE.maximumSubscriptionsPerPartition())
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
-				.subscriptionAuthorizer(
-						McpSubscriptionAuthorizer.denyAllInstance())
+				.subscriptionAuthorizer((context, features) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
 				.localizer(state.localizer())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
