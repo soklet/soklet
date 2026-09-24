@@ -1750,31 +1750,50 @@ public class McpSubscriptionPublicRuntimeTests {
 							.filter(McpMetricsEvent.SubscriptionMaintenance.class::isInstance)
 							.map(McpMetricsEvent.SubscriptionMaintenance.class::cast)
 							.toList();
-			List<Class<?>> expectedEventTypes = new ArrayList<>(List.of(
+			List<Class<?>> expectedLifecycleEventTypes = List.of(
 					McpMetricsEvent.ServerStarted.class,
 					McpMetricsEvent.ConnectionAccepted.class,
 					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
-					McpMetricsEvent.HandlerExecutionStarted.class,
-					McpMetricsEvent.HandlerExecutionFinished.class,
 					McpMetricsEvent.RequestStreamOpened.class,
-					McpMetricsEvent.SubscriptionOpened.class));
-			for (int index = 0; index < expectedActiveAuthorizationChecks;
-					index++) {
-				expectedEventTypes.add(
-						McpMetricsEvent.HandlerExecutionStarted.class);
-				expectedEventTypes.add(
-						McpMetricsEvent.HandlerExecutionFinished.class);
-			}
-			expectedEventTypes.addAll(List.of(
+					McpMetricsEvent.SubscriptionOpened.class,
 					McpMetricsEvent.RequestStreamClosed.class,
 					McpMetricsEvent.SubscriptionClosed.class,
-					McpMetricsEvent.RequestFinished.class));
-			Assertions.assertEquals(expectedEventTypes,
-					withoutKeepAlives.stream()
-							.filter(event -> !(event instanceof
-									McpMetricsEvent.SubscriptionMaintenance))
-							.map(Object::getClass).toList());
+					McpMetricsEvent.RequestFinished.class);
+			List<Class<?>> expectedHandlerEventTypes = new ArrayList<>();
+			expectedHandlerEventTypes.add(
+					McpMetricsEvent.HandlerExecutionStarted.class);
+			expectedHandlerEventTypes.add(
+					McpMetricsEvent.HandlerExecutionFinished.class);
+			for (int index = 0; index < expectedActiveAuthorizationChecks;
+					index++) {
+				expectedHandlerEventTypes.add(
+						McpMetricsEvent.HandlerExecutionStarted.class);
+				expectedHandlerEventTypes.add(
+						McpMetricsEvent.HandlerExecutionFinished.class);
+			}
+			List<Class<?>> observedEventTypes = withoutKeepAlives.stream()
+					.filter(event -> !(event instanceof
+							McpMetricsEvent.SubscriptionMaintenance))
+					.map(Object::getClass).toList();
+			Set<Class<?>> handlerEventTypes = Set.of(
+					McpMetricsEvent.HandlerExecutionStarted.class,
+					McpMetricsEvent.HandlerExecutionFinished.class);
+			// Handler exit and stream activation run on different threads. Preserve
+			// each sequence without requiring a cross-thread delivery order.
+			Assertions.assertEquals(expectedLifecycleEventTypes,
+					observedEventTypes.stream()
+							.filter(type -> !handlerEventTypes.contains(type))
+							.toList());
+			Assertions.assertEquals(expectedHandlerEventTypes,
+					observedEventTypes.stream()
+							.filter(handlerEventTypes::contains)
+							.toList());
+			Assertions.assertTrue(indexOfEvent(events,
+					McpMetricsEvent.HandlerExecutionStarted.class)
+					< indexOfEvent(events,
+							McpMetricsEvent.RequestStreamOpened.class),
+					"Initial authorization must start before subscription activation.");
 			Assertions.assertEquals(1 + expectedActiveAuthorizationChecks,
 					maintenanceEvents.size());
 			for (McpMetricsEvent.SubscriptionMaintenance maintenance
