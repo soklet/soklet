@@ -54,19 +54,19 @@ public interface McpInvocationFeatures {
 	 * instance of its key and retains its own mutability and thread-safety
 	 * contract.
 	 *
-	 * @param features exact feature-interface keys and matching values
+	 * @param featuresByType exact feature-interface keys and matching values
 	 * @return immutable feature lookup
 	 * @throws NullPointerException if the map, a key, or a value is null
 	 * @throws IllegalArgumentException if a value is not an instance of its key
 	 */
 	@NonNull
 	static McpInvocationFeatures fromFeatures(
-			@NonNull Map<@NonNull Class<?>, @NonNull Object> features) {
-		requireNonNull(features);
+			@NonNull Map<@NonNull Class<?>, @NonNull Object> featuresByType) {
+		requireNonNull(featuresByType);
 		Map<@NonNull Class<?>, @NonNull Object> copiedFeatures =
 				new LinkedHashMap<>();
 		for (Map.Entry<@NonNull Class<?>, @NonNull Object> entry
-				: features.entrySet()) {
+				: featuresByType.entrySet()) {
 			Class<?> featureType = requireNonNull(entry.getKey());
 			Object feature = requireNonNull(entry.getValue());
 			if (!featureType.isInstance(feature))

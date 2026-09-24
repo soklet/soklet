@@ -83,7 +83,9 @@ JAZZER_FUZZ=1 mvn -o -f fuzz/pom.xml \
 Jazzer needs permission to attach its agent to the local test JVM. A denied
 attachment is a harness failure, not parser evidence. The initial Skills
 checkpoint passed 19 seed/test invocations on Java 17 and 26 and two local
-Java 26 smoke runs; it does not satisfy the planned 24-hour qualification.
+Java 26 smoke runs. On 2026-09-24, the owner replaced the planned local
+24-hour Skills campaign with the existing nightly CI fuzzing. These local
+smoke runs are exploration evidence, not a nightly CI result.
 
 ## Corpus Policy
 
@@ -143,9 +145,12 @@ target-specific corpus cache under a run-specific key. The key rotates on every
 run so nightly exploration can compound over time; restore keys keep each
 target seeded from the newest available corpus for the branch.
 
-The two private Skills targets now have dedicated nightly slots and registered
-release-history receipts. Each nightly slot runs for five minutes; this does
-not replace the separately required 24-hour Skills campaign. The expanded
-history contract needs a fresh complete run for every registered target on
-each of its required consecutive dates. Local smoke success is not evidence
-that the nightly or long-duration gates ran.
+The two private Skills targets have dedicated nightly slots and registered
+release-history receipts. The owner accepted nightly CI fuzzing in place of a
+local 24-hour Skills campaign on 2026-09-24. Each nightly slot runs for five
+minutes. Skills qualification still requires reviewing successful CI receipts
+and triaging any findings; configuration or local smoke success alone is not a
+pass. The expanded release-history contract needs a fresh complete run for
+every registered target on each of its required consecutive dates. GitHub's
+schedule runs on the default branch (`master`); use the existing manual
+workflow dispatch to exercise a feature-branch commit before merge.

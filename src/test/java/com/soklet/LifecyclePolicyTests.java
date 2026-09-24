@@ -24,7 +24,7 @@ import java.time.Duration;
 class LifecyclePolicyTests {
 	@Test
 	void defaultPolicyHasFourFiniteTimeouts() {
-		LifecyclePolicy policy = LifecyclePolicy.fromDefaults();
+		LifecyclePolicy policy = LifecyclePolicy.defaultInstance();
 
 		Assertions.assertEquals(Duration.ofSeconds(30),
 				policy.getStartupTimeout());
@@ -34,6 +34,15 @@ class LifecyclePolicyTests {
 				policy.getGracefulShutdownTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(3),
 				policy.getForcedShutdownTimeout());
+	}
+
+	@Test
+	void defaultPolicyIsSharedWhileBuilderCreatesIndependentPolicy() {
+		LifecyclePolicy defaults = LifecyclePolicy.defaultInstance();
+		Assertions.assertSame(defaults, LifecyclePolicy.defaultInstance());
+		LifecyclePolicy built = LifecyclePolicy.builder().build();
+		Assertions.assertNotSame(defaults, built);
+		Assertions.assertEquals(defaults, built);
 	}
 
 	@Test

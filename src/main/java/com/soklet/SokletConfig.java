@@ -124,7 +124,7 @@ public final class SokletConfig {
 		this.sseServer = builder.sseServer;
 		this.mcpServer = builder.mcpServer;
 		this.lifecyclePolicy = builder.lifecyclePolicy != null
-				? builder.lifecyclePolicy : LifecyclePolicy.fromDefaults();
+				? builder.lifecyclePolicy : LifecyclePolicy.defaultInstance();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());

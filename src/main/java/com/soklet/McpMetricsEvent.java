@@ -121,16 +121,16 @@ public sealed interface McpMetricsEvent permits
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
 	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param outcome fixed terminal outcome
-	 * @param duration nonnegative request duration
+	 * @param requestOutcome fixed terminal outcome
+	 * @param requestDuration nonnegative request duration
 	 * @return request-finished event
 	 */
 	@NonNull
 	static RequestFinished requestFinished(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod, @NonNull McpRequestOutcome outcome,
-			@NonNull Duration duration) {
-		return new RequestFinished(endpointPath, jsonRpcMethod, outcome,
-				duration);
+			@NonNull String jsonRpcMethod, @NonNull McpRequestOutcome requestOutcome,
+			@NonNull Duration requestDuration) {
+		return new RequestFinished(endpointPath, jsonRpcMethod, requestOutcome,
+				requestDuration);
 	}
 
 	/**
@@ -151,17 +151,17 @@ public sealed interface McpMetricsEvent permits
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
 	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param reason fixed stream termination reason
-	 * @param duration nonnegative stream duration
+	 * @param streamTerminationReason fixed stream termination reason
+	 * @param streamDuration nonnegative stream duration
 	 * @return request-stream-closed event
 	 */
 	@NonNull
 	static RequestStreamClosed requestStreamClosed(
 			@NonNull String endpointPath, @NonNull String jsonRpcMethod,
-			@NonNull McpStreamTerminationReason reason,
-			@NonNull Duration duration) {
-		return new RequestStreamClosed(endpointPath, jsonRpcMethod, reason,
-				duration);
+			@NonNull McpStreamTerminationReason streamTerminationReason,
+			@NonNull Duration streamDuration) {
+		return new RequestStreamClosed(endpointPath, jsonRpcMethod,
+				streamTerminationReason, streamDuration);
 	}
 
 	/**
@@ -179,31 +179,33 @@ public sealed interface McpMetricsEvent permits
 	 * Creates an event indicating that an MCP subscription terminated.
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param reason fixed stream termination reason
-	 * @param duration nonnegative subscription duration
+	 * @param streamTerminationReason fixed stream termination reason
+	 * @param subscriptionDuration nonnegative subscription duration
 	 * @return subscription-closed event
 	 */
 	@NonNull
 	static SubscriptionClosed subscriptionClosed(@NonNull String endpointPath,
-			@NonNull McpStreamTerminationReason reason,
-			@NonNull Duration duration) {
-		return new SubscriptionClosed(endpointPath, reason, duration);
+			@NonNull McpStreamTerminationReason streamTerminationReason,
+			@NonNull Duration subscriptionDuration) {
+		return new SubscriptionClosed(endpointPath, streamTerminationReason,
+				subscriptionDuration);
 	}
 
 	/**
 	 * Creates an event describing one bounded subscription-maintenance outcome.
 	 *
 	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param work fixed maintenance work family
-	 * @param outcome fixed maintenance outcome
+	 * @param maintenanceWork fixed maintenance work family
+	 * @param maintenanceOutcome fixed maintenance outcome
 	 * @return subscription-maintenance event
 	 */
 	@NonNull
 	static SubscriptionMaintenance subscriptionMaintenance(
 			@NonNull String endpointPath,
-			SubscriptionMaintenance.@NonNull Work work,
-			SubscriptionMaintenance.@NonNull Outcome outcome) {
-		return new SubscriptionMaintenance(endpointPath, work, outcome);
+			SubscriptionMaintenance.@NonNull Work maintenanceWork,
+			SubscriptionMaintenance.@NonNull Outcome maintenanceOutcome) {
+		return new SubscriptionMaintenance(endpointPath, maintenanceWork,
+				maintenanceOutcome);
 	}
 
 	/**

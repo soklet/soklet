@@ -369,7 +369,7 @@ public class SokletSimulatorIsolationTests {
 				.resourceMethodResolver(resourceMethods())
 				.build();
 
-		LifecyclePolicy defaults = LifecyclePolicy.fromDefaults();
+		LifecyclePolicy defaults = LifecyclePolicy.defaultInstance();
 		LifecyclePolicy actual = simulatorConfig.getSokletConfig()
 				.getLifecyclePolicy();
 		Assertions.assertEquals(defaults.getStartupTimeout(),

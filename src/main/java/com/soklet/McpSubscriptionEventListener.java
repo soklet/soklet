@@ -35,7 +35,7 @@ public interface McpSubscriptionEventListener {
 	/**
 	 * Receives one coarse subscription-change event.
 	 *
-	 * @param event subscription-change event
+	 * @param subscriptionEvent subscription-change event
 	 */
-	void onEvent(@NonNull McpSubscriptionEvent event);
+	void onEvent(@NonNull McpSubscriptionEvent subscriptionEvent);
 }

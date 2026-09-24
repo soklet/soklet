@@ -157,6 +157,8 @@ public class SokletConfigTests {
 				.lifecyclePolicy(null)
 				.build();
 
+		Assertions.assertSame(LifecyclePolicy.defaultInstance(),
+				config.getLifecyclePolicy());
 		Assertions.assertEquals(Duration.ofSeconds(30),
 				config.getLifecyclePolicy().getStartupTimeout());
 	}

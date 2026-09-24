@@ -37,7 +37,7 @@ public interface McpRequestStateProtector {
 	/**
 	 * Protects canonical framework request-state bytes.
 	 *
-	 * @param context immutable binding context
+	 * @param requestStateProtectionContext immutable binding context
 	 * @param plaintext call-confined canonical framework bytes; implementations
 	 *                  must not retain or mutate this array
 	 * @return opaque string suitable for the MCP wire value
@@ -45,7 +45,7 @@ public interface McpRequestStateProtector {
 	 *                                            failure
 	 */
 	@NonNull
-	String seal(@NonNull McpRequestStateProtectionContext context,
+	String seal(@NonNull McpRequestStateProtectionContext requestStateProtectionContext,
 			byte @NonNull [] plaintext)
 			throws McpRequestStateProtectionException;
 
@@ -53,7 +53,7 @@ public interface McpRequestStateProtector {
 	 * Opens a framework request-state wire value previously produced by this
 	 * protector.
 	 *
-	 * @param context immutable expected binding context
+	 * @param requestStateProtectionContext immutable expected binding context
 	 * @param protectedState opaque value received from the client
 	 * @return newly allocated canonical framework bytes whose ownership transfers
 	 *         to Soklet
@@ -62,7 +62,7 @@ public interface McpRequestStateProtector {
 	 * malformation, authentication failure, expiry-equivalent failure, or
 	 * context mismatch detected by the protector
 	 */
-	byte @NonNull [] open(@NonNull McpRequestStateProtectionContext context,
+	byte @NonNull [] open(@NonNull McpRequestStateProtectionContext requestStateProtectionContext,
 			@NonNull String protectedState)
 			throws McpRequestStateProtectionException;
 }

@@ -41,11 +41,11 @@ public final class McpJsonRpcException extends RuntimeException {
 	/**
 	 * Creates an exception carrying an intentional JSON-RPC error.
 	 *
-	 * @param error client-visible JSON-RPC error
+	 * @param jsonRpcError client-visible JSON-RPC error
 	 */
-	public McpJsonRpcException(@NonNull McpJsonRpcError error) {
+	public McpJsonRpcException(@NonNull McpJsonRpcError jsonRpcError) {
 		super("MCP handler produced a JSON-RPC error.");
-		this.error = requireNonNull(error);
+		this.error = requireNonNull(jsonRpcError);
 	}
 
 	/** @return client-visible JSON-RPC error */

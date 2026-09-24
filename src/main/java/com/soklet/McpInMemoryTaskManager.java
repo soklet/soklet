@@ -430,20 +430,20 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	 * endpoint. An unknown task and a task owned by another partition or
 	 * endpoint are deliberately indistinguishable.
 	 *
-	 * @param context protocol task lookup context
+	 * @param taskRequestContext protocol task lookup context
 	 * @return immutable current task, if retained and authorized
 	 */
 	@Override
 	@NonNull
 	public Optional<@NonNull McpTask> findTask(
-			@NonNull McpTaskRequestContext context) {
-		requireNonNull(context);
+			@NonNull McpTaskRequestContext taskRequestContext) {
+		requireNonNull(taskRequestContext);
 		this.lock.lock();
 		try {
 			removeExpiredEntries(this.nanoTime.getAsLong());
-			Entry entry = this.entries.get(context.getTaskId());
+			Entry entry = this.entries.get(taskRequestContext.getTaskId());
 			if (entry == null || !isAuthorized(entry,
-					context.getRequestContext()))
+					taskRequestContext.getRequestContext()))
 				return Optional.empty();
 			return Optional.of(entry.task);
 		} finally {
@@ -457,19 +457,19 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	 * consumed response keys and responses whose union variant does not match the
 	 * outstanding request are ignored.
 	 *
-	 * @param context protocol task update context
+	 * @param taskUpdateContext protocol task update context
 	 * @throws McpTaskNotFoundException if the task is absent, expired, or not
 	 *                                  visible to this request
 	 */
 	@Override
-	public void updateTask(@NonNull McpTaskUpdateContext context)
+	public void updateTask(@NonNull McpTaskUpdateContext taskUpdateContext)
 			throws McpTaskNotFoundException {
-		requireNonNull(context);
+		requireNonNull(taskUpdateContext);
 		boolean changed = false;
 		this.lock.lock();
 		try {
-			Entry entry = requireAuthorizedEntry(context.getTaskId(),
-					context.getRequestContext(), this.nanoTime.getAsLong());
+			Entry entry = requireAuthorizedEntry(taskUpdateContext.getTaskId(),
+					taskUpdateContext.getRequestContext(), this.nanoTime.getAsLong());
 			if (isTerminal(entry.task.getTaskStatus())
 					|| entry.task.getTaskStatus() != McpTaskStatus.INPUT_REQUIRED)
 				return;
@@ -479,7 +479,7 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 			Map<String, McpJsonValue> acceptedInputResponses =
 					new LinkedHashMap<>();
 			for (Map.Entry<@NonNull String, @NonNull McpJsonValue> response
-					: context.getInputResponses().asMap().entrySet()) {
+					: taskUpdateContext.getInputResponses().asMap().entrySet()) {
 				McpInputRequest inputRequest = remainingInputRequests.get(
 						response.getKey());
 				if (inputRequest != null && inputRequest.matchesInputResponse(
@@ -505,7 +505,7 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 			this.lock.unlock();
 		}
 		if (changed)
-			publishTaskChanged(context.getTaskId());
+			publishTaskChanged(taskUpdateContext.getTaskId());
 	}
 
 	/**
@@ -513,19 +513,19 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	 * to the requesting MCP authorization partition and endpoint. This signal
 	 * does not itself change the task's status.
 	 *
-	 * @param context protocol task cancelation context
+	 * @param taskRequestContext protocol task cancelation context
 	 * @throws McpTaskNotFoundException if the task is absent, expired, or not
 	 *                                  visible to this request
 	 */
 	@Override
 	public void requestTaskCancelation(
-			@NonNull McpTaskRequestContext context)
+			@NonNull McpTaskRequestContext taskRequestContext)
 			throws McpTaskNotFoundException {
-		requireNonNull(context);
+		requireNonNull(taskRequestContext);
 		this.lock.lock();
 		try {
-			Entry entry = requireAuthorizedEntry(context.getTaskId(),
-					context.getRequestContext(), this.nanoTime.getAsLong());
+			Entry entry = requireAuthorizedEntry(taskRequestContext.getTaskId(),
+					taskRequestContext.getRequestContext(), this.nanoTime.getAsLong());
 			if (!isTerminal(entry.task.getTaskStatus()))
 				entry.cancelationRequested = true;
 		} finally {

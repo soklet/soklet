@@ -34,12 +34,12 @@ public interface McpAdmissionController {
 	 * Makes the admission decision for one structurally valid request or
 	 * notification.
 	 *
-	 * @param context bounded pre-handler admission context
+	 * @param admissionContext bounded pre-handler admission context
 	 * @return a non-null accepted or rejected decision
 	 * @throws Exception if application admission logic fails; Soklet fails closed
 	 */
 	@NonNull
-	McpAdmissionDecision admit(@NonNull McpAdmissionContext context) throws Exception;
+	McpAdmissionDecision admit(@NonNull McpAdmissionContext admissionContext) throws Exception;
 
 	/**
 	 * Returns the shared controller that accepts every request or notification
@@ -69,7 +69,7 @@ final class AcceptAllMcpAdmissionController implements McpAdmissionController {
 
 	@Override
 	@NonNull
-	public McpAdmissionDecision admit(@NonNull McpAdmissionContext context) {
+	public McpAdmissionDecision admit(@NonNull McpAdmissionContext admissionContext) {
 		return McpAdmissionDecision.accepted();
 	}
 }

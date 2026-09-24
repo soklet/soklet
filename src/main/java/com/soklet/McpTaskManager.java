@@ -107,13 +107,13 @@ public interface McpTaskManager {
 	 * to thread interruption; a result may be discarded when the subscription is
 	 * no longer active.
 	 *
-	 * @param context independently admitted lookup context
+	 * @param taskRequestContext independently admitted lookup context
 	 * @return current snapshot, or empty when the task is unknown or unauthorized
 	 * @throws Exception if task storage or authorization fails unexpectedly
 	 */
 	@NonNull
 	Optional<@NonNull McpTask> findTask(
-			@NonNull McpTaskRequestContext context) throws Exception;
+			@NonNull McpTaskRequestContext taskRequestContext) throws Exception;
 
 	/**
 	 * Atomically authorizes and accepts client responses to outstanding task
@@ -127,12 +127,12 @@ public interface McpTaskManager {
 	 * The update acknowledgement may precede a worker's subsequent observable
 	 * state change.
 	 *
-	 * @param context independently admitted task update
+	 * @param taskUpdateContext independently admitted task update
 	 * @throws McpTaskNotFoundException if the task is unknown or unauthorized
 	 * @throws Exception if task storage, authorization, or update processing
 	 * fails unexpectedly
 	 */
-	void updateTask(@NonNull McpTaskUpdateContext context) throws Exception;
+	void updateTask(@NonNull McpTaskUpdateContext taskUpdateContext) throws Exception;
 
 	/**
 	 * Atomically authorizes and records a client's durable task-cancelation
@@ -145,11 +145,11 @@ public interface McpTaskManager {
 	 * accepted idempotently; only an unknown or unauthorized task uses the
 	 * not-found signal.
 	 *
-	 * @param context independently admitted task-cancelation request
+	 * @param taskRequestContext independently admitted task-cancelation request
 	 * @throws McpTaskNotFoundException if the task is unknown or unauthorized
 	 * @throws Exception if task storage, authorization, or intent recording
 	 * fails unexpectedly
 	 */
 	void requestTaskCancelation(
-			@NonNull McpTaskRequestContext context) throws Exception;
+			@NonNull McpTaskRequestContext taskRequestContext) throws Exception;
 }

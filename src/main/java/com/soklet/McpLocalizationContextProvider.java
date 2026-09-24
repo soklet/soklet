@@ -45,7 +45,7 @@ public interface McpLocalizationContextProvider {
 	 * Provides the immutable localization context for one admitted
 	 * localization-capable operation.
 	 *
-	 * @param request bounded localization inputs and admitted request context
+	 * @param localizationRequest bounded localization inputs and admitted request context
 	 * @return non-null request-local context
 	 * @throws Exception if context creation fails; when Soklet invokes this
 	 * callback it treats the exception as untrusted localization data and never
@@ -54,5 +54,5 @@ public interface McpLocalizationContextProvider {
 	 */
 	@NonNull
 	McpLocalizationContext provideContext(
-			@NonNull McpLocalizationRequest request) throws Exception;
+			@NonNull McpLocalizationRequest localizationRequest) throws Exception;
 }

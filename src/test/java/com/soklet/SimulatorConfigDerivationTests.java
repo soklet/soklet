@@ -275,7 +275,7 @@ class SimulatorConfigDerivationTests {
 						.getRequestBodyMarshaler()).getValueConverterRegistry());
 		Assertions.assertNotSame(sourceMetrics,
 				derivedConfig.getMetricsCollector());
-		LifecyclePolicy defaultLifecyclePolicy = LifecyclePolicy.fromDefaults();
+		LifecyclePolicy defaultLifecyclePolicy = LifecyclePolicy.defaultInstance();
 		Assertions.assertNotSame(sourceLifecyclePolicy,
 				derivedConfig.getLifecyclePolicy());
 		Assertions.assertEquals(defaultLifecyclePolicy.getStartupTimeout(),

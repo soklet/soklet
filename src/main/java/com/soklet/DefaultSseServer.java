@@ -323,7 +323,7 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private volatile Boolean stopping = false;
 	@NonNull
-	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.fromDefaults();
+	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.defaultInstance();
 	@Nullable
 	private volatile Thread eventLoopThread;
 	@Nullable

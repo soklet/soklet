@@ -42,6 +42,8 @@ public final class LifecyclePolicy {
 	@NonNull
 	private static final Duration DEFAULT_FORCED_SHUTDOWN_TIMEOUT =
 			Duration.ofSeconds(3);
+	@NonNull
+	private static final LifecyclePolicy DEFAULT_INSTANCE = builder().build();
 
 	@NonNull
 	private final Duration startupTimeout;
@@ -67,10 +69,10 @@ public final class LifecyclePolicy {
 				"forcedShutdownTimeout");
 	}
 
-	/** @return the default lifecycle policy */
+	/** @return the shared default lifecycle policy */
 	@NonNull
-	public static LifecyclePolicy fromDefaults() {
-		return builder().build();
+	public static LifecyclePolicy defaultInstance() {
+		return DEFAULT_INSTANCE;
 	}
 
 	/** @return a mutable builder initialized with the default policy */

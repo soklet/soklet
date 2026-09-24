@@ -93,10 +93,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param soklet stopped Soklet
-	 * @param result aggregate lifecycle result
+	 * @param shutdownResult aggregate lifecycle result
 	 */
 	default void didStopSoklet(@NonNull Soklet soklet,
-			@NonNull ShutdownResult result) {
+			@NonNull ShutdownResult shutdownResult) {
 		// No-op by default
 	}
 
@@ -144,10 +144,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param httpServer stopped HTTP server
-	 * @param result lifecycle component shutdown result
+	 * @param shutdownComponentResult lifecycle component shutdown result
 	 */
 	default void didStopHttpServer(@NonNull HttpServer httpServer,
-			@NonNull ShutdownComponentResult result) {
+			@NonNull ShutdownComponentResult shutdownComponentResult) {
 		// No-op by default
 	}
 
@@ -441,10 +441,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param sseServer stopped SSE server
-	 * @param result lifecycle component shutdown result
+	 * @param shutdownComponentResult lifecycle component shutdown result
 	 */
 	default void didStopSseServer(@NonNull SseServer sseServer,
-			@NonNull ShutdownComponentResult result) {
+			@NonNull ShutdownComponentResult shutdownComponentResult) {
 		// No-op by default
 	}
 
@@ -498,10 +498,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer       the MCP server that stopped
-	 * @param result lifecycle component shutdown result
+	 * @param shutdownComponentResult lifecycle component shutdown result
 	 */
 	default void didStopMcpServer(@NonNull McpServer mcpServer,
-			@NonNull ShutdownComponentResult result) {
+			@NonNull ShutdownComponentResult shutdownComponentResult) {
 		// No-op by default
 	}
 
@@ -519,9 +519,9 @@ public interface LifecycleObserver {
 	 * on the same thread. Exceptions are contained and do not alter the wire
 	 * result.
 	 *
-	 * @param context immutable admitted-request context
+	 * @param requestContext immutable admitted-request context
 	 */
-	default void didStartMcpRequestHandling(@NonNull McpRequestContext context) {
+	default void didStartMcpRequestHandling(@NonNull McpRequestContext requestContext) {
 		// No-op by default
 	}
 
@@ -538,17 +538,17 @@ public interface LifecycleObserver {
 	 * Implementations must be safe for the server's configured request
 	 * concurrency. Exceptions are contained and do not alter the wire result.
 	 *
-	 * @param context    immutable admitted-request context
-	 * @param outcome    fixed client-visible terminal outcome
-	 * @param error      exact client-visible JSON-RPC error, or {@code null} when
+	 * @param requestContext immutable admitted-request context
+	 * @param requestOutcome fixed client-visible terminal outcome
+	 * @param jsonRpcError   exact client-visible JSON-RPC error, or {@code null} when
 	 *                   the terminal outcome has no JSON-RPC error
-	 * @param duration   total admitted-request duration
+	 * @param requestDuration total admitted-request duration
 	 * @param throwables immutable failures observed while handling the request
 	 */
-	default void didFinishMcpRequestHandling(@NonNull McpRequestContext context,
-			@NonNull McpRequestOutcome outcome,
-			@Nullable McpJsonRpcError error,
-			@NonNull Duration duration,
+	default void didFinishMcpRequestHandling(@NonNull McpRequestContext requestContext,
+			@NonNull McpRequestOutcome requestOutcome,
+			@Nullable McpJsonRpcError jsonRpcError,
+			@NonNull Duration requestDuration,
 			@NonNull List<@NonNull Throwable> throwables) {
 		// No-op by default
 	}

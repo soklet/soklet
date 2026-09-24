@@ -49,12 +49,12 @@ public interface McpRateLimiter {
 	/**
 	 * Attempts to acquire permission for one request or tool invocation.
 	 *
-	 * @param context immutable rate-limit context
+	 * @param rateLimitContext immutable rate-limit context
 	 * @return a non-null allowed or denied decision
 	 * @throws Exception if the backing rate-limit service fails
 	 */
 	@NonNull
-	McpRateLimitDecision acquire(@NonNull McpRateLimitContext context) throws Exception;
+	McpRateLimitDecision acquire(@NonNull McpRateLimitContext rateLimitContext) throws Exception;
 
 	/**
 	 * Creates Soklet's built-in in-memory token-bucket limiter with documented
@@ -156,12 +156,12 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 
 	@Override
 	@NonNull
-	public McpRateLimitDecision acquire(@NonNull McpRateLimitContext context) {
-		requireNonNull(context);
+	public McpRateLimitDecision acquire(@NonNull McpRateLimitContext rateLimitContext) {
+		requireNonNull(rateLimitContext);
 		BucketKey key = new BucketKey(
-				context.getEndpoint().getPath(),
-				context.getAdmissionIdentity().getRateLimitPartitionKey(),
-				context.getTarget());
+				rateLimitContext.getEndpoint().getPath(),
+				rateLimitContext.getAdmissionIdentity().getRateLimitPartitionKey(),
+				rateLimitContext.getTarget());
 		long nowNanos = this.clock.nanoTime();
 
 		this.partitionLock.readLock().lock();

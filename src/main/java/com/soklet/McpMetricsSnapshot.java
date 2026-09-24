@@ -618,14 +618,15 @@ public final class McpMetricsSnapshot {
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 * @param outcome fixed terminal request outcome
+		 * @param requestOutcome fixed terminal request outcome
 		 * @return request-outcome aggregate key
 		 */
 		@NonNull
 		public static RequestOutcomeKey fromDimensions(
 				@NonNull String endpointPath, @NonNull String jsonRpcMethod,
-				@NonNull McpRequestOutcome outcome) {
-			return new RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome);
+				@NonNull McpRequestOutcome requestOutcome) {
+			return new RequestOutcomeKey(endpointPath, jsonRpcMethod,
+					requestOutcome);
 		}
 
 		private RequestOutcomeKey(@NonNull String endpointPath,
@@ -707,15 +708,15 @@ public final class McpMetricsSnapshot {
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 * @param reason fixed request-stream termination reason
+		 * @param streamTerminationReason fixed request-stream termination reason
 		 * @return request-stream termination aggregate key
 		 */
 		@NonNull
 		public static RequestStreamTerminationKey fromDimensions(
 				@NonNull String endpointPath, @NonNull String jsonRpcMethod,
-				@NonNull McpStreamTerminationReason reason) {
+				@NonNull McpStreamTerminationReason streamTerminationReason) {
 			return new RequestStreamTerminationKey(endpointPath, jsonRpcMethod,
-					reason);
+					streamTerminationReason);
 		}
 
 		private RequestStreamTerminationKey(@NonNull String endpointPath,
@@ -794,14 +795,15 @@ public final class McpMetricsSnapshot {
 		 * Creates a subscription termination aggregate key.
 		 *
 		 * @param endpointPath registered endpoint-path declaration
-		 * @param reason fixed subscription termination reason
+		 * @param streamTerminationReason fixed subscription termination reason
 		 * @return subscription termination aggregate key
 		 */
 		@NonNull
 		public static SubscriptionTerminationKey fromDimensions(
 				@NonNull String endpointPath,
-				@NonNull McpStreamTerminationReason reason) {
-			return new SubscriptionTerminationKey(endpointPath, reason);
+				@NonNull McpStreamTerminationReason streamTerminationReason) {
+			return new SubscriptionTerminationKey(endpointPath,
+					streamTerminationReason);
 		}
 
 		private SubscriptionTerminationKey(@NonNull String endpointPath,

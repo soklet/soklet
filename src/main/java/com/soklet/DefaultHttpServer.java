@@ -260,7 +260,7 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private volatile LifecycleObserver lifecycleObserver = LifecycleObserver.defaultInstance();
 	@NonNull
-	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.fromDefaults();
+	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.defaultInstance();
 	@Nullable
 	private volatile MetricsCollector metricsCollector;
 	@Nullable

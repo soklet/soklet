@@ -47,12 +47,12 @@ public final class McpEmbeddedResource implements McpContentBlock {
 	/**
 	 * Vends a builder primed with resource contents.
 	 *
-	 * @param resource embedded resource contents
+	 * @param resourceContents embedded resource contents
 	 * @return embedded-resource builder
 	 */
 	@NonNull
-	public static Builder withResource(@NonNull McpResourceContents resource) {
-		return new Builder(resource);
+	public static Builder withResource(@NonNull McpResourceContents resourceContents) {
+		return new Builder(resourceContents);
 	}
 
 	private McpEmbeddedResource(@NonNull Builder builder) {

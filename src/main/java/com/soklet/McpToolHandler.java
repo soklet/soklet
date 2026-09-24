@@ -42,13 +42,13 @@ public interface McpToolHandler<A> {
 	 * Handles one tool invocation.
 	 *
 	 * @param requestContext request metadata
-	 * @param arguments converted and raw tool arguments
+	 * @param toolArguments converted and raw tool arguments
 	 * @param invocationFeatures invocation-scoped optional features
 	 * @return recognized non-null operation result
 	 * @throws Exception if application handling fails
 	 */
 	@NonNull
 	McpOperationResult handle(@NonNull McpRequestContext requestContext,
-			@NonNull McpToolArguments<@NonNull A> arguments,
+			@NonNull McpToolArguments<@NonNull A> toolArguments,
 			@NonNull McpInvocationFeatures invocationFeatures) throws Exception;
 }

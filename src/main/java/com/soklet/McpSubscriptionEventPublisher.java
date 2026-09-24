@@ -77,9 +77,9 @@ public interface McpSubscriptionEventPublisher {
 	/**
 	 * Broadcasts a coarse subscription-change event.
 	 *
-	 * @param event subscription-change event
+	 * @param subscriptionEvent subscription-change event
 	 */
-	void publish(@NonNull McpSubscriptionEvent event);
+	void publish(@NonNull McpSubscriptionEvent subscriptionEvent);
 
 	/** Broadcasts a resource-list-changed event. */
 	default void publishResourcesListChanged() {

@@ -344,7 +344,7 @@ final class DefaultMcpServer implements McpServer {
 				? CorsAuthorizer.rejectAllInstance() : configuredCorsAuthorizer;
 		this.lifecycleObserver = LifecycleObserver.defaultInstance();
 		this.metricsCollector = MetricsCollector.disabledInstance();
-		this.lifecyclePolicy = LifecyclePolicy.fromDefaults();
+		this.lifecyclePolicy = LifecyclePolicy.defaultInstance();
 		this.instanceProvider = InstanceProvider.defaultInstance();
 		this.pendingListenerGeneration = null;
 		this.ownerTerminalResult = null;

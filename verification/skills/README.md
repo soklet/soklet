@@ -507,3 +507,15 @@ commands and pins. This is actual-client retrieval/integrity evidence, not agent
 activation, consent, execution, paginated/authorized/localized host qualification,
 or release qualification. Production code and HTTP compression are unchanged by
 this example slice; the prior broader Java regression results remain separate.
+
+## 2026-09-24 fuzzing disposition
+
+The owner stopped the two local Skills coverage-guided fuzz campaigns because
+they were affecting workstation performance. Both exited cleanly on interrupt
+without a reported finding; neither completed its planned 24-hour duration.
+The owner accepted the existing CI nightly Skills fuzz slots instead of that
+local duration requirement. This changes only the fuzzing evidence expected for
+P4-Q: successful CI run receipts and any findings still need review, and the
+remaining YAML boundary, operational, and host checks are still open. The
+scheduled workflow runs on `master`; a feature commit needs the existing manual
+dispatch to get candidate-specific CI evidence before merge.

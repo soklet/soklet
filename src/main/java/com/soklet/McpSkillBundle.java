@@ -61,15 +61,15 @@ public final class McpSkillBundle {
 	 * constrains resolved metadata and resource delivery. These construction
 	 * bounds are not configurable through this factory.
 	 *
-	 * @param files logical file paths and complete file contents
+	 * @param fileContentsByLogicalPath logical file paths and complete file contents
 	 * @return immutable validated bundle
 	 * @throws NullPointerException if the map, a path, or file bytes are null
 	 * @throws IllegalArgumentException if paths, metadata, content, or limits are invalid
 	 */
 	@NonNull
 	public static McpSkillBundle fromFiles(
-			@NonNull Map<@NonNull String, byte @NonNull []> files) {
-		return new McpSkillBundle(McpSkillRuntimeBridge.fromFiles(files));
+			@NonNull Map<@NonNull String, byte @NonNull []> fileContentsByLogicalPath) {
+		return new McpSkillBundle(McpSkillRuntimeBridge.fromFiles(fileContentsByLogicalPath));
 	}
 
 	/** @return validated skill name from the root document */
@@ -100,13 +100,13 @@ public final class McpSkillBundle {
 	/**
 	 * Copies the requested file without copying the complete bundle.
 	 *
-	 * @param filePath exact, case-sensitive logical file path
+	 * @param logicalFilePath exact, case-sensitive logical file path
 	 * @return defensive file-byte copy, or empty when the path is absent
 	 * @throws NullPointerException if the path is null
 	 */
 	@NonNull
-	public Optional<byte @NonNull []> findFileBytes(@NonNull String filePath) {
-		return this.runtimeBundle.findFileBytes(filePath);
+	public Optional<byte @NonNull []> findFileBytes(@NonNull String logicalFilePath) {
+		return this.runtimeBundle.findFileBytes(logicalFilePath);
 	}
 
 	McpSkillRuntimeBridge.@NonNull Bundle runtimeBundle() { return this.runtimeBundle; }

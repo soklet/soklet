@@ -315,15 +315,15 @@ public final class McpPromptRegistration {
 		 * Null or empty clears the property. The complete list is validated and
 		 * snapshotted before replacing the prior value.
 		 *
-		 * @param arguments prompt-argument declarations, or null to clear
+		 * @param argumentDeclarations prompt-argument declarations, or null to clear
 		 * @return this builder
 		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
 		public Builder arguments(
-				@Nullable List<@NonNull McpPromptArgumentDeclaration> arguments) {
-			this.arguments = arguments == null ? List.of()
-					: List.copyOf(arguments);
+				@Nullable List<@NonNull McpPromptArgumentDeclaration> argumentDeclarations) {
+			this.arguments = argumentDeclarations == null ? List.of()
+					: List.copyOf(argumentDeclarations);
 			return this;
 		}
 

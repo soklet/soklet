@@ -120,6 +120,12 @@ complete runs after the owner commits the change. P4-Q also still needs a final 
 receipt and explicit review of its supported YAML boundary. This is **not
 MCP-G5 GO**.
 
+**2026-09-24 owner update:** The local 24-hour Skills campaign is no longer a
+qualification requirement. The owner chose the existing nightly CI Skills fuzz
+slots instead; their actual run receipts and any findings still need review.
+The two local long runs were stopped at the owner's request and do not count
+as completed nightly runs. The remaining P4-Q and P4-R checks above are unchanged.
+
 ## What remains before candidate gates
 
 1. Commit the reviewed P0-C integration, then replay the immutable candidate
@@ -127,7 +133,7 @@ MCP-G5 GO**.
 2. Review/accept the exact alpha.11 dependency repin and explicitly dispose
    of its single low development finding.
 3. Resolve the released Apps host behavior or approve a clearly limited Apps
-   claim; complete the chosen real-host matrix. Finish Skills long-duration
+   claim; complete the chosen real-host matrix. Review Skills nightly CI
    fuzzing and scoped operational/host checks, or approve a narrower Skills
    surface.
 4. Finish MCP API/incompatibility/evolution/roadmap ledgers only for qualified

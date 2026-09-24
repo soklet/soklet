@@ -215,13 +215,13 @@ public final class McpInputResponses {
 		 * <p>Repeated keys are last-call-wins.
 		 *
 		 * @param key response key
-		 * @param response exact JSON response
+		 * @param inputResponse exact JSON response
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder addResponse(@NonNull String key,
-				@NonNull McpJsonValue response) {
-			this.responses.put(requireNonNull(key), requireNonNull(response));
+				@NonNull McpJsonValue inputResponse) {
+			this.responses.put(requireNonNull(key), requireNonNull(inputResponse));
 			return this;
 		}
 

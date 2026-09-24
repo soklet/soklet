@@ -1222,7 +1222,7 @@ public class McpHandlerMetricsObservabilityTests {
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer) {
 		return newSoklet(server, collector, observer,
-				LifecyclePolicy.fromDefaults());
+				LifecyclePolicy.defaultInstance());
 	}
 
 	@NonNull
