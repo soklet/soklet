@@ -218,6 +218,8 @@ public class McpTransportContainmentSpikeTests {
 				clock.advance(keepAliveInterval);
 				runtime.runTimerCycle();
 				Assertions.assertEquals(": keepalive\n\n", client.readChunkText());
+				Assertions.assertEquals(0, runtime.snapshot().bufferedFrames(),
+						"first keep-alive write had not finished before advancing the clock");
 
 				clock.advance(Duration.ofSeconds(3));
 				runtime.runTimerCycle();

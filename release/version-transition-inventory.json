@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "470b89e23ff4d507dcb18ea10044aa981eb2034e9649ed3c686724cb1d0d14eb",
+    "censusSha256": "066e56ca16f245c0e1b55cf0ceb641b64dfb3f0573a82ab11c8b562512062e01",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4055,7 +4055,7 @@
       "src/main/java/com/soklet/McpLogLevel.java"
     ],
     "files": [
-      ".github/workflows/ci.yml\t165bde827101a828ca93e1c1890f4ae9b9585da0a7a96f7bed0950a17d5ad613",
+      ".github/workflows/ci.yml\ta4774a6ea4439bdf5223e56bdc4e6b350027f901db5e1e55eb0fcb2b0365e370",
       ".github/workflows/release-validation.yml\t75cfc3d7cc7b097a444d07b2ecd2993d994e950392df2fb9755712316772bbb6",
       "BENCHMARKS.md\t131108b936a3389bfc6ef600344198621d2dd8abcbaeda92a6b3ecf5555227ed",
       "CHANGELOG.md\tcdeed188b3535d63de4523e33f6536a20db85728ed6a6fbaf19450319f74693b",
@@ -4083,7 +4083,7 @@
       "conformance/golden-result-envelope/live/complete-server-discover-string.json\t42251e39125340df5b6294c08bb30412d91d24b75d757dfa52251820180524f6",
       "conformance/mcp-finite-bound-inventory.json\t03132daf20c41a01e3da9bc870bcefba16a1d10c58c9dbe89a0c1e63cea69222",
       "conformance/mcp-limits-and-accounting.json\t9e0bace1102026cff8b5f0c72fbb0be0b664801ef1617f44694c21c8ea091821",
-      "conformance/mcp-privacy-boundary-inventory.json\t1ff9b01312de17cd7f2307e5fa7e46af34cc80ce8d709c5d9c1868f056d24ce5",
+      "conformance/mcp-privacy-boundary-inventory.json\t026bfd84d9808f4683781d4f0b0256ed084718fff2de0538eb4f95c1edad433a",
       "conformance/official/README.md\t55910f14339417bda5f00a70f5658126d2387c9b79ee5e17f7e2a7317a72d033",
       "conformance/official/build-public-fixture.sh\tfa6ff13efda433bb925455ed17ddcb88964d3d631c2f7fc016b5240bc24532b1",
       "conformance/official/expected-checks.json\t4f036369b9c3895c07e9cfe25ed2b82ab1a22342c55dd8f3181bf062d45366ae",
@@ -4148,13 +4148,13 @@
       "scripts/release-validation-self-test.mjs\t15e67cc9d1a685da8f3487d08fe13042c9ee7c2cd5909a71e1f078e1302fa992",
       "scripts/validate-release-candidate.sh\t5487f30685db1d0f84b5882b1b428ef740de6dfca9a756910d15be627088efd5",
       "scripts/verify-d1p-evidence-self-test.mjs\t1a5cb492fd418ba388eb26a84af470480c84f174c2331e4ad96048de99903255",
-      "scripts/verify-lifecycle-bound-harness-inventory.mjs\tfc9335b6d2dea180b7eb0d02a85f900acfff1c2f926c553dfab85c3a6e69f9d2",
+      "scripts/verify-lifecycle-bound-harness-inventory.mjs\tb27bacfc7b597b4bbad4472900f598231fae6400ce71ebf3ee3ca389e29f9b83",
       "scripts/verify-mcp-roadmap-readiness-self-test.mjs\td5c2eac5ca022fac9c155e2aa525377ea94e4d385070e15594b3495e6aa1fef8",
       "scripts/verify-mcp-roadmap-readiness.mjs\t51a77d5a163fffb1d12fd75a8f123a343796a97a2a59a6eb250e98831d56ca47",
       "scripts/verify-mcp-transport-dependencies-self-test.mjs\t3aa3a790e5a64fae6c674cd04c3e49effdd26e88aa0c92f743eb8892dcff878d",
       "scripts/verify-mcp-transport-dependencies.mjs\tbf71d0c07c36e42e7ee9488d43243c9c13a4ce731dfb575921d3adbaf6db4262",
       "scripts/verify-release-matrix-closure-self-test.mjs\tf3f041ce73740b5df27c9118e214a2e549ffc7fc0dd5856482ea1262b837a4b7",
-      "scripts/verify-release-matrix-closure.mjs\td968c13b6b32ba6f6ea3abc4ba46d8051ef82d92de5a87967c96f7acb291274e",
+      "scripts/verify-release-matrix-closure.mjs\t442bf71ce52dc35d6f96f5a8b547210b6c691825c5c42e43d816c92be531d527",
       "scripts/verify-runtime-dependency-surface-self-test.mjs\t90606e19e9ac93f92c9d3cf8758f26ec4d1dc1ceb580cbb2f3c363fc8bdcc2e1",
       "scripts/verify-surefire-reports-self-test.mjs\t390b4bdb67d76def8a276191243ceb033cb134abb43f9c08a58d0162184ecb58",
       "soak/MANUAL_SOAKS.md\t4b24811f79ea851f9d31533b8b2fc911a46f8d722e3353549f5f937c4f5bc933",
@@ -4508,7 +4508,7 @@
       "REPLACED\tconformance/golden-result-envelope/live/complete-server-discover-string.json\t1\t292\t0\t4.0.0-SNAPSHOT\t4.0.0\tconformance/golden-result-envelope/live/complete-server-discover-string.json\t1\t0",
       "TARGET_ONLY\tconformance/mcp-finite-bound-inventory.json\t3115\t20\t0\t4.0.0\t4.0.0\t-\t-\t-",
       "TARGET_ONLY\tconformance/mcp-limits-and-accounting.json\t822\t20\t0\t4.0.0\t4.0.0\t-\t-\t-",
-      "TARGET_ONLY\tconformance/mcp-privacy-boundary-inventory.json\t66056\t20\t0\t4.0.0\t4.0.0\t-\t-\t-",
+      "TARGET_ONLY\tconformance/mcp-privacy-boundary-inventory.json\t66074\t20\t0\t4.0.0\t4.0.0\t-\t-\t-",
       "REPLACED\tconformance/official/README.md\t44\t64\t0\t4.0.0\t4.0.0\tconformance/official/README.md\t30\t0",
       "REPLACED\tconformance/official/README.md\t142\t50\t0\t4.0.0-SNAPSHOT\t4.0.0\tconformance/official/README.md\t44\t0",
       "REPLACED\tconformance/official/README.md\t447\t56\t0\t4.0\t4.0\tconformance/official/README.md\t338\t0",

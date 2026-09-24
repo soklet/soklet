@@ -460,7 +460,9 @@ jobs:
             --work-dir "${{ github.workspace }}/target/conformance/official/phase-5" \
             --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
             --project-root "${{ github.workspace }}" \
-            --phase 5
+            --java "${JAVA_HOME}/bin/java" \
+            --phase 5 \
+            --p0c-policy accepted-2026-09-22
 
       - name: Upload MCP conformance evidence
         if: always()
