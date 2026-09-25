@@ -221,13 +221,18 @@ function run() {
       className = fuzzClass,
       durationSeconds = localContract.policy.perTargetDurationSeconds + 0.75,
       methodName = fuzzMethod,
+      seedMethodName = methodName,
+      seedDurationSeconds = 0.01,
+      declaredTests = '3',
     } = {}) => writeFileSync(
       surefireReport,
-      `<testsuite name="${className}" time="${durationSeconds}" tests="1" errors="0" failures="0" skipped="0">\n`
+      `<testsuite name="${className}" time="${durationSeconds + seedDurationSeconds + 0.02}" tests="${declaredTests}" errors="0" failures="0" skipped="0">\n`
         + '<properties>\n'
         + `<property name="jazzer.max_duration" value="${localContract.policy.perTargetDurationSeconds}s"/>\n`
         + '</properties>\n'
-        + `<testcase classname="${className}" name="${methodName}(byte[])" time="${durationSeconds}"/>\n`
+        + `<testcase classname="${className}" name="${seedMethodName}(byte[])[1]" time="${seedDurationSeconds}"/>\n`
+        + `<testcase classname="${className}" name="${methodName}(byte[])[2]" time="0.02"/>\n`
+        + `<testcase classname="${className}" name="${methodName}(byte[])[3]" time="${durationSeconds}"/>\n`
         + '</testsuite>\n',
     );
     writeSurefire();
@@ -258,8 +263,10 @@ function run() {
     });
     assert.equal(target.target.id, localContract.policy.targets[0].id);
     assert.match(target.corpusHash, /^[0-9a-f]{64}$/);
+    assert.equal(target.measuredDurationSeconds,
+      localContract.policy.perTargetDurationSeconds);
     assert.equal(readFileSync(targetOutput, 'utf8'), canonicalJson(target));
-    assertions += 3;
+    assertions += 4;
     writeSurefire({ durationSeconds: localContract.policy.perTargetDurationSeconds - 0.25 });
     expectThrows(
       () => createFuzzTargetReceipt({
@@ -277,6 +284,26 @@ function run() {
       /active-fuzz interval/u,
       'short fuzz duration',
     );
+    writeSurefire({
+      durationSeconds: localContract.policy.perTargetDurationSeconds - 0.25,
+      seedDurationSeconds: localContract.policy.perTargetDurationSeconds + 1,
+    });
+    expectThrows(
+      () => createFuzzTargetReceipt({
+        contract: localContract,
+        corpusRoot: corpus,
+        jazzerApiJarPath: jazzerApi,
+        jazzerEngineJarPath: jazzerEngine,
+        jazzerJarPath: jazzer,
+        outputPath: join(root, 'long-seed-target-receipt.json'),
+        supplementalJazzerSha256,
+        surefireRoot: surefire,
+        targetId: localContract.policy.targets[0].id,
+        toolchainEvidencePath: localEvidencePath,
+      }),
+      /active-fuzz interval/u,
+      'long seed replay cannot substitute for the fuzz interval',
+    );
     writeSurefire({ methodName: 'differentPassingFuzzTarget' });
     expectThrows(
       () => createFuzzTargetReceipt({
@@ -293,6 +320,40 @@ function run() {
       }),
       /testcase does not match registered target/u,
       'wrong passing fuzz target',
+    );
+    writeSurefire({ seedMethodName: 'differentSeedTarget' });
+    expectThrows(
+      () => createFuzzTargetReceipt({
+        contract: localContract,
+        corpusRoot: corpus,
+        jazzerApiJarPath: jazzerApi,
+        jazzerEngineJarPath: jazzerEngine,
+        jazzerJarPath: jazzer,
+        outputPath: join(root, 'mixed-target-receipt.json'),
+        supplementalJazzerSha256,
+        surefireRoot: surefire,
+        targetId: localContract.policy.targets[0].id,
+        toolchainEvidencePath: localEvidencePath,
+      }),
+      /testcase does not match registered target/u,
+      'seed from a different fuzz target',
+    );
+    writeSurefire({ declaredTests: '2' });
+    expectThrows(
+      () => createFuzzTargetReceipt({
+        contract: localContract,
+        corpusRoot: corpus,
+        jazzerApiJarPath: jazzerApi,
+        jazzerEngineJarPath: jazzerEngine,
+        jazzerJarPath: jazzer,
+        outputPath: join(root, 'wrong-count-target-receipt.json'),
+        supplementalJazzerSha256,
+        surefireRoot: surefire,
+        targetId: localContract.policy.targets[0].id,
+        toolchainEvidencePath: localEvidencePath,
+      }),
+      /testcase count/u,
+      'mismatched Surefire testcase count',
     );
     writeSurefire();
     writeFileSync(jazzer, 'changed');

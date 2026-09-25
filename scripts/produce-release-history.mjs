@@ -369,7 +369,7 @@ function verifyPassingSurefireDirectory(path, targetId, configuredSeconds) {
   if (reports[0] !== `TEST-${execution.className}.xml`)
     fail(`Fuzz Surefire report does not match registered target ${targetId}.`);
   const attributes = xmlAttributes(suite[1]);
-  for (const [name, expected] of [['tests', '1'], ['errors', '0'], ['failures', '0'], ['skipped', '0']]) {
+  for (const [name, expected] of [['errors', '0'], ['failures', '0'], ['skipped', '0']]) {
     if (attributes.get(name) !== expected)
       fail(`Fuzz Surefire XML ${name} does not equal ${expected}.`);
   }
@@ -378,22 +378,32 @@ function verifyPassingSurefireDirectory(path, targetId, configuredSeconds) {
   if (/<(?:error|failure|skipped)\b/.test(xml))
     fail('Fuzz Surefire XML contains a nonpassing testcase outcome.');
   const testcases = [...xml.matchAll(/<testcase\b([^>]*)>/g)];
-  if (testcases.length !== 1)
-    fail(`Fuzz Surefire XML must contain exactly one testcase, found ${testcases.length}.`);
-  const testcase = xmlAttributes(testcases[0][1]);
-  const testcaseName = testcase.get('name');
-  if (testcase.get('classname') !== execution.className
-      || (testcaseName !== execution.methodName
-        && !testcaseName?.startsWith(`${execution.methodName}(`))) {
-    fail(`Fuzz Surefire testcase does not match registered target ${targetId}.`);
+  const declaredTests = attributes.get('tests');
+  if (!/^[1-9][0-9]*$/.test(declaredTests ?? '')
+      || Number(declaredTests) !== testcases.length) {
+    fail('Fuzz Surefire XML testcase count does not match its suite declaration.');
+  }
+  for (const match of testcases) {
+    const testcase = xmlAttributes(match[1]);
+    const testcaseName = testcase.get('name');
+    if (testcase.get('classname') !== execution.className
+        || (testcaseName !== execution.methodName
+          && !testcaseName?.startsWith(`${execution.methodName}(`))) {
+      fail(`Fuzz Surefire testcase does not match registered target ${targetId}.`);
+    }
+    const caseElapsed = Number(testcase.get('time'));
+    if (!Number.isFinite(caseElapsed) || caseElapsed < 0)
+      fail('Fuzz Surefire testcase duration is invalid.');
   }
   const configured = [...xml.matchAll(/<property\b([^>]*)\/>/g)]
     .map((match) => xmlAttributes(match[1]))
     .find((property) => property.get('name') === 'jazzer.max_duration');
   if (configured?.get('value') !== `${configuredSeconds}s`)
     fail('Fuzz Surefire XML does not bind the registered Jazzer duration.');
-  const elapsed = Number(testcase.get('time'));
-  if (!Number.isFinite(elapsed) || elapsed < configuredSeconds)
+  // Jazzer reports curated seed invocations before the coverage-guided run.
+  // Only the final invocation proves the configured active-fuzz interval.
+  const elapsed = Number(xmlAttributes(testcases.at(-1)[1]).get('time'));
+  if (elapsed < configuredSeconds)
     fail('Fuzz testcase duration does not prove the registered active-fuzz interval.');
   return { elapsedSeconds: Math.floor(elapsed), report: reports[0] };
 }
