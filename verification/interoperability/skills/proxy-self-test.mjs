@@ -8,6 +8,12 @@ const skill = 'io.modelcontextprotocol/skills';
 const uri = 'skill://example/demo/file.bin';
 const secret = 'PRIVATE_TEST_SENTINEL';
 const tick = () => new Promise(resolve => setImmediate(resolve));
+async function waitFor(condition) {
+  const deadline = Date.now() + 1000;
+  while (!condition() && Date.now() < deadline)
+    await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(condition());
+}
 const wire = (method = 'skills/list', changes = {}) => ({
   jsonrpc: '2.0', id: 'probe', method,
   params: { _meta: { 'io.modelcontextprotocol/protocolVersion': protocol,
@@ -134,7 +140,7 @@ test('malformed, failed, truncated and oversized responses never become valid ro
   }
   mode = 'exact';
   assert.equal((await begin(proxy.port).result).body.length, 4 * 1024 * 1024);
-  assert.equal(proxy.rows.at(-1).valid, true);
+  await waitFor(() => proxy.rows.at(-1).valid);
 });
 
 test('request bytes and count are capped with bounded overflow evidence', async t => {

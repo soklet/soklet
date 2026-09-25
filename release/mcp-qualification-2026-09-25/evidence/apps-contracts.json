@@ -1,0 +1,433 @@
+{
+  "kind": "soklet.apps.candidate-fixture.local.v1",
+  "verdict": "PASS",
+  "hostQualification": false,
+  "candidate": {
+    "jar": "/Users/Shared/ai-shared/soklet/soklet/target/soklet-4.0.0.jar",
+    "jarSha256": "f91ab625a5a7fb506d0066dfc73cc942e96afa20f71fd6f368d945b9d701ce51",
+    "pom": "/Users/Shared/ai-shared/soklet/soklet/pom.xml",
+    "pomSha256": "90a0e38702ed10392a1d77ccc556995575d9eef7b601537b3d7a4a68790c7324"
+  },
+  "shell": {
+    "sha256": "3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60",
+    "bytes": 281142,
+    "receiptSha256": "19abfbd57db5bd7b4e29a7b3ccbb3e69e2879f09e0bb2d51514b357c051502c4",
+    "build": {
+      "schemaVersion": 1,
+      "kind": "soklet-apps-shell-build",
+      "sdk": "2.0.0",
+      "bundler": "1.2.9",
+      "lockSha256": "37dfcdb1476f7f31c4aeea13971a729588bad7719c67bb8349f7bd8c52d29f29",
+      "packageSha256": "8fc642c9ec63e951bf987d4ccf2c7a198a33f350f7d424ad2e95a1f48dbfe2c0",
+      "bytes": 281142,
+      "sha256": "3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60",
+      "sourceInputs": [
+        {
+          "path": "../inspector/process.mjs",
+          "bytes": 6285,
+          "sha256": "36b712377e19ea584ad1479f5460578e193b658549fc6b5d92d8d08f3b29dd68"
+        },
+        {
+          "path": "assets/catalog-entry.mjs",
+          "bytes": 311,
+          "sha256": "ffcb48f7221f2110355e78f6aa0e59ea0cf568f8c19f7b207d678b9c7b0195e0"
+        },
+        {
+          "path": "assets/catalog-shell.html",
+          "bytes": 1198,
+          "sha256": "009b12c5c9aded41b935e8169ee915ceb0e10f9be8d968170a7049a674a839f5"
+        },
+        {
+          "path": "assets/catalog-shell.mjs",
+          "bytes": 6923,
+          "sha256": "3a6a49bda6a444b3a16ab017636528a937eb7f2c697c7ca255e9380340016aa8"
+        },
+        {
+          "path": "build-shell.mjs",
+          "bytes": 14949,
+          "sha256": "389a957cb3dd653396a503fbc99321e6e018799c980ab043c5f496d29297d882"
+        }
+      ],
+      "bundledInputs": [
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/cfWorkerProvider-BylNJ1R5.mjs",
+          "bytes": 41926,
+          "sha256": "eb39ab8996af767751fc34bea128d6b2adaef5a39cd42ec94749a091f76ab268"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/chunk-Br0eD_fh.mjs",
+          "bytes": 1426,
+          "sha256": "d4a000980e7c6a8a2ee04c12d80cf538b11e5040e8487dad7661b09d85894e74"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/dialects-BOhdv1Fc.mjs",
+          "bytes": 2107,
+          "sha256": "34447f2f5bffaab20cf5148c190137fc3129e7b23614a75a47c1db3b0994969e"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/index.mjs",
+          "bytes": 238700,
+          "sha256": "af3ec9fcf3a70fb4681e9b3c11aa18a7ce9aca36fed9f138a6e704043695d414"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/shimsBrowser.mjs",
+          "bytes": 536,
+          "sha256": "76db20e8d9ff0415e48fdb0d79a5f3005e49782df0991b40f0712038b3a7fdbc"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/client/dist/src-D_zzAWoS.mjs",
+          "bytes": 301052,
+          "sha256": "fb539b120913afb2a469cfdd8f233b4c6aac98d7532f3172e783258aaadef084"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs",
+          "bytes": 68485,
+          "sha256": "17df1168d46e8215ad9b204b0ba5061a7ff44a787bf7a8dd8ba5b20ac4499e68"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/core/dist/index.mjs",
+          "bytes": 10088,
+          "sha256": "e38d1b81e798b96853a7076a9511f0300ae683c9af0f3c260dc46c16bd2a7e62"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/core/dist/internal.mjs",
+          "bytes": 11434,
+          "sha256": "0cc572e7ac91e9f1a36133b83a6207fdea87cb41f9531c7f406d5eca3c355dfb"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/ext-apps/dist/src/app.js",
+          "bytes": 33917,
+          "sha256": "8c539d54ae46db4aaae29276dc5b3be396f748ad3c99cb55e7fa8dcd03024aa6"
+        },
+        {
+          "path": "node_modules/pkce-challenge/dist/index.browser.js",
+          "bytes": 2781,
+          "sha256": "0a2e4c59975ffb7ec9c70499e36208260f6524261b443b57894c980736d0b3f4"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/coerce.js",
+          "bytes": 550,
+          "sha256": "fb2efe3b6eacc475c77cbb571b5fb8650d92a10f316dc869e49b722973d83c3c"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/compat.js",
+          "bytes": 1090,
+          "sha256": "0e948b101771cc0e7b753e54b3f5b486929d3db9bd4c09d98fe4ce86271bcf7b"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/errors.js",
+          "bytes": 2532,
+          "sha256": "d32f7c1ef8e2c70072f6f0ec8ba7081bbc331353cc3a7cb4429e5ece91409543"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/iso.js",
+          "bytes": 556,
+          "sha256": "deaa026b7c5302e59719f401248e7866691d8d8a892884dd2b6868b1cb7252d8"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/parse.js",
+          "bytes": 1057,
+          "sha256": "11941573401bbef138842c7a523dff554873343fccbf0e8b0a144259d2d703f1"
+        },
+        {
+          "path": "node_modules/zod/v4/classic/schemas.js",
+          "bytes": 53354,
+          "sha256": "2bf4a631a18f734a9a7ab7fc11bcf919214774d2235a312dcec0dd53d0324c32"
+        },
+        {
+          "path": "node_modules/zod/v4/core/api.js",
+          "bytes": 28953,
+          "sha256": "03ae6016abc9585e3f3481d6b8d775a95ae4ee65badbde73ca1ed953ff14c0e7"
+        },
+        {
+          "path": "node_modules/zod/v4/core/checks.js",
+          "bytes": 19491,
+          "sha256": "bc42543274218aa7ef72192b3218d2a4a399e53df8de240a04d9ff275096f563"
+        },
+        {
+          "path": "node_modules/zod/v4/core/core.js",
+          "bytes": 6642,
+          "sha256": "c7ce485c97263e42568d16b11bb4a90133221c7e807498a9273d70f41ba16ef6"
+        },
+        {
+          "path": "node_modules/zod/v4/core/doc.js",
+          "bytes": 1290,
+          "sha256": "be4c1b1a1ad247cc70f360a572060edd7e0cea24252c3a319f33d247899c5643"
+        },
+        {
+          "path": "node_modules/zod/v4/core/errors.js",
+          "bytes": 10871,
+          "sha256": "a0c95ef2f7085b5bc2931f7b566f524b26a0360c8df741e3f87f923745cf9792"
+        },
+        {
+          "path": "node_modules/zod/v4/core/json-schema-processors.js",
+          "bytes": 34985,
+          "sha256": "b6d2aee72212c076b9cde38da6333591c76a24eb049a4ee4e7bd2b7825d8b817"
+        },
+        {
+          "path": "node_modules/zod/v4/core/memoizer.js",
+          "bytes": 12517,
+          "sha256": "18a3188c51229d9189a5408b0b7fbc3e121b55c2b4c3c406d79cb9b77e7ad964"
+        },
+        {
+          "path": "node_modules/zod/v4/core/parse.js",
+          "bytes": 8267,
+          "sha256": "fb05b91ec260f3f484f7c00a177b6126ceb8fd1b09dc90b1200afdffd4d98efd"
+        },
+        {
+          "path": "node_modules/zod/v4/core/regexes.js",
+          "bytes": 11818,
+          "sha256": "24fc98f6fc9175e50ff29d28b040e3b4ac5650de19914d45ee27b853d367ecc6"
+        },
+        {
+          "path": "node_modules/zod/v4/core/registries.js",
+          "bytes": 1540,
+          "sha256": "f04d4b2c0bc5b4ac2d6610ea34edf2e5260eade18f20976b79916dcdbeb9fa4d"
+        },
+        {
+          "path": "node_modules/zod/v4/core/schemas.js",
+          "bytes": 105968,
+          "sha256": "e632b655441418f0593153abc6809fd81cf3e0782d810622d0a4fa50ef6e182e"
+        },
+        {
+          "path": "node_modules/zod/v4/core/to-json-schema.js",
+          "bytes": 29029,
+          "sha256": "85b883eb8f05e9f060c71a39fce7df9345b566af29d5bc9c8fa477fe616a051d"
+        },
+        {
+          "path": "node_modules/zod/v4/core/util.js",
+          "bytes": 34363,
+          "sha256": "728f52b496620336775eafcdb91c0a574380086e53f215b55c58eedc1422c49c"
+        },
+        {
+          "path": "node_modules/zod/v4/core/versions.js",
+          "bytes": 70,
+          "sha256": "63b38035ff5e2a5a5cfe5665e271af72b0cf9791e770dccf5e99d977064fb96c"
+        },
+        {
+          "path": "node_modules/zod/v4/locales/en.js",
+          "bytes": 5302,
+          "sha256": "d5930e10d137b048b37823e168e4177947e1f696ada8419c71bb0d32da4333c0"
+        }
+      ],
+      "virtualModules": [],
+      "packageTrees": [
+        {
+          "name": "@modelcontextprotocol/client",
+          "version": "2.0.0",
+          "sha256": "d32253f41a5245732553e67885098eee60f2600cb8fd71169a40e0c86139db09",
+          "files": 85,
+          "bytes": 6588734
+        },
+        {
+          "name": "@modelcontextprotocol/core",
+          "version": "2.0.0",
+          "sha256": "bdae7a7b1bc378c0129297cf71f79748eb245c29e6863d501ef027f666ee0d83",
+          "files": 21,
+          "bytes": 1313025
+        },
+        {
+          "name": "@modelcontextprotocol/ext-apps",
+          "version": "2.0.0",
+          "sha256": "7f800042aa874da28c8803d8fdb9def15a60b8dddb380d2f993796ecd0eab1fe",
+          "files": 47,
+          "bytes": 1484749
+        },
+        {
+          "name": "@oxc-project/types",
+          "version": "0.150.0",
+          "sha256": "1487aa596c84f94d69efbd7ec4fed02ba4ddff3e482f5bc2f8a8733f9998c166",
+          "files": 4,
+          "bytes": 44596
+        },
+        {
+          "name": "@rolldown/binding-darwin-arm64",
+          "version": "1.2.9",
+          "sha256": "83c69b6576b08363c970fc9b4c648c8e2dbcaf76e00860caecaebb2dfdb8c659",
+          "files": 3,
+          "bytes": 16373598
+        },
+        {
+          "name": "@rolldown/pluginutils",
+          "version": "1.0.1",
+          "sha256": "fd1bee7028a0280c6b674a31887af93c7f63733f4bf027b91ceb452124134f1d",
+          "files": 8,
+          "bytes": 25693
+        },
+        {
+          "name": "pkce-challenge",
+          "version": "5.0.1",
+          "sha256": "3229017c69678bb8a24ef4484d407cd15d641382921766bcebd5a9c72998e649",
+          "files": 10,
+          "bytes": 18211
+        },
+        {
+          "name": "rolldown",
+          "version": "1.2.9",
+          "sha256": "05f99df5274f99da5b4a83745caca352d22c6ca04b2eac774952b5271cb4d1ea",
+          "files": 54,
+          "bytes": 852131
+        },
+        {
+          "name": "zod",
+          "version": "4.6.5",
+          "sha256": "984bd10276a45aa9cdbeab4e31a1e593696959f6d19874d1085f07dd693ab1eb",
+          "files": 840,
+          "bytes": 6140311
+        }
+      ],
+      "nativeBinding": {
+        "path": "node_modules/@rolldown/binding-darwin-arm64/rolldown-binding.darwin-arm64.node",
+        "bytes": 16372640,
+        "sha256": "6c530f1a82893925f733d1ba412c323684fa3e524a8aa6cbb2cb4aa04937abaa"
+      },
+      "licenses": [
+        {
+          "path": "node_modules/@modelcontextprotocol/client/LICENSE",
+          "bytes": 12227,
+          "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/core/LICENSE",
+          "bytes": 12227,
+          "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+        },
+        {
+          "path": "node_modules/@modelcontextprotocol/ext-apps/LICENSE",
+          "bytes": 12227,
+          "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+        },
+        {
+          "path": "node_modules/pkce-challenge/LICENSE",
+          "bytes": 1057,
+          "sha256": "feb87a2e0c305de3464cc44077da5393c52d8ca6362d37427157d04ec6f4510d"
+        },
+        {
+          "path": "node_modules/zod/LICENSE",
+          "bytes": 1072,
+          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        }
+      ],
+      "consoleCallsRemoved": true,
+      "sourceRechecked": true,
+      "hostQualification": false
+    }
+  },
+  "inputs": [
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/assets/catalog-entry.mjs",
+      "sha256": "ffcb48f7221f2110355e78f6aa0e59ea0cf568f8c19f7b207d678b9c7b0195e0"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/assets/catalog-shell.html",
+      "sha256": "009b12c5c9aded41b935e8169ee915ceb0e10f9be8d968170a7049a674a839f5"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/assets/catalog-shell.mjs",
+      "sha256": "3a6a49bda6a444b3a16ab017636528a937eb7f2c697c7ca255e9380340016aa8"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/browser-probe-self-test.mjs",
+      "sha256": "b8536aa5e10a5fdb5a6e5d74dbe9ff8f65d7621aeed40e580ce9be6f9c62a211"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/browser-probe.mjs",
+      "sha256": "13a94c1127b5cf1f42c5493293b40f699a26c67f1e7bf4ef9bf506e95ea562e7"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/build-shell.mjs",
+      "sha256": "389a957cb3dd653396a503fbc99321e6e018799c980ab043c5f496d29297d882"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/host-runner-self-test.mjs",
+      "sha256": "0b1e61d5c019ef4c80d3eee873c4ecfec68f4c505e3c941e29db5665497dc9ab"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/host-trace-self-test.mjs",
+      "sha256": "8e8c244f5f0d8434fd321e7a6134594dc549689350b39d7a4a173c1abdcad1f1"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/host-trace.mjs",
+      "sha256": "11b2bd50fca8339a58c8d3648ed9af87ebb0dbff4d8d68e5d9446f6c69a8963e"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/launcher-self-test.mjs",
+      "sha256": "a1c9993cc0399247b9161c0501def04902e88164ff963bd28087c1e2405a3bbd"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/README.md",
+      "sha256": "852f660a0a57f297e74b3e7dfc2b6dbee99c3fb582ea4da8053cfdb53314362b"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/run-host.mjs",
+      "sha256": "88db6d817ee22f05e80246267b00c727bd62283058a81e76a990d4bf01764e03"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/run.mjs",
+      "sha256": "d4a29b737273dbc2abf25f49de59bc5a28c8fb2694a5683aab2514b4396f136e"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/runner-self-test.mjs",
+      "sha256": "d787afb9ac6185325068e7f3e1326ed84883a2fa96fb2e41df321235c0edfb73"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/shell-self-test.mjs",
+      "sha256": "0079e6a2eb22e82b6713fa6c8f1c50fa97461b15f46498d56a983419a27f7f25"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/src/com/soklet/interop/apps/AppsFixture.java",
+      "sha256": "4ec2e957e5982d0e92e8c79f80c11bc227da8ffd29b5f2f21d1bd9f5b0c5cba4"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/src/com/soklet/interop/apps/AppsFixtureMain.java",
+      "sha256": "95284137f2e1a70969a9f9c909e57bdb53b7e63f6d0dfd687a8ffc68e6df2329"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/test-src/com/soklet/interop/apps/AppsFixtureContractTest.java",
+      "sha256": "b17a0136b934b2708956d526b4157557140fcb649f285978ca2794cb2e482d66"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/apps/test-src/com/soklet/interop/apps/AppsFixtureHttpAuthorizationTest.java",
+      "sha256": "05413c52c8459430db35ff8e9515326d0a27bd64a3f99ae69c6546ab606dd80f"
+    },
+    {
+      "path": "/Users/Shared/ai-shared/soklet/soklet/verification/interoperability/inspector/process.mjs",
+      "sha256": "36b712377e19ea584ad1479f5460578e193b658549fc6b5d92d8d08f3b29dd68"
+    }
+  ],
+  "bounds": {
+    "compileMs": 120000,
+    "contractsMs": 60000,
+    "dependencyAuditMs": 60000,
+    "maximumChildOutputBytes": 2097152
+  },
+  "checks": [
+    "java-identity",
+    "core-identity",
+    "candidate-pom",
+    "compile-release-17",
+    "server-contracts",
+    "public-api-dependencies",
+    "input-recheck"
+  ],
+  "limitations": [
+    "Simulator contracts only; no actual browser/host rendering or bridge qualification",
+    "CSP/permissions metadata is not proof of host enforcement",
+    "Disposable fixture authentication is not production OAuth qualification",
+    "Dirty-tree local evidence, not immutable release conformance"
+  ],
+  "java": "openjdk version \"17.0.20.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Corretto-17.0.20.10.1 (build 17.0.20.1+10-LTS)\nOpenJDK 64-Bit Server VM Corretto-17.0.20.10.1 (build 17.0.20.1+10-LTS, mixed mode, sharing)",
+  "node": "v26.5.0",
+  "coreCommit": "4753ef23eb64986d61e7d0d2a27e960315752f3b",
+  "contracts": {
+    "status": "PASS",
+    "cases": 12,
+    "requests": 34,
+    "scope": "candidate-public-api-simulator"
+  },
+  "dependenciesSha256": "04d014e56fed34b27d7aaaddac620f61d1bb03de5c1192770ade31f3c876bb26",
+  "retainedCopyRedactions": [
+    "shell.path",
+    "shell.receiptPath"
+  ]
+}
