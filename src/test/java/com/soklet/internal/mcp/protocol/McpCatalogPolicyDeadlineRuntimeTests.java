@@ -181,6 +181,7 @@ public class McpCatalogPolicyDeadlineRuntimeTests {
 		AtomicBoolean firstInterruptWasCleared = new AtomicBoolean();
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch firstInterrupted = new CountDownLatch(1);
+		CountDownLatch cancelationCallbackDelivered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		McpServerRuntimeBridge.CatalogAccessAdapter adapter = input -> {
 			CancelationToken observed = input.cancelationToken();
@@ -189,6 +190,7 @@ public class McpCatalogPolicyDeadlineRuntimeTests {
 				cancelationCallbacks.incrementAndGet();
 				cancelationReason.set(observed.getCancelationReason().orElse(null));
 				cancelationCause.set(observed.getCancelationCause());
+				cancelationCallbackDelivered.countDown();
 			});
 			return new McpServerRuntimeBridge.CatalogAccessSession() {
 				@Override
@@ -257,6 +259,8 @@ public class McpCatalogPolicyDeadlineRuntimeTests {
 				Assertions.assertNotNull(observed);
 				Assertions.assertTrue(observed.isCanceled(),
 						"Application stop must cancel the request-scoped policy token.");
+				Assertions.assertTrue(cancelationCallbackDelivered.await(5, TimeUnit.SECONDS),
+						"The catalog policy cancelation callback was not delivered.");
 				Assertions.assertEquals(StreamTerminationReason.SERVER_STOPPING,
 						cancelationReason.get());
 				Assertions.assertEquals(Optional.empty(), cancelationCause.get());
