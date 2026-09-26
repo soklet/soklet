@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.LifecyclePolicy;
 import com.soklet.McpAdmissionDecision;
+import com.soklet.McpAdmissionContext;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
@@ -65,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Black-box authorization and local-reconciliation coverage for MCP
@@ -91,6 +93,8 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		CountDownLatch releaseAuthorizer = new CountDownLatch(1);
 		AtomicReference<McpSubscriptionAuthorizationContext> observedContext =
 				new AtomicReference<>();
+		AtomicReference<McpAdmissionContext> observedAdmission =
+				new AtomicReference<>();
 		AtomicReference<McpInvocationFeatures> observedFeatures =
 				new AtomicReference<>();
 		AtomicReference<Thread> authorizerThread = new AtomicReference<>();
@@ -106,7 +110,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer,
-				admissionApplicationContext);
+				admissionApplicationContext, observedAdmission::set);
 		Soklet owner = managedSoklet(server,
 				MetricsCollector.disabledInstance());
 		ExecutorService reader = Executors.newSingleThreadExecutor();
@@ -122,6 +126,19 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 					"The initial authorizer did not run.");
 			Assertions.assertFalse(responseHead.isDone(),
 					"A subscription acknowledgment escaped before authorization.");
+			McpAdmissionContext admission = observedAdmission.get();
+			Assertions.assertNotNull(admission);
+			Assertions.assertFalse(admission.isToolsListChangedIncluded());
+			Assertions.assertFalse(admission.isPromptsListChangedIncluded());
+			Assertions.assertTrue(admission.isResourcesListChangedIncluded());
+			Assertions.assertTrue(admission.isResourceSubscriptionsIncluded());
+			Assertions.assertEquals(List.of(FIRST_RESOURCE_URI, SECOND_RESOURCE_URI),
+					admission.getRequestedResourceSubscriptionUris());
+			Assertions.assertFalse(admission.isTaskIdsRequested());
+			Assertions.assertTrue(admission.getRequestedTaskIds().isEmpty());
+			Assertions.assertThrows(UnsupportedOperationException.class,
+					() -> admission.getRequestedResourceSubscriptionUris()
+							.add(URI.create("test://subscription/mutated")));
 			McpSubscriptionAuthorizationContext context = observedContext.get();
 			Assertions.assertNotNull(context);
 			Assertions.assertSame(admissionApplicationContext,
@@ -1025,8 +1042,18 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 			@NonNull McpSubscriptionAuthorizer authorizer,
 			@Nullable Object admissionApplicationContext) {
 		return server(publisher, authorizer, admissionApplicationContext,
+				ignored -> {});
+	}
+
+	@NonNull
+	private static McpServer server(
+			@NonNull McpSubscriptionEventPublisher publisher,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@Nullable Object admissionApplicationContext,
+			@NonNull Consumer<@NonNull McpAdmissionContext> admissionObserver) {
+		return server(publisher, authorizer, admissionApplicationContext,
 				Duration.ofMinutes(5), Duration.ofMinutes(5),
-				Duration.ofHours(24));
+				Duration.ofHours(24), admissionObserver);
 	}
 
 	@NonNull
@@ -1037,6 +1064,20 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 			@NonNull Duration authorizationTimeout,
 			@NonNull Duration maximumAuthorizationDuration,
 			@NonNull Duration maximumSubscriptionDuration) {
+		return server(publisher, authorizer, admissionApplicationContext,
+				authorizationTimeout, maximumAuthorizationDuration,
+				maximumSubscriptionDuration, ignored -> {});
+	}
+
+	@NonNull
+	private static McpServer server(
+			@NonNull McpSubscriptionEventPublisher publisher,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@Nullable Object admissionApplicationContext,
+			@NonNull Duration authorizationTimeout,
+			@NonNull Duration maximumAuthorizationDuration,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull Consumer<@NonNull McpAdmissionContext> admissionObserver) {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 				.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
@@ -1055,6 +1096,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(endpoint.build())))
 				.admissionController(context -> {
+					admissionObserver.accept(context);
 					McpAdmissionIdentity.Builder identity = McpAdmissionIdentity
 							.withRateLimitPartitionKey("authorization-runtime-rate")
 							.authorizationPartitionKey(

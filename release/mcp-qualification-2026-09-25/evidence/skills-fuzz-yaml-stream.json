@@ -1,0 +1,14 @@
+{
+  "corpusHash": "ec3b2e228b5afe7076cdd9853f72971e66bd8f35c02622bdedda955b58249649",
+  "formatVersion": 1,
+  "gate": "fuzz-nightly-history",
+  "measuredDurationSeconds": 301,
+  "surefireReport": "TEST-com.soklet.internal.mcp.skills.SkillYamlFuzzTest.xml",
+  "target": {
+    "durationSeconds": 300,
+    "id": "mcp-skill-yaml-stream",
+    "ordinal": 19,
+    "outcome": "PASS"
+  },
+  "toolchainsSha256": "fc54799de37cf49536ae84c848424b4a06df522057e53fcf81e23319ddeeb849"
+}

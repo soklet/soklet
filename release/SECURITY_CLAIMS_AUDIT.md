@@ -42,7 +42,7 @@ boundary. They are not global adjectives for an entire deployment.
 | Overbroad claim | Release wording |
 | --- | --- |
 | Zero dependencies means first-party-only code or no third-party vulnerability surface | Zero external runtime dependency artifacts; embedded credited source remains in scope. |
-| Soklet provides OAuth or MCP Authorization end to end | Soklet transports an opaque challenge and invokes per-request admission. The application owns tokens, metadata, authorization server, scopes, DCR, provider policy, and RFC conformance. |
+| Soklet provides OAuth or MCP Authorization end to end | Soklet offers a validated Bearer challenge value and invokes per-request admission. The application owns tokens, metadata, authorization server, scopes, DCR, provider policy, and other applicable RFC obligations. |
 | CORS, Host validation, or network bind policy authenticates a caller | These are independent request/network controls and never substitute for authentication or authorization. |
 | A custom transport/decorator's attestation proves its implementation honest | Soklet validates the presented contract; it cannot detect deliberately false custom evidence. |
 | Java-derived schema means arbitrary JSON Schema is safe or supported | Tool Schema Profile 1 is a closed bounded subset and does not validate semantic business rules or sensitive-data policy. |

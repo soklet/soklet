@@ -21,22 +21,22 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Typed MCP admission rejection. Soklet owns envelope serialization and
  * suppresses the body for notifications. Application response headers are
- * transported only after Soklet's response-header safety validation. An
- * application may supply {@code WWW-Authenticate} with a standards-compliant
- * Bearer challenge, including an absolute {@code resource_metadata} URI and
- * operation scopes, but Soklet treats that challenge syntax as opaque: the
- * application owns authentication semantics and RFC compliance. Unsafe,
+ * transported only after Soklet's response-header safety validation. A
+ * {@link BearerAuthenticationChallenge} supplies a validated
+ * {@code WWW-Authenticate} value; the application owns token verification,
+ * protected-resource metadata, and scope policy. Unsafe,
  * framework-owned, hop-by-hop, CORS, and obsolete transport-state headers
  * fail closed.
  *
@@ -48,7 +48,7 @@ public final class McpAdmissionRejection {
 	@NonNull
 	private final McpJsonRpcError jsonRpcError;
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 
 	/**
 	 * Vends a rejection builder primed with an HTTP status and JSON-RPC error.
@@ -64,16 +64,35 @@ public final class McpAdmissionRejection {
 		return new Builder().statusCode(statusCode).jsonRpcError(jsonRpcError);
 	}
 
+	/**
+	 * Vends a rejection builder using the challenge's recommended HTTP status
+	 * and adding its rendered {@code WWW-Authenticate} value.
+	 *
+	 * @param bearerAuthenticationChallenge validated Bearer challenge
+	 * @param jsonRpcError client-visible JSON-RPC error
+	 * @return rejection builder
+	 */
+	@NonNull
+	public static Builder withBearerAuthenticationChallengeAndError(
+			@NonNull BearerAuthenticationChallenge bearerAuthenticationChallenge,
+			@NonNull McpJsonRpcError jsonRpcError) {
+		BearerAuthenticationChallenge challenge =
+				requireNonNull(bearerAuthenticationChallenge);
+		return withStatusCodeAndError(challenge.getRecommendedStatusCode(),
+				jsonRpcError).addHeader("WWW-Authenticate",
+				challenge.getHeaderValue());
+	}
+
 	private McpAdmissionRejection(@NonNull Builder builder) {
 		this.statusCode = builder.statusCode;
 		if (this.statusCode < 400 || this.statusCode > 599)
 			throw new IllegalArgumentException(
 					"Admission rejection statusCode must be between 400 and 599");
 		this.jsonRpcError = requireNonNull(builder.jsonRpcError, "jsonRpcError");
-		Map<String, Set<String>> copied = new LinkedHashMap<>();
+		Map<String, List<String>> copied = new LinkedHashMap<>();
 		builder.headers.forEach((name, values) -> copied.put(
-				requireNonNull(name), Set.copyOf(requireNonNull(values))));
-		this.headers = Map.copyOf(copied);
+				requireNonNull(name), List.copyOf(requireNonNull(values))));
+		this.headers = Collections.unmodifiableMap(copied);
 	}
 
 	/** @return rejection HTTP status */
@@ -95,7 +114,7 @@ public final class McpAdmissionRejection {
 	 * @return immutable application response headers
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
@@ -128,7 +147,7 @@ public final class McpAdmissionRejection {
 		@Nullable
 		private McpJsonRpcError jsonRpcError;
 		@NonNull
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers =
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers =
 				new LinkedHashMap<>();
 
 		private Builder() {
@@ -159,16 +178,16 @@ public final class McpAdmissionRejection {
 		 *
 		 * @param headers application response headers
 		 * @return this builder
-		 * @throws NullPointerException if the map, a name, a value set, or a value is null
+		 * @throws NullPointerException if the map, a name, a value list, or a value is null
 		 */
 		@NonNull
 		public Builder headers(
-				@NonNull Map<@NonNull String, ? extends @NonNull Set<@NonNull String>> headers) {
+				@NonNull Map<@NonNull String, ? extends @NonNull List<@NonNull String>> headers) {
 			requireNonNull(headers);
-			Map<String, Set<String>> copied = new LinkedHashMap<>();
+			Map<String, List<String>> copied = new LinkedHashMap<>();
 			headers.forEach((name, values) -> {
 				String checkedName = requireNonNull(name);
-				Set<String> copiedValues = new LinkedHashSet<>();
+				List<String> copiedValues = new ArrayList<>();
 				requireNonNull(values).forEach(
 						value -> copiedValues.add(requireNonNull(value)));
 				copied.put(checkedName, copiedValues);
@@ -190,7 +209,7 @@ public final class McpAdmissionRejection {
 		public Builder addHeader(@NonNull String name, @NonNull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
-			this.headers.computeIfAbsent(name, ignored -> new LinkedHashSet<>())
+			this.headers.computeIfAbsent(name, ignored -> new ArrayList<>())
 					.add(value);
 			return this;
 		}

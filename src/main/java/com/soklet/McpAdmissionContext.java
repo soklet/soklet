@@ -80,6 +80,30 @@ public interface McpAdmissionContext {
 	@NonNull Optional<@NonNull McpClientCapabilities> getClientCapabilities();
 
 	/**
+	 * @return whether tool-list-change delivery is selected for this
+	 *         {@code subscriptions/listen} request; false for other methods
+	 */
+	@NonNull Boolean isToolsListChangedIncluded();
+
+	/**
+	 * @return whether prompt-list-change delivery is selected for this
+	 *         {@code subscriptions/listen} request; false for other methods
+	 */
+	@NonNull Boolean isPromptsListChangedIncluded();
+
+	/**
+	 * @return whether resource-list-change delivery is selected for this
+	 *         {@code subscriptions/listen} request; false for other methods
+	 */
+	@NonNull Boolean isResourcesListChangedIncluded();
+
+	/**
+	 * @return whether resource-update subscriptions are selected for this
+	 *         {@code subscriptions/listen} request; false for other methods
+	 */
+	@NonNull Boolean isResourceSubscriptionsIncluded();
+
+	/**
 	 * Returns the validated, deduplicated resource URIs requested by a
 	 * {@code subscriptions/listen} message, in first-encounter order. The list
 	 * is empty for every other method and when the subscription request does not
@@ -89,6 +113,25 @@ public interface McpAdmissionContext {
 	 */
 	@NonNull
 	List<@NonNull URI> getRequestedResourceSubscriptionUris();
+
+	/**
+	 * Returns whether the validated {@code subscriptions/listen} request
+	 * included a {@code taskIds} array, including an empty array. Task IDs have
+	 * not yet been authorized by the subscription authorizer.
+	 *
+	 * @return whether task IDs were requested; false for other methods
+	 */
+	@NonNull Boolean isTaskIdsRequested();
+
+	/**
+	 * Returns the validated, deduplicated task IDs requested by a
+	 * {@code subscriptions/listen} message, in first-encounter order. The list
+	 * is empty for every other method and when no task IDs were requested.
+	 * Task IDs have not yet been authorized by the subscription authorizer.
+	 *
+	 * @return immutable requested task-ID list
+	 */
+	@NonNull List<@NonNull String> getRequestedTaskIds();
 
 	/**
 	 * Returns the validated distributed trace context supplied through MCP

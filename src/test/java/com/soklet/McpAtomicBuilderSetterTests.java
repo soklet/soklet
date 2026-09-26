@@ -19,8 +19,8 @@ package com.soklet;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,33 +61,33 @@ class McpAtomicBuilderSetterTests {
 	@Test
 	void headersValidateBeforeReplacementAndSnapshotNestedCollections() {
 		McpAdmissionRejection.Builder builder = rejectionBuilder();
-		Set<String> suppliedValues = new LinkedHashSet<>(Set.of("one"));
-		Map<String, Set<String>> supplied = new LinkedHashMap<>();
+		List<String> suppliedValues = new ArrayList<>(List.of("one"));
+		Map<String, List<String>> supplied = new LinkedHashMap<>();
 		supplied.put("X-Original", suppliedValues);
 
 		assertSame(builder, builder.headers(supplied));
 		suppliedValues.add("later");
-		supplied.put("X-Later", Set.of("later"));
-		Map<String, Set<String>> expected = Map.of("X-Original", Set.of("one"));
+		supplied.put("X-Later", List.of("later"));
+		Map<String, List<String>> expected = Map.of("X-Original", List.of("one"));
 		assertEquals(expected, builder.build().getHeaders());
 
-		Map<String, Set<String>> nullSet = new LinkedHashMap<>();
-		nullSet.put("X-New", Set.of("new"));
+		Map<String, List<String>> nullSet = new LinkedHashMap<>();
+		nullSet.put("X-New", List.of("new"));
 		nullSet.put("X-Invalid", null);
 		assertThrows(NullPointerException.class, () -> builder.headers(nullSet));
 		assertEquals(expected, builder.build().getHeaders());
 
-		Map<String, Set<String>> nullName = new LinkedHashMap<>();
-		nullName.put("X-New", Set.of("new"));
-		nullName.put(null, Set.of("invalid"));
+		Map<String, List<String>> nullName = new LinkedHashMap<>();
+		nullName.put("X-New", List.of("new"));
+		nullName.put(null, List.of("invalid"));
 		assertThrows(NullPointerException.class, () -> builder.headers(nullName));
 		assertEquals(expected, builder.build().getHeaders());
 
-		Set<String> nullValue = new LinkedHashSet<>();
+		List<String> nullValue = new ArrayList<>();
 		nullValue.add("new");
 		nullValue.add(null);
-		Map<String, Set<String>> nullMember = new LinkedHashMap<>();
-		nullMember.put("X-New", Set.of("new"));
+		Map<String, List<String>> nullMember = new LinkedHashMap<>();
+		nullMember.put("X-New", List.of("new"));
 		nullMember.put("X-Invalid", nullValue);
 		assertThrows(NullPointerException.class,
 				() -> builder.headers(nullMember));
@@ -103,7 +103,7 @@ class McpAtomicBuilderSetterTests {
 	void addHeaderRejectsNullBeforeCreatingAnEntry() {
 		McpAdmissionRejection.Builder builder = rejectionBuilder()
 				.addHeader("X-Original", "one");
-		Map<String, Set<String>> expected = Map.of("X-Original", Set.of("one"));
+		Map<String, List<String>> expected = Map.of("X-Original", List.of("one"));
 
 		assertThrows(NullPointerException.class,
 				() -> builder.addHeader("X-Invalid", null));
@@ -111,6 +111,21 @@ class McpAtomicBuilderSetterTests {
 		assertThrows(NullPointerException.class,
 				() -> builder.addHeader(null, "invalid"));
 		assertEquals(expected, builder.build().getHeaders());
+	}
+
+	@Test
+	void repeatedChallengesRetainTheirOrderAndMultiplicity() {
+		McpAdmissionRejection rejection = rejectionBuilder()
+				.addHeader("WWW-Authenticate", "Bearer realm=\"first\"")
+				.addHeader("WWW-Authenticate", "Bearer realm=\"second\"")
+				.addHeader("WWW-Authenticate", "Bearer realm=\"first\"")
+				.build();
+		assertEquals(List.of("Bearer realm=\"first\"",
+				"Bearer realm=\"second\"", "Bearer realm=\"first\""),
+				rejection.getHeaders().get("WWW-Authenticate"));
+		assertThrows(UnsupportedOperationException.class,
+				() -> rejection.getHeaders().get("WWW-Authenticate")
+						.add("Bearer realm=\"third\""));
 	}
 
 	private static McpAdmissionRejection.Builder rejectionBuilder() {

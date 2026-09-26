@@ -172,7 +172,8 @@ class McpRequestPropagationTests {
 		return new AdmissionInput(request, endpoint(), Map.of(), "tools/call",
 				false, Optional.of(McpRequestId.fromString("request")),
 				"2026-07-28", Optional.of("propagation"), Optional.empty(),
-				Optional.of(McpJsonObject.emptyInstance()), List.of(), metadata);
+				Optional.of(McpJsonObject.emptyInstance()), false, false, false,
+				false, List.of(), false, List.of(), metadata);
 	}
 
 	private static RequestObservationInput requestObservationInput(

@@ -51,7 +51,13 @@ record McpAdmissionContext(@NonNull Request request,
 		@NonNull Optional<@NonNull String> operationName,
 		@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
 		@NonNull Optional<@NonNull McpClientCapabilities> clientCapabilities,
+		boolean toolsListChangedIncluded,
+		boolean promptsListChangedIncluded,
+		boolean resourcesListChangedIncluded,
+		boolean resourceSubscriptionsIncluded,
 		@NonNull List<@NonNull URI> requestedResourceSubscriptionUris,
+		boolean taskIdsRequested,
+		@NonNull List<@NonNull String> requestedTaskIds,
 		@NonNull Optional<@NonNull McpJsonObject> requestMetadata) {
 	McpAdmissionContext {
 		requireNonNull(request);
@@ -67,6 +73,7 @@ record McpAdmissionContext(@NonNull Request request,
 		requireNonNull(clientCapabilities);
 		requestedResourceSubscriptionUris = List.copyOf(
 				requireNonNull(requestedResourceSubscriptionUris));
+		requestedTaskIds = List.copyOf(requireNonNull(requestedTaskIds));
 		requireNonNull(requestMetadata);
 	}
 

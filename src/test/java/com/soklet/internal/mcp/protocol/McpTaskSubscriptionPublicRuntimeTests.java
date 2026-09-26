@@ -16,9 +16,13 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.BearerAuthenticationChallenge;
+import com.soklet.BearerAuthenticationError;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
+import com.soklet.McpAdmissionContext;
 import com.soklet.McpAdmissionIdentity;
+import com.soklet.McpAdmissionRejection;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -27,6 +31,7 @@ import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequestDeclaration;
 import com.soklet.McpInputRequirement;
 import com.soklet.McpJsonObject;
+import com.soklet.McpJsonRpcError;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpMetricsEvent;
@@ -121,6 +126,71 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			Instant.parse("2026-09-01T12:05:00Z");
 	private static final Duration TASK_TIME_TO_LIVE = Duration.ofMinutes(1);
 	private static final Duration POLL_INTERVAL = Duration.ofMillis(250);
+
+	@Test
+	public void admissionCanChallengeForValidatedTaskSubscriptionSelection()
+			throws Exception {
+		AtomicReference<McpAdmissionContext> observed = new AtomicReference<>();
+		AtomicInteger authorizerCalls = new AtomicInteger();
+		BearerAuthenticationChallenge challenge =
+				BearerAuthenticationChallenge.withResourceMetadataUri(URI.create(
+						"https://example.test/.well-known/oauth-protected-resource/mcp"))
+						.error(BearerAuthenticationError.INSUFFICIENT_SCOPE)
+						.requiredScopes(List.of("mcp:tasks:listen"))
+						.build();
+		McpServer server = serverBuilder(new ScriptedTaskManager(),
+				new AtomicInteger())
+				.subscriptionAuthorizer((context, features) -> {
+					authorizerCalls.incrementAndGet();
+					return McpSubscriptionAuthorization.deniedInstance();
+				})
+				.admissionController(context -> {
+					observed.set(context);
+					if (!context.isTaskIdsRequested()
+							|| !context.getRequestedTaskIds()
+									.contains("task-first"))
+						return McpAdmissionDecision.accepted(McpAdmissionIdentity
+							.withRateLimitPartitionKey("rate-" + ALPHA)
+							.authorizationPartitionKey("authorization-" + ALPHA)
+							.principal(ALPHA).build());
+					return McpAdmissionDecision.rejected(
+							McpAdmissionRejection.withBearerAuthenticationChallengeAndError(
+									challenge,
+									McpJsonRpcError.fromApplication(-31903,
+											"Operation not permitted"))
+								.build());
+				})
+				.build();
+		Soklet soklet = managedSoklet(server);
+		try {
+			soklet.start();
+			try (McpChunkedHttpClient client = listen(boundPort(server),
+					"\"task-scope\"", ALPHA, true,
+					"{\"taskIds\":[\"task-first\",\"task-second\","
+							+ "\"task-first\"]}")) {
+				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+				assertJsonErrorHead(head, 403);
+				Assertions.assertEquals(challenge.getHeaderValue(),
+						head.singleHeader("WWW-Authenticate"));
+			}
+			McpAdmissionContext context = observed.get();
+			Assertions.assertNotNull(context);
+			Assertions.assertTrue(context.isTaskIdsRequested());
+			Assertions.assertEquals(List.of("task-first", "task-second"),
+					context.getRequestedTaskIds());
+			Assertions.assertFalse(context.isToolsListChangedIncluded());
+			Assertions.assertFalse(context.isPromptsListChangedIncluded());
+			Assertions.assertFalse(context.isResourcesListChangedIncluded());
+			Assertions.assertFalse(context.isResourceSubscriptionsIncluded());
+			Assertions.assertTrue(
+					context.getRequestedResourceSubscriptionUris().isEmpty());
+			Assertions.assertThrows(UnsupportedOperationException.class,
+					() -> context.getRequestedTaskIds().add("mutated"));
+			Assertions.assertEquals(0, authorizerCalls.get());
+		} finally {
+			soklet.close();
+		}
+	}
 
 	@Test
 	public void acknowledgmentFiltersTaskIdsAndEventCarriesExactCurrentSnapshot()

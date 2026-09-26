@@ -21,8 +21,11 @@ For every structurally valid MCP message:
    application then extracts exactly one materialized Bearer credential value
    and asks its token verifier to authenticate it.
 3. The application checks the scope for the validated MCP method and selected
-   operation.
-4. A rejection returns a safe HTTP status, JSON-RPC error, and optional opaque
+   operation. For `subscriptions/listen`, admission also exposes the validated
+   notification selection and deduplicated requested resource URIs and task IDs.
+   The application can challenge for a grantable selection-specific scope before
+   Soklet opens the subscription stream.
+4. A rejection returns a safe HTTP status, JSON-RPC error, and optional
    `WWW-Authenticate` challenge. A notification still carries the HTTP status
    and headers but has no JSON-RPC response body.
 5. An acceptance carries stable opaque partition keys and an application
@@ -30,6 +33,19 @@ For every structurally valid MCP message:
 
 Connection reuse does not reuse identity. Every request and notification is
 admitted independently.
+
+`McpAdmissionContext` exposes `isToolsListChangedIncluded()`,
+`isPromptsListChangedIncluded()`, `isResourcesListChangedIncluded()`,
+`isResourceSubscriptionsIncluded()`, `getRequestedResourceSubscriptionUris()`,
+`isTaskIdsRequested()`, and `getRequestedTaskIds()` for the validated
+`subscriptions/listen` selection. The included flags reflect selected delivery
+families; task IDs and resource URIs are validated requests and are not grants
+by themselves. For other MCP methods the flags are false and the lists are
+empty. An application can use these values in admission to choose a fixed,
+grantable OAuth scope. The subscription authorizer remains responsible for
+initial and continuing permission checks; its denial carries no HTTP headers,
+and a later renewal or reconciliation cannot change response headers after the
+stream opens.
 
 ## Token-verification seam
 
@@ -91,6 +107,8 @@ request value, token, subject, tenant, or provider error text.
 ```java
 package example.security;
 
+import com.soklet.BearerAuthenticationChallenge;
+import com.soklet.BearerAuthenticationError;
 import com.soklet.McpAdmissionContext;
 import com.soklet.McpAdmissionController;
 import com.soklet.McpAdmissionDecision;
@@ -99,15 +117,16 @@ import com.soklet.McpAdmissionRejection;
 import com.soklet.McpJsonRpcError;
 import com.soklet.Request;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public final class OAuthAdmissionController
     implements McpAdmissionController {
-  private static final String RESOURCE_METADATA =
+  private static final URI RESOURCE_METADATA_URI = URI.create(
       "https://api.example.com/.well-known/"
-          + "oauth-protected-resource/catalog/mcp";
+          + "oauth-protected-resource/catalog/mcp");
   private static final Map<String, String> TOOL_SCOPES = Map.of(
       "catalog.search", "mcp:tools:call:catalog.search");
 
@@ -192,29 +211,33 @@ public final class OAuthAdmissionController
 
   private static McpAdmissionDecision unauthorized(
       String scope, boolean invalidToken) {
-    String error = invalidToken ? "error=\"invalid_token\", " : "";
-    String challenge = "Bearer " + error
-        + "resource_metadata=\"" + RESOURCE_METADATA + "\", "
-        + "scope=\"" + scope + "\"";
+    BearerAuthenticationChallenge.Builder challenge =
+        BearerAuthenticationChallenge
+            .withResourceMetadataUri(RESOURCE_METADATA_URI)
+            .requiredScopes(List.of(scope));
+    if (invalidToken) {
+      challenge.error(BearerAuthenticationError.INVALID_TOKEN);
+    }
     return McpAdmissionDecision.rejected(
-        McpAdmissionRejection.withStatusCodeAndError(
-                401,
+        McpAdmissionRejection.withBearerAuthenticationChallengeAndError(
+                challenge.build(),
                 McpJsonRpcError.fromApplication(
                     -31901, "Authentication required"))
-            .addHeader("WWW-Authenticate", challenge)
             .build());
   }
 
   private static McpAdmissionDecision forbidden(String scope) {
-    String challenge = "Bearer error=\"insufficient_scope\", "
-        + "resource_metadata=\"" + RESOURCE_METADATA + "\", "
-        + "scope=\"" + scope + "\"";
+    BearerAuthenticationChallenge challenge =
+        BearerAuthenticationChallenge
+            .withResourceMetadataUri(RESOURCE_METADATA_URI)
+            .error(BearerAuthenticationError.INSUFFICIENT_SCOPE)
+            .requiredScopes(List.of(scope))
+            .build();
     return McpAdmissionDecision.rejected(
-        McpAdmissionRejection.withStatusCodeAndError(
-                403,
+        McpAdmissionRejection.withBearerAuthenticationChallengeAndError(
+                challenge,
                 McpJsonRpcError.fromApplication(
                     -31903, "Operation not permitted"))
-            .addHeader("WWW-Authenticate", challenge)
             .build());
   }
 
@@ -308,8 +331,10 @@ OAuth metadata server.
 | Handler-level protected object is unknown or unauthorized | Application-defined safe error | Same response shape for both | Do not reveal existence, owner, path, or policy details. |
 
 Soklet validates application-supplied response headers and owns JSON-RPC
-serialization. It treats the Bearer challenge as opaque text; creating it does
-not prove RFC conformance. For browser clients, explicitly allow the intended
+serialization. `BearerAuthenticationChallenge` validates and renders the
+challenge syntax; the application remains responsible for token verification,
+scope policy, and publishing the matching protected-resource metadata. For
+browser clients, explicitly allow the intended
 Origin and expose `WWW-Authenticate` only as required. For every remote
 deployment, terminate TLS at a trusted boundary and ensure proxies do not
 accept or synthesize identity headers outside that boundary.

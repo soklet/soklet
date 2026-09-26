@@ -1222,6 +1222,18 @@
     {
       "classification": "REVIEWED_DISCOVERY_ONLY",
       "closureStatus": "CLOSED",
+      "id": "CLASS-SKILLS-OPERATIONAL-HOST-DEVELOPMENT",
+      "paths": [
+        "verification/interoperability/skills-matrix/README.md",
+        "verification/interoperability/skills-matrix/SkillsMatrixFixture.java",
+        "verification/interoperability/skills-matrix/run.mjs"
+      ],
+      "rationale": "This separate public-API Skills fixture and released-Inspector-CLI development probe supervises client and command children with 30-second defaults, compilation and dependency checks with 60-second bounds, and its disposable loopback fixture with a 120-second bound and cleanup. Ready and revocation controls have ten-second waits; direct protocol controls have five-second abort deadlines and one-MiB response bounds. It checks caller-bound single-use pagination, locale variants, access, and revocation under isolated client state and records only sanitized outcomes. This is scoped host interoperability evidence, not an ordinary JUnit owner scope, settled lifecycle release harness, production authentication proof, or immutable candidate receipt.",
+      "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
       "id": "CLASS-STREAMING-COMPONENT-TESTS",
       "paths": [
         "src/test/java/com/soklet/StreamingCallbackRegistrationTests.java",
@@ -1270,15 +1282,15 @@
       "path": "api/mcp/current-incompatibilities.jsonl"
     },
     {
-      "id": "CURRENT-LEGACY-fdb5e4404d1647c7",
-      "line": 442,
+      "id": "CURRENT-LEGACY-0bc5f7157e33cfc3",
+      "line": 448,
       "lineSha256": "b61dcce99a709d2794a59dd287bdaf0a96f46d3c8ec5bd8c0d7dee59c47ae1f4",
       "occurrenceIndex": 0,
       "path": "api/mcp/current-incompatibilities.jsonl"
     },
     {
-      "id": "CURRENT-LEGACY-3e0401e210a85800",
-      "line": 668,
+      "id": "CURRENT-LEGACY-3bf07865249bb0c7",
+      "line": 674,
       "lineSha256": "55b9f807411e4161ffd1add8254f42c3ea0c3cd11131611f9fdcf46724149e99",
       "occurrenceIndex": 0,
       "path": "api/mcp/current-incompatibilities.jsonl"
@@ -1432,8 +1444,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 8343,
-    "candidateSha256": "2a4ad31da515d09c0307618770206b8b001fe64db6909a695137fffe3b958de9",
+    "candidateCount": 8366,
+    "candidateSha256": "29411290a151f4538e6ab0679d7a20238b96e244bc2e5fb0ce6601a304cd168a",
     "candidates": [
       {
         "kinds": [
@@ -5231,7 +5243,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 547,
+        "line": 608,
         "lineSha256": "7707aeb303481cf9488e7dfb95cec1f24d97a08139b140bb7b331f31b98f040c",
         "path": "scripts/produce-release-history-self-test.mjs"
       },
@@ -22701,7 +22713,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 291,
+        "line": 292,
         "lineSha256": "80222a63cdd575b6dd04f77fbb3e9ba878c14b5e366a47041d9d74c3be49cc26",
         "path": "src/test/java/com/soklet/McpPrivacyBoundaryTests.java"
       },
@@ -22709,7 +22721,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 386,
+        "line": 387,
         "lineSha256": "172a91d6ba829d9a4302826f7453962030dfb78833a2da8d94376ca95456456c",
         "path": "src/test/java/com/soklet/McpPrivacyBoundaryTests.java"
       },
@@ -23481,7 +23493,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1735,
+        "line": 1746,
         "lineSha256": "4fd1fe6608d6e02014f6b95a799e3b86931c8350bffc47f82c889e908da5eeea",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23489,64 +23501,8 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1738,
+        "line": 1749,
         "lineSha256": "4fd1fe6608d6e02014f6b95a799e3b86931c8350bffc47f82c889e908da5eeea",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1741,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1742,
-        "lineSha256": "2ffd99a4001902676d45819af1ba00d1ce865393d7288e7919304fb37589692d",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1744,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1745,
-        "lineSha256": "b687758984f3e4d25f80ede19ba9eae3d2cedf0fdb9a28a2bcfe3e83762d9a6f",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1747,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1748,
-        "lineSha256": "4b8f37cc423253f1a7bb33fe86db6986e041f95e1de20f3fe9d46da7cd02d4d2",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1751,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
@@ -23554,32 +23510,31 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 1752,
-        "lineSha256": "e00731fd1d626b159c06375f7544867e7b15dd91e3242cf2b3ae7a6d91d5540b",
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1754,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "line": 1753,
+        "lineSha256": "2ffd99a4001902676d45819af1ba00d1ce865393d7288e7919304fb37589692d",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
         "kinds": [
-          "LIFECYCLE_SIGNAL",
-          "NAMED_TIMEOUT_CANDIDATE"
+          "LIFECYCLE_SIGNAL"
         ],
         "line": 1755,
-        "lineSha256": "98d4e6803159517dfd177d900c2b4d766822cb7c6985c2b221a5417d2dbeb85a",
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1757,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "line": 1756,
+        "lineSha256": "b687758984f3e4d25f80ede19ba9eae3d2cedf0fdb9a28a2bcfe3e83762d9a6f",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
@@ -23587,14 +23542,6 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 1758,
-        "lineSha256": "d7f67d0f5987ecabd9f9cb385c9a042222a520ed9baf03a7caec220c1e124b24",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1760,
         "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23602,8 +23549,16 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1761,
-        "lineSha256": "83683a11dd59040ac5e8e4df726d104eb5776ccf3af9c0b6d042ab7dfc9f5efe",
+        "line": 1759,
+        "lineSha256": "4b8f37cc423253f1a7bb33fe86db6986e041f95e1de20f3fe9d46da7cd02d4d2",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1762,
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
@@ -23611,22 +23566,14 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 1763,
-        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "lineSha256": "e00731fd1d626b159c06375f7544867e7b15dd91e3242cf2b3ae7a6d91d5540b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1764,
-        "lineSha256": "b94c8353c2db95c27634ebcd3636952c3ad82120a6d6f79b66694707a24f326c",
-        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1766,
+        "line": 1765,
         "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23635,8 +23582,16 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1767,
-        "lineSha256": "2202a8cf5c5f079c150eb3b7f1eef0d746cd55ca89b2004167f87b5dba989376",
+        "line": 1766,
+        "lineSha256": "98d4e6803159517dfd177d900c2b4d766822cb7c6985c2b221a5417d2dbeb85a",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1768,
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
       {
@@ -23644,6 +23599,46 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 1769,
+        "lineSha256": "d7f67d0f5987ecabd9f9cb385c9a042222a520ed9baf03a7caec220c1e124b24",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1771,
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1772,
+        "lineSha256": "83683a11dd59040ac5e8e4df726d104eb5776ccf3af9c0b6d042ab7dfc9f5efe",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1774,
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1775,
+        "lineSha256": "b94c8353c2db95c27634ebcd3636952c3ad82120a6d6f79b66694707a24f326c",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1777,
         "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23652,7 +23647,24 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1770,
+        "line": 1778,
+        "lineSha256": "2202a8cf5c5f079c150eb3b7f1eef0d746cd55ca89b2004167f87b5dba989376",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1780,
+        "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
+        "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 1781,
         "lineSha256": "aeb979cfb26142f5a5b1cf60db6287b04b91499581bc7f0729784c09ace5b143",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23660,7 +23672,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1772,
+        "line": 1783,
         "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23668,7 +23680,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1773,
+        "line": 1784,
         "lineSha256": "fb99958567a02d1876cc714e50a4973985ef92dde13883c1593f924f42941ba0",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23676,7 +23688,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1775,
+        "line": 1786,
         "lineSha256": "d78e3b0a652e79a7854ff63315ef1e5a59a65abaea0896037ee00c7ea4e6294b",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23684,7 +23696,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1776,
+        "line": 1787,
         "lineSha256": "7adf47884cb6be2f4b142ab8bdb458718ac66d1c59135981141d655ad411c9bc",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23692,7 +23704,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2408,
+        "line": 2419,
         "lineSha256": "e6569b5daaf8a75e1bc8b79e467e523e467abcdf4421f9ad13530f79002010c9",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -23700,7 +23712,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2474,
+        "line": 2485,
         "lineSha256": "af2ca9abfd21a4d5f926400fdf39491c2ea595a71c9a657ead6c9b65698a84e0",
         "path": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
       },
@@ -26079,7 +26091,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 821,
+        "line": 827,
         "lineSha256": "873ede58ae55ec993cfc613c67dbb77e8e5314ecfe46e450c951389f1564c841",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26087,7 +26099,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 823,
+        "line": 829,
         "lineSha256": "d0eb2316952e6366e397cfba1a111ba89a3505d3919364f6b3299c87a03020c1",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26095,7 +26107,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 851,
+        "line": 857,
         "lineSha256": "308bc6546cca512493b4ab47dbba15c78163db9e1d6fa1fd592ca6d3a47d66d3",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26103,7 +26115,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 853,
+        "line": 859,
         "lineSha256": "7284af60326789a6e019ed543e52ebcc60d622bf3bbf71341067f9eb162ac92c",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26111,7 +26123,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 868,
+        "line": 874,
         "lineSha256": "2268dfa423fd1eed2b56ef298f40a0030e81af7a114bfdf0eedbbd484833b574",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26119,7 +26131,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 870,
+        "line": 876,
         "lineSha256": "d0eb2316952e6366e397cfba1a111ba89a3505d3919364f6b3299c87a03020c1",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26127,7 +26139,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 894,
+        "line": 900,
         "lineSha256": "630a50c8153bd96669442fe6aee1999cdb8828cfe7d84a0f1ea6eca6871ebbe9",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26135,7 +26147,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 896,
+        "line": 902,
         "lineSha256": "c1836ce60ebba711c0adff33afb37d576b3a39c62b8fd609d4adb644232b4da3",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26143,7 +26155,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 908,
+        "line": 914,
         "lineSha256": "322bc3cf039bb07eff96ebfd11929d83b5a2bacd03763a1cb6dac7fbacb42619",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26151,7 +26163,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 910,
+        "line": 916,
         "lineSha256": "b1af415c625526f6a91b76c4157d21e93a7eccb3b9450e503426a48c4adfe3f6",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26159,7 +26171,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 924,
+        "line": 930,
         "lineSha256": "63b4ba1cf17bf244c3271181025e057b61b91ed694df8855fd7d47f2034caf98",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26167,7 +26179,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 929,
+        "line": 935,
         "lineSha256": "9e5cc8ca7c6001ed1e6bf08ce1a4a62f42f186816a5632ca360958cd4f835b5c",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26175,7 +26187,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 941,
+        "line": 947,
         "lineSha256": "b6caae18007129a8640c3f4b18cce2369b791eaf01aeb302f3b205cf0b8f888a",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26183,7 +26195,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 947,
+        "line": 953,
         "lineSha256": "70c37eff17835d0bdb86ce9f31e50ffd8fa4888d234c03ecd7301f52f07a42cb",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26191,7 +26203,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 963,
+        "line": 969,
         "lineSha256": "b7371d7d9cf1894bfdfdc15acccdfb17fbcf94ca0218d36ba1deb8132b469607",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26199,7 +26211,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 964,
+        "line": 970,
         "lineSha256": "0953a27baf4e196b381aaab09b1048100608f553e212201c883a6039dda4e0f6",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26207,7 +26219,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 983,
+        "line": 989,
         "lineSha256": "d170d6a3adf78f7139447566195cb6259e4351f1c793d3906c4f9e2e5e1f1a20",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26215,7 +26227,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 984,
+        "line": 990,
         "lineSha256": "92ce772e7d278f26c6d81e39ab54b17ec914a46f92bd86831a1ea8f78c1d1a18",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26223,7 +26235,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1011,
+        "line": 1017,
         "lineSha256": "2268dfa423fd1eed2b56ef298f40a0030e81af7a114bfdf0eedbbd484833b574",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26231,7 +26243,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1013,
+        "line": 1019,
         "lineSha256": "9d5d81ed1120f4f6eb1b08b10b7d4d2389452b49ae50ac0947e9d9485c2b9024",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26239,7 +26251,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1021,
+        "line": 1027,
         "lineSha256": "6d155dafc50072fcfa7c2e28ee229c92d5a0bd69f41187fc66bc9c9789069a9f",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26247,7 +26259,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1042,
+        "line": 1048,
         "lineSha256": "73cc6ad183fe899a6ae208aac3299888a45a8680f61c05190607464cecdcb6bd",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26255,7 +26267,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1051,
+        "line": 1057,
         "lineSha256": "8a6ba17693dc92f221cf7f0df460d67481ed1d70b85d0f4b30f26e6a16226ea8",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26263,7 +26275,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1064,
+        "line": 1070,
         "lineSha256": "8a6ba17693dc92f221cf7f0df460d67481ed1d70b85d0f4b30f26e6a16226ea8",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26271,7 +26283,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1067,
+        "line": 1073,
         "lineSha256": "ccc7eeca2b789dadd6589808563406f474930be83df1ea71c5e35970a187c7dc",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26279,7 +26291,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1084,
+        "line": 1090,
         "lineSha256": "630a50c8153bd96669442fe6aee1999cdb8828cfe7d84a0f1ea6eca6871ebbe9",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26287,7 +26299,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1086,
+        "line": 1092,
         "lineSha256": "c1836ce60ebba711c0adff33afb37d576b3a39c62b8fd609d4adb644232b4da3",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26295,7 +26307,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1095,
+        "line": 1101,
         "lineSha256": "322bc3cf039bb07eff96ebfd11929d83b5a2bacd03763a1cb6dac7fbacb42619",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26303,7 +26315,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1097,
+        "line": 1103,
         "lineSha256": "b1af415c625526f6a91b76c4157d21e93a7eccb3b9450e503426a48c4adfe3f6",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26311,7 +26323,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1113,
+        "line": 1119,
         "lineSha256": "19550e20c01344cffda4b473bdbc8007c98e2fbbc5c2c4e55339baa3738392b2",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26319,7 +26331,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1115,
+        "line": 1121,
         "lineSha256": "9d5d81ed1120f4f6eb1b08b10b7d4d2389452b49ae50ac0947e9d9485c2b9024",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26327,7 +26339,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1143,
+        "line": 1149,
         "lineSha256": "b612a50f042906b505b14ab693aeca7dbe4940e89c1c1c1499324e102900c9ac",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26335,7 +26347,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1144,
+        "line": 1150,
         "lineSha256": "ad42bfcf6bc3a82ac53157fc8db370811699c1e499da5a755e7d195826a72bd8",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26343,7 +26355,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1146,
+        "line": 1152,
         "lineSha256": "7688c716c7e40177e2121cd12392c2ae2b4698f46432d75e25a95f8ec8fce18a",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26351,7 +26363,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1152,
+        "line": 1158,
         "lineSha256": "0d673ac795fbb01a28f7e31983d0aa8b1341934ddca0ec7fe550c8f2df182443",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26359,7 +26371,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1160,
+        "line": 1166,
         "lineSha256": "e922584bdcf929f8999d3115f261b82ebe7b31cb3b01ec38058f6354978dfcf7",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26367,7 +26379,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1172,
+        "line": 1178,
         "lineSha256": "ca67caf29847a3d05aea8381d27714193a37f62e1d4251d5b6744ae98e723cec",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26375,7 +26387,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1174,
+        "line": 1180,
         "lineSha256": "62128155446bc222b3caaf292be4b664cb4c09b8f954ab75d71fc17cfd80c201",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26383,7 +26395,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1180,
+        "line": 1186,
         "lineSha256": "caf7f7cf7e7528fd86500ae3e970edcf8cb927662952e1b04d10b8c25f12336f",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26391,7 +26403,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1190,
+        "line": 1196,
         "lineSha256": "cb1b4ec76175f4e9a8f062907654695aa3f672bf871430413941d4564c80058f",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26399,7 +26411,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1191,
+        "line": 1197,
         "lineSha256": "62128155446bc222b3caaf292be4b664cb4c09b8f954ab75d71fc17cfd80c201",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26407,7 +26419,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1201,
+        "line": 1207,
         "lineSha256": "73cc4a3d61a8a85db09275452bee80f6adf2d92eb4db9380d93d090d7f8c3070",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26415,7 +26427,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1209,
+        "line": 1215,
         "lineSha256": "3e2e3fe832ac1f11815d4a71e7b2355c018c26ac77a3c3ab9d3587ef14e92ee0",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26423,7 +26435,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1212,
+        "line": 1218,
         "lineSha256": "37e6b5a5aa241331d039cb730ee3e3fda6f5a755e0309b6d7f65c7d2b0e599b0",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26431,7 +26443,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1231,
+        "line": 1237,
         "lineSha256": "10df5047239ea0d5b6632540ab27d80f4f4a6f95ae8403414566f19b6013fe78",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26439,7 +26451,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1233,
+        "line": 1239,
         "lineSha256": "32e4764ff469731b2be6326be1dfcebdea9502b4595a3ba4f77d436d66cd6326",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26447,7 +26459,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1236,
+        "line": 1242,
         "lineSha256": "a447b7aaad875160d9f471a33948f69c51eab7f1c8c7b8676de371fff2cce27b",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26456,7 +26468,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1237,
+        "line": 1243,
         "lineSha256": "9b17a116456dc3a920d099a446684a621fd9953ac62a545098925a30557da8f4",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26465,7 +26477,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1238,
+        "line": 1244,
         "lineSha256": "0cdd051629e790d331bb6f0ebecdd723dd3bc3fec0aa47ea8ea0c39a02126c94",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26474,7 +26486,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1239,
+        "line": 1245,
         "lineSha256": "2e293d364cc8edb04a2802517a7da5582984441b6184d47b4c2e022b7bdf065a",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26483,7 +26495,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1240,
+        "line": 1246,
         "lineSha256": "a7fe11d1949a119dfc3e7766455a1b017000daab85c0ee27781e7e795ea2985c",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26491,7 +26503,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1243,
+        "line": 1249,
         "lineSha256": "a969dc4743af0bd6e65fc0b489fc23f2863d3a51abcc94659f4ead4870055c07",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26499,7 +26511,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1247,
+        "line": 1253,
         "lineSha256": "1a279dcfb6e71f53b8a7f9c5a517c52488b170315393c9b96c902abd87a70b41",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26507,7 +26519,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1270,
+        "line": 1276,
         "lineSha256": "ded29845c2c8975d4dececc2823988de5ae2dcc15f80ce9f5fc7f431f431fcdd",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26515,7 +26527,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1295,
+        "line": 1301,
         "lineSha256": "e14c0190503963c81769ecb141ede88fafd1552f3927d3839fa28458be7c7513",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -26523,7 +26535,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1471,
+        "line": 1477,
         "lineSha256": "5f2aba0d795a25425de0e0591e32ef448bc4793aac8266c29b78296bda6cac24",
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       },
@@ -49840,7 +49852,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 200,
+        "line": 202,
         "lineSha256": "7c9ab64ec04887c907502ae31767e7591e6dd05e893fb8f2a34e85c351323b28",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49848,7 +49860,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 206,
+        "line": 208,
         "lineSha256": "2134bbd1fe3e46ac4a8aa601535b43eecddcff644150c59f9db3a4e2ac1aec5b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49856,7 +49868,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 232,
+        "line": 234,
         "lineSha256": "8311d57feb02660404e8388846e784e56f0685854fdb7c3530555dcde598a1a4",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49864,7 +49876,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 244,
+        "line": 246,
         "lineSha256": "4d443f701a8c8f79f13e8f7125c7ed9b949e7ebc6b267bb6938e078bbefd8bde",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49872,7 +49884,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 248,
+        "line": 250,
         "lineSha256": "90022451b8c3aa0f25d19aef1af8a388d1031684fc66e7fb04c88201f08c1209",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49880,7 +49892,15 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 267,
+        "line": 262,
+        "lineSha256": "2b7ff825b191d5abec5cf165ea7fe3d68a14564a7935b917228d98882e82663e",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 271,
         "lineSha256": "b72c2a473c359f800d69ceea162faa8c5701b1213721f64a7f80ce96381fb614",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49888,7 +49908,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 275,
+        "line": 279,
         "lineSha256": "b72c2a473c359f800d69ceea162faa8c5701b1213721f64a7f80ce96381fb614",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49896,7 +49916,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 319,
+        "line": 323,
         "lineSha256": "c60201a029aeb18b6edea0aebbc56b77559472a0a2861daaaf3724b878140b18",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49904,7 +49924,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 329,
+        "line": 333,
         "lineSha256": "c60201a029aeb18b6edea0aebbc56b77559472a0a2861daaaf3724b878140b18",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49912,7 +49932,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 337,
+        "line": 341,
         "lineSha256": "e7fed5036775415343407c6c82c66500b87d29214502bee220b9dc9d060992a6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49920,7 +49940,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 348,
+        "line": 352,
         "lineSha256": "ee8bf8a65bcb466c048762c1a3241ef3c2d45cec83035b71fc4be43d5018a244",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49928,7 +49948,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 358,
+        "line": 362,
         "lineSha256": "e94de90e64de58dd5678ee9cc9389a2385c8cbc71ab67c0406505d01c580bd0a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49936,7 +49956,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 359,
+        "line": 363,
         "lineSha256": "f54504300e08805209b5e2f39f5194babd13db93a83eee01ee3b228c265decf9",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49944,7 +49964,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 367,
+        "line": 371,
         "lineSha256": "f8afcb43103e32b6ce34a9f12235cdf8fee5d0bc7ccf34e5c11292cc06920868",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49952,7 +49972,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 372,
+        "line": 376,
         "lineSha256": "ff3be7b413e0a498d4cc6cb89a4ef2256b90bb3d50a60d20d3b28cfd14054719",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49960,7 +49980,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 387,
+        "line": 391,
         "lineSha256": "a1aef9666e30fdcab65657e707e116dca85ad50cbc26d58fc965dd5199bc2848",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49968,7 +49988,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 434,
+        "line": 438,
         "lineSha256": "cd2d8f4c20218dd174dc63d9982424bd5b93aadf73510fbecf12da058552f9ab",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49976,7 +49996,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 435,
+        "line": 439,
         "lineSha256": "71d0a250672166da4c688d984db2d9bc713721880ac2caa228a6923b52a1070a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -49984,7 +50004,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 496,
+        "line": 500,
         "lineSha256": "f46dd8545081e81ff05519bdf68f56831e54344256a33e175b4420abd72fcbed",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java"
       },
@@ -57918,7 +57938,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 34,
+        "line": 35,
         "lineSha256": "53a9b6e05028d5e4ad1449c1f37e19570a999ddf171d083364e46bb19088a923",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57926,7 +57946,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 45,
+        "line": 46,
         "lineSha256": "1c56d45e3fe85d78dc817c6267985900e98a69e24b23d977a9e7a349be92294c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57934,7 +57954,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 46,
+        "line": 47,
         "lineSha256": "c51ad3a687e0b49f74d4e97cd0fbccfdfe856d4547e9705636fbc20faa969106",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57942,7 +57962,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 75,
+        "line": 77,
         "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57950,7 +57970,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 102,
+        "line": 106,
         "lineSha256": "81634cb24090988df13f2c5b90bacc1373b3c17ac48f26414545b515e5de4a60",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57958,7 +57978,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 108,
+        "line": 112,
         "lineSha256": "b8741fba2842796f6d7863daf3d6e717004b1c2b59303de2035082fdd80dddc3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57966,7 +57986,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 110,
+        "line": 114,
         "lineSha256": "53b068f992ac0214c09ab0dfabc4008433f6718a56e458d8722e1b63e3fb392f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57974,7 +57994,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 121,
+        "line": 125,
         "lineSha256": "f2e0bd28f780e1e27695fa5d11fb1cf764c14ca7485ecc4b200fb1a1cc4cd984",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57982,7 +58002,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 162,
+        "line": 179,
         "lineSha256": "5a8f8383ad266b3e26480f9fe22a76a629b2ea07d0a454ab7dba6b1094b311ef",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57990,7 +58010,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 234,
+        "line": 251,
         "lineSha256": "2bc5445fec90323338bc4fcccfa76bd31e43e7165dee925a2999ce0f5ebf2e37",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -57998,7 +58018,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 247,
+        "line": 264,
         "lineSha256": "82bffee412019c4386f3470a3acc3000a2e149e7f637f6ddf2ce54e5c425ea03",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58006,7 +58026,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 255,
+        "line": 272,
         "lineSha256": "bab9bae3610a627f5c164ee95d873292856253e69060329b27b448878e09f2f9",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58014,7 +58034,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 269,
+        "line": 286,
         "lineSha256": "b8741fba2842796f6d7863daf3d6e717004b1c2b59303de2035082fdd80dddc3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58022,7 +58042,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 271,
+        "line": 288,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58030,7 +58050,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 282,
+        "line": 299,
         "lineSha256": "0ce86403f87e4bd26f00cd10a6ce9900baf3d74e732e434edfda56a704e7cae3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58038,7 +58058,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 293,
+        "line": 310,
         "lineSha256": "f2e20c0b54dc0bf90d71c0e14474908fb60a6bbf4244ac564f1f6029fd7de9ed",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58046,7 +58066,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 297,
+        "line": 314,
         "lineSha256": "9e52506896259ef120e99cefd670fec757e5e048c4e6abe11eb89238aa452c62",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58054,7 +58074,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 303,
+        "line": 320,
         "lineSha256": "6776438001f8c1f3948e7b6bc73bd02e7c0f03e0d5495e9cfb40f6551645f239",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58062,7 +58082,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 306,
+        "line": 323,
         "lineSha256": "46b0dfd64df82213e5368aea874110717d165da729158590810bcf626ee0f4e0",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58070,7 +58090,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 328,
+        "line": 345,
         "lineSha256": "5a8f8383ad266b3e26480f9fe22a76a629b2ea07d0a454ab7dba6b1094b311ef",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58078,7 +58098,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 342,
+        "line": 359,
         "lineSha256": "42dbea73ed9e4e113924e7fc8dadcb6cd4c931bb54bf84fba73fe3cde440fa0c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58086,7 +58106,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 370,
+        "line": 387,
         "lineSha256": "728530d5a20921789c3b641b5ccf9f05af2b9c0248c92e0c105eba95db816b58",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58094,7 +58114,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 371,
+        "line": 388,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58102,7 +58122,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 444,
+        "line": 461,
         "lineSha256": "2bc5445fec90323338bc4fcccfa76bd31e43e7165dee925a2999ce0f5ebf2e37",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58110,7 +58130,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 457,
+        "line": 474,
         "lineSha256": "520763c835bf3b92e56a1d10ea57be6b0d02abf2b70d6a45a5f3fc499445bf57",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58118,7 +58138,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 485,
+        "line": 502,
         "lineSha256": "b8741fba2842796f6d7863daf3d6e717004b1c2b59303de2035082fdd80dddc3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58126,7 +58146,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 487,
+        "line": 504,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58134,7 +58154,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 503,
+        "line": 520,
         "lineSha256": "c458dc4e95f46a9fcdcf983ee7318d79a875264216246f60c0ae14a8f5de1486",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58142,7 +58162,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 512,
+        "line": 529,
         "lineSha256": "f2e20c0b54dc0bf90d71c0e14474908fb60a6bbf4244ac564f1f6029fd7de9ed",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58150,7 +58170,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 522,
+        "line": 539,
         "lineSha256": "6e97895ab69de8f8aa947cd0d8adfcd5107723a8c0a96dbfb85ccef50e3b74f0",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58158,7 +58178,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 526,
+        "line": 543,
         "lineSha256": "6776438001f8c1f3948e7b6bc73bd02e7c0f03e0d5495e9cfb40f6551645f239",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58166,7 +58186,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 536,
+        "line": 553,
         "lineSha256": "8dc2cb7aae04942cec3cca3dea0e5d92dcc586e9ace064f578bf7169f08abd1b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58174,7 +58194,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 543,
+        "line": 560,
         "lineSha256": "17be6e16722a16ccb05456a572036e8af3582147d1aa47f9ea1a699d3f8d98a5",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58182,7 +58202,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 595,
+        "line": 612,
         "lineSha256": "8d494476d313df165b8a747989a77ab0795b89bb8593308d2f22b99b86079220",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58190,7 +58210,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 598,
+        "line": 615,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58198,7 +58218,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 607,
+        "line": 624,
         "lineSha256": "e161296af924d3885f06199c7746cb1aac1b54f0bbf8701d7fee647c95d53596",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58206,7 +58226,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 671,
+        "line": 688,
         "lineSha256": "b8741fba2842796f6d7863daf3d6e717004b1c2b59303de2035082fdd80dddc3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58214,7 +58234,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 674,
+        "line": 691,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58222,7 +58242,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 683,
+        "line": 700,
         "lineSha256": "e161296af924d3885f06199c7746cb1aac1b54f0bbf8701d7fee647c95d53596",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58230,7 +58250,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 709,
+        "line": 726,
         "lineSha256": "c458dc4e95f46a9fcdcf983ee7318d79a875264216246f60c0ae14a8f5de1486",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58238,7 +58258,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 746,
+        "line": 763,
         "lineSha256": "544f07dc3a86c63d7db1614cda88a79837ad667d4e890b133cb9054d8d70cfd0",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58246,7 +58266,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 760,
+        "line": 777,
         "lineSha256": "8d494476d313df165b8a747989a77ab0795b89bb8593308d2f22b99b86079220",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58254,7 +58274,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 763,
+        "line": 780,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58262,7 +58282,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 774,
+        "line": 791,
         "lineSha256": "e161296af924d3885f06199c7746cb1aac1b54f0bbf8701d7fee647c95d53596",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58270,7 +58290,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 781,
+        "line": 798,
         "lineSha256": "bcbe2c59f754a5aa5d8b5e06b32402ef45f1e7f5f46b34a1d827900bc0636daa",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58278,7 +58298,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 826,
+        "line": 843,
         "lineSha256": "49e8e6927866285e3dcb74f827ca9f673bbfd8f08adcdf28a16795eef7dd280d",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58286,7 +58306,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 844,
+        "line": 861,
         "lineSha256": "8d494476d313df165b8a747989a77ab0795b89bb8593308d2f22b99b86079220",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58294,7 +58314,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 847,
+        "line": 864,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58302,7 +58322,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 856,
+        "line": 873,
         "lineSha256": "e161296af924d3885f06199c7746cb1aac1b54f0bbf8701d7fee647c95d53596",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58310,7 +58330,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 877,
+        "line": 894,
         "lineSha256": "cc26ea8e01e84f0b18b5a310c919cd648b8c1324db7563a652212d00f4164db8",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58318,7 +58338,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 912,
+        "line": 929,
         "lineSha256": "8d494476d313df165b8a747989a77ab0795b89bb8593308d2f22b99b86079220",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58326,7 +58346,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 915,
+        "line": 932,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58334,7 +58354,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 924,
+        "line": 941,
         "lineSha256": "e161296af924d3885f06199c7746cb1aac1b54f0bbf8701d7fee647c95d53596",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58342,7 +58362,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 953,
+        "line": 970,
         "lineSha256": "728530d5a20921789c3b641b5ccf9f05af2b9c0248c92e0c105eba95db816b58",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58350,7 +58370,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 954,
+        "line": 971,
         "lineSha256": "2ee4fa632081a5a86ecd789b05319f3d290c81247802496641030296378088df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58358,7 +58378,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1023,
+        "line": 1040,
         "lineSha256": "1c67ba92bcdb6eb0a0446d0342ec7cef0fa44f5086c5b78b70c8b4e08d7c771c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58366,7 +58386,15 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1033,
+        "line": 1049,
+        "lineSha256": "1c67ba92bcdb6eb0a0446d0342ec7cef0fa44f5086c5b78b70c8b4e08d7c771c",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1060,
         "lineSha256": "1c67ba92bcdb6eb0a0446d0342ec7cef0fa44f5086c5b78b70c8b4e08d7c771c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58374,7 +58402,31 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1037,
+        "line": 1064,
+        "lineSha256": "d2f2c5a1f58c2b3b0df1e27a4002adff7893d2dc8196062434e3b46a95769e78",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 1068,
+        "lineSha256": "9130bf5682aefbddbedbf0f7ecd480e05298d220a032c267853219aa62b0deb6",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1073,
+        "lineSha256": "1c67ba92bcdb6eb0a0446d0342ec7cef0fa44f5086c5b78b70c8b4e08d7c771c",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 1077,
         "lineSha256": "d2f2c5a1f58c2b3b0df1e27a4002adff7893d2dc8196062434e3b46a95769e78",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58382,7 +58434,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1054,
+        "line": 1095,
         "lineSha256": "62128155446bc222b3caaf292be4b664cb4c09b8f954ab75d71fc17cfd80c201",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58390,7 +58442,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1069,
+        "line": 1111,
         "lineSha256": "24a61c4a94ae92405053b7a7fae746190a3ce64f705a8cab1ee2988d82288dab",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58398,7 +58450,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1094,
+        "line": 1136,
         "lineSha256": "781608b8b224f33fe229c7c4f45df1b779e53c6f5a7c091900ff228212d36ce2",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58406,7 +58458,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1096,
+        "line": 1138,
         "lineSha256": "997185bd82c40a6a053187d89ab3437e8d6d9391e38d09557f445819e14fd229",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58414,7 +58466,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1099,
+        "line": 1141,
         "lineSha256": "a447b7aaad875160d9f471a33948f69c51eab7f1c8c7b8676de371fff2cce27b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58423,7 +58475,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1100,
+        "line": 1142,
         "lineSha256": "9b17a116456dc3a920d099a446684a621fd9953ac62a545098925a30557da8f4",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58432,7 +58484,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1101,
+        "line": 1143,
         "lineSha256": "0cdd051629e790d331bb6f0ebecdd723dd3bc3fec0aa47ea8ea0c39a02126c94",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58441,7 +58493,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1102,
+        "line": 1144,
         "lineSha256": "2e293d364cc8edb04a2802517a7da5582984441b6184d47b4c2e022b7bdf065a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58450,7 +58502,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1103,
+        "line": 1145,
         "lineSha256": "a7fe11d1949a119dfc3e7766455a1b017000daab85c0ee27781e7e795ea2985c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58458,7 +58510,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1165,
+        "line": 1207,
         "lineSha256": "6c3d214e42a4bfe07c584918376e8dd0e3ef6bcb75f79fca7286c1e2fc79e782",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58466,7 +58518,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1184,
+        "line": 1226,
         "lineSha256": "b21ffcc9aabbc9960e7f20663b6215fef9a4f867b9857c5483f50c9f98bd8a22",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58474,7 +58526,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1186,
+        "line": 1228,
         "lineSha256": "87b5c748ddc90662314ee73adbf52f511343368a71c10c1177a8f66cfe47c910",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58482,7 +58534,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1207,
+        "line": 1249,
         "lineSha256": "b21ffcc9aabbc9960e7f20663b6215fef9a4f867b9857c5483f50c9f98bd8a22",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -58490,7 +58542,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1209,
+        "line": 1251,
         "lineSha256": "87b5c748ddc90662314ee73adbf52f511343368a71c10c1177a8f66cfe47c910",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java"
       },
@@ -61420,7 +61472,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 36,
+        "line": 41,
         "lineSha256": "53a9b6e05028d5e4ad1449c1f37e19570a999ddf171d083364e46bb19088a923",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61428,7 +61480,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 58,
+        "line": 63,
         "lineSha256": "1c56d45e3fe85d78dc817c6267985900e98a69e24b23d977a9e7a349be92294c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61436,7 +61488,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 59,
+        "line": 64,
         "lineSha256": "c51ad3a687e0b49f74d4e97cd0fbccfdfe856d4547e9705636fbc20faa969106",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61444,7 +61496,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 98,
+        "line": 103,
         "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61452,7 +61504,23 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 130,
+        "line": 141,
+        "lineSha256": "476c8f052e8edf47b9bc23f5ab4c771f2c534f0557ccbf714e35fd0317d3ee7b",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 164,
+        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 200,
         "lineSha256": "c17275f245a2f7e17f3ac37103c1b3cabfe5433fd2219ae0edd9185e7c18978f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61460,7 +61528,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 131,
+        "line": 201,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61468,7 +61536,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 207,
+        "line": 277,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61476,7 +61544,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 217,
+        "line": 287,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61484,7 +61552,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 282,
+        "line": 352,
         "lineSha256": "94fdfaab771c20a7b7fd31309b5034084dcb5c79529114f84b74478b89329063",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61492,32 +61560,8 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 330,
+        "line": 400,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 333,
-        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 357,
-        "lineSha256": "94fdfaab771c20a7b7fd31309b5034084dcb5c79529114f84b74478b89329063",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 402,
-        "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
       {
@@ -61530,25 +61574,17 @@
       },
       {
         "kinds": [
-          "LIFECYCLE_SIGNAL"
+          "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 432,
-        "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
+        "line": 427,
+        "lineSha256": "94fdfaab771c20a7b7fd31309b5034084dcb5c79529114f84b74478b89329063",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 438,
-        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 470,
+        "line": 472,
         "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61556,7 +61592,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 471,
+        "line": 473,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61564,7 +61600,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 507,
+        "line": 502,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61572,8 +61608,16 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 510,
+        "line": 508,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 540,
+        "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
       {
@@ -61581,14 +61625,6 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 541,
-        "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 544,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61596,7 +61632,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 581,
+        "line": 577,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61604,7 +61640,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 584,
+        "line": 580,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61612,7 +61648,39 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 618,
+        "line": 611,
+        "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 614,
+        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 651,
+        "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 654,
+        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 688,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61620,7 +61688,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 620,
+        "line": 690,
         "lineSha256": "9cfad29ba622f665b44b46e2117ca800107b9af9c1b273a2816e130c1df24b0f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61628,7 +61696,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 622,
+        "line": 692,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61636,7 +61704,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 628,
+        "line": 698,
         "lineSha256": "934aff56ad1944b426f3d6cfe167ed27064729c78ab4bccac649323b8f5837fc",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61644,7 +61712,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 629,
+        "line": 699,
         "lineSha256": "ba1c6f32ac5cff9ceea4980014ceb7859827929ca9c865fd590509e2178f4a58",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61652,7 +61720,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 632,
+        "line": 702,
         "lineSha256": "5951dee5f6c1e2161e06f621ff52b22d44f15d7feed5bb0876b6cd9ecfd8fbd9",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61660,7 +61728,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 634,
+        "line": 704,
         "lineSha256": "7acf883a73a5c8bfd876365f8cb3e8c55b6e69c76240457f96a8400cb7c6a89a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61668,7 +61736,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 635,
+        "line": 705,
         "lineSha256": "74dbed4ba63f44c8846270244f4e2a3d3807c3271a94daf40821ee52786530db",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61676,7 +61744,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 647,
+        "line": 717,
         "lineSha256": "f93f73a2a5ce821865180f6c832c6c3b0479b9028f1a7b54811ad931f57581a5",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61684,7 +61752,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 649,
+        "line": 719,
         "lineSha256": "4f2c5b88a36a4cf75b9b26570ac0d1e4ee96e782bc0140dcbb418522d86f83f0",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61692,7 +61760,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 650,
+        "line": 720,
         "lineSha256": "3b9b52b91cc0504d8b341dc4d0008902652bda916db1713af7cbc2e618f5745f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61700,7 +61768,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 664,
+        "line": 734,
         "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61708,7 +61776,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 665,
+        "line": 735,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61716,7 +61784,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 708,
+        "line": 778,
         "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61724,7 +61792,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 709,
+        "line": 779,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61732,7 +61800,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 765,
+        "line": 835,
         "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61740,7 +61808,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 766,
+        "line": 836,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61748,32 +61816,8 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 819,
+        "line": 889,
         "lineSha256": "c17275f245a2f7e17f3ac37103c1b3cabfe5433fd2219ae0edd9185e7c18978f",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 820,
-        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 862,
-        "lineSha256": "6879770d701941e9691e2adba091787e893ded50f6aa93ad1e3b42bc501a22b3",
-        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 863,
-        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
       {
@@ -61781,6 +61825,30 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 890,
+        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 932,
+        "lineSha256": "6879770d701941e9691e2adba091787e893ded50f6aa93ad1e3b42bc501a22b3",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 933,
+        "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 960,
         "lineSha256": "c17275f245a2f7e17f3ac37103c1b3cabfe5433fd2219ae0edd9185e7c18978f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61788,7 +61856,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 891,
+        "line": 961,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61796,7 +61864,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 921,
+        "line": 991,
         "lineSha256": "f7f5dc9669b8d6b68d95b011196ec4af6bba7fa1ce83990d83d39a8c583b21e6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61804,7 +61872,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 922,
+        "line": 992,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61812,7 +61880,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 982,
+        "line": 1052,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61820,7 +61888,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 986,
+        "line": 1056,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61828,7 +61896,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1000,
+        "line": 1070,
         "lineSha256": "acf91c8a28ceffadfaf7c96ac0bd8a2af5fc07d9d17a8248ca2d667966304d6d",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61836,7 +61904,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1027,
+        "line": 1097,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61844,7 +61912,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1030,
+        "line": 1100,
         "lineSha256": "3eab3ed137e78424e635b17ea282317cd87165135d72c73932af9bc035608a3f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61852,7 +61920,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 1059,
+        "line": 1129,
         "lineSha256": "94b2b950ece33fae7a571ae70af626fa294b17d273bae3fec84bc299537f4c7b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61860,7 +61928,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1064,
+        "line": 1134,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61868,7 +61936,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1067,
+        "line": 1137,
         "lineSha256": "3eab3ed137e78424e635b17ea282317cd87165135d72c73932af9bc035608a3f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61876,7 +61944,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 1149,
+        "line": 1219,
         "lineSha256": "94b2b950ece33fae7a571ae70af626fa294b17d273bae3fec84bc299537f4c7b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61884,7 +61952,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1153,
+        "line": 1223,
         "lineSha256": "85c48990fe0c1343d3e7e41563e52800643cbc28e1646fa73d646699d4837c00",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61892,7 +61960,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1154,
+        "line": 1224,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61900,7 +61968,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 1228,
+        "line": 1298,
         "lineSha256": "94b2b950ece33fae7a571ae70af626fa294b17d273bae3fec84bc299537f4c7b",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61908,7 +61976,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1232,
+        "line": 1302,
         "lineSha256": "533b786ffad7835d763656146db44563da35ff40cf22b7940bfb8d16f657ab63",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61916,7 +61984,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1235,
+        "line": 1305,
         "lineSha256": "29b0ddcd4dc9de66074bb8ee897a7be8987826b94940c9b997142d430d0d2e17",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61924,7 +61992,7 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
-        "line": 1278,
+        "line": 1348,
         "lineSha256": "f9656b65071c4e6a95134c93f629d7f903bfee980b697c5e9228ddb9c9744aa4",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61932,7 +62000,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1284,
+        "line": 1354,
         "lineSha256": "b03d9320be77e25e7fabd3d18784e4e5d1d2e0f198d5dbedb1a1c1f43bb006fe",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61940,7 +62008,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1285,
+        "line": 1355,
         "lineSha256": "416294d2e8136cfe6c257769b76ef55adaedf06ca6a45c87c2a9179f26fc7796",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61948,7 +62016,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1288,
+        "line": 1358,
         "lineSha256": "07ff6fd9f41b0ba5f78b774411f2eef1d376cd844a34743e3f454ef282800483",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61956,7 +62024,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1304,
+        "line": 1374,
         "lineSha256": "9d2e87f3e413ea519c09e1cdeb5972d19fe72df02c58fade606f4b684ce93ed3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61964,7 +62032,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1322,
+        "line": 1392,
         "lineSha256": "cd9eaba54ad94d6b849cf3da2e6b37e742fc05f66e423554f2b50e102a2c9c88",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61972,7 +62040,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1325,
+        "line": 1395,
         "lineSha256": "e942e086aa86ff56679d7550aa716b53aad515261ad34aa195de2d95895f6468",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61980,7 +62048,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1330,
+        "line": 1400,
         "lineSha256": "1c67ba92bcdb6eb0a0446d0342ec7cef0fa44f5086c5b78b70c8b4e08d7c771c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61988,7 +62056,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1337,
+        "line": 1407,
         "lineSha256": "ac7bcafb5b34122d3a96798cb06fc385976a5cff7733fbd99f23eeaaa4271b96",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -61996,7 +62064,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1344,
+        "line": 1414,
         "lineSha256": "ac7bcafb5b34122d3a96798cb06fc385976a5cff7733fbd99f23eeaaa4271b96",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62004,7 +62072,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1348,
+        "line": 1418,
         "lineSha256": "62128155446bc222b3caaf292be4b664cb4c09b8f954ab75d71fc17cfd80c201",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62012,7 +62080,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1402,
+        "line": 1472,
         "lineSha256": "5fe1fd9a2dfa0dd477f988b95f82a74660cffadd7c2d72b5a17e0044c18f8be3",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62020,7 +62088,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1422,
+        "line": 1492,
         "lineSha256": "f6e046aa0ad17033fdb2ffea273a451df0d9ffec48040aa0c391586fd2c723a7",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62028,7 +62096,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1426,
+        "line": 1496,
         "lineSha256": "781608b8b224f33fe229c7c4f45df1b779e53c6f5a7c091900ff228212d36ce2",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62036,7 +62104,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1428,
+        "line": 1498,
         "lineSha256": "997185bd82c40a6a053187d89ab3437e8d6d9391e38d09557f445819e14fd229",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62044,7 +62112,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1435,
+        "line": 1505,
         "lineSha256": "6c3d214e42a4bfe07c584918376e8dd0e3ef6bcb75f79fca7286c1e2fc79e782",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62052,7 +62120,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1459,
+        "line": 1529,
         "lineSha256": "5f2aba0d795a25425de0e0591e32ef448bc4793aac8266c29b78296bda6cac24",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62060,7 +62128,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1486,
+        "line": 1556,
         "lineSha256": "5f2aba0d795a25425de0e0591e32ef448bc4793aac8266c29b78296bda6cac24",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62068,7 +62136,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1646,
+        "line": 1716,
         "lineSha256": "b605677fb19c52a92685066e1d99db9e493bced3cf2ec60c7ca21b22a3cd7762",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62076,7 +62144,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1664,
+        "line": 1734,
         "lineSha256": "2453ba620b1eed2d115617f8b4acec578a788bae3e3a018589ff5ee1cfe0b1df",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62084,7 +62152,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1803,
+        "line": 1873,
         "lineSha256": "f8afcb43103e32b6ce34a9f12235cdf8fee5d0bc7ccf34e5c11292cc06920868",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62092,7 +62160,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1823,
+        "line": 1893,
         "lineSha256": "47db5e37b4e5cbdb34d022fea00417ebbde7a718e6d91f586db8c5ebce032cdc",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62100,7 +62168,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1830,
+        "line": 1900,
         "lineSha256": "cdee3d1b824141ee02fd444af301eff11c8c7b376f2bd8e942567ce5bbd94c39",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62108,7 +62176,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1832,
+        "line": 1902,
         "lineSha256": "f8afcb43103e32b6ce34a9f12235cdf8fee5d0bc7ccf34e5c11292cc06920868",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62116,7 +62184,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1834,
+        "line": 1904,
         "lineSha256": "47db5e37b4e5cbdb34d022fea00417ebbde7a718e6d91f586db8c5ebce032cdc",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62124,7 +62192,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1842,
+        "line": 1912,
         "lineSha256": "77767bf1f22dc3943e1e46aede3cff12cd0d9ee2540ef97c873f196eb380278d",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62132,7 +62200,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1843,
+        "line": 1913,
         "lineSha256": "f8afcb43103e32b6ce34a9f12235cdf8fee5d0bc7ccf34e5c11292cc06920868",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62140,7 +62208,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1845,
+        "line": 1915,
         "lineSha256": "47db5e37b4e5cbdb34d022fea00417ebbde7a718e6d91f586db8c5ebce032cdc",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62148,7 +62216,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1852,
+        "line": 1922,
         "lineSha256": "3ef38379abaa098bd9f37416870113e418aa749dc93351a34400cd0ac45c98be",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62156,7 +62224,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1869,
+        "line": 1939,
         "lineSha256": "aeb4d173fbd923b620acca3bcb302522781e62b78bdfa4e3fbba09301fa6589e",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62164,7 +62232,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1888,
+        "line": 1958,
         "lineSha256": "f8afcb43103e32b6ce34a9f12235cdf8fee5d0bc7ccf34e5c11292cc06920868",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62172,7 +62240,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1891,
+        "line": 1961,
         "lineSha256": "6775e47b9aa5aa1f89b028f7543a25a6b6e97edfa822f7280703d4f26a84e8b6",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62180,7 +62248,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1892,
+        "line": 1962,
         "lineSha256": "3d775cea09ab0410558ab4e9ddd412e03c94a270ed49c5a836585b3b17229324",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62188,7 +62256,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1900,
+        "line": 1970,
         "lineSha256": "47db5e37b4e5cbdb34d022fea00417ebbde7a718e6d91f586db8c5ebce032cdc",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62196,7 +62264,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2007,
+        "line": 2077,
         "lineSha256": "cfa8207d3aa42eda9762c3a3c7b81956b04a7c68e16620ff9a81815c3346045f",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62204,7 +62272,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2263,
+        "line": 2333,
         "lineSha256": "1e0d135d2c2539681a9009ed0dd3dd1a2271a0105b533485a45557bbf6b661e0",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62212,7 +62280,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2294,
+        "line": 2364,
         "lineSha256": "3fe3e240bec983dfff5e3f3b4f8804d6010f18108d6d3414323998d30330b966",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62220,7 +62288,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2326,
+        "line": 2396,
         "lineSha256": "3fe3e240bec983dfff5e3f3b4f8804d6010f18108d6d3414323998d30330b966",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62228,7 +62296,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2356,
+        "line": 2426,
         "lineSha256": "d61271fc2c034a2201cfc93d08650ed6955ffb2c81fbf510da684a224e59a60c",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62236,7 +62304,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2380,
+        "line": 2450,
         "lineSha256": "ad1633d89bdfb36f82fbbcd7fe79386eb92ffa7a4e7ed85f3ea10be8d4a8716a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62244,7 +62312,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2391,
+        "line": 2461,
         "lineSha256": "b21ffcc9aabbc9960e7f20663b6215fef9a4f867b9857c5483f50c9f98bd8a22",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -62252,7 +62320,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 2393,
+        "line": 2463,
         "lineSha256": "8ca25810a628554d01570f70ec393b5d64b8b2578b251a5bb83307d7ca27da0a",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
       },
@@ -67943,6 +68011,126 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
+        "line": 3,
+        "lineSha256": "a0814635cc5bdc9a6fca16160289cb7bb57eeb4867f722c07b29218181a8dbcd",
+        "path": "verification/interoperability/skills-matrix/README.md"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 40,
+        "lineSha256": "b59a332407dd282d9606980a33f26702c5ab363d329972b968b0b99d1da46ef8",
+        "path": "verification/interoperability/skills-matrix/README.md"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 24,
+        "lineSha256": "53a9b6e05028d5e4ad1449c1f37e19570a999ddf171d083364e46bb19088a923",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 35,
+        "lineSha256": "1c56d45e3fe85d78dc817c6267985900e98a69e24b23d977a9e7a349be92294c",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 36,
+        "lineSha256": "c51ad3a687e0b49f74d4e97cd0fbccfdfe856d4547e9705636fbc20faa969106",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 97,
+        "lineSha256": "45a7f952bb4b3ded66d17f91368341872fc3789685963f4e8f8e835f20728449",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 98,
+        "lineSha256": "32e4764ff469731b2be6326be1dfcebdea9502b4595a3ba4f77d436d66cd6326",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 101,
+        "lineSha256": "44cb68a85a0b0ac8ef582f223c91a4584d5d51262a1407af5d1626837b94709c",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 116,
+        "lineSha256": "49108c009b3a86e3cc1d37d59e4960511fadb9b7315b358d36fee053213d2407",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 125,
+        "lineSha256": "18f77ebbefdd6678cad82a4ec8231d1b3dbb8b442de75e0862cbd8ec3687c413",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 155,
+        "lineSha256": "96d525076352ada922a24e59340ca41e3a73986f593863b10e148ffcef4927d8",
+        "path": "verification/interoperability/skills-matrix/SkillsMatrixFixture.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 33,
+        "lineSha256": "9f43e695a402e69e4535e2ffec9c7c3ce9b112e5b4fe9626b8a18dc7cdfb5ca6",
+        "path": "verification/interoperability/skills-matrix/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 47,
+        "lineSha256": "5613bc4db322c561661a6d179afe463fbd0f2d1d889a3dd99bd659da8193c6bf",
+        "path": "verification/interoperability/skills-matrix/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 147,
+        "lineSha256": "7e0af8aa9cd058bab60f8f774b3943cd4db3cf3480f637bc5b50f0b151874365",
+        "path": "verification/interoperability/skills-matrix/run.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 148,
+        "lineSha256": "d766d8a17dee53d0eccc08d9670e20624b27cb0098a42651deb15566619d6712",
+        "path": "verification/interoperability/skills-matrix/run.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
         "line": 40,
         "lineSha256": "3acdb5dae8fc12403e147ab6a21241ab411a70d6c34232a1807eec1d1dc65ae2",
         "path": "verification/interoperability/skills/README.md"
@@ -67951,7 +68139,15 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 36,
+        "line": 14,
+        "lineSha256": "c6bddb6c6126c6d18c87f030823ded77b26bb833d56ba84e20e28284d5290b95",
+        "path": "verification/interoperability/skills/proxy-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 42,
         "lineSha256": "1f94d384d4e62ba0fc88ff6dde80bcb8dd989fb7a66cb47aa3bc83a35fc74786",
         "path": "verification/interoperability/skills/proxy-self-test.mjs"
       },
@@ -67959,7 +68155,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 203,
+        "line": 209,
         "lineSha256": "62bcbed16825eeb1eb0c591a08c74c76c32e49639ff592782a53c27365d96861",
         "path": "verification/interoperability/skills/proxy-self-test.mjs"
       },
@@ -67967,7 +68163,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 204,
+        "line": 210,
         "lineSha256": "663f8d79f9e2ab76bab06c20752e8c4112e2f26dc4176a3e6906d1229d026199",
         "path": "verification/interoperability/skills/proxy-self-test.mjs"
       },
@@ -68593,14 +68789,14 @@
       }
     ],
     "countsByKind": {
-      "FIXED_WAIT_CANDIDATE": 2124,
+      "FIXED_WAIT_CANDIDATE": 2126,
       "JUNIT_OUTER_GUARD": 411,
-      "LIFECYCLE_SIGNAL": 4598,
-      "NAMED_TIMEOUT_CANDIDATE": 1590,
+      "LIFECYCLE_SIGNAL": 4612,
+      "NAMED_TIMEOUT_CANDIDATE": 1597,
       "PROCESS_OUTER_GUARD": 18,
       "WORKFLOW_OUTER_GUARD": 14
     },
-    "pathCount": 434
+    "pathCount": 437
   },
   "formatVersion": 2,
   "javascriptGuards": [
@@ -68654,7 +68850,7 @@
   ],
   "junitGuardSummary": {
     "count": 398,
-    "sha256": "8ae1df07ec66debf278c69d46cbb7877d14a8c09ba087fa417664ad34dd9cfde"
+    "sha256": "893e3fe3cdbe719c4c5a9fa312864149b928174463d1110e523aa0faed86fa05"
   },
   "lifecycleScopes": [
     {
@@ -116804,7 +117000,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -116913,7 +117109,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117027,7 +117223,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117131,7 +117327,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117242,7 +117438,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 2000,
         "factoryGenerationHasExecution": false,
@@ -117361,7 +117557,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 2000,
         "factoryGenerationHasExecution": false,
@@ -117470,7 +117666,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117579,7 +117775,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117688,7 +117884,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117797,7 +117993,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117827,7 +118023,7 @@
         "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
         "scopeKind": "TEST",
         "scopeName": "customAdmissionReceivesPublicMetadataAndMapsTypedRejectionToWire",
-        "scopeSha256": "cc4bc2dd03cc2cc3d3d3bc704a1548671da100d25c45f848fbf9aa8814d0f395",
+        "scopeSha256": "879ff075263c18182dcb421f90939564f48540e3141fa09277f8a5e7563c7264",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -117885,7 +118081,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 811,
+          "line": 817,
           "lineSha256": "b0474fa14d5c494304525bf767edeb86399202a558502e6637c6b2187182162c",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -117906,7 +118102,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -117921,9 +118117,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-907b597840c0dc4e",
+        "id": "SCOPE-3d045361643fd406",
         "inlineCleanupMillis": null,
-        "line": 811,
+        "line": 817,
         "lineSha256": "b0474fa14d5c494304525bf767edeb86399202a558502e6637c6b2187182162c",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -117974,7 +118170,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 844,
+          "line": 850,
           "lineSha256": "34a573091a485ca80d2d860f726e1580c4cfdb824b1fbbe304b974bbb9a9c40b",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -117999,7 +118195,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 844,
+          "line": 850,
           "lineSha256": "34a573091a485ca80d2d860f726e1580c4cfdb824b1fbbe304b974bbb9a9c40b",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118020,7 +118216,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118035,9 +118231,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-33f08d258fe65ee2",
+        "id": "SCOPE-849188ea0e954ce8",
         "inlineCleanupMillis": null,
-        "line": 844,
+        "line": 850,
         "lineSha256": "34a573091a485ca80d2d860f726e1580c4cfdb824b1fbbe304b974bbb9a9c40b",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118088,7 +118284,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 885,
+          "line": 891,
           "lineSha256": "816358b74d4f3d6f1b064dd30bc405fb069602b2f9b1f270ea3feceb457abc6d",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -118113,7 +118309,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 885,
+          "line": 891,
           "lineSha256": "816358b74d4f3d6f1b064dd30bc405fb069602b2f9b1f270ea3feceb457abc6d",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118134,7 +118330,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118149,9 +118345,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-42eb8ff3b8366f6b",
+        "id": "SCOPE-4f69ec39d8f7938c",
         "inlineCleanupMillis": null,
-        "line": 885,
+        "line": 891,
         "lineSha256": "816358b74d4f3d6f1b064dd30bc405fb069602b2f9b1f270ea3feceb457abc6d",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118202,7 +118398,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 921,
+          "line": 927,
           "lineSha256": "20c1896b6f789c5d2c197f7c7d745c3f47f43a45af269f31af0e18fc531d9ee7",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -118227,7 +118423,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 921,
+          "line": 927,
           "lineSha256": "20c1896b6f789c5d2c197f7c7d745c3f47f43a45af269f31af0e18fc531d9ee7",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118248,7 +118444,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118263,9 +118459,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-21ace25cc188ef8e",
+        "id": "SCOPE-7726ce46299aa895",
         "inlineCleanupMillis": null,
-        "line": 921,
+        "line": 927,
         "lineSha256": "20c1896b6f789c5d2c197f7c7d745c3f47f43a45af269f31af0e18fc531d9ee7",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118316,7 +118512,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 960,
+          "line": 966,
           "lineSha256": "d05e98f7ae68aa61a0e7f3992f23b386e685a677c010272d558b5ce47efce7eb",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -118341,7 +118537,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 960,
+          "line": 966,
           "lineSha256": "d05e98f7ae68aa61a0e7f3992f23b386e685a677c010272d558b5ce47efce7eb",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118362,7 +118558,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118377,9 +118573,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-1af01cde61cc1896",
+        "id": "SCOPE-73e0c693a9d21bf3",
         "inlineCleanupMillis": null,
-        "line": 960,
+        "line": 966,
         "lineSha256": "d05e98f7ae68aa61a0e7f3992f23b386e685a677c010272d558b5ce47efce7eb",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118424,7 +118620,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 30000,
         "controlProof": {
-          "line": 1005,
+          "line": 1011,
           "lineSha256": "857f9b7789272a73307ecf5c2aa6f226be98054079ca9df8c70bdea84487ba52",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -118455,7 +118651,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 1005,
+          "line": 1011,
           "lineSha256": "857f9b7789272a73307ecf5c2aa6f226be98054079ca9df8c70bdea84487ba52",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118476,7 +118672,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 5,
         "fixedControlWaitMillis": 30000,
         "factoryGenerationHasExecution": false,
@@ -118491,9 +118687,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-72ebc2771429a1df",
+        "id": "SCOPE-8c0658c95d9d032b",
         "inlineCleanupMillis": null,
-        "line": 1005,
+        "line": 1011,
         "lineSha256": "857f9b7789272a73307ecf5c2aa6f226be98054079ca9df8c70bdea84487ba52",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118544,7 +118740,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 1075,
+          "line": 1081,
           "lineSha256": "fcf788173ba3e57aa16821362b706043271e9ca6f376089cbf4cb4f1d81ee051",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -118569,7 +118765,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 1075,
+          "line": 1081,
           "lineSha256": "fcf788173ba3e57aa16821362b706043271e9ca6f376089cbf4cb4f1d81ee051",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118590,7 +118786,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118605,9 +118801,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-757ecb4d01ab0a74",
+        "id": "SCOPE-78588b108f461e4f",
         "inlineCleanupMillis": null,
-        "line": 1075,
+        "line": 1081,
         "lineSha256": "fcf788173ba3e57aa16821362b706043271e9ca6f376089cbf4cb4f1d81ee051",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118678,7 +118874,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 1110,
+          "line": 1116,
           "lineSha256": "a5c523d35115f78df0355c82d55c4e10f8e26cbd38021b8dcf57c7621a35f513",
           "path": "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -118699,7 +118895,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118714,9 +118910,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-d43818488a492ac7",
+        "id": "SCOPE-d758bb91d8498462",
         "inlineCleanupMillis": null,
-        "line": 1110,
+        "line": 1116,
         "lineSha256": "a5c523d35115f78df0355c82d55c4e10f8e26cbd38021b8dcf57c7621a35f513",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -118803,7 +118999,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e812618abdc98b7ac8e236931e4e919dabe1cfe58e1746d65291592e3804157e",
+        "fileSha256": "91af5a4f549de58641ea3cf95a63a8d44bbd8bf9c389685e9ed8717ada62462b",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -118818,9 +119014,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-7c80753fb50d4a27",
+        "id": "SCOPE-e53f6edcdae2d36c",
         "inlineCleanupMillis": null,
-        "line": 1141,
+        "line": 1147,
         "lineSha256": "c50f6cfa011608cf60c9cee64fc79765f1904c1f40b889fce77f8ac723ba54b3",
         "observedOperations": [
           "CONSTRUCT_HTTP_SERVER",
@@ -175292,7 +175488,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "2cb83524c67ee99563500650d0a20dec69378479eb4946bec0a0344ac96f6774",
+        "fileSha256": "e6f215073cf7d7e7ca87cab101fdc9f821e00ab948600a960ed991430615611d",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -175394,7 +175590,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "2cb83524c67ee99563500650d0a20dec69378479eb4946bec0a0344ac96f6774",
+        "fileSha256": "e6f215073cf7d7e7ca87cab101fdc9f821e00ab948600a960ed991430615611d",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -175445,14 +175641,14 @@
         "applicationCleanupCount": 0,
         "applicationCleanupMillis": 0,
         "branchBoundsMillis": {
-          "COMPLETE_CORE": 73000,
-          "INCOMPLETE_CORE": 75000
+          "COMPLETE_CORE": 78000,
+          "INCOMPLETE_CORE": 80000
         },
         "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
         "cleanupProof": null,
         "closureStatus": "CLOSED",
         "completeGenerationMultiplier": 1,
-        "controlJoinMillis": 25000,
+        "controlJoinMillis": 30000,
         "controlProof": {
           "line": 170,
           "lineSha256": "13c64f12e2c6c3051fa7e827d0b5d25a11a886364d7d91f3dc905c2f050c5ff7",
@@ -175489,10 +175685,10 @@
         "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
         "requiredAction": "RAISE_OUTER_BOUND",
         "requiredReserveMillis": 0,
-        "reserveMillis": 45000,
+        "reserveMillis": 40000,
         "terminalReportCount": 0,
         "terminalReportMillis": 0,
-        "totalComposedBoundMillis": 75000
+        "totalComposedBoundMillis": 80000
       },
       "source": {
         "applicationRunSiteCount": 0,
@@ -175501,9 +175697,9 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "2cb83524c67ee99563500650d0a20dec69378479eb4946bec0a0344ac96f6774",
-        "fixedControlWaitCount": 7,
-        "fixedControlWaitMillis": 25000,
+        "fileSha256": "e6f215073cf7d7e7ca87cab101fdc9f821e00ab948600a960ed991430615611d",
+        "fixedControlWaitCount": 8,
+        "fixedControlWaitMillis": 30000,
         "factoryGenerationHasExecution": false,
         "factoryGenerationFixedControlWaitMillis": 0,
         "factoryGenerationOuterTimeoutMillis": null,
@@ -175529,7 +175725,7 @@
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogPolicyDeadlineRuntimeTests.java",
         "scopeKind": "TEST",
         "scopeName": "applicationStopCancelsActivePolicyBeforeAnotherEvaluatorCanEnter",
-        "scopeSha256": "1dcfa89d4f34bdc4d0832dc29806b499b79fb089061d0c1214b3994d43485578",
+        "scopeSha256": "691edc69658c41476fc1e809c6ec5eb9eecd80607b80c4b491be8bb6573a7b12",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 2,
@@ -196234,7 +196430,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 20000,
         "controlProof": {
-          "line": 86,
+          "line": 88,
           "lineSha256": "eb72d4c5bfd97a5d03c8696c2e9c19e928d9ca2499cde197f6ea709fbdc13b80",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -196265,7 +196461,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 86,
+          "line": 88,
           "lineSha256": "eb72d4c5bfd97a5d03c8696c2e9c19e928d9ca2499cde197f6ea709fbdc13b80",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196286,7 +196482,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 4,
         "fixedControlWaitMillis": 20000,
         "factoryGenerationHasExecution": false,
@@ -196301,9 +196497,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-32e080ee4902fe25",
+        "id": "SCOPE-a2c0e219026b4c67",
         "inlineCleanupMillis": null,
-        "line": 86,
+        "line": 88,
         "lineSha256": "eb72d4c5bfd97a5d03c8696c2e9c19e928d9ca2499cde197f6ea709fbdc13b80",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196316,7 +196512,7 @@
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
         "scopeKind": "TEST",
         "scopeName": "initialAuthorizationPrecedesAcknowledgmentAndExposesImmutableCandidates",
-        "scopeSha256": "52845fab9ec8ed5ad6421195b9b2dab16e5022aa048434db5d5f389a42a29df5",
+        "scopeSha256": "b2765189726f745792d882fa3a132d2e80620d079dd3704d80b37225287c63d5",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -196374,7 +196570,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 180,
+          "line": 197,
           "lineSha256": "550ec0fb0fcab2105db0d84bb37687f38568163bcaffcf3f1071e002e2949125",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196395,7 +196591,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -196410,9 +196606,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-1a85bcf7324a1f5f",
+        "id": "SCOPE-d74a4593c18dc103",
         "inlineCleanupMillis": null,
-        "line": 180,
+        "line": 197,
         "lineSha256": "550ec0fb0fcab2105db0d84bb37687f38568163bcaffcf3f1071e002e2949125",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196483,7 +196679,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 187,
+          "line": 204,
           "lineSha256": "acc77e22568fd0a003e6408633f22262fc67450a1086bcb23ad65357172b28f4",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196504,7 +196700,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -196519,9 +196715,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-4c01f9a19c2c9ecd",
+        "id": "SCOPE-f1387afb6c930e6e",
         "inlineCleanupMillis": null,
-        "line": 187,
+        "line": 204,
         "lineSha256": "acc77e22568fd0a003e6408633f22262fc67450a1086bcb23ad65357172b28f4",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196592,7 +196788,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 196,
+          "line": 213,
           "lineSha256": "67a3481a55652d81568d2ba3d2d1ed2cd03a701c69a0594ec67eb9f6553b7142",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196613,7 +196809,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -196628,9 +196824,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-8cf2b59bc0a3897a",
+        "id": "SCOPE-be85aab26bdd45cb",
         "inlineCleanupMillis": null,
-        "line": 196,
+        "line": 213,
         "lineSha256": "67a3481a55652d81568d2ba3d2d1ed2cd03a701c69a0594ec67eb9f6553b7142",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196675,7 +196871,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 45100,
         "controlProof": {
-          "line": 204,
+          "line": 221,
           "lineSha256": "b65f3b2270bf38bcabcdbdf4f049d948d87709c667aa30931fb13de39facea57",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable and owning-file hashes bind the background blocker to a guaranteed foreground/finally release and bounded join."
@@ -196706,7 +196902,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 204,
+          "line": 221,
           "lineSha256": "b65f3b2270bf38bcabcdbdf4f049d948d87709c667aa30931fb13de39facea57",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196727,7 +196923,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 11,
         "fixedControlWaitMillis": 45100,
         "factoryGenerationHasExecution": false,
@@ -196742,9 +196938,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-179dfee61da2e85e",
+        "id": "SCOPE-e6d758f1d2208584",
         "inlineCleanupMillis": null,
-        "line": 204,
+        "line": 221,
         "lineSha256": "b65f3b2270bf38bcabcdbdf4f049d948d87709c667aa30931fb13de39facea57",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196815,7 +197011,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 360,
+          "line": 377,
           "lineSha256": "42fd98d2162f6de3766c27a3f4e813b31ce06a9ffb1114ebc38666320c337719",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196836,7 +197032,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -196851,9 +197047,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-2fb55330f0dad047",
+        "id": "SCOPE-b268e4adbacb6eec",
         "inlineCleanupMillis": null,
-        "line": 360,
+        "line": 377,
         "lineSha256": "42fd98d2162f6de3766c27a3f4e813b31ce06a9ffb1114ebc38666320c337719",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -196898,7 +197094,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 35100,
         "controlProof": {
-          "line": 405,
+          "line": 422,
           "lineSha256": "a4988c03f9b0914e7a0b3be8b17bc1d95e0ddf72b525ca3c788156e581c58875",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable and owning-file hashes bind the background blocker to a guaranteed foreground/finally release and bounded join."
@@ -196929,7 +197125,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 405,
+          "line": 422,
           "lineSha256": "a4988c03f9b0914e7a0b3be8b17bc1d95e0ddf72b525ca3c788156e581c58875",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -196950,7 +197146,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 9,
         "fixedControlWaitMillis": 35100,
         "factoryGenerationHasExecution": false,
@@ -196965,9 +197161,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-b7db706ff3a1f1b1",
+        "id": "SCOPE-3b935286a0952cb4",
         "inlineCleanupMillis": null,
-        "line": 405,
+        "line": 422,
         "lineSha256": "a4988c03f9b0914e7a0b3be8b17bc1d95e0ddf72b525ca3c788156e581c58875",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -197012,7 +197208,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 567,
+          "line": 584,
           "lineSha256": "34a6f42443ddc472093ed1b5dd323ea9af1a4fbf0f09ac53f03e0079e958f784",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -197043,7 +197239,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 567,
+          "line": 584,
           "lineSha256": "34a6f42443ddc472093ed1b5dd323ea9af1a4fbf0f09ac53f03e0079e958f784",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -197064,7 +197260,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -197079,9 +197275,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-413a1a65b702bf8c",
+        "id": "SCOPE-e4e4adc921dfa9c6",
         "inlineCleanupMillis": null,
-        "line": 567,
+        "line": 584,
         "lineSha256": "34a6f42443ddc472093ed1b5dd323ea9af1a4fbf0f09ac53f03e0079e958f784",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -197126,7 +197322,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 10000,
         "controlProof": {
-          "line": 635,
+          "line": 652,
           "lineSha256": "9d564e3d8fb5e0b13ed8789e6ec89ffaa4834fc0c22b2a45aafc7c018dbc652f",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -197157,7 +197353,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 635,
+          "line": 652,
           "lineSha256": "9d564e3d8fb5e0b13ed8789e6ec89ffaa4834fc0c22b2a45aafc7c018dbc652f",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -197178,7 +197374,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -197193,9 +197389,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-c5387d36b468e0f8",
+        "id": "SCOPE-d700d08b1fe0285a",
         "inlineCleanupMillis": null,
-        "line": 635,
+        "line": 652,
         "lineSha256": "9d564e3d8fb5e0b13ed8789e6ec89ffaa4834fc0c22b2a45aafc7c018dbc652f",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -197240,7 +197436,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 16000,
         "controlProof": {
-          "line": 733,
+          "line": 750,
           "lineSha256": "ade4f8f4d53aa8d3615308df27bd884ad8ccdde378b7069f63eab8fa116eec8a",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -197271,7 +197467,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 733,
+          "line": 750,
           "lineSha256": "ade4f8f4d53aa8d3615308df27bd884ad8ccdde378b7069f63eab8fa116eec8a",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -197292,7 +197488,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 4,
         "fixedControlWaitMillis": 16000,
         "factoryGenerationHasExecution": false,
@@ -197307,9 +197503,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-472168ea8aecce94",
+        "id": "SCOPE-ab2b241db7f02bbf",
         "inlineCleanupMillis": null,
-        "line": 733,
+        "line": 750,
         "lineSha256": "ade4f8f4d53aa8d3615308df27bd884ad8ccdde378b7069f63eab8fa116eec8a",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -197354,7 +197550,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 12000,
         "controlProof": {
-          "line": 804,
+          "line": 821,
           "lineSha256": "745e09a6185eeec7568c3b72d4e5975801944e47f973cec1a0a00364e186cbe7",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable and owning-file hashes bind the background blocker to a guaranteed foreground/finally release and bounded join."
@@ -197385,7 +197581,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 804,
+          "line": 821,
           "lineSha256": "745e09a6185eeec7568c3b72d4e5975801944e47f973cec1a0a00364e186cbe7",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -197406,7 +197602,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 4,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -197421,9 +197617,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-97321b805327ef62",
+        "id": "SCOPE-0d424e3d22a2c5a3",
         "inlineCleanupMillis": null,
-        "line": 804,
+        "line": 821,
         "lineSha256": "745e09a6185eeec7568c3b72d4e5975801944e47f973cec1a0a00364e186cbe7",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -197468,7 +197664,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 886,
+          "line": 903,
           "lineSha256": "7b93cbae0e2fbca45824c309caa5b67f39438f53128fde3f05aefeb110e04871",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -197499,7 +197695,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 886,
+          "line": 903,
           "lineSha256": "7b93cbae0e2fbca45824c309caa5b67f39438f53128fde3f05aefeb110e04871",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -197520,7 +197716,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e0acc9616c73331a615d001eb0a92d155eb7c393ab8ea3710597fa2335ba356d",
+        "fileSha256": "9577f5933150436815c4961db7851a35b448383abdc36e8a1943c46ef51e6232",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -197535,9 +197731,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-626e0dfcdee22ff8",
+        "id": "SCOPE-e22babe354801367",
         "inlineCleanupMillis": null,
-        "line": 886,
+        "line": 903,
         "lineSha256": "7b93cbae0e2fbca45824c309caa5b67f39438f53128fde3f05aefeb110e04871",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -199029,7 +199225,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199138,7 +199334,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199247,7 +199443,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199356,7 +199552,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199465,7 +199661,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199579,7 +199775,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199688,7 +199884,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199802,7 +199998,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -199911,7 +200107,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -200025,7 +200221,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -200139,7 +200335,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -200253,7 +200449,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -200372,7 +200568,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 40000,
         "factoryGenerationHasExecution": false,
@@ -200481,7 +200677,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -200595,7 +200791,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -200709,7 +200905,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 3,
         "fixedControlWaitMillis": 15000,
         "factoryGenerationHasExecution": false,
@@ -200818,7 +201014,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -200932,7 +201128,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4a1f6d9b202c5a5f90909688f9f0fc65f58415092199b3afdf165b52f3c9b5b4",
+        "fileSha256": "7e6adf944583f5db4abd393117aab52c14f7aefdcd772f6caceee2772b2e60fb",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -204228,7 +204424,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -204243,9 +204439,112 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-f8248791d5855075",
+        "id": "SCOPE-08892cdcbc68e17b",
         "inlineCleanupMillis": null,
-        "line": 126,
+        "line": 131,
+        "lineSha256": "3b4ebddc5a653cfc1e9483188381e2dd01893583a818d935104679dda8379b24",
+        "observedOperations": [
+          "CONSTRUCT_MCP_SERVER",
+          "CONSTRUCT_SOKLET",
+          "START",
+          "CLOSE"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "admissionCanChallengeForValidatedTaskSubscriptionSelection",
+        "scopeSha256": "3072ecf4f53a72e60f2c37b22f43395b27b318f86700519a1bf2e8a851a6cf46",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 30000,
+          "RUNNING_STOP": 18000,
+          "NORMAL_START_THEN_RUNNING_STOP": 48000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 50000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 50000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 3000,
+          "gracefulShutdownMillis": 15000,
+          "startupCancellationMillis": 2000,
+          "startupMillis": 30000,
+          "mode": "INHERITED_DEFAULT"
+        },
+        "policyProof": null,
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "NONE",
+        "requiredReserveMillis": 0,
+        "reserveMillis": 10000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 50000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": false,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-cdc4fffa0cc6635c",
+        "inlineCleanupMillis": null,
+        "line": 196,
         "lineSha256": "e24aaa76b45e1d2ebba112ffcf337dc3a3f623955a03c5effa9633831290407a",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204289,7 +204588,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 169,
+          "line": 239,
           "lineSha256": "746bdb87c29c08a0eb9ab7b4aa11d06d0f2c16a08d5907ca0a3187adb43bb88a",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -204336,7 +204635,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -204351,9 +204650,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-94f5ee9370206d2e",
+        "id": "SCOPE-9717437e46b22b7e",
         "inlineCleanupMillis": null,
-        "line": 169,
+        "line": 239,
         "lineSha256": "746bdb87c29c08a0eb9ab7b4aa11d06d0f2c16a08d5907ca0a3187adb43bb88a",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204397,7 +204696,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 304,
+          "line": 374,
           "lineSha256": "7b394dde0570c69db318a1824f8c9517facd3c40d964ed0842e6045465fc97d0",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -204444,7 +204743,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -204459,9 +204758,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-5b22c65af0461e70",
+        "id": "SCOPE-fac3a618e9a83e65",
         "inlineCleanupMillis": null,
-        "line": 304,
+        "line": 374,
         "lineSha256": "7b394dde0570c69db318a1824f8c9517facd3c40d964ed0842e6045465fc97d0",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204547,7 +204846,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -204562,9 +204861,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-b0024eaa006c9e33",
+        "id": "SCOPE-d5de9f1bf1c3954e",
         "inlineCleanupMillis": null,
-        "line": 399,
+        "line": 469,
         "lineSha256": "e8219f316a4c30b3a60e860708fd407434279e7a8bab0ecd679b4cf0466ab7fe",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204650,7 +204949,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -204665,9 +204964,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-a96dc37e6189ab4d",
+        "id": "SCOPE-a4f9f10287625007",
         "inlineCleanupMillis": null,
-        "line": 428,
+        "line": 498,
         "lineSha256": "a0f19ffc0ba4c932576b1701a23f5c40a8d3edbdc1c13d200ab8dd2e2e471f8f",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204753,7 +205052,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -204768,9 +205067,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-b6cac112d5b47e5c",
+        "id": "SCOPE-1c355c17da5af9c1",
         "inlineCleanupMillis": null,
-        "line": 467,
+        "line": 537,
         "lineSha256": "20e975f86c56358758bb3b90dac9bff77a69f2d55e203305041cd5f794dd850d",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204856,7 +205155,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -204871,9 +205170,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-933060bc51c29351",
+        "id": "SCOPE-f2d087069c20a585",
         "inlineCleanupMillis": null,
-        "line": 504,
+        "line": 574,
         "lineSha256": "facaeaa11be984416fa44c0c3eba0ef2f8d83429559cd25a4bb43bd3e1ff56fe",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -204917,7 +205216,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 10000,
         "controlProof": {
-          "line": 538,
+          "line": 608,
           "lineSha256": "b069f5e6f6e8c6c91b8921bf1cff7b276109d484cc9ef59ed6a5eb36e9f07741",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -204964,7 +205263,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -204979,9 +205278,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-1173eadbff6f5883",
+        "id": "SCOPE-f4c9ab45192dec34",
         "inlineCleanupMillis": null,
-        "line": 538,
+        "line": 608,
         "lineSha256": "b069f5e6f6e8c6c91b8921bf1cff7b276109d484cc9ef59ed6a5eb36e9f07741",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205025,7 +205324,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 10000,
         "controlProof": {
-          "line": 578,
+          "line": 648,
           "lineSha256": "90f27efc7ba4843c8b922e56e176e5141b10183382c50f593aa983e71a68cc8e",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -205072,7 +205371,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -205087,9 +205386,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-9eb3b3ce9b52e379",
+        "id": "SCOPE-f8e0b600486345c8",
         "inlineCleanupMillis": null,
-        "line": 578,
+        "line": 648,
         "lineSha256": "90f27efc7ba4843c8b922e56e176e5141b10183382c50f593aa983e71a68cc8e",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205134,7 +205433,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 10000,
         "controlProof": {
-          "line": 615,
+          "line": 685,
           "lineSha256": "e7c97ac341d289bef9013acab264eab8b7f720bdb20bf9f3b491db169b121484",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -205181,7 +205480,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 2,
         "fixedControlWaitMillis": 10000,
         "factoryGenerationHasExecution": false,
@@ -205196,9 +205495,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-564efa1646e578a1",
+        "id": "SCOPE-c4c2f20ded09af45",
         "inlineCleanupMillis": null,
-        "line": 615,
+        "line": 685,
         "lineSha256": "e7c97ac341d289bef9013acab264eab8b7f720bdb20bf9f3b491db169b121484",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205284,7 +205583,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205299,9 +205598,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-e905755160173a20",
+        "id": "SCOPE-4d90b7ebfcc1918e",
         "inlineCleanupMillis": null,
-        "line": 661,
+        "line": 731,
         "lineSha256": "061cce8d2940430d0d5e58544c24701e2f234617d1911e45118d8171418f76e7",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205387,7 +205686,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205402,9 +205701,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-2290591638cf1bde",
+        "id": "SCOPE-fc196bbd629c5640",
         "inlineCleanupMillis": null,
-        "line": 705,
+        "line": 775,
         "lineSha256": "6fe16d5905e503fafdf578e07b61878f34ebbb50c2d207ea15691cfcfc78f4c1",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205448,7 +205747,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 762,
+          "line": 832,
           "lineSha256": "e692598384cd4bdf3c3d6c7d2642178c432909c260173fd650d342416c5d87e3",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -205495,7 +205794,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -205510,9 +205809,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-39b2aa52c1ee0449",
+        "id": "SCOPE-bd5537132d5193c5",
         "inlineCleanupMillis": null,
-        "line": 762,
+        "line": 832,
         "lineSha256": "e692598384cd4bdf3c3d6c7d2642178c432909c260173fd650d342416c5d87e3",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205598,7 +205897,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205613,9 +205912,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-f0c2e8ef42f04c17",
+        "id": "SCOPE-3f3e4fa6db7f3b68",
         "inlineCleanupMillis": null,
-        "line": 815,
+        "line": 885,
         "lineSha256": "0294f33032676f5fb0b423fb24662371dcfebe739ce4ce359b650caadea3b05e",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205701,7 +206000,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205716,9 +206015,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-fb3b4bc3a0cff4d0",
+        "id": "SCOPE-b384b361260e20a3",
         "inlineCleanupMillis": null,
-        "line": 858,
+        "line": 928,
         "lineSha256": "caffad2f42f64a41a9b416f3d58a4e28de29f0e6244021f4c28d12a02cccb8eb",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205804,7 +206103,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205819,9 +206118,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-8fa3d5c734bd73fe",
+        "id": "SCOPE-f936d47ae7f7a175",
         "inlineCleanupMillis": null,
-        "line": 886,
+        "line": 956,
         "lineSha256": "0a5d8fb86a070cf48a778838d827b6b4a7a54a1870fc3a5f78597e37508bf118",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205907,7 +206206,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -205922,9 +206221,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-3fb92b126216d061",
+        "id": "SCOPE-30e8bc0b27782d51",
         "inlineCleanupMillis": null,
-        "line": 918,
+        "line": 988,
         "lineSha256": "23772f4baf80a93ad6c1f8fc83a7f689f0da48b7dfe9ae660986ecd72002b990",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -205968,7 +206267,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 979,
+          "line": 1049,
           "lineSha256": "9f2323dc9dd50cab1ab47b08b8e60ddfc24842fc2d8ef85735694c03835a224c",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -206015,7 +206314,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -206030,9 +206329,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-50585810ba0b5f23",
+        "id": "SCOPE-ab56f70b17cf9825",
         "inlineCleanupMillis": null,
-        "line": 979,
+        "line": 1049,
         "lineSha256": "9f2323dc9dd50cab1ab47b08b8e60ddfc24842fc2d8ef85735694c03835a224c",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -206076,7 +206375,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 5000,
         "controlProof": {
-          "line": 1023,
+          "line": 1093,
           "lineSha256": "9eb1990a0ebc03837d407959e029c9bc00dc832acb541ed29b4051c87808b544",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -206123,7 +206422,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 1,
         "fixedControlWaitMillis": 5000,
         "factoryGenerationHasExecution": false,
@@ -206138,9 +206437,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-87aeeef7306af069",
+        "id": "SCOPE-355b21a9fce16eb3",
         "inlineCleanupMillis": null,
-        "line": 1023,
+        "line": 1093,
         "lineSha256": "9eb1990a0ebc03837d407959e029c9bc00dc832acb541ed29b4051c87808b544",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -206184,7 +206483,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 15000,
         "controlProof": {
-          "line": 1060,
+          "line": 1130,
           "lineSha256": "951074a6600fcc9e8349732a8337377e29284a0aad62cdb71e55813941b60ba7",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -206231,7 +206530,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 90000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 3,
         "fixedControlWaitMillis": 15000,
         "factoryGenerationHasExecution": false,
@@ -206246,9 +206545,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-b7d360b1ec11b556",
+        "id": "SCOPE-e76b1b762d4f842f",
         "inlineCleanupMillis": null,
-        "line": 1060,
+        "line": 1130,
         "lineSha256": "951074a6600fcc9e8349732a8337377e29284a0aad62cdb71e55813941b60ba7",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -206293,7 +206592,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 25000,
         "controlProof": {
-          "line": 1150,
+          "line": 1220,
           "lineSha256": "7c5ac88c54f59311c1e9b651ab902abd1c8447bc268621d66b1e94ae576aff73",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -206340,7 +206639,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 90000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 5,
         "fixedControlWaitMillis": 25000,
         "factoryGenerationHasExecution": false,
@@ -206355,9 +206654,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-4fafee1f162efb51",
+        "id": "SCOPE-5363d1be4aa97d24",
         "inlineCleanupMillis": null,
-        "line": 1150,
+        "line": 1220,
         "lineSha256": "7c5ac88c54f59311c1e9b651ab902abd1c8447bc268621d66b1e94ae576aff73",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -206402,7 +206701,7 @@
         "completeGenerationMultiplier": 1,
         "controlJoinMillis": 15000,
         "controlProof": {
-          "line": 1229,
+          "line": 1299,
           "lineSha256": "7cb47d7fe604ef61ea932c3e2fd861fb698c3f6fc637190301d97dbbc68493f3",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
@@ -206449,7 +206748,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 90000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 3,
         "fixedControlWaitMillis": 15000,
         "factoryGenerationHasExecution": false,
@@ -206464,9 +206763,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-9dc2dc2590f4110c",
+        "id": "SCOPE-c179cb77b7c3c2f0",
         "inlineCleanupMillis": null,
-        "line": 1229,
+        "line": 1299,
         "lineSha256": "7cb47d7fe604ef61ea932c3e2fd861fb698c3f6fc637190301d97dbbc68493f3",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",
@@ -206517,7 +206816,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 1279,
+          "line": 1349,
           "lineSha256": "0be39dde5c211a51cdbed31653b7c04f73b035506296cd020893cd40fe5ce9a2",
           "path": "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -206558,7 +206857,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "0aca5e2e18882cd2b47f6c3fd36a65f8f1eaff2cfd430cf897e25e78a8208c72",
+        "fileSha256": "56d99dba2afd6a5123f2fd5315c42b9dec5a4647d38e91b944a457c22ff0ad72",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -206573,9 +206872,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-7ae2e0c222b080bb",
+        "id": "SCOPE-259d162c6d60d863",
         "inlineCleanupMillis": null,
-        "line": 1279,
+        "line": 1349,
         "lineSha256": "0be39dde5c211a51cdbed31653b7c04f73b035506296cd020893cd40fe5ce9a2",
         "observedOperations": [
           "CONSTRUCT_MCP_SERVER",

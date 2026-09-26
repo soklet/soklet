@@ -4270,9 +4270,27 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 	getClientCapabilities() {
 		return this.clientCapabilities;
 	}
+	@Override public @NonNull Boolean isToolsListChangedIncluded() {
+		return this.input.toolsListChangedIncluded();
+	}
+	@Override public @NonNull Boolean isPromptsListChangedIncluded() {
+		return this.input.promptsListChangedIncluded();
+	}
+	@Override public @NonNull Boolean isResourcesListChangedIncluded() {
+		return this.input.resourcesListChangedIncluded();
+	}
+	@Override public @NonNull Boolean isResourceSubscriptionsIncluded() {
+		return this.input.resourceSubscriptionsIncluded();
+	}
 	@Override public @NonNull List<@NonNull URI>
 	getRequestedResourceSubscriptionUris() {
 		return this.input.requestedResourceSubscriptionUris();
+	}
+	@Override public @NonNull Boolean isTaskIdsRequested() {
+		return this.input.taskIdsRequested();
+	}
+	@Override public @NonNull List<@NonNull String> getRequestedTaskIds() {
+		return this.input.requestedTaskIds();
 	}
 	@Override public @NonNull Optional<@NonNull TraceContext> getTraceContext() {
 		return this.requestPropagation.traceContext();

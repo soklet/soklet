@@ -55,6 +55,24 @@ API-freeze gate remains red until their qualifications and final review.
 The API-diff gate regenerates the incompatibility set and compares it in both
 directions, so an unexpected addition, removal, or changed record fails.
 
+The 2026-09-26 subscription admission amendment adds six methods to
+`McpAdmissionContext` for the validated `subscriptions/listen` selection:
+the four selected notification-family flags, the task-ID-presence flag, and
+the deduplicated requested task IDs. Together with the existing requested
+resource URIs, these let an application select an OAuth scope before the
+stream opens. The reviewed current incompatibility set has 713 records. The
+remaining P3 Apps signature delta is tracked separately from this amendment.
+
+The 2026-09-26 Bearer challenge amendment adds
+`BearerAuthenticationChallenge`, its builder, and `BearerAuthenticationError`
+to the Phase 4 owner inventory. `McpAdmissionRejection` gains a challenge
+factory that selects the RFC-recommended status and appends the rendered
+`WWW-Authenticate` value. Rejection headers now retain ordered, repeated
+values through `Map<String, List<String>>`. The Phase 4 snapshot records 27
+added signatures and two changed generic signatures; the previously known P3
+Apps signature delta remains separate. The 3.5.1 incompatibility ledger still
+contains 713 records.
+
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
 It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
 

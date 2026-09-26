@@ -801,6 +801,12 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertTrue(
 					context.getRequestedResourceSubscriptionUris().isEmpty(),
 					"Non-subscription admission must expose no requested resource URIs.");
+			Assertions.assertFalse(context.isToolsListChangedIncluded());
+			Assertions.assertFalse(context.isPromptsListChangedIncluded());
+			Assertions.assertFalse(context.isResourcesListChangedIncluded());
+			Assertions.assertFalse(context.isResourceSubscriptionsIncluded());
+			Assertions.assertFalse(context.isTaskIdsRequested());
+			Assertions.assertTrue(context.getRequestedTaskIds().isEmpty());
 		} finally {
 			owner.close();
 			owner.close();

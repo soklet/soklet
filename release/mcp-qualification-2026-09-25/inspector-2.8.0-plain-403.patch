@@ -1,0 +1,126 @@
+diff --git a/clients/web/src/test/core/auth/challenge.test.ts b/clients/web/src/test/core/auth/challenge.test.ts
+index 08c7a68..65c764a 100644
+--- a/clients/web/src/test/core/auth/challenge.test.ts
++++ b/clients/web/src/test/core/auth/challenge.test.ts
+@@ -144,6 +144,19 @@ describe("parseAuthChallengeFromResponse", () => {
+     });
+   });
+ 
++  it("leaves a plain 403 policy denial outside OAuth recovery", () => {
++    const response = new Response(
++      JSON.stringify({
++        jsonrpc: "2.0",
++        id: 1,
++        error: { code: -32603, message: "Subscription denied" },
++      }),
++      { status: 403, headers: { "Content-Type": "application/json" } },
++    );
++
++    expect(parseAuthChallengeFromResponse(response)).toBeUndefined();
++  });
++
+   it("returns undefined for non-auth statuses", () => {
+     const response = new Response(null, { status: 500 });
+     expect(parseAuthChallengeFromResponse(response)).toBeUndefined();
+diff --git a/clients/web/src/test/core/mcp/node/authChallengeFetch.test.ts b/clients/web/src/test/core/mcp/node/authChallengeFetch.test.ts
+index 4dbfc46..502c247 100644
+--- a/clients/web/src/test/core/mcp/node/authChallengeFetch.test.ts
++++ b/clients/web/src/test/core/mcp/node/authChallengeFetch.test.ts
+@@ -53,6 +53,20 @@ describe("createAuthChallengeInterceptFetch", () => {
+     }
+   });
+ 
++  it("passes a plain 403 policy denial through with its body intact", async () => {
++    const response = new Response("Subscription denied", { status: 403 });
++    const cancelSpy = vi.spyOn(response.body!, "cancel");
++    const fetchFn = createAuthChallengeInterceptFetch(
++      vi.fn(async () => response),
++    );
++
++    const result = await fetchFn("https://example.com/mcp");
++
++    expect(result).toBe(response);
++    expect(cancelSpy).not.toHaveBeenCalled();
++    expect(await result.text()).toBe("Subscription denied");
++  });
++
+   it("cancels a present response body before throwing", async () => {
+     const response = new Response("challenge body", {
+       status: 401,
+@@ -134,6 +148,20 @@ describe("createAuthChallengeObserverFetch", () => {
+     );
+   });
+ 
++  it("does not report a plain 403 policy denial as an OAuth challenge", async () => {
++    const onChallenge = vi.fn();
++    const response = new Response("Subscription denied", { status: 403 });
++
++    const result = await createAuthChallengeObserverFetch(
++      vi.fn(async () => response),
++      onChallenge,
++    )("https://example.com/mcp");
++
++    expect(result).toBe(response);
++    expect(onChallenge).not.toHaveBeenCalled();
++    expect(await result.text()).toBe("Subscription denied");
++  });
++
+   it("stays silent on a non-challenge response", async () => {
+     const baseFetch = vi.fn(async () => new Response("ok", { status: 200 }));
+     const onChallenge = vi.fn();
+diff --git a/core/auth/challenge.ts b/core/auth/challenge.ts
+index 78092a9..aa00f4b 100644
+--- a/core/auth/challenge.ts
++++ b/core/auth/challenge.ts
+@@ -302,6 +302,10 @@ export function parseAuthChallengeFromResponse(
+   }
+ 
+   const wwwAuthenticate = response.headers.get("WWW-Authenticate") ?? undefined;
++  // A 403 without a challenge is a policy denial, not an OAuth recovery signal.
++  if (status === 403 && !wwwAuthenticate) {
++    return undefined;
++  }
+   const bearer = wwwAuthenticate
+     ? parseWwwAuthenticateBearer(wwwAuthenticate)
+     : {};
+diff --git a/core/mcp/inspectorClient.ts b/core/mcp/inspectorClient.ts
+index 0429323..4deee57 100644
+--- a/core/mcp/inspectorClient.ts
++++ b/core/mcp/inspectorClient.ts
+@@ -2270,13 +2270,9 @@ export class InspectorClient extends InspectorClientEventTarget {
+         // `|| this.probesProtocolEra()` clause below exists only to compensate
+         // for that upstream gap and should be deleted with it.
+         //
+-        // Known, accepted side effect of turning intercept on with no stored
+-        // tokens: `parseAuthChallengeFromResponse` treats 403 as a challenge
+-        // too, so a probe answered 403 for a *non-auth* reason (a gateway
+-        // rejecting the unknown `server/discover` method, say) now starts OAuth
+-        // discovery instead of letting "auto" fall back to the legacy
+-        // `initialize`. The outcome is a surfaced `oauthError`, not a hang, and
+-        // it goes away with this clause.
++        // A probe answered 403 without WWW-Authenticate is a policy denial,
++        // not an OAuth challenge. The intercept fetch leaves that response for
++        // the SDK's protocol-era classifier rather than starting discovery.
+         (transportOptions.authProvider || this.probesProtocolEra())
+       ) {
+         transportOptions.interceptAuthChallenges = true;
+diff --git a/core/mcp/node/authChallengeFetch.ts b/core/mcp/node/authChallengeFetch.ts
+index 1ed8e34..ea72c80 100644
+--- a/core/mcp/node/authChallengeFetch.ts
++++ b/core/mcp/node/authChallengeFetch.ts
+@@ -18,7 +18,6 @@ export function createAuthChallengeInterceptFetch(
+     }
+ 
+     const challenge = parseAuthChallengeFromResponse(response);
+-    /* v8 ignore next 3 -- parseAuthChallengeFromResponse only returns undefined for non-401/403, which the status guard above already excludes */
+     if (!challenge) {
+       return response;
+     }
+@@ -63,7 +62,6 @@ export function createAuthChallengeObserverFetch(
+     const response = await baseFetch(input, init);
+     if (response.status === 401 || response.status === 403) {
+       const challenge = parseAuthChallengeFromResponse(response);
+-      /* v8 ignore next 3 -- parseAuthChallengeFromResponse only returns undefined for non-401/403, which the status guard above already excludes */
+       if (challenge) {
+         onChallenge(challenge);
+       }

@@ -4868,10 +4868,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				Optional.of(mappedRequest.id()), requestedProtocolVersion,
 				operationName, mappedRequest.params().metadata().clientInformation(),
 				Optional.of(mappedRequest.params().metadata().clientCapabilities()),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::toolsListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::promptsListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::resourcesListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::resourceSubscriptionsIncluded).orElse(false),
 				acceptedSubscriptionFilter
 						.map(AcceptedSubscriptionFilter
 								::requestedResourceSubscriptionUris)
 						.orElseGet(List::of),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::taskIdsRequested).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::requestedTaskIds).orElseGet(List::of),
 				Optional.of(mappedRequest.params().metadata().toJsonObject()));
 		Optional<McpAdmissionDecision> admissionResult;
 		try {
@@ -6275,7 +6287,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpAdmissionContext admissionContext = new McpAdmissionContext(
 				sokletRequest, endpoint, Map.of(), notification.method(), true,
 				Optional.empty(), protocolVersion, Optional.empty(), Optional.empty(),
-				Optional.empty(), List.of(), metadataValidation.metadata());
+				Optional.empty(), false, false, false, false, List.of(),
+				false, List.of(), metadataValidation.metadata());
 		Optional<McpAdmissionDecision> admissionResult;
 		try {
 			admissionResult = Optional.ofNullable(

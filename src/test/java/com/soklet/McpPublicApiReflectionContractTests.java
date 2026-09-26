@@ -1659,6 +1659,17 @@ public class McpPublicApiReflectionContractTests {
 				requestedResourceSubscriptionUris.getGenericReturnType(), null,
 				List.class, URI.class);
 		assertNoGenericParameters(requestedResourceSubscriptionUris);
+		for (String methodName : List.of("isToolsListChangedIncluded",
+				"isPromptsListChangedIncluded", "isResourcesListChangedIncluded",
+				"isResourceSubscriptionsIncluded", "isTaskIdsRequested"))
+			assertInstanceMethod(McpAdmissionContext.class, methodName,
+					Boolean.class, MethodShape.ABSTRACT, false);
+		Method requestedTaskIds = assertInstanceMethod(
+				McpAdmissionContext.class, "getRequestedTaskIds", List.class,
+				MethodShape.ABSTRACT, false);
+		assertParameterizedType(requestedTaskIds.getGenericReturnType(), null,
+				List.class, String.class);
+		assertNoGenericParameters(requestedTaskIds);
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpEndpoint.Builder.class, "subscriptionConfig",
 				McpEndpoint.Builder.class, MethodShape.CONCRETE, false,

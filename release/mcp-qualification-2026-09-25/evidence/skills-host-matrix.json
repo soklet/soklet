@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "status": "PASSED",
+  "scope": "SKILLS_RELEASED_CLI_OPERATIONAL_MATRIX",
+  "releaseQualification": false,
+  "agentActivationTested": false,
+  "checks": [
+    "ENGLISH_HOST_WALKS_TWO_PAGES_WITH_SPOOFED_FRENCH_HEADER",
+    "FRENCH_HOST_WALKS_TWO_PAGES_WITH_SPOOFED_ENGLISH_HEADER",
+    "DENIED_HOST_LIST_EMPTY",
+    "HOST_VERIFIES_SHARED_NESTED_BYTES_AND_FRONTMATTER",
+    "DIRECT_URI_HOST_READS_IGNORE_OPPOSING_LANGUAGE_HEADER",
+    "HOST_GETS_AUTHORIZED_UNLISTED_SKILL",
+    "HOST_REJECTS_TAMPERED_FRONTMATTER_AND_DIGEST",
+    "CALLER_BOUND_SINGLE_USE_CURSOR",
+    "DIRECT_GET_AND_FILE_READ_RECHECK_ACCESS",
+    "REVOKED_CREDENTIAL_DENIED_ON_NEXT_HOST_REQUEST"
+  ],
+  "stage": "COMPLETE",
+  "inputs": {
+    "candidateJar": "f91ab625a5a7fb506d0066dfc73cc942e96afa20f71fd6f368d945b9d701ce51",
+    "candidatePom": "90a0e38702ed10392a1d77ccc556995575d9eef7b601537b3d7a4a68790c7324",
+    "fixture": "0cdc8558b7e6153dbb8bfcadf3f01a4f04f62ccf66e915378a03a889cc06c902",
+    "harness": {
+      "files": 3,
+      "sha256": "7eb695524a6be2f0803d52abf8d5ddcd35341a63893987ad32eb76eab9fb1b4e"
+    },
+    "dependencyTree": {
+      "files": 9391,
+      "sha256": "8c0b1ed101c4c7e7497aa4aaba7e953b03a44bc58179308db1613a988d5a2b8d"
+    },
+    "launcher": "21ca6e6e031713e5ae040ecf71f8fd0b0ef9a4ece4131fd03d3b01aeae5415f4",
+    "lock": "37dfcdb1476f7f31c4aeea13971a729588bad7719c67bb8349f7bd8c52d29f29"
+  },
+  "client": {
+    "name": "@modelcontextprotocol/inspector",
+    "version": "2.7.0",
+    "sourceCommit": "2e90a628e6296c62e4bef942afbb43d3faa4baf4",
+    "modified": false
+  },
+  "node": "v26.5.0",
+  "java": "openjdk version \"17.0.20.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Corretto-17.0.20.10.1 (build 17.0.20.1+10-LTS)\nOpenJDK 64-Bit Server VM Corretto-17.0.20.10.1 (build 17.0.20.1+10-LTS, mixed mode, sharing)",
+  "publicApiOnly": true,
+  "cleanShutdown": true,
+  "inputsUnchanged": true,
+  "privateStateRemoved": true
+}

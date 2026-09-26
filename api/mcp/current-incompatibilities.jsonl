@@ -156,9 +156,15 @@
 {"id":"M:com/soklet/McpAdmissionContext#getProtocolVersion()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpAdmissionContext#getRequestId()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpAdmissionContext#getRequestedResourceSubscriptionUris()Ljava/util/List;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#getRequestedTaskIds()Ljava/util/List;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpAdmissionContext#getSessionId()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpAdmissionContext#getTraceContext()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpAdmissionContext#isNotification()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#isPromptsListChangedIncluded()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#isResourceSubscriptionsIncluded()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#isResourcesListChangedIncluded()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#isTaskIdsRequested()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpAdmissionContext#isToolsListChangedIncluded()Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpArray#<init>(Ljava/util/List;)V","kind":"constructor","changes":[{"type":"CONSTRUCTOR_REMOVED","site":"constructor","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpArray#equals(Ljava/lang/Object;)Z","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpArray#hashCode()I","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}

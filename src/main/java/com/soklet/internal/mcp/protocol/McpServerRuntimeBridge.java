@@ -1387,8 +1387,13 @@ public final class McpServerRuntimeBridge {
 					context.protocolVersion(), context.operationName(),
 					context.clientInformation().map(McpServerRuntimeBridge::toPublic),
 					context.clientCapabilities().map(value ->
-							(McpJsonObject) toPublic(value.toJsonObject())),
+								(McpJsonObject) toPublic(value.toJsonObject())),
+					context.toolsListChangedIncluded(),
+					context.promptsListChangedIncluded(),
+					context.resourcesListChangedIncluded(),
+					context.resourceSubscriptionsIncluded(),
 					context.requestedResourceSubscriptionUris(),
+					context.taskIdsRequested(), context.requestedTaskIds(),
 					context.requestMetadata().map(value ->
 							(McpJsonObject) toPublic(value)));
 			McpAdmissionDecision decision = requireNonNull(
@@ -3888,7 +3893,13 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull String> operationName,
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
 			@NonNull Optional<@NonNull McpJsonObject> clientCapabilitiesJson,
+			boolean toolsListChangedIncluded,
+			boolean promptsListChangedIncluded,
+			boolean resourcesListChangedIncluded,
+			boolean resourceSubscriptionsIncluded,
 			@NonNull List<@NonNull URI> requestedResourceSubscriptionUris,
+			boolean taskIdsRequested,
+			@NonNull List<@NonNull String> requestedTaskIds,
 			@NonNull Optional<@NonNull McpJsonObject> requestMetadata) {
 		public AdmissionInput {
 			requireNonNull(request);
@@ -3902,6 +3913,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(clientCapabilitiesJson);
 			requestedResourceSubscriptionUris = List.copyOf(
 					requireNonNull(requestedResourceSubscriptionUris));
+			requestedTaskIds = List.copyOf(requireNonNull(requestedTaskIds));
 			requireNonNull(requestMetadata);
 		}
 

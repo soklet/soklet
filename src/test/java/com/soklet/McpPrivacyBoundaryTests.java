@@ -125,7 +125,8 @@ class McpPrivacyBoundaryTests {
 				Map.of(SECRET, SECRET), SECRET, false,
 				Optional.of(McpRequestId.fromString(SECRET)), "2026-07-28",
 				Optional.of(SECRET), Optional.of(clientInformation()),
-				Optional.of(secretJson), List.of(URI.create("urn:" + SECRET)),
+				Optional.of(secretJson), false, false, false, false,
+				List.of(URI.create("urn:" + SECRET)), false, List.of(SECRET),
 				Optional.of(secretJson));
 		ResourceInvocation resourceInvocation = new ResourceInvocation(request,
 				requestContext, endpoint, Map.of(SECRET, SECRET), SECRET,
