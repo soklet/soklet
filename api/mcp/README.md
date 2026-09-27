@@ -49,9 +49,11 @@ checkpoint's ledger contained 702 records and had SHA-256
 The [2026-09-24 bounded MCP-G2 review](mcp-g2-bounded-refreeze-2026-09-24.md)
 reconciles the exact current incompatibility set to 707 records, SHA-256
 `24bbed473a6c4d9807cfce776a7353ffc3c99fd052d342fec5914355e1220808`.
-It also accepts only the N0, P1b, and P2 signature differences into the
-reviewed snapshots. P3 Apps and P4 Skills remain provisional; the aggregate
-API-freeze gate remains red until their qualifications and final review.
+That review accepted the N0, P1b, and P2 differences. The subsequent
+[Skills review](../../release/mcp-qualification-2026-09-25/REVIEW.md) and
+[Apps signature review](mcp-g2-apps-refreeze-2026-09-27.md) accept the remaining
+signatures. The aggregate API-freeze now verifies exactly; full Apps host
+qualification remains open.
 The API-diff gate regenerates the incompatibility set and compares it in both
 directions, so an unexpected addition, removal, or changed record fails.
 
