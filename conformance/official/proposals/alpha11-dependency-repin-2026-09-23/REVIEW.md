@@ -1,9 +1,8 @@
 # Exact alpha.11 dependency repin proposal — 2026-09-23
 
-Status: **prepared for owner review; not an approved release-toolchain disposition.**
-The candidate-conformance gate remains `BLOCKED_TOOLCHAIN_SECURITY_REVIEW`.
-This directory is a proposal. The committed release runner does not consume its
-lockfile; this preparation branch stages a runner integration for review.
+Status: **prepared review retained; the later candidate-use recommendation is
+in [the September 27 disposition](../../DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).**
+This directory preserves the original proposal and its development evidence.
 
 ## Immutable inputs and output
 
@@ -117,6 +116,6 @@ conformance result.
 
 Separately, the P0-C upstream diagnostic mismatch recorded in
 [`P0C_CHECK_DISPOSITION_2026-09-22.md`](../../P0C_CHECK_DISPOSITION_2026-09-22.md)
-still needs its runner integration and exact candidate replay. This dependency
-proposal does not resolve that mismatch, qualify Apps/Skills, refreeze the MCP
-API, or constitute an immutable candidate PASS.
+now has a bounded runner policy but still needs exact candidate replay. This
+dependency proposal does not qualify Apps/Skills, refreeze the MCP API, or
+constitute an immutable candidate PASS.

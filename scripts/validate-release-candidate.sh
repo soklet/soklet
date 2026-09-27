@@ -934,8 +934,13 @@ run_candidate_conformance() {
 	local checkout
 	checkout=$(clone_pinned_gate candidate-conformance)
 	local repin_helper="$project_root/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/apply-repin.mjs"
+	local repin_lock="$project_root/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json"
+	local audit_verifier="$project_root/conformance/official/verify-dependency-repin-audit.mjs"
+	local conformance_work="$project_root/target/conformance/official/release"
+	mkdir -p "$conformance_work"
 	[[ -f "$repin_helper" && ! -L "$repin_helper" ]] \
 		|| fail "Reviewed conformance dependency repin helper is missing or unsafe."
+	node conformance/official/verify-dependency-repin-audit-self-test.mjs
 	# Verify the exact upstream source before changing only its lock for npm ci.
 	node "$repin_helper" prepare "$checkout"
 	local npm_cache="$work_root/npm-cache-conformance"
@@ -951,6 +956,19 @@ run_candidate_conformance() {
 			npm_config_globalconfig="$npm_global_config" npm ci --ignore-scripts
 		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
 			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
+			npm_config_globalconfig="$npm_global_config" \
+			npm audit --package-lock-only --json --omit=dev \
+			> "$conformance_work/dependency-audit-runtime.json"
+		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
+			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
+			npm_config_globalconfig="$npm_global_config" \
+			npm audit --package-lock-only --json --audit-level=moderate \
+			> "$conformance_work/dependency-audit-full.json"
+		node "$audit_verifier" "$repin_lock" \
+			"$conformance_work/dependency-audit-runtime.json" \
+			"$conformance_work/dependency-audit-full.json"
+		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
+			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
 			npm_config_globalconfig="$npm_global_config" npm run build
 	)
 	# Restore the original reviewed source tree and verify the built CLI. The
@@ -962,8 +980,6 @@ run_candidate_conformance() {
 	local classpath
 	classpath=$(sh conformance/official/build-public-fixture.sh \
 		"$candidate_jar" "$fixture_root")
-	local conformance_work="$project_root/target/conformance/official/release"
-	mkdir -p "$conformance_work"
 	local pom_sha main_sha sources_sha javadoc_sha
 	pom_sha=$(node "$evidence_helper" sha256 "$candidate_pom")
 	main_sha=$(node "$evidence_helper" sha256 "$candidate_jar")
@@ -991,11 +1007,13 @@ run_candidate_conformance() {
 		"$manifest_path" "$candidate_commit" "$artifact_descriptor" \
 		"$conformance_work/evidence.json"
 	assert_pinned_checkout_unchanged candidate-conformance "$checkout"
-	local repin_lock="$project_root/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json"
-	local repin_sha
+	local repin_sha runtime_audit_sha full_audit_sha
 	repin_sha=$(node "$evidence_helper" sha256 "$repin_lock")
-	printf 'upstreamCommit=%s\nrepinnedLockSha256=%s\n' \
+	runtime_audit_sha=$(node "$evidence_helper" sha256 "$conformance_work/dependency-audit-runtime.json")
+	full_audit_sha=$(node "$evidence_helper" sha256 "$conformance_work/dependency-audit-full.json")
+	printf 'upstreamCommit=%s\nrepinnedLockSha256=%s\nruntimeAuditSha256=%s\nfullAuditSha256=%s\n' \
 		"${gate_commit[candidate-conformance]}" "$repin_sha" \
+		"$runtime_audit_sha" "$full_audit_sha" \
 		> "$conformance_work/dependency-repin.txt"
 	record_gate candidate-conformance "conformance-evidence=$conformance_work"
 }

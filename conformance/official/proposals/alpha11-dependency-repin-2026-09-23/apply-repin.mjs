@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Prepare and then restore the exact upstream checkout around a repinned install.
-// This proposal is not used by the release runner until its owner review closes.
+// Candidate use is governed by DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md.
 
 import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, writeFileSync } from 'node:fs';

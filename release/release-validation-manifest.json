@@ -339,9 +339,9 @@
       "evidenceContract": "soklet.release.candidate-conformance.v2",
       "id": "candidate-conformance",
       "kind": "CANDIDATE_ARTIFACT",
-      "reason": "The reviewed alpha.11 suite pin is implemented, but conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md records an OPEN external npm toolchain audit (including the directly used Undici request path). An explicit security-risk disposition is required before canonical candidate execution or promotion. Development conformance results do not waive this review.",
+      "reason": "",
       "repository": "https://github.com/modelcontextprotocol/conformance.git",
-      "status": "BLOCKED_TOOLCHAIN_SECURITY_REVIEW",
+      "status": "READY",
       "toolchain": "nodePin",
       "versionProperty": null
     },

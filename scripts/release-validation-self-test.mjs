@@ -494,7 +494,7 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
-  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 19);
+  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 20);
   assert.equal(
     tracked.gates.filter(({ status }) => status === 'BLOCKED_HARNESS_MISSING').length,
     0,
@@ -518,11 +518,11 @@ try {
   }
   assert.equal(
     tracked.gates.filter(({ status }) => status === 'BLOCKED_TOOLCHAIN_SECURITY_REVIEW').length,
-    1,
+    0,
   );
   assert.equal(
     tracked.gates.find(({ id }) => id === 'candidate-conformance').status,
-    'BLOCKED_TOOLCHAIN_SECURITY_REVIEW',
+    'READY',
   );
   for (const gateId of [
     'release-scans',
@@ -615,7 +615,7 @@ try {
   assert.equal(trackedLocalizationGate.repository, null);
   assert.throws(
     () => validateReleaseConfiguration(trackedManifestPath, { requireReady: true }),
-    /candidate-conformance=BLOCKED_TOOLCHAIN_SECURITY_REVIEW/,
+    /barebones-app=BLOCKED_UNCOMMITTED_LOCAL_MIGRATION/,
   );
   for (const [gateId, directory] of [
     ['typescript-interop', 'typescript'],

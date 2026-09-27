@@ -24,10 +24,10 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [historical-source dispositions and reviewed semantic anchors](PLANNING_AUTHORITY_DRIFT_2026-09-13.md)
 
 The format-v2 manifest defines an exact ordered universe of 26 release gates.
-Nineteen gates are currently `READY`; none remain `BLOCKED_HARNESS_MISSING`.
-Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and
-`candidate-conformance` is `BLOCKED_TOOLCHAIN_SECURITY_REVIEW` pending the
-explicit disposition described in the [external conformance dependency review](../conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md).
+Twenty gates are currently `READY`; none remain `BLOCKED_HARNESS_MISSING`.
+Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`.
+`candidate-conformance` is `READY` for the exact dependency repin under the
+[September 27 toolchain disposition](../conformance/official/DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).
 The candidate is still not release-runnable end to end. `READY` means only that a gate has an executable,
 pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish

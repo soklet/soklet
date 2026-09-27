@@ -1445,7 +1445,7 @@
   ],
   "discoveryCensus": {
     "candidateCount": 8366,
-    "candidateSha256": "29411290a151f4538e6ab0679d7a20238b96e244bc2e5fb0ce6601a304cd168a",
+    "candidateSha256": "0adc447036802c587e52ba19e3cce90fa8ce3be81d4bc8cc1cbdcd0e0436080f",
     "candidates": [
       {
         "kinds": [
@@ -3274,7 +3274,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 71,
+        "line": 70,
         "lineSha256": "06ef549005d64bfa4979d45d8692783ef36ef528f16975cc04ca5bd60911f235",
         "path": "conformance/official/proposals/alpha11-dependency-repin-2026-09-23/REVIEW.md"
       },
@@ -5355,7 +5355,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1075,
+        "line": 1093,
         "lineSha256": "20948df8b4be9b60753136a013a14bd3b2af47bcb130555dac9589aef803cf47",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5363,7 +5363,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1127,
+        "line": 1145,
         "lineSha256": "55bdb3912d9f088e9cce70ea2c30716ad7575f8b12e1fed607a6c5dc643b04e1",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5371,7 +5371,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1129,
+        "line": 1147,
         "lineSha256": "4ec0f5f0a448e182873e264ca4f5ba9a9d0e716560008c89a98d5333d49b1f68",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5379,7 +5379,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1152,
+        "line": 1170,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -5387,7 +5387,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1188,
+        "line": 1206,
         "lineSha256": "04d78014d7feac77e70c557b99e18339e384f5ec8ff0f87f3d5c6a26451d34fa",
         "path": "scripts/validate-release-candidate.sh"
       },
