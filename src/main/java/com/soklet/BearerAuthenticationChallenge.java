@@ -229,6 +229,11 @@ public final class BearerAuthenticationChallenge {
 		return List.copyOf(distinct);
 	}
 
+	/**
+	 * Compares the validated challenge fields.
+	 *
+	 * @return whether both challenges contain the same fields
+	 */
 	@Override
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
@@ -243,12 +248,14 @@ public final class BearerAuthenticationChallenge {
 				&& Objects.equals(this.errorUri, challenge.errorUri);
 	}
 
+	/** @return a hash code for the validated challenge fields */
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.resourceMetadataUri, this.error,
 				this.requiredScopes, this.realm, this.errorDescription, this.errorUri);
 	}
 
+	/** @return a concise description that omits scope and URI details */
 	@Override
 	@NonNull
 	public String toString() {
@@ -256,7 +263,11 @@ public final class BearerAuthenticationChallenge {
 				+ ", requiredScopeCount=" + this.requiredScopes.size() + "]";
 	}
 
-	/** Mutable builder for one immutable Bearer challenge. */
+	/**
+	 * Mutable builder for one immutable Bearer challenge.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull

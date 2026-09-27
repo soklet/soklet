@@ -63,13 +63,13 @@ resource URIs, these let an application select an OAuth scope before the
 stream opens. The reviewed current incompatibility set has 713 records. The
 remaining P3 Apps signature delta is tracked separately from this amendment.
 
-The 2026-09-26 Bearer challenge amendment adds
+The 2026-09-26 Bearer challenge amendment adds the general HTTP types
 `BearerAuthenticationChallenge`, its builder, and `BearerAuthenticationError`
-to the Phase 4 owner inventory. `McpAdmissionRejection` gains a challenge
+to the non-MCP public API allowlist. `McpAdmissionRejection` gains a challenge
 factory that selects the RFC-recommended status and appends the rendered
 `WWW-Authenticate` value. Rejection headers now retain ordered, repeated
-values through `Map<String, List<String>>`. The Phase 4 snapshot records 27
-added signatures and two changed generic signatures; the previously known P3
+values through `Map<String, List<String>>`. The Phase 4 snapshot records one
+added signature and two changed generic signatures; the previously known P3
 Apps signature delta remains separate. The 3.5.1 incompatibility ledger still
 contains 713 records.
 
@@ -137,10 +137,10 @@ scope has exactly one owner:
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
-| `non-mcp-public-api.allowlist` | 83 | reviewed lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
+| `non-mcp-public-api.allowlist` | 86 | reviewed Bearer challenge, lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 294-entry current-source MCP union plus the 83-entry non-MCP allowlist owns
-exactly 377 current types. Ownership alone does not freeze a type. The phase
+The 294-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
+exactly 380 current types. Ownership alone does not freeze a type. The phase
 and provisional signature ledgers contain the bounded N0/P1b/P2 review;
 the P3/P4 differences remain outside the reviewed snapshots.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective

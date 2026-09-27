@@ -1,6 +1,3 @@
-com.soklet.BearerAuthenticationChallenge
-com.soklet.BearerAuthenticationChallenge$Builder
-com.soklet.BearerAuthenticationError
 com.soklet.CorsAuthorizer
 com.soklet.LifecycleObserver
 com.soklet.LogEventType
