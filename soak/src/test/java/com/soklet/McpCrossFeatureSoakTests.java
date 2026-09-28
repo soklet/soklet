@@ -463,7 +463,7 @@ public class McpCrossFeatureSoakTests {
 				.put("required", McpJsonArray.builder().add("answer").build())
 				.build();
 		McpToolRegistration<McpJsonObject> progressTool = McpToolRegistration
-				.withName(PROGRESS_TOOL)
+				.withName(PROGRESS_TOOL, Set.of(McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.progressInvocations.incrementAndGet();
@@ -486,7 +486,7 @@ public class McpCrossFeatureSoakTests {
 				.put("fixture", "mcp-cross-feature-soak")
 				.build();
 		McpToolRegistration<McpJsonObject> protectedTool = McpToolRegistration
-				.withName(PROTECTED_TOOL)
+				.withName(PROTECTED_TOOL, Set.of(McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getFrameworkRequestState().isEmpty()) {
@@ -526,7 +526,7 @@ public class McpCrossFeatureSoakTests {
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpToolRegistration<McpJsonObject> blockingTool = McpToolRegistration
-				.withName(BLOCKING_TOOL)
+				.withName(BLOCKING_TOOL, Set.of(McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					String invocation = requireJsonString(
@@ -562,14 +562,16 @@ public class McpCrossFeatureSoakTests {
 				})
 				.build();
 		McpToolRegistration<McpJsonObject> simulatorJsonTool =
-				McpToolRegistration.withName(SIMULATOR_JSON_TOOL)
+				McpToolRegistration.withName(SIMULATOR_JSON_TOOL,
+						Set.of(McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
 										"off-network simulator JSON complete"))
 						.build();
 		McpToolRegistration<McpJsonObject> simulatorCaptureTool =
-				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL)
+				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL,
+						Set.of(McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							String mode = requireJsonString(
@@ -595,7 +597,8 @@ public class McpCrossFeatureSoakTests {
 						})
 						.build();
 		McpToolRegistration<McpJsonObject> simulatorResidualTool =
-				McpToolRegistration.withName(SIMULATOR_RESIDUAL_TOOL)
+				McpToolRegistration.withName(SIMULATOR_RESIDUAL_TOOL,
+						Set.of(McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							state.runResidualHandler();
@@ -604,7 +607,8 @@ public class McpCrossFeatureSoakTests {
 						})
 						.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "MCP soak resource")
+				.withUriAndName(RESOURCE_URI, "MCP soak resource",
+						Set.of(McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										read.getUri(), "MCP soak resource contents")
@@ -617,7 +621,9 @@ public class McpCrossFeatureSoakTests {
 						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"soklet-mcp-soak", "4.0.0").build())
+						"soklet-mcp-soak", "4.0.0").build(),
+						Set.of(McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(List.of(progressTool, protectedTool, blockingTool,
 						simulatorJsonTool, simulatorCaptureTool, simulatorResidualTool))
 				.resourceRegistrations(List.of(resource))

@@ -231,7 +231,8 @@ public final class OperationalHistoryHarness {
         .heartbeatInterval(Duration.ofSeconds(15))
         .concurrentConnectionLimit(Math.max(64, policy.clientsPerScenario() * 4))
         .build();
-    McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(MCP_TOOL)
+    McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(
+        MCP_TOOL, Set.of(McpProtocolVersion.V2026_07_28))
         .jsonObjectArguments()
         .handler((context, arguments, features) -> {
           McpJsonValue value = arguments.getRawArguments().find("canary")
@@ -244,7 +245,8 @@ public final class OperationalHistoryHarness {
         })
         .build();
     McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-            "soklet-operational-history", "4.0.0").build())
+            "soklet-operational-history", "4.0.0").build(),
+        Set.of(McpProtocolVersion.V2026_07_28))
         .toolRegistrations(java.util.List.of(tool))
         .build();
     McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -401,7 +403,8 @@ public final class OperationalHistoryHarness {
         .requestHeaderTimeout(Duration.ofSeconds(5))
         .writeTimeout(Duration.ofSeconds(5))
         .build();
-    McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(MCP_TOOL)
+    McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(
+        MCP_TOOL, Set.of(McpProtocolVersion.V2026_07_28))
         .jsonObjectArguments()
         .handler((context, arguments, features) -> {
           McpJsonValue value = arguments.getRawArguments().find("canary").orElseThrow();
@@ -412,7 +415,8 @@ public final class OperationalHistoryHarness {
         })
         .build();
     McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-            "soklet-operational-self-test", "4.0.0").build())
+            "soklet-operational-self-test", "4.0.0").build(),
+        Set.of(McpProtocolVersion.V2026_07_28))
         .toolRegistrations(java.util.List.of(tool))
         .build();
     byte[] traceKeyBytes = new byte[32];

@@ -21,6 +21,7 @@ import com.soklet.McpImplementation;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpJsonRpcException;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
 import com.soklet.McpSkillAccessPolicy;
@@ -62,6 +63,7 @@ public final class SkillsMatrixFixture {
 	private static final URI HIDDEN_URI = URI.create("skill://matrix/hidden/reference/SKILL.md");
 	private static final URI EN_URI = URI.create("skill://matrix/en/guide/SKILL.md");
 	private static final URI FR_URI = URI.create("skill://matrix/fr/guide/SKILL.md");
+	private static final Set<McpProtocolVersion> PROTOCOL_VERSIONS = Set.of(McpProtocolVersion.V2026_07_28);
 	private static final byte[] CHILD_DOCUMENT = document("child", "Nested child");
 	private static final byte[] SHARED_BINARY = {0, 1, (byte) 0xff, 3};
 	private static final LifecycleObserver QUIET = new LifecycleObserver() {
@@ -77,11 +79,11 @@ public final class SkillsMatrixFixture {
 			PARENT_URI, McpSkillBundle.fromFiles(Map.of(
 				"SKILL.md", document("parent", "Parent with shared child"),
 				"child/SKILL.md", CHILD_DOCUMENT,
-				"child/assets/shared.bin", SHARED_BINARY))).build();
+				"child/assets/shared.bin", SHARED_BINARY)), PROTOCOL_VERSIONS).build();
 	private final McpSkillRegistration child = McpSkillRegistration.withUriAndSkillBundle(
 			CHILD_URI, McpSkillBundle.fromFiles(Map.of(
 				"SKILL.md", CHILD_DOCUMENT,
-				"assets/shared.bin", SHARED_BINARY))).build();
+				"assets/shared.bin", SHARED_BINARY)), PROTOCOL_VERSIONS).build();
 	private final McpSkillRegistration hidden = registration(HIDDEN_URI, "reference", "Unlisted reference", null);
 	private final McpSkillRegistration english = registration(EN_URI, "guide", "English guide", Locale.ENGLISH);
 	private final McpSkillRegistration french = registration(FR_URI, "guide", "Guide français", Locale.FRENCH);
@@ -124,7 +126,8 @@ public final class SkillsMatrixFixture {
 
 	private McpServer server() {
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				McpImplementation.withNameAndVersion("soklet-skills-matrix", "fixture-v1").build())
+				McpImplementation.withNameAndVersion("soklet-skills-matrix", "fixture-v1").build(),
+				PROTOCOL_VERSIONS)
 				.skillRegistrations(List.of(this.common, this.parent, this.child, this.hidden))
 				.skillGroups(List.of(McpSkillGroup.fromKeyAndSkillRegistrations("guide",
 						List.of(this.english, this.french))))
@@ -150,8 +153,8 @@ public final class SkillsMatrixFixture {
 								"Invalid Skills cursor.", McpJsonObject.emptyInstance()));
 					this.snapshots.remove(cursor, snapshot);
 					return McpSkillPage.builder().skillRegistrations(snapshot.remaining()).build();
-				})
-				.build();
+			}, PROTOCOL_VERSIONS)
+			.build();
 		return McpServer.withPort(0).host(HOST).allowedHosts(Set.of(HOST))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -188,7 +191,8 @@ public final class SkillsMatrixFixture {
 
 	private static McpSkillRegistration registration(URI uri, String name, String description, Locale locale) {
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(uri,
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", document(name, description))));
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", document(name, description))),
+				PROTOCOL_VERSIONS);
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}

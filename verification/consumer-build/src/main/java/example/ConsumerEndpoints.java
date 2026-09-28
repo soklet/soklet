@@ -4,6 +4,7 @@ import com.soklet.MarshaledResponse;
 import com.soklet.StreamingResponseBody;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
+import com.soklet.McpProtocolVersion;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
@@ -16,7 +17,8 @@ import java.util.List;
 import java.util.Optional;
 
 /** Consumer-owned declarations; no core test classes or runtime dependencies. */
-@McpServerEndpoint(path = "/catalog/mcp", name = "catalog", version = "1.0.0")
+@McpServerEndpoint(path = "/catalog/mcp", name = "catalog", version = "1.0.0",
+    protocolVersions = {McpProtocolVersion.V2026_07_28})
 public final class ConsumerEndpoints {
   @GET("/hello")
   public String hello() {
@@ -41,12 +43,12 @@ public final class ConsumerEndpoints {
         StreamingResponseBody.fromInputStream(ConsumerOwnership::openInputStream)).build();
   }
 
-  @McpTool(name = "catalog.search")
+  @McpTool(name = "catalog.search", protocolVersions = {McpProtocolVersion.V2026_07_28})
   public SearchResult search(@McpToolArgument String query) {
     return new SearchResult(List.of("Match for " + query));
   }
 
-  @McpPrompt(name = "catalog.prompt")
+  @McpPrompt(name = "catalog.prompt", protocolVersions = {McpProtocolVersion.V2026_07_28})
   public McpPromptOutput prompt(@McpPromptArgument String query,
       @McpPromptArgument Optional<String> suffix) {
     return McpPromptOutput.fromMessages(McpPromptMessage.fromUserText(

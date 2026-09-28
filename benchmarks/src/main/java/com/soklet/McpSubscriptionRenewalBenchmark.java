@@ -162,12 +162,14 @@ public final class McpSubscriptionRenewalBenchmark {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"subscription-renewal-benchmark", "4.0.0")
-						.build())
+						.build(), Set.of(McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
 				.subscriptionConfig(subscriptions)
 				.resourceRegistrations(List.of(McpResourceRegistration
 						.withUriAndName(
 								java.net.URI.create("benchmark://subscription-renewal"),
-								"Subscription renewal benchmark resource")
+								"Subscription renewal benchmark resource",
+								Set.of(McpProtocolVersion.V2026_07_28))
 						.handler((request, read, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(

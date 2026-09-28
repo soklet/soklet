@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import java.util.Set;
+
 /**
  * Fixture-only registration for the official JSON Schema conformance tool.
  *
@@ -37,7 +39,8 @@ public final class McpOfficialSchemaConformanceTool {
 	 * @return immutable conformance-tool registration
 	 */
 	public static McpToolRegistration<McpJsonObject> create() {
-		return McpToolRegistration.withName(TOOL_NAME)
+		return McpToolRegistration.withName(TOOL_NAME,
+				Set.of(McpProtocolVersion.V2026_07_28))
 				.inputSchema(inputSchema())
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("Schema input accepted."))

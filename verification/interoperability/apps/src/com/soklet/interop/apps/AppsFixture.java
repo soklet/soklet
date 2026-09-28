@@ -30,6 +30,7 @@ import com.soklet.McpJsonString;
 import com.soklet.McpLocalizationContext;
 import com.soklet.McpLocalizationResult;
 import com.soklet.McpLocalizer;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpRateLimiter;
 import com.soklet.McpRequestContext;
 import com.soklet.McpResourceDescriptor;
@@ -71,6 +72,7 @@ public final class AppsFixture {
 	public static final String TOOL = "show_catalog";
 	public static final String REFRESH = "refresh_catalog";
 	public static final String RAW_CANARY = "fixture-private-canary";
+	private static final Set<McpProtocolVersion> PROTOCOL_VERSIONS = Set.of(McpProtocolVersion.V2026_07_28);
 	private static final int MAXIMUM_SHELL_BYTES = 512 * 1024;
 	private static final int MAXIMUM_CALLERS = 8;
 	private static final LifecyclePolicy LIFECYCLE = LifecyclePolicy.builder()
@@ -116,9 +118,11 @@ public final class AppsFixture {
 				.permissions(requireNonNull(permissions))
 				.prefersBorder(true).build();
 		this.endpoint = McpEndpoint.withPath(PATH,
-				McpImplementation.withNameAndVersion("soklet-apps-fixture", "fixture-v1").build())
+				McpImplementation.withNameAndVersion("soklet-apps-fixture", "fixture-v1").build(),
+				PROTOCOL_VERSIONS)
 				.toolRegistrations(java.util.List.of(tool(TOOL, false), tool(REFRESH, true)))
-				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI, "catalog_view")
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI,
+						"catalog_view", PROTOCOL_VERSIONS)
 						.handler((context, resource, features) -> {
 							// Independent of listing, tool visibility, or prior tool execution.
 							if (!caller(context).allowed())
@@ -130,7 +134,8 @@ public final class AppsFixture {
 						}).title("Catalog view").mimeType(MIME).build()))
 				.resourceListCachePolicy(McpCachePolicy.privateNoCacheInstance())
 				.resourceListHandler((context, list, features) -> McpResourcePage.builder()
-						.resourceDescriptors(caller(context).allowed() ? List.of(descriptor) : List.of()).build())
+						.resourceDescriptors(caller(context).allowed() ? List.of(descriptor) : List.of()).build(),
+						PROTOCOL_VERSIONS)
 				.build();
 	}
 
@@ -207,12 +212,12 @@ public final class AppsFixture {
 	}
 
 	private McpToolRegistration<McpJsonObject> tool(String name, boolean appOnly) {
-		McpAppToolMetadata.Builder app = McpAppToolMetadata.builder();
+		McpAppToolMetadata.Builder app = McpAppToolMetadata.withProtocolVersions(PROTOCOL_VERSIONS);
 		if (appOnly)
 			app.visibility(Set.of(McpAppToolMetadata.Visibility.APP));
 		else
 			app.resourceUri(UI_URI);
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, PROTOCOL_VERSIONS)
 				.inputSchema(McpJsonObject.builder().put("type", "object")
 						.put("properties", McpJsonObject.emptyInstance()).put("additionalProperties", false).build())
 				.handler((context, arguments, features) -> {

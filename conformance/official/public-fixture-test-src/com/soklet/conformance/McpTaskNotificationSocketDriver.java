@@ -30,6 +30,7 @@ import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpMetricsEvent;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRequestContext;
 import com.soklet.McpResourcePage;
@@ -610,7 +611,7 @@ public final class McpTaskNotificationSocketDriver {
 	private static McpEndpoint taskEndpoint(String path,
 			ScriptedTaskManager taskManager) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, Set.of(McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpJsonValue taskIdValue = arguments.getRawArguments()
@@ -632,7 +633,9 @@ public final class McpTaskNotificationSocketDriver {
 		return McpEndpoint.withPath(path,
 				McpImplementation.withNameAndVersion(
 						"task-subscription-public-runtime-test", "4.0.0")
-						.build())
+						.build(), Set.of(McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}

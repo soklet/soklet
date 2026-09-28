@@ -49,6 +49,7 @@ import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtectionConfig;
@@ -116,6 +117,8 @@ import java.util.function.Supplier;
 public final class McpConformanceFixture {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
+	private static final Set<McpProtocolVersion> MODERN_PROTOCOL_VERSIONS =
+			Set.of(McpProtocolVersion.V2026_07_28);
 	private static final URI STATIC_TEXT_URI = URI.create("test://static-text");
 	private static final URI STATIC_BINARY_URI =
 			URI.create("test://static-binary");
@@ -339,8 +342,10 @@ public final class McpConformanceFixture {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-public-conformance", "4.0.0")
 						.description("Soklet MCP conformance fixture")
-						.build())
+						.build(), MODERN_PROTOCOL_VERSIONS)
 				.serverInfoIncluded(true)
+				.taskProtocolVersions(TASK_SCENARIOS.contains(scenario)
+						? MODERN_PROTOCOL_VERSIONS : Set.of())
 				.toolRegistrations(tools(scenario))
 				.promptRegistrations(prompts(scenario))
 				.resourceRegistrations(resources())
@@ -352,11 +357,12 @@ public final class McpConformanceFixture {
 					return McpResourcePage.builder()
 							.resourceDescriptors(list.getRegisteredResourceDescriptors())
 							.build();
-				})
+				}, MODERN_PROTOCOL_VERSIONS)
 				.resourceListCachePolicy(CACHE_POLICY)
 				.resourceTemplateListCachePolicy(CACHE_POLICY);
 		if ("server-stateless".equals(scenario))
-			builder.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
+			builder.subscriptionProtocolVersions(MODERN_PROTOCOL_VERSIONS)
+					.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 					McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(
 							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 							McpSubscriptionNotificationType.RESOURCE_UPDATED))
@@ -393,7 +399,7 @@ public final class McpConformanceFixture {
 						"Returns a deterministic application-level tool error.",
 						() -> McpCompleteResult.fromToolErrorText(
 								"This tool intentionally returns an error for testing")),
-				McpToolRegistration.withName("test_tool_with_progress")
+				McpToolRegistration.withName("test_tool_with_progress", MODERN_PROTOCOL_VERSIONS)
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							McpProgressReporter reporter = features
@@ -412,7 +418,7 @@ public final class McpConformanceFixture {
 						.description("Reports deterministic 0/50/100 progress.")
 						.build(),
 				McpOfficialSchemaConformanceTool.create(),
-				McpToolRegistration.withName("test_custom_header")
+				McpToolRegistration.withName("test_custom_header", MODERN_PROTOCOL_VERSIONS)
 						.argumentType(CustomHeaderArguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
@@ -432,7 +438,7 @@ public final class McpConformanceFixture {
 							.put("properties", McpJsonObject.emptyInstance())
 							.build())
 					.build();
-			tools.add(McpToolRegistration.withName("test_missing_elicitation_capability")
+			tools.add(McpToolRegistration.withName("test_missing_elicitation_capability", MODERN_PROTOCOL_VERSIONS)
 					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText(
@@ -440,7 +446,7 @@ public final class McpConformanceFixture {
 					.inputRequestDeclarations(java.util.List.of(elicitation))
 					.description("Requires the form elicitation capability.")
 					.build());
-			tools.add(McpToolRegistration.withName("test_streaming_elicitation")
+			tools.add(McpToolRegistration.withName("test_streaming_elicitation", MODERN_PROTOCOL_VERSIONS)
 					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpInputRequiredResult.withInputRequest("conformance-value",
@@ -463,7 +469,7 @@ public final class McpConformanceFixture {
 	}
 
 	private static void addTaskTools(List<McpToolRegistration<?>> tools) {
-		tools.add(McpToolRegistration.withName("greet")
+		tools.add(McpToolRegistration.withName("greet", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					String name = ((McpJsonString) arguments.getConvertedArguments()
@@ -473,7 +479,7 @@ public final class McpConformanceFixture {
 				})
 				.description("Returns a synchronous greeting.")
 				.build());
-		tools.add(McpToolRegistration.withName("slow_compute")
+		tools.add(McpToolRegistration.withName("slow_compute", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					long seconds = integerArgument(arguments.getConvertedArguments(),
@@ -492,7 +498,7 @@ public final class McpConformanceFixture {
 				})
 				.description("Completes asynchronously when Tasks are negotiated.")
 				.build());
-		tools.add(McpToolRegistration.withName("failing_job")
+		tools.add(McpToolRegistration.withName("failing_job", MODERN_PROTOCOL_VERSIONS)
 				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					McpTask task = TASK_MANAGER.createTask(
@@ -504,7 +510,7 @@ public final class McpConformanceFixture {
 				})
 				.description("Completes with an application-level tool error.")
 				.build());
-		tools.add(McpToolRegistration.withName("protocol_error_job")
+		tools.add(McpToolRegistration.withName("protocol_error_job", MODERN_PROTOCOL_VERSIONS)
 				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					McpTask task = TASK_MANAGER.createTask(
@@ -516,7 +522,7 @@ public final class McpConformanceFixture {
 				})
 				.description("Fails with a protocol-level task error.")
 				.build());
-		tools.add(McpToolRegistration.withName("confirm_delete")
+		tools.add(McpToolRegistration.withName("confirm_delete", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
@@ -533,7 +539,7 @@ public final class McpConformanceFixture {
 				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Waits for one task-scoped elicitation response.")
 				.build());
-		tools.add(McpToolRegistration.withName("multi_input")
+		tools.add(McpToolRegistration.withName("multi_input", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Optional<McpTaskCreationContext> taskCreationContext = features.getTaskCreationContext();
@@ -551,7 +557,7 @@ public final class McpConformanceFixture {
 				.inputRequestDeclarations(java.util.List.of(FORM_INPUT))
 				.description("Waits for two task-scoped elicitation responses.")
 				.build());
-		tools.add(McpToolRegistration.withName("test_tool_with_task")
+		tools.add(McpToolRegistration.withName("test_tool_with_task", MODERN_PROTOCOL_VERSIONS)
 				.argumentAndOutputTypes(EmptyTaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					if (request.getInputResponses().find("user_name").isEmpty())
@@ -604,7 +610,7 @@ public final class McpConformanceFixture {
 
 	private static McpToolRegistration<McpJsonObject> elicitationTool() {
 		return McpToolRegistration.withName(
-				"test_input_required_result_elicitation")
+				"test_input_required_result_elicitation", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (request.getInputResponses().find("user_name").isPresent())
@@ -622,7 +628,7 @@ public final class McpConformanceFixture {
 
 	private static McpToolRegistration<McpJsonObject> requestStateTool() {
 		return McpToolRegistration.withName(
-				"test_input_required_result_request_state")
+				"test_input_required_result_request_state", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "request-state")
@@ -642,7 +648,7 @@ public final class McpConformanceFixture {
 
 	private static McpToolRegistration<McpJsonObject> multiRoundTool() {
 		return McpToolRegistration.withName(
-				"test_input_required_result_multi_round")
+				"test_input_required_result_multi_round", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "round-2")
@@ -669,7 +675,7 @@ public final class McpConformanceFixture {
 
 	private static McpToolRegistration<McpJsonObject> tamperedStateTool() {
 		return McpToolRegistration.withName(
-				"test_input_required_result_tampered_state")
+				"test_input_required_result_tampered_state", MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					if (hasFrameworkState(request, "tamper-check")
@@ -719,7 +725,7 @@ public final class McpConformanceFixture {
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name,
 			String description, Supplier<McpCompleteResult> resultSupplier) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, MODERN_PROTOCOL_VERSIONS)
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> resultSupplier.get())
 				.description(description)
@@ -751,14 +757,14 @@ public final class McpConformanceFixture {
 
 	private static List<McpPromptRegistration> prompts(String scenario) {
 		List<McpPromptRegistration> prompts = new ArrayList<>(List.of(
-				McpPromptRegistration.withName("test_simple_prompt")
+				McpPromptRegistration.withName("test_simple_prompt", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, prompt, features) -> completePrompt(
 								McpPromptMessage.fromUserContent(
 										McpTextContent.fromText(
 												"This is a simple prompt for testing."))))
 						.description("Returns a deterministic simple prompt.")
 						.build(),
-				McpPromptRegistration.withName("test_prompt_with_arguments")
+				McpPromptRegistration.withName("test_prompt_with_arguments", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, prompt, features) -> completePrompt(
 								McpPromptMessage.fromUserContent(McpTextContent.fromText(
 										"Prompt with arguments: arg1='"
@@ -772,10 +778,11 @@ public final class McpConformanceFixture {
 								"Second test argument")))
 						.completionHandler((request, completion, features) ->
 								completeArgument(List.of("test-one", "test-two"),
-										completion.getArgumentValue()))
+										completion.getArgumentValue()),
+								MODERN_PROTOCOL_VERSIONS)
 						.build(),
 				McpPromptRegistration.withName(
-						"test_prompt_with_embedded_resource")
+						"test_prompt_with_embedded_resource", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, prompt, features) -> {
 							URI uri = URI.create(prompt.findArgument(
 									"resourceUri").orElseThrow());
@@ -791,7 +798,7 @@ public final class McpConformanceFixture {
 						.arguments(java.util.List.of(requiredPromptArgument("resourceUri",
 								"URI of the resource to embed")))
 						.build(),
-				McpPromptRegistration.withName("test_prompt_with_image")
+				McpPromptRegistration.withName("test_prompt_with_image", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, prompt, features) -> completePrompt(
 								McpPromptMessage.fromUserContent(McpImageContent
 										.withDataAndMimeType(PNG_BYTES, "image/png")
@@ -802,7 +809,7 @@ public final class McpConformanceFixture {
 						.build()));
 		if ("input-required-result-non-tool-request".equals(scenario))
 			prompts.add(McpPromptRegistration.withName(
-					"test_input_required_result_prompt")
+					"test_input_required_result_prompt", MODERN_PROTOCOL_VERSIONS)
 					.handler((request, prompt, features) -> {
 						if (request.getInputResponses().find(
 								"user_context").isPresent())
@@ -845,7 +852,7 @@ public final class McpConformanceFixture {
 	private static List<McpResourceRegistration> resources() {
 		return List.of(
 				McpResourceRegistration.withUriAndName(
-						STATIC_TEXT_URI, "Static text resource")
+						STATIC_TEXT_URI, "Static text resource", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, resource, features) ->
 								completeResource(McpTextResourceContents
 										.withUriAndText(resource.getUri(),
@@ -857,7 +864,7 @@ public final class McpConformanceFixture {
 						.cachePolicy(CACHE_POLICY)
 						.build(),
 				McpResourceRegistration.withUriAndName(
-						STATIC_BINARY_URI, "Static binary resource")
+						STATIC_BINARY_URI, "Static binary resource", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, resource, features) ->
 								completeResource(McpBlobResourceContents
 										.withUriAndData(resource.getUri(), PNG_BYTES)
@@ -868,7 +875,7 @@ public final class McpConformanceFixture {
 						.cachePolicy(CACHE_POLICY)
 						.build(),
 				McpResourceRegistration.withUriTemplateAndName(
-						TEMPLATE_URI, "Template data resource")
+						TEMPLATE_URI, "Template data resource", MODERN_PROTOCOL_VERSIONS)
 						.handler((request, resource, features) -> {
 							String id = resource.getUriTemplateVariables()
 									.get("id");
@@ -883,7 +890,8 @@ public final class McpConformanceFixture {
 						.description("A deterministic RFC 6570 Level 1 template.")
 						.completionHandler((request, completion, features) ->
 								completeArgument(List.of("test-1", "test-2"),
-										completion.getArgumentValue()))
+										completion.getArgumentValue()),
+								MODERN_PROTOCOL_VERSIONS)
 						.mimeType("application/json")
 						.cachePolicy(CACHE_POLICY)
 						.build());

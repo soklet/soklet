@@ -26,6 +26,7 @@ import com.soklet.McpLocalizationContextProvider;
 import com.soklet.McpLocalizationRequest;
 import com.soklet.McpLocalizationResult;
 import com.soklet.McpLocalizer;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpRequestContext;
 import com.soklet.McpTextCoordinate;
 
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
@@ -162,7 +164,7 @@ public final class GenericLocalizationProviderExample
 		McpEndpoint endpoint = McpEndpoint.withPath("/localization-verification", McpImplementation.withNameAndVersion(
 						"localization-verification", "1.0")
 						.title("Search")
-						.build())
+						.build(), Set.of(McpProtocolVersion.V2026_07_28))
 				.build();
 		List<McpLocalizableText> texts = McpLocalizationCatalog
 				.fromEndpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

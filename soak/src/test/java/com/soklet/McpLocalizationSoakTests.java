@@ -260,7 +260,7 @@ class McpLocalizationSoakTests {
 	@NonNull
 	private static McpEndpoint endpoint() {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, Set.of(McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
@@ -268,7 +268,8 @@ class McpLocalizationSoakTests {
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("soak://localization/resource"),
-						"localization-soak-resource")
+						"localization-soak-resource",
+						Set.of(McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(
@@ -279,7 +280,8 @@ class McpLocalizationSoakTests {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"soklet-mcp-localization-soak", "4.0.0")
 						.title(SERVER_TITLE)
-						.build())
+						.build(), Set.of(McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(List.of(tool))
 				.resourceRegistrations(List.of(resource))
 				.subscriptionConfig(McpSubscriptionConfig
