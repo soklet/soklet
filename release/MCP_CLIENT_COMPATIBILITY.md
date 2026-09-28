@@ -4,7 +4,61 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
-## Matrix
+## September 28 real-host development check
+
+On **2026-09-28**, a disposable, loopback-bound fixture built with Soklet from
+exact commit `fd5e0d479216aeda7565a379f27bd32fa79604cc` exposed one
+`interop.echo` tool. The locally built Soklet JAR had SHA-256
+`e09bb1edf4dfccc99c6ff481183ba2694c8a20e68aa944cb7d0db57e3a546216`.
+The dual-era URL explicitly served `2026-07-28`, `2025-06-18`, and
+`2025-11-25`; separate fixture URLs restricted selection to both 2025
+revisions or to one exact 2025 revision. Each passing local row below includes an
+actual model-driven tool invocation and its returned echo value.
+
+| Client or host | Exact version | URL revisions and observed negotiation | Observed operation and result | Status |
+| --- | --- | --- | --- | --- |
+| Codex CLI | `0.155.0-alpha.16.4` | Dual-era URL; offered and selected `2025-06-18` through `initialize`. | `tools/list` exposed `interop.echo`; `tools/call` returned `soklet-echo:codex-dual-approved` with the `2025-06-18` protocol header. | **PASS (local development tool smoke)** |
+| Codex CLI | `0.155.0-alpha.16.4` | `2025-11-25`-only URL; offered `2025-06-18`, then selected the server's `2025-11-25` response. | `tools/list` exposed `interop.echo`; `tools/call` returned `soklet-echo:codex-november-20260928` with the `2025-11-25` protocol header. | **PASS (local development tool smoke)** |
+| Claude Code | `2.1.274` | 2025-only URL; probed `server/discover` for `2026-07-28`, then fell back to `initialize` and selected `2025-11-25`. | `tools/list` exposed `interop.echo`; `tools/call` returned `soklet-echo:claude-legacy-default`. | **PASS (local development tool smoke)** |
+| Claude Code | `2.1.274` | Dual-era URL; selected `2026-07-28` through `server/discover`. | `tools/list` exposed `interop.echo`; `tools/call` returned `soklet-echo:claude-dual-default`. | **PASS (local development tool smoke)** |
+| Visual Studio Code / Copilot | VS Code `1.139.1`, bundled Copilot `0.67.0` | Installed locally; no authenticated Copilot model session or tool invocation completed. | None. | **NOT TESTED** |
+
+These observations establish that current initialization clients can use an
+endpoint **when the application explicitly declares the matching 2025
+revision**, while Claude Code can also choose `2026-07-28` on a dual-era URL.
+They do not establish support for every 2025 operation or every host. The
+fixture exercised synchronous `tools/list` and `tools/call`, not denial,
+OAuth recovery, disconnect behavior, prompts, resources, Apps, Skills, Tasks,
+subscriptions, or SSE streaming. Other host rows are still pending. This was a
+local development build from a known commit, not an immutable release
+candidate or public Maven artifact; the release gate must repeat relevant
+checks against the exact candidate.
+
+### Claude Desktop custom connector cloud check
+
+The cloud test used a **different, uncommitted working-tree build** with
+validated hybrid 2025 header handling. Its Soklet JAR SHA-256 was
+`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`.
+A temporary token-gated HTTPS tunnel forwarded the client's MCP headers and
+payloads unchanged to the disposable 2025-only fixture. The temporary URL and
+token are intentionally omitted from this record.
+
+| Client or host | Exact version/state | Observed negotiation and operation | Status |
+| --- | --- | --- | --- |
+| Claude Desktop custom connector and Claude cloud backend | Desktop `2.9939.2`; cloud backend version not exposed | `server/discover` probing `2026-07-28` received the expected unsupported HTTP 400; fallback `initialize` selected `2025-11-25`; `notifications/initialized` received HTTP 202; `tools/list` received HTTP 200 and exposed `interop.echo`; a model-driven `tools/call` received HTTP 200 and returned `soklet-echo:claude-cloud-unmodified-20260928`. | **PASS (cloud development tool smoke)** |
+
+This demonstrates one cloud-hosted connector reaching the stateless 2025 tool
+path through an HTTPS endpoint. It does not qualify cloud GET SSE, denial,
+OAuth recovery, disconnect behavior, or any non-tool operation. The uncommitted
+build and temporary tunnel are not an immutable release candidate or a public
+artifact. Candidate qualification must repeat the applicable checks on the
+owner's exact release commits.
+
+The focused legacy-wire and adjacent runtime regression batch passed **44/44**
+tests on both JDK 17 and JDK 26. This verifies the observed cloud fallback and
+malformed mixed-framing cases, but does not replace the full release test suite.
+
+## September 1 baseline matrix
 
 Manual smoke date: **2026-09-01**
 
@@ -18,7 +72,7 @@ Server target: Soklet 4.0.0, exact MCP profile `2026-07-28`, Streamable HTTP
 | Visual Studio Code | 1.135.0, commit `08d4889f9ec4a1685d257b9b95de036c8e1ce1e5`, arm64 | Installed locally; no MCP model/extension session was available, so no discovery or invocation was run. | **NOT TESTED** |
 | Claude Code | Not installed; no version asserted | No connection was attempted. | **NOT TESTED** |
 | Cursor | Not installed; no version asserted | No connection was attempted. | **NOT TESTED** |
-| A client fixed to Soklet 3.5.1's initialization/session/GET-SSE contract | Legacy profile, independent of product version | Cannot use the 4.0.0 endpoint without a client migration. | **INCOMPATIBLE BY DESIGN** |
+| A client fixed to Soklet 3.5.1's initialization/session/GET-SSE contract | Legacy profile, independent of product version | The September 1 modern-only endpoint could not serve that contract. The September 28 checks above establish only the named, stateless 2025 tool paths. | **INCOMPATIBLE WITH SEPTEMBER 1 ENDPOINT** |
 
 None of these host rows exercised the
 [`io.modelcontextprotocol/tasks` extension](../MCP.md#durable-tasks). Soklet's
@@ -81,9 +135,11 @@ candidate provenance, client-host smokes, or the unresolved
 “PASS (pre-release manual smoke)” means only that the named local interaction
 worked on the stated date. It does not mean every feature of that host was
 tested, a live language model was involved, or the eventual published artifact
-was exercised. Before publishing, repeat the same smoke against the exact
-candidate JAR; after Central synchronization, repeat it from a clean directory
-against the public `com.soklet:soklet:4.0.0` coordinate.
+was exercised. The September 28 rows explicitly used model-driven calls but
+carry the same development-evidence limitation. Before publishing, repeat the
+relevant smoke against the exact candidate JAR; after Central synchronization,
+repeat it from a clean directory against the public
+`com.soklet:soklet:4.0.0` coordinate.
 
 Test environment: macOS 26.6.2 (build 25G83) on arm64, Amazon Corretto
 26.0.1+8-FR, Node.js 26.5.0, and npm 11.17.0. These are the manual client's
@@ -190,11 +246,15 @@ legacy session setup.
 
 ## Mainstream host setup notes
 
-The untested rows above are not implied compatible. When testing them, pin and
-record the exact host version, use its HTTP/Streamable HTTP server form, and
-point it at the same endpoint URL. Do not select an stdio command, the removed
-standalone HTTP+SSE transport, or a client mode that requires `initialize` and
-an MCP session ID.
+The untested rows above are not implied compatible. When testing a host, pin
+and record its exact version, use its HTTP/Streamable HTTP server form, and
+point it at the application's configured endpoint URL. A client that uses
+`initialize` may connect only if the endpoint explicitly declares a supported
+2025 revision; the 2026-only configuration used for the September 1 Inspector
+smoke does not accept that wire protocol. The implemented 2025 tool adapter is
+stateless: it does not provide Soklet 3.5.1 sessions, GET SSE, or the removed
+standalone HTTP+SSE transport. Do not select an stdio command or a deprecated
+transport when testing the HTTP endpoint.
 
 - Visual Studio Code documents workspace/user MCP configuration in
   [Use MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).

@@ -4405,7 +4405,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				headerValues(request, MCP_PROTOCOL_VERSION),
 				headerValues(request, MCP_METHOD), headerValues(request, MCP_NAME),
 				request.headers().stream().anyMatch(header -> header.name()
-						.regionMatches(true, 0, "Mcp-Param-", 0, 10)));
+						.regionMatches(true, 0, "Mcp-Param-", 0, 10)),
+				this.mirroredHeaderCodec);
 
 		if (envelope instanceof McpJsonRpcEnvelope.Notification notification)
 			return processNotification(request, sokletRequest, notification,

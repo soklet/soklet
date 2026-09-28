@@ -42,6 +42,171 @@ public class McpLegacyHttpWireTests {
 	private static final McpJsonCodec JSON = new McpJsonCodec(LIMITS);
 	private static final McpJsonRpcEnvelopeCodec ENVELOPES =
 			new McpJsonRpcEnvelopeCodec(JSON);
+	private static final McpMirroredHeaderCodec MIRRORED_HEADERS =
+			new McpMirroredHeaderCodec(
+					McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES);
+	private static final String METHOD_MIRRORED_LEGACY_INITIALIZE = """
+			{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+			"protocolVersion":"2025-11-25","capabilities":{},
+			"clientInfo":{"name":"Claude","version":"1"},
+			"_meta":{"traceparent":"00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"}}}
+			""";
+
+	@Test
+	public void methodOnlyInitializeMirrorIsAConstrainedLegacyBootstrap() {
+		McpJsonRpcEnvelope initialize = ENVELOPES.decode(
+				METHOD_MIRRORED_LEGACY_INITIALIZE);
+		Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+				classify(initialize, List.of(),
+						List.of("initialize"), List.of(), false));
+		McpJsonRpcEnvelope juneInitialize = ENVELOPES.decode(
+				METHOD_MIRRORED_LEGACY_INITIALIZE.replace("2025-11-25", "2025-06-18"));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+				classify(juneInitialize, List.of(),
+						List.of("initialize"), List.of(), false));
+		for (List<String> methodHeaders : List.of(
+				List.of("tools/list"), List.of("initialize", "initialize")))
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(initialize, List.of(), methodHeaders,
+							List.of(), false));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(initialize, List.of("2025-11-25"),
+						List.of("initialize"), List.of(), false));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(initialize, List.of(),
+						List.of("initialize"), List.of("unexpected"), false));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(initialize, List.of(),
+						List.of("initialize"), List.of(), true));
+
+		McpJsonRpcEnvelope modernMetadata = ENVELOPES.decode(
+				METHOD_MIRRORED_LEGACY_INITIALIZE.replace(
+						"\"traceparent\"", "\"io.modelcontextprotocol/protocolVersion\":"
+								+ "\"2026-07-28\",\"traceparent\""));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(modernMetadata, List.of(),
+						List.of("initialize"), List.of(), false));
+		McpJsonRpcEnvelope modernSelector = ENVELOPES.decode(
+				METHOD_MIRRORED_LEGACY_INITIALIZE.replace("2025-11-25", "2026-07-28"));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(modernSelector, List.of(),
+						List.of("initialize"), List.of(), false));
+	}
+
+	@Test
+	@Timeout(30)
+	public void methodOnlyLegacyInitializeWorksOnTheHttpWire() throws Exception {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
+				.withServerInformation(McpImplementationMetadata
+						.withNameAndVersion("server", "4.0.0"))
+				.build();
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+						request -> McpAdmissionDecision.acceptedAnonymous()),
+				endpoint, McpApplicationRequestRouter.empty(),
+				McpRuntimeObservationSink.disabledInstance(), List.of(),
+				Optional.empty(), Map.of("2025-11-25", endpoint,
+						"2026-07-28", endpoint));
+		HttpClient client = HttpClient.newBuilder()
+				.version(HttpClient.Version.HTTP_1_1).build();
+		try (McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0), List.of(binding))) {
+			URI uri = URI.create("http://127.0.0.1:" + runtime.start().getPort()
+					+ "/mcp");
+			HttpResponse<String> accepted = post(client, uri, Optional.empty(),
+					Optional.of("initialize"), METHOD_MIRRORED_LEGACY_INITIALIZE);
+			Assertions.assertEquals(200, accepted.statusCode(), accepted.body());
+			Assertions.assertTrue(accepted.body().contains(
+					"\"protocolVersion\":\"2025-11-25\""), accepted.body());
+
+			HttpResponse<String> withVersionHeader = post(client, uri,
+					Optional.of("2025-11-25"), Optional.of("initialize"),
+					METHOD_MIRRORED_LEGACY_INITIALIZE);
+			Assertions.assertEquals(400, withVersionHeader.statusCode(),
+					withVersionHeader.body());
+			Assertions.assertTrue(withVersionHeader.body().contains("\"code\":-32022"),
+					withVersionHeader.body());
+			HttpResponse<String> mismatchedMethod = post(client, uri,
+					Optional.empty(), Optional.of("tools/list"),
+					METHOD_MIRRORED_LEGACY_INITIALIZE);
+			Assertions.assertEquals(400, mismatchedMethod.statusCode(),
+					mismatchedMethod.body());
+			Assertions.assertTrue(mismatchedMethod.body().contains("\"code\":-32020"),
+					mismatchedMethod.body());
+			HttpResponse<String> duplicateMethod = client.send(
+					HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10))
+							.header("Content-Type", "application/json")
+							.header("Accept", "application/json, text/event-stream")
+							.header("Mcp-Method", "initialize")
+							.header("Mcp-Method", "initialize")
+							.POST(HttpRequest.BodyPublishers.ofString(
+									METHOD_MIRRORED_LEGACY_INITIALIZE))
+							.build(), HttpResponse.BodyHandlers.ofString());
+			Assertions.assertEquals(400, duplicateMethod.statusCode(),
+					duplicateMethod.body());
+			Assertions.assertTrue(duplicateMethod.body().contains("\"code\":-32020"),
+					duplicateMethod.body());
+			HttpResponse<String> modernMetadata = post(client, uri,
+					Optional.empty(), Optional.of("initialize"),
+					METHOD_MIRRORED_LEGACY_INITIALIZE.replace(
+							"\"traceparent\"", "\"io.modelcontextprotocol/protocolVersion\":"
+									+ "\"2026-07-28\",\"traceparent\""));
+			Assertions.assertEquals(400, modernMetadata.statusCode(),
+					modernMetadata.body());
+			Assertions.assertTrue(modernMetadata.body().contains("\"code\":-32020"),
+					modernMetadata.body());
+		}
+	}
+
+	@Test
+	public void laterLegacyMessagesMayMirrorOnlyTheirExactMethod() {
+		McpJsonRpcEnvelope notification = ENVELOPES.decode(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+		McpJsonRpcEnvelope list = ENVELOPES.decode(
+				"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+		for (McpJsonRpcEnvelope envelope : List.of(notification, list)) {
+			String method = envelope instanceof McpJsonRpcEnvelope.Notification value
+					? value.method() : ((McpJsonRpcEnvelope.Request) envelope).method();
+			Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+					classify(envelope, List.of("2025-11-25"),
+							List.of(method), List.of(), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(envelope, List.of("2025-11-25"),
+							List.of("initialize"), List.of(), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(envelope, List.of("2025-11-25"),
+							List.of(method, method), List.of(), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(envelope, List.of("2025-11-25"),
+							List.of(method), List.of("unexpected"), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(envelope, List.of("2025-11-25"),
+							List.of(method), List.of(), true));
+		}
+		McpJsonRpcEnvelope modernMetadata = ENVELOPES.decode("""
+				{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{
+				"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}
+				""");
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(modernMetadata, List.of("2025-11-25"),
+						List.of("tools/list"), List.of(), false));
+		McpJsonRpcEnvelope toolCall = ENVELOPES.decode("""
+				{"jsonrpc":"2.0","id":3,"method":"tools/call",
+				"params":{"name":"shared","arguments":{}}}
+				""");
+		for (String matchingName : List.of("shared", "=?base64?c2hhcmVk?="))
+			Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+					classify(toolCall, List.of("2025-11-25"),
+							List.of("tools/call"), List.of(matchingName), false));
+		for (List<String> badNames : List.of(List.of("other"),
+				List.of("shared", "shared"), List.of("=?base64?invalid?=")))
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(toolCall, List.of("2025-11-25"),
+							List.of("tools/call"), badNames, false));
+		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+				classify(toolCall, List.of("2025-11-25"),
+						List.of("tools/call"), List.of("shared"), true));
+	}
 
 	@Test
 	public void modernFramingCannotBeReinterpretedByALegacyVersionHeader() {
@@ -57,19 +222,19 @@ public class McpLegacyHttpWireTests {
 				""");
 
 		Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
-				McpLegacyHttpWire.classify(initialize, List.of(), List.of(),
+				classify(initialize, List.of(), List.of(),
 						List.of(), false));
 		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
-				McpLegacyHttpWire.classify(initialize, List.of("2025-11-25"),
+				classify(initialize, List.of("2025-11-25"),
 						List.of("initialize"), List.of(), false));
 		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
-				McpLegacyHttpWire.classify(initialize, List.of("2025-11-25"),
+				classify(initialize, List.of("2025-11-25"),
 						List.of(), List.of(), true));
 		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
-				McpLegacyHttpWire.classify(modern, List.of("2025-11-25"),
+				classify(modern, List.of("2025-11-25"),
 						List.of(), List.of(), false));
 		Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
-				McpLegacyHttpWire.classify(modern, List.of("2026-07-28"),
+				classify(modern, List.of("2026-07-28"),
 						List.of("tools/list"), List.of(), false));
 	}
 
@@ -408,6 +573,17 @@ public class McpLegacyHttpWireTests {
 					"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
 			Assertions.assertEquals(202, ready.statusCode(), ready.body());
 			Assertions.assertTrue(ready.body().isEmpty());
+			HttpResponse<String> mirroredReady = post(client, uri,
+					Optional.of("2025-11-25"),
+					Optional.of("notifications/initialized"),
+					"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+			Assertions.assertEquals(202, mirroredReady.statusCode(),
+					mirroredReady.body());
+			HttpResponse<String> mismatchedReady = post(client, uri,
+					Optional.of("2025-11-25"), Optional.of("tools/list"),
+					"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+			Assertions.assertEquals(400, mismatchedReady.statusCode(),
+					mismatchedReady.body());
 
 			HttpResponse<String> listing = post(client, uri,
 					Optional.of("2025-11-25"), Optional.empty(),
@@ -416,6 +592,17 @@ public class McpLegacyHttpWireTests {
 			Assertions.assertTrue(listing.body().contains("\"shared\""), listing.body());
 			Assertions.assertFalse(listing.body().contains("modern-only"), listing.body());
 			Assertions.assertFalse(listing.body().contains("resultType"), listing.body());
+			HttpResponse<String> mirroredListing = post(client, uri,
+					Optional.of("2025-11-25"), Optional.of("tools/list"),
+					"""
+					{"jsonrpc":"2.0","id":22,"method":"tools/list",
+					"params":{"_meta":{"traceparent":
+					"00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"}}}
+					""");
+			Assertions.assertEquals(200, mirroredListing.statusCode(),
+					mirroredListing.body());
+			Assertions.assertTrue(mirroredListing.body().contains("\"shared\""),
+					mirroredListing.body());
 			Assertions.assertTrue(admissionContexts.stream()
 					.filter(value -> "tools/list".equals(value.jsonRpcMethod()))
 					.findFirst().orElseThrow().clientCapabilities().isEmpty());
@@ -426,14 +613,49 @@ public class McpLegacyHttpWireTests {
 			Assertions.assertTrue(juneListing.body().contains("\"shared\""),
 					juneListing.body());
 
-			HttpResponse<String> call = post(client, uri,
-					Optional.of("2025-11-25"), Optional.empty(), """
+			String callBody = """
 					{"jsonrpc":"2.0","id":3,"method":"tools/call",
 					"params":{"name":"shared","arguments":{}}}
-					""");
+					""";
+			HttpResponse<String> call = post(client, uri,
+					Optional.of("2025-11-25"), Optional.empty(), callBody);
 			Assertions.assertEquals(200, call.statusCode(), call.body());
 			Assertions.assertTrue(call.body().contains("\"text\":\"ok\""), call.body());
 			Assertions.assertFalse(call.body().contains("resultType"), call.body());
+			for (String name : List.of("shared", "other", "=?base64?c2hhcmVk?=")) {
+				HttpResponse<String> mirroredCall = client.send(
+						HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10))
+								.header("Content-Type", "application/json")
+								.header("Accept", "application/json, text/event-stream")
+								.header("MCP-Protocol-Version", "2025-11-25")
+								.header("Mcp-Method", "tools/call")
+								.header("Mcp-Name", name)
+								.POST(HttpRequest.BodyPublishers.ofString(callBody))
+								.build(), HttpResponse.BodyHandlers.ofString());
+				int expectedStatus = "other".equals(name) ? 400 : 200;
+				Assertions.assertEquals(expectedStatus, mirroredCall.statusCode(),
+						mirroredCall.body());
+				if (expectedStatus == 200)
+					Assertions.assertTrue(mirroredCall.body().contains("\"text\":\"ok\""),
+							mirroredCall.body());
+				else
+					Assertions.assertTrue(mirroredCall.body().contains("\"code\":-32020"),
+							mirroredCall.body());
+			}
+			HttpResponse<String> duplicateName = client.send(
+					HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10))
+							.header("Content-Type", "application/json")
+							.header("Accept", "application/json, text/event-stream")
+							.header("MCP-Protocol-Version", "2025-11-25")
+							.header("Mcp-Method", "tools/call")
+							.header("Mcp-Name", "shared")
+							.header("Mcp-Name", "shared")
+							.POST(HttpRequest.BodyPublishers.ofString(callBody))
+							.build(), HttpResponse.BodyHandlers.ofString());
+			Assertions.assertEquals(400, duplicateName.statusCode(),
+					duplicateName.body());
+			Assertions.assertTrue(duplicateName.body().contains("\"code\":-32020"),
+					duplicateName.body());
 			HttpResponse<String> callWithProgress = post(client, uri,
 					Optional.of("2025-11-25"), Optional.empty(), """
 					{"jsonrpc":"2.0","id":32,"method":"tools/call",
@@ -596,6 +818,14 @@ public class McpLegacyHttpWireTests {
 					"\"supported\":[\"2026-07-28\"]"),
 					modernDiagnostic.body());
 		}
+	}
+
+	private static McpLegacyHttpWire.Era classify(McpJsonRpcEnvelope envelope,
+			List<String> versionHeaders, List<String> methodHeaders,
+			List<String> nameHeaders, boolean argumentMirrorsPresent) {
+		return McpLegacyHttpWire.classify(envelope, versionHeaders,
+				methodHeaders, nameHeaders, argumentMirrorsPresent,
+				MIRRORED_HEADERS);
 	}
 
 	private static HttpResponse<String> post(HttpClient client, URI uri,
