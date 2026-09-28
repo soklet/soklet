@@ -135,7 +135,7 @@ public class McpTasksApplicationPatternsTests {
 	@NonNull
 	private static SokletConfig config(@NonNull ReportTaskManager taskManager) {
 		McpToolRegistration<ReportArguments> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(ReportArguments.class,
 						GeneratedReport.class)
 				.operationHandler((request, arguments, features) -> {
@@ -149,7 +149,7 @@ public class McpTasksApplicationPatternsTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-application-pattern", "4.0.0").build())
+						"tasks-application-pattern", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0)

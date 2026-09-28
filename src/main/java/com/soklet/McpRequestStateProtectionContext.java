@@ -40,7 +40,7 @@ public final class McpRequestStateProtectionContext {
 	@NonNull
 	private final String endpointPath;
 	@NonNull
-	private final String protocolVersion;
+	private final McpProtocolVersion protocolVersion;
 	@NonNull
 	private final String jsonRpcMethod;
 	private final byte @NonNull [] associatedData;
@@ -59,7 +59,7 @@ public final class McpRequestStateProtectionContext {
 	 */
 	@NonNull
 	public static McpRequestStateProtectionContext fromComponents(
-			@NonNull String endpointPath, @NonNull String protocolVersion,
+			@NonNull String endpointPath, @NonNull McpProtocolVersion protocolVersion,
 			@NonNull String jsonRpcMethod,
 			byte @NonNull [] associatedData) {
 		return new McpRequestStateProtectionContext(endpointPath, protocolVersion,
@@ -67,7 +67,7 @@ public final class McpRequestStateProtectionContext {
 	}
 
 	McpRequestStateProtectionContext(@NonNull String endpointPath,
-			@NonNull String protocolVersion, @NonNull String jsonRpcMethod,
+			@NonNull McpProtocolVersion protocolVersion, @NonNull String jsonRpcMethod,
 			byte @NonNull [] associatedData) {
 		this.endpointPath = requireNonNull(endpointPath);
 		this.protocolVersion = requireNonNull(protocolVersion);
@@ -83,7 +83,7 @@ public final class McpRequestStateProtectionContext {
 
 	/** @return validated MCP protocol version supplied on this request */
 	@NonNull
-	public String getProtocolVersion() {
+	public McpProtocolVersion getProtocolVersion() {
 		return this.protocolVersion;
 	}
 

@@ -79,9 +79,9 @@ public class McpTypedInputRequestAnnotationTests {
 				import com.soklet.annotation.McpServerEndpoint;
 				import com.soklet.annotation.McpTool;
 
-				@McpServerEndpoint(path = "/mcp", name = "typed-input", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "typed-input", version = "1")
 				public final class TypedInputEndpoint {
-				  @McpTool(name = "sample", mayRequestInput = @McpMayRequestInput(
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "sample", mayRequestInput = @McpMayRequestInput(
 				      type = McpInputRequestType.ELICITATION_FORM,
 				      requirement = McpInputRequirement.CONDITIONAL),
 				      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
@@ -90,33 +90,33 @@ public class McpTypedInputRequestAnnotationTests {
 				        McpJsonString.fromValue("sample-state")).build();
 				  }
 
-				  @McpTool(name = "state-only-tool",
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "state-only-tool",
 				      requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED)
 				  public McpOperationResult stateOnlyTool() { return null; }
 
-				  @McpPrompt(name = "form", mayRequestInput = @McpMayRequestInput(
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "form", mayRequestInput = @McpMayRequestInput(
 				      type = McpInputRequestType.ELICITATION_FORM,
 				      requirement = McpInputRequirement.REQUIRED),
 				      requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED)
 				  public McpOperationResult form() { return null; }
 
-				  @McpPrompt(name = "url", mayRequestInput = @McpMayRequestInput(
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "url", mayRequestInput = @McpMayRequestInput(
 				      type = McpInputRequestType.ELICITATION_URL,
 				      requirement = McpInputRequirement.CONDITIONAL))
 				  public McpOperationResult url() { return null; }
 
-				  @McpPrompt(name = "state-only-prompt",
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "state-only-prompt",
 				      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
 				  public McpOperationResult stateOnlyPrompt() { return null; }
 
-				  @McpResource(uri = "test://roots", name = "roots",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://roots", name = "roots",
 				      mayRequestInput = @McpMayRequestInput(
 				          type = McpInputRequestType.ELICITATION_URL,
 				          requirement = McpInputRequirement.CONDITIONAL),
 				      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
 				  public McpOperationResult roots() { return null; }
 
-				  @McpResource(uri = "test://state-only", name = "state-only-resource",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://state-only", name = "state-only-resource",
 				      requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED)
 				  public McpOperationResult stateOnlyResource() { return null; }
 				}
@@ -254,21 +254,21 @@ public class McpTypedInputRequestAnnotationTests {
 						import com.soklet.annotation.McpPrompt;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "invalid", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "invalid", version = "1")
 						public final class InvalidTypedInputEndpoint {
-						  @McpPrompt(name = "roots", mayRequestInput = @McpMayRequestInput(
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "roots", mayRequestInput = @McpMayRequestInput(
 						      type = McpInputRequestType.ROOTS,
 						      samplingCapabilities = McpClientCapability.SAMPLING_CONTEXT,
 						      requirement = McpInputRequirement.CONDITIONAL))
 						  public McpOperationResult roots() { return null; }
 
-						  @McpPrompt(name = "sampling", mayRequestInput = @McpMayRequestInput(
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "sampling", mayRequestInput = @McpMayRequestInput(
 						      type = McpInputRequestType.SAMPLING,
 						      samplingCapabilities = McpClientCapability.ELICITATION_FORM,
 						      requirement = McpInputRequirement.CONDITIONAL))
 						  public McpOperationResult sampling() { return null; }
 
-						  @McpPrompt(name = "duplicate", mayRequestInput = @McpMayRequestInput(
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "duplicate", mayRequestInput = @McpMayRequestInput(
 						      type = McpInputRequestType.SAMPLING,
 						      samplingCapabilities = {
 						          McpClientCapability.SAMPLING_TOOLS,
@@ -298,9 +298,9 @@ public class McpTypedInputRequestAnnotationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "invalid", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "invalid", version = "1")
 						public final class InvalidTypedCompletionEndpoint {
-						  @McpTool(name = "typed", mayRequestInput = @McpMayRequestInput(
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "typed", mayRequestInput = @McpMayRequestInput(
 						      type = McpInputRequestType.ELICITATION_FORM,
 						      requirement = McpInputRequirement.CONDITIONAL))
 						  public Result typed() { return new Result("done"); }
@@ -335,14 +335,14 @@ public class McpTypedInputRequestAnnotationTests {
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "invalid", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "invalid", version = "1")
 						public final class InvalidPromptAndResourceEndpoint {
-						  @McpPrompt(name = "prompt", mayRequestInput = @McpMayRequestInput(
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt", mayRequestInput = @McpMayRequestInput(
 						      type = McpInputRequestType.ELICITATION_FORM,
 						      requirement = McpInputRequirement.CONDITIONAL))
 						  public McpPromptOutput prompt() { return null; }
 
-						  @McpResource(uri = "test://resource", name = "resource",
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://resource", name = "resource",
 						      requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
 						  public McpResourceOutput resource() { return null; }
 						}

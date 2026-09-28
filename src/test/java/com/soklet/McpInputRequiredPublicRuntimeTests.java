@@ -76,7 +76,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("requestedSchema", requestedSchema)
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("input-tool")
+				.withName("input-tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpInputRequiredResult.withInputRequest("approval", McpInputRequest.fromDeclaration(
@@ -91,7 +91,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(form, urlInput))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("input-prompt")
+				.withName("input-prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) ->
 						McpInputRequiredResult.withInputRequest("promptUrlInput", McpInputRequest.fromDeclaration(
 										urlInput,
@@ -103,7 +103,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriTemplateAndName("test://items/{id}", "input-resource")
+				.withUriTemplateAndName("test://items/{id}", "input-resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpInputRequiredResult.withInputRequest("resourceApproval", McpInputRequest.fromDeclaration(
 										form, resourceFormParams))
@@ -221,21 +221,21 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpJsonObject additionalFormParams = formParams;
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("valid-form-input")
+				.withName("valid-form-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> inputRequired(
 						"form", form, formParams))
 				.inputRequestDeclarations(java.util.List.of(form))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("valid-url-input")
+				.withName("valid-url-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> inputRequired(
 						"url", url, urlParams))
 				.inputRequestDeclarations(java.util.List.of(url))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://valid-additionalForm"),
-						"valid-additionalForm-input")
+						"valid-additionalForm-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> inputRequired(
 						"additionalForm", additionalForm, additionalFormParams))
 				.inputRequestDeclarations(java.util.List.of(additionalForm))
@@ -354,7 +354,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("secret", metadataSecret)
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("invalid-form-input")
+				.withName("invalid-form-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -369,7 +369,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(urlInput, form))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("invalid-additionalForm-input")
+				.withName("invalid-additionalForm-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
@@ -384,7 +384,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://invalid-urlInput"),
-						"invalid-urlInput-input")
+						"invalid-urlInput-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.withInputRequest("valid-first", McpInputRequest.fromDeclaration(
@@ -462,7 +462,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpInputRequestDeclaration conditionalUrlInput = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
-				.withName("required-urlInput")
+				.withName("required-urlInput", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					requiredHandlerInvocations.incrementAndGet();
@@ -472,7 +472,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(requiredUrlInput))
 				.build();
 		McpToolRegistration<McpJsonObject> conditionalComplete =
-				McpToolRegistration.withName("conditional-complete")
+				McpToolRegistration.withName("conditional-complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							conditionalCompleteHandlerInvocations.incrementAndGet();
@@ -481,7 +481,7 @@ public class McpInputRequiredPublicRuntimeTests {
 						.inputRequestDeclarations(java.util.List.of(conditionalUrlInput))
 						.build();
 		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
-				.withName("conditional-input")
+				.withName("conditional-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					conditionalInputHandlerInvocations.incrementAndGet();
@@ -574,7 +574,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpInputRequestDeclaration requiredForm = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -585,7 +585,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(requiredForm))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(promptName)
+				.withName(promptName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					promptHandlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -759,7 +759,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.put("secret", metadataSecret)
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("conditional-malformed-input")
+				.withName("conditional-malformed-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -832,7 +832,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("undeclared-input")
+				.withName("undeclared-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -907,7 +907,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		URI resourceUri = URI.create("test://interceptor-undeclared-input");
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("interceptor-undeclared-tool")
+				.withName("interceptor-undeclared-tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -916,7 +916,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(declared))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("interceptor-undeclared-prompt")
+				.withName("interceptor-undeclared-prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -927,7 +927,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(declared))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(resourceUri, "interceptor-undeclared-resource")
+				.withUriAndName(resourceUri, "interceptor-undeclared-resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromResourceOutput(
@@ -1032,7 +1032,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				"interceptor-undeclared-input", "interceptor-invalid-input",
 				"interceptor-missing-capability")) {
 			McpToolRegistration.OperationBuilder<McpJsonObject> toolBuilder =
-					McpToolRegistration.withName(toolName)
+					McpToolRegistration.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.jsonObjectArguments()
 							.handler((request, arguments, features) -> {
 								handlerInvocations.incrementAndGet();
@@ -1161,7 +1161,7 @@ public class McpInputRequiredPublicRuntimeTests {
 								urlInput, params))
 						.build();
 		McpToolRegistration<McpJsonObject> aggregateTool = McpToolRegistration
-				.withName("aggregate-input-requests")
+				.withName("aggregate-input-requests", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					aggregateInvocations.incrementAndGet();
@@ -1170,7 +1170,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(urlInput))
 				.build();
 		McpToolRegistration<McpJsonObject> legalTool = McpToolRegistration
-				.withName("legal-input-request")
+				.withName("legal-input-request", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					legalInvocations.incrementAndGet();
@@ -1233,7 +1233,7 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"input-required-public-runtime-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 	}
 

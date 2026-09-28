@@ -293,7 +293,8 @@ class McpSkillEndpointTests {
 	}
 
 	private static McpEndpoint.Builder builder() {
-		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpSkillRegistration standalone(String name) {
@@ -312,7 +313,7 @@ class McpSkillEndpointTests {
 		files.put("SKILL.md", root(name));
 		files.putAll(supporting);
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(URI.create(uri),
-				McpSkillBundle.fromFiles(files)).cachePolicy(cachePolicy);
+				McpSkillBundle.fromFiles(files), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).cachePolicy(cachePolicy);
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}
@@ -350,13 +351,13 @@ class McpSkillEndpointTests {
 	}
 
 	private static McpResourceRegistration exactResource(URI uri) {
-		return McpResourceRegistration.withUriAndName(uri, "ordinary").handler((request, read, features) -> {
+		return McpResourceRegistration.withUriAndName(uri, "ordinary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).handler((request, read, features) -> {
 			throw new AssertionError("Construction must not invoke a resource handler.");
 		}).build();
 	}
 
 	private static McpResourceRegistration templateResource(String template) {
-		return McpResourceRegistration.withUriTemplateAndName(template, "ordinary-template").handler((request, read, features) -> {
+		return McpResourceRegistration.withUriTemplateAndName(template, "ordinary-template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).handler((request, read, features) -> {
 			throw new AssertionError("Construction must not invoke a resource handler.");
 		}).build();
 	}

@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.annotation.McpAppTool;
 import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpMayRequestInput;
@@ -69,6 +70,7 @@ public class McpAnnotationContractTests {
 		assertAnnotationContract(McpResourceUriParameter.class,
 				ElementType.PARAMETER);
 		assertAnnotationContract(McpResourceList.class, ElementType.METHOD);
+		assertAnnotationContract(McpAppTool.class, ElementType.METHOD);
 		assertAnnotationContract(McpMayRequestInput.class);
 	}
 
@@ -76,11 +78,14 @@ public class McpAnnotationContractTests {
 	public void annotationElementsAreLimitedToReviewedMcpVerticals() {
 		Assertions.assertEquals(Set.of("path", "name", "version", "title",
 				"description", "websiteUrl", "instructions", "toolRateLimiterName",
+				"protocolVersions", "taskProtocolVersions",
+				"subscriptionProtocolVersions",
 				"resourceListCacheTimeToLiveInMilliseconds", "resourceListCacheScope",
 				"resourceTemplateListCacheTimeToLiveInMilliseconds",
 				"resourceTemplateListCacheScope"),
 				elementNames(McpServerEndpoint.class));
 		Assertions.assertEquals(Set.of("name", "title", "description",
+				"protocolVersions",
 				"rateLimiterName", "structuredContentMirroredAsText",
 				"mayRequestInput", "requestStateMode"),
 				elementNames(McpTool.class));
@@ -90,18 +95,23 @@ public class McpAnnotationContractTests {
 				elementNames(McpToolProperty.class));
 		Assertions.assertEquals(Set.of("name"), elementNames(McpHeader.class));
 		Assertions.assertEquals(Set.of("name", "title", "description",
+				"protocolVersions",
 				"mayRequestInput", "requestStateMode"),
 				elementNames(McpPrompt.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpPromptArgument.class));
 		Assertions.assertEquals(Set.of("uri", "name", "title", "description",
+				"protocolVersions",
 				"mimeType", "sizeInBytes", "cacheTimeToLiveInMilliseconds",
 				"cacheScope",
 				"mayRequestInput", "requestStateMode"),
 				elementNames(McpResource.class));
 		Assertions.assertEquals(Set.of("name"),
 				elementNames(McpResourceUriParameter.class));
-		Assertions.assertEquals(Set.of(), elementNames(McpResourceList.class));
+		Assertions.assertEquals(Set.of("protocolVersions"),
+				elementNames(McpResourceList.class));
+		Assertions.assertEquals(Set.of("protocolVersions", "resourceUri",
+				"visibility"), elementNames(McpAppTool.class));
 		Assertions.assertEquals(Set.of("type",
 				"requirement"), elementNames(McpMayRequestInput.class));
 	}
@@ -113,6 +123,12 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("/mcp", endpoint.path());
 		Assertions.assertEquals("catalog", endpoint.name());
 		Assertions.assertEquals("4.0.0", endpoint.version());
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2026_07_28}, endpoint.protocolVersions());
+		Assertions.assertArrayEquals(new McpProtocolVersion[0],
+				endpoint.taskProtocolVersions());
+		Assertions.assertArrayEquals(new McpProtocolVersion[0],
+				endpoint.subscriptionProtocolVersions());
 		Assertions.assertEquals("", endpoint.title());
 		Assertions.assertEquals("", endpoint.description());
 		Assertions.assertEquals("", endpoint.websiteUrl());
@@ -130,6 +146,8 @@ public class McpAnnotationContractTests {
 				String.class);
 		McpTool tool = method.getAnnotation(McpTool.class);
 		Assertions.assertEquals("search", tool.name());
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2026_07_28}, tool.protocolVersions());
 		Assertions.assertEquals("", tool.title());
 		Assertions.assertEquals("", tool.description());
 		Assertions.assertEquals("", tool.rateLimiterName());
@@ -160,6 +178,8 @@ public class McpAnnotationContractTests {
 				String.class, Optional.class);
 		McpPrompt prompt = promptMethod.getAnnotation(McpPrompt.class);
 		Assertions.assertEquals("compose", prompt.name());
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2026_07_28}, prompt.protocolVersions());
 		Assertions.assertEquals("", prompt.title());
 		Assertions.assertEquals("", prompt.description());
 		Assertions.assertEquals(0, prompt.mayRequestInput().length);
@@ -182,6 +202,8 @@ public class McpAnnotationContractTests {
 		McpResource resource = resourceMethod.getAnnotation(McpResource.class);
 		Assertions.assertEquals("test://catalog/{identifier}", resource.uri());
 		Assertions.assertEquals("catalog-entry", resource.name());
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2026_07_28}, resource.protocolVersions());
 		Assertions.assertEquals("", resource.title());
 		Assertions.assertEquals("", resource.description());
 		Assertions.assertEquals("", resource.mimeType());
@@ -194,9 +216,12 @@ public class McpAnnotationContractTests {
 		McpResourceUriParameter uriParameter = resourceMethod.getParameters()[0]
 				.getAnnotation(McpResourceUriParameter.class);
 		Assertions.assertEquals("", uriParameter.name());
-		Assertions.assertNotNull(MinimalEndpoint.class.getDeclaredMethod(
+		McpResourceList resourceList = MinimalEndpoint.class.getDeclaredMethod(
 				"listResources", McpResourceListContext.class)
-				.getAnnotation(McpResourceList.class));
+				.getAnnotation(McpResourceList.class);
+		Assertions.assertNotNull(resourceList);
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2026_07_28}, resourceList.protocolVersions());
 
 		McpTool multiRoundTripTool = MinimalEndpoint.class
 				.getDeclaredMethod("deleteItem")
@@ -221,6 +246,11 @@ public class McpAnnotationContractTests {
 				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
 		assertNonNullArray(McpResource.class
 				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
+		for (Class<? extends Annotation> annotationType : Set.of(
+				McpServerEndpoint.class, McpTool.class, McpPrompt.class,
+				McpResource.class, McpResourceList.class, McpAppTool.class))
+			assertNonNullArray(annotationType.getDeclaredMethod("protocolVersions")
+					.getAnnotatedReturnType());
 	}
 
 	private static void assertAnnotationContract(
@@ -250,15 +280,15 @@ public class McpAnnotationContractTests {
 				.isAnnotationPresent(NonNull.class));
 	}
 
-	@McpServerEndpoint(path = "/mcp", name = "catalog", version = "4.0.0")
+	@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "catalog", version = "4.0.0")
 	public static final class MinimalEndpoint {
-		@McpTool(name = "search")
+		@McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "search")
 		public SearchResult search(
 				@McpToolArgument @McpHeader(name = "Tenant") String query) {
 			return new SearchResult(query);
 		}
 
-		@McpPrompt(name = "compose")
+		@McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "compose")
 		public McpPromptOutput compose(
 				@McpPromptArgument(name = "subject", title = "Subject",
 						description = "Subject to discuss") String subject,
@@ -268,7 +298,7 @@ public class McpAnnotationContractTests {
 							McpTextContent.fromText(subject)));
 		}
 
-		@McpResource(uri = "test://catalog/{identifier}",
+		@McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://catalog/{identifier}",
 				name = "catalog-entry")
 		public McpResourceOutput readResource(
 				@McpResourceUriParameter String identifier) {
@@ -278,14 +308,14 @@ public class McpAnnotationContractTests {
 					.build();
 		}
 
-		@McpResourceList
+		@McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 		public McpResourcePage listResources(McpResourceListContext list) {
 			return McpResourcePage.builder()
 					.resourceDescriptors(list.getRegisteredResourceDescriptors())
 					.build();
 		}
 
-		@McpTool(name = "delete", mayRequestInput = @McpMayRequestInput(
+		@McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "delete", mayRequestInput = @McpMayRequestInput(
 				type = McpInputRequestType.ELICITATION_FORM,
 				requirement = McpInputRequirement.REQUIRED),
 				requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)

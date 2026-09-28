@@ -101,7 +101,7 @@ public class McpRequestStateContextPlumbingTests {
 	private static McpEndpoint endpoint() {
 		return McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 }

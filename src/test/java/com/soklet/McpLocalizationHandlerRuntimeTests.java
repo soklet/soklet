@@ -155,8 +155,8 @@ class McpLocalizationHandlerRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
-						.withNameAndVersion("handler-context", "1.0").build())
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("context.prompt")
+						.withNameAndVersion("handler-context", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("context.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, promptContext, features) -> {
 							promptObserved.set(features
 									.find(McpLocalizationContext.class).orElse(null));
@@ -165,7 +165,7 @@ class McpLocalizationHandlerRuntimeTests {
 						})
 						.build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("handler://text"), "text")
+						URI.create("handler://text"), "text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) -> {
 							resourceObserved.set(features
 									.find(McpLocalizationContext.class).orElse(null));
@@ -206,12 +206,12 @@ class McpLocalizationHandlerRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
-						.withNameAndVersion("handler-cursor", "1.0").build())
+						.withNameAndVersion("handler-cursor", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) -> {
 					assertTrue(features.find(McpLocalizationContext.class)
 							.isPresent());
 					return McpResourcePage.builder().build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 
 		Capture absent = call(endpoint, localizer, null, request("resources/list",
@@ -243,8 +243,8 @@ class McpLocalizationHandlerRuntimeTests {
 
 	private static McpEndpoint endpoint(FeaturesProbe probe) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
-						.withNameAndVersion("handler-context", "1.0").build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("context.tool")
+						.withNameAndVersion("handler-context", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("context.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							probe.observe(features);

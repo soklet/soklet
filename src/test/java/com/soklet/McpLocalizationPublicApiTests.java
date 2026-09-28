@@ -518,7 +518,7 @@ public class McpLocalizationPublicApiTests {
 	private static McpEndpointRegistry endpointRegistry() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion(
-						"localization-api-test", "4.0.0").build())
+						"localization-api-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}

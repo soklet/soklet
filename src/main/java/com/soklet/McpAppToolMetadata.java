@@ -46,16 +46,25 @@ public final class McpAppToolMetadata {
 	@Nullable
 	private final URI resourceUri;
 	@NonNull
+	private final Set<@NonNull McpProtocolVersion> protocolVersions;
+	@NonNull
 	private final Set<@NonNull Visibility> visibility;
 
-	/** @return mutable builder with both audiences and no resource association */
+	/**
+	 * Starts metadata for exact protocol revisions of its owning tool.
+	 *
+	 * @param protocolVersions nonempty revision set
+	 * @return mutable builder with both audiences and no resource association
+	 */
 	@NonNull
-	public static Builder builder() {
-		return new Builder();
+	public static Builder withProtocolVersions(
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new Builder(McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	private McpAppToolMetadata(@NonNull Builder builder) {
 		this.resourceUri = builder.resourceUri;
+		this.protocolVersions = builder.protocolVersions;
 		this.visibility = builder.visibility;
 	}
 
@@ -63,6 +72,12 @@ public final class McpAppToolMetadata {
 	@NonNull
 	public Optional<@NonNull URI> getResourceUri() {
 		return Optional.ofNullable(this.resourceUri);
+	}
+
+	/** @return exact revisions on which the Apps metadata is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
 	}
 
 	/** @return immutable audiences in enum declaration order; explicit empty stays empty */
@@ -79,13 +94,14 @@ public final class McpAppToolMetadata {
 		if (!(other instanceof McpAppToolMetadata metadata))
 			return false;
 		return Objects.equals(this.resourceUri, metadata.resourceUri)
+				&& this.protocolVersions.equals(metadata.protocolVersions)
 				&& this.visibility.equals(metadata.visibility);
 	}
 
 	/** @return structural hash code */
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.resourceUri, this.visibility);
+		return Objects.hash(this.resourceUri, this.protocolVersions, this.visibility);
 	}
 
 	/** @return diagnostic rendering without application configuration */
@@ -118,10 +134,14 @@ public final class McpAppToolMetadata {
 		@Nullable
 		private URI resourceUri;
 		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
+		@NonNull
 		private Set<@NonNull Visibility> visibility = Collections.unmodifiableSet(
 				new LinkedHashSet<>(EnumSet.allOf(Visibility.class)));
 
-		private Builder() {}
+		private Builder(@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			this.protocolVersions = requireNonNull(protocolVersions);
+		}
 
 		/**
 		 * Associates a concrete UI resource without fetching or dereferencing it.

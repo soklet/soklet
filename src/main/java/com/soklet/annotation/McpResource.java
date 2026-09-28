@@ -18,6 +18,7 @@ package com.soklet.annotation;
 
 import com.soklet.McpCacheScope;
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -39,6 +40,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpResource {
+	/** @return the required exact MCP revisions on which this resource is available */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 	/**
 	 * The absolute resource URI or RFC 6570 Level 1 URI template.
 	 *

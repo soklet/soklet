@@ -285,7 +285,7 @@ class McpServerFutureConfigurationTests {
 
 	private static McpServer.Builder serverBuilder() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"future-configuration-tests", "4.0.0").build())
+						"future-configuration-tests", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)));
 	}

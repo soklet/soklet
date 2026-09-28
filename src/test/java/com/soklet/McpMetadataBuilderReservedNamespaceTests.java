@@ -164,7 +164,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 			throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"metadata-reserved-namespace-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(invalidNestedTextTool(), invalidNestedBlobTool()))
 				.promptRegistrations(java.util.List.of(invalidPrompt()))
 				.resourceRegistrations(java.util.List.of(invalidResource()))
@@ -206,7 +206,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	}
 
 	private static McpToolRegistration<McpJsonObject> invalidNestedTextTool() {
-		return McpToolRegistration.withName("reserved.nested-text")
+		return McpToolRegistration.withName("reserved.nested-text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
@@ -220,7 +220,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	}
 
 	private static McpToolRegistration<McpJsonObject> invalidNestedBlobTool() {
-		return McpToolRegistration.withName("reserved.nested-blob")
+		return McpToolRegistration.withName("reserved.nested-blob", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(McpToolOutput.builder()
@@ -234,7 +234,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	}
 
 	private static McpPromptRegistration invalidPrompt() {
-		return McpPromptRegistration.withName("reserved.prompt")
+		return McpPromptRegistration.withName("reserved.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 								.messages(java.util.List.of(McpPromptMessage.fromAssistantContent(
@@ -246,7 +246,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 
 	private static McpResourceRegistration invalidResource() {
 		return McpResourceRegistration.withUriAndName(RESOURCE_URI,
-				"Reserved metadata resource")
+				"Reserved metadata resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents.withUriAndText(
 										resource.getUri(), SECRET_VALUE)

@@ -863,7 +863,7 @@ public class McpShutdownObservabilityTests {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerEntered.countDown();
@@ -882,7 +882,7 @@ public class McpShutdownObservabilityTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0").build())
+						"shutdown-observability-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -1141,7 +1141,7 @@ public class McpShutdownObservabilityTests {
 	@NonNull
 	private static McpServer newServer(@NonNull String path) {
 		McpEndpoint endpoint = McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0").build())
+						"shutdown-observability-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return serverFor(endpoint);
 	}
@@ -1181,10 +1181,10 @@ public class McpShutdownObservabilityTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0").build())
+						"shutdown-observability-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(subscriptions)
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 	}
 

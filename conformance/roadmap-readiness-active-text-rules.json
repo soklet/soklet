@@ -4,7 +4,7 @@
     {
       "id": "PROFILE-001",
       "classification": "latest-profile-qualification",
-      "rationale": "Every retained automatic/latest-profile reference is qualified by explicit fixed-profile and no-fallback language.",
+      "rationale": "Every retained automatic/latest-profile reference is qualified by explicit revision selection and no-fallback language.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
         {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Protocol scope and unsupported features"],"role":"compatibility"}}
@@ -35,18 +35,18 @@
     },
     {
       "id": "PROFILE-003",
-      "classification": "fixed-production-profile",
-      "rationale": "Default-path guidance names the one production profile explicitly.",
+      "classification": "qualified-production-profile",
+      "rationale": "Default-path guidance names the qualified 4.0.0 server target explicitly without implying that development compatibility adapters are qualified.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
         {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ],
-      "matcher": {"kind":"literal","pattern":"Soklet supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "matcher": {"kind":"regex","pattern":"Soklet's qualified 4\\.0\\.0 MCP server target is\\s+`2026-07-28`","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"Soklet supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet's qualified 4.0.0 MCP server target is","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Soklet supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
-        {"path":"README.md","matchedText":"Soklet supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
+        {"path":"MCP.md","matchedText":"Soklet's qualified 4.0.0 MCP server target is\n`2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","matchedText":"Soklet's qualified 4.0.0 MCP server target is `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ]
     },
     {

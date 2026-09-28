@@ -312,7 +312,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void anEndpointWithNoLocalizableTextNeverCreatesAContext() {
 		AtomicInteger contexts = new AtomicInteger();
 		McpEndpoint bare = McpEndpoint.withPath(WIRE_PATH, McpImplementation
-						.withNameAndVersion("bare", "1.0").build())
+						.withNameAndVersion("bare", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		Capture capture = capture(bare,
 				McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
@@ -519,9 +519,9 @@ class McpLocalizationRenderingRuntimeTests {
 						.withNameAndVersion("localization-render", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Endpoint instructions")
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("render.search")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("render.search", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.inputSchema(inputSchema)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
@@ -530,7 +530,7 @@ class McpLocalizationRenderingRuntimeTests {
 						.toolAnnotations(McpToolAnnotations.builder()
 								.title("Annotation title").build())
 						.build()))
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("render.summary")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("render.summary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -542,12 +542,12 @@ class McpLocalizationRenderingRuntimeTests {
 								.build()))
 						.build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("render://summary"), "summary")
+						URI.create("render://summary"), "summary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
 						.build(), McpResourceRegistration.withUriTemplateAndName(
-						"render://item/{id}", "item")
+						"render://item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Template title")
 						.description("Template description")
@@ -607,7 +607,7 @@ class McpLocalizationRenderingRuntimeTests {
 						.withNameAndVersion("localization-render", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use canonical instructions.")
 				.build();
 		AtomicReference<String> captured = new AtomicReference<>();

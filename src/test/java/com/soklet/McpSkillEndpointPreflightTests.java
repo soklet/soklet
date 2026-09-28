@@ -35,11 +35,11 @@ class McpSkillEndpointPreflightTests {
 	void customHandlerPermitsLargerCatalogAndNullResetRestoresAutomaticPreflight() {
 		List<McpSkillRegistration> registrations = registrations(33);
 		McpSkillListHandler handler = handler();
-		McpEndpoint.Builder builder = builder().skillRegistrations(registrations).skillListHandler(handler);
+		McpEndpoint.Builder builder = builder().skillRegistrations(registrations).skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		McpEndpoint endpoint = assertDoesNotThrow(builder::build);
 		assertSame(handler, endpoint.getSkillListHandler().orElseThrow());
 		assertEquals(33, endpoint.getSkillRegistrations().size());
-		assertPaginationRequired(() -> builder.skillListHandler(null).build());
+		assertPaginationRequired(() -> builder.skillListHandler(null, java.util.Set.of()).build());
 	}
 
 	@Test
@@ -60,7 +60,7 @@ class McpSkillEndpointPreflightTests {
 		List<McpSkillGroup> groups = new ArrayList<>();
 		for (int index = 0; index < 5; ++index) groups.add(group("bytes-" + index, "", large));
 		assertPaginationRequired(() -> builder().skillGroups(groups).build());
-		assertEquals(5, assertDoesNotThrow(() -> builder().skillGroups(groups).skillListHandler(handler()).build())
+		assertEquals(5, assertDoesNotThrow(() -> builder().skillGroups(groups).skillListHandler(handler(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build())
 				.getSkillGroups().size());
 	}
 
@@ -73,7 +73,7 @@ class McpSkillEndpointPreflightTests {
 		List<McpSkillGroup> groups = new ArrayList<>();
 		for (int index = 0; index < 11; ++index) groups.add(group("nodes-" + index, byteHeavy, nodeHeavy));
 		assertPaginationRequired(() -> builder().skillGroups(groups).build());
-		assertEquals(11, assertDoesNotThrow(() -> builder().skillGroups(groups).skillListHandler(handler()).build())
+		assertEquals(11, assertDoesNotThrow(() -> builder().skillGroups(groups).skillListHandler(handler(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build())
 				.getSkillGroups().size());
 	}
 
@@ -84,8 +84,8 @@ class McpSkillEndpointPreflightTests {
 		String serverField = "x".repeat(900_000);
 		McpImplementation information = McpImplementation.withNameAndVersion(serverField, serverField)
 				.title(serverField).description(serverField).build();
-		McpEndpoint.Builder builder = McpEndpoint.withPath("/skills", information)
-				.skillRegistrations(List.of(registration)).skillListHandler(handler());
+		McpEndpoint.Builder builder = McpEndpoint.withPath("/skills", information, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.skillRegistrations(List.of(registration)).skillListHandler(handler(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, builder::build);
 		assertEquals("An MCP Skills registration with endpoint metadata exceeds the JSON output profile.", failure.getMessage());
 		assertNull(failure.getCause());
@@ -94,7 +94,7 @@ class McpSkillEndpointPreflightTests {
 	}
 
 	private static McpEndpoint.Builder builder() {
-		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static List<McpSkillRegistration> registrations(int count) {
@@ -114,7 +114,7 @@ class McpSkillEndpointPreflightTests {
 		byte[] root = ("---\nname: " + name + "\ndescription: Synthetic description\n" + extra + "---\nOpaque body.\n")
 				.getBytes(StandardCharsets.UTF_8);
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/" + variant + "/" + name + "/SKILL.md"), McpSkillBundle.fromFiles(Map.of("SKILL.md", root)));
+				URI.create("skill://host.invalid/" + variant + "/" + name + "/SKILL.md"), McpSkillBundle.fromFiles(Map.of("SKILL.md", root)), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}

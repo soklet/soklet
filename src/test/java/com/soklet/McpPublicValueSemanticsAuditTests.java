@@ -376,7 +376,7 @@ class McpPublicValueSemanticsAuditTests {
 	private static McpLocalizationCatalog localizationCatalog(
 			String instructions) {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
-				implementation("4.0.0"))
+				implementation("4.0.0"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions(instructions)
 				.build();
 		return McpLocalizationCatalog.fromEndpointRegistry(
@@ -401,7 +401,7 @@ class McpPublicValueSemanticsAuditTests {
 	private static McpRequestStateProtectionContext protectionContext(
 			byte[] associatedData) {
 		return McpRequestStateProtectionContext.fromComponents("/mcp",
-				"2026-07-28", "tools/call", associatedData);
+				McpProtocolVersion.V2026_07_28, "tools/call", associatedData);
 	}
 
 	private static McpAdmissionRejection admissionRejection(String challenge) {

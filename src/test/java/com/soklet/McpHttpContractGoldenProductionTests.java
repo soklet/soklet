@@ -413,7 +413,7 @@ public class McpHttpContractGoldenProductionTests {
 
 	private static McpServer server(FixtureState state) {
 		McpToolRegistration<ContractArguments> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(ContractArguments.class)
 				.handler((request, arguments, features) -> {
 					String caseName = state.caseName(request.getRequest());
@@ -433,7 +433,7 @@ public class McpHttpContractGoldenProductionTests {
 				})
 				.build();
 		McpToolRegistration<ContractArguments> typedTool = McpToolRegistration
-				.withName(TYPED_TOOL_NAME)
+				.withName(TYPED_TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(ContractArguments.class, ContractResult.class)
 				.handler((request, arguments, features) -> {
 					state.record(state.caseName(request.getRequest()), "handler");
@@ -441,7 +441,7 @@ public class McpHttpContractGoldenProductionTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"http-contract-golden", "4.0.0").build())
+						"http-contract-golden", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool, typedTool))
 				.build();

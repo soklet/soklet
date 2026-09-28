@@ -662,9 +662,9 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 
 		private SimulatorConfig config() {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-							"localized-cursor-fixture", "1.0").build())
+							"localized-cursor-fixture", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(
-							"app-resource://catalog/{id}", "catalog-resource")
+							"app-resource://catalog/{id}", "catalog-resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
 											McpResourceOutput.withContent(McpTextResourceContents
@@ -673,7 +673,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 															.build())
 													.build()))
 							.build()))
-					.resourceListHandler(this::page)
+					.resourceListHandler(this::page, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.build();
 			McpLocalizer localizer = McpLocalizer
 					.withFallbackLocale(Locale.ENGLISH,

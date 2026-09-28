@@ -11,6 +11,9 @@ The root document and CSV are fixed classpath resources. The small binary file i
 created in Java, and `McpSkillBundle` snapshots all three files before the listener
 starts. Soklet provides the standard `skills/list`, `skills/get`, and
 `resources/read` behavior; the example does not register any Tools.
+Its Skill registration and endpoint both explicitly select
+`McpProtocolVersion.V2026_07_28`; Skills are not part of the first 2025
+synchronous-tools compatibility slice.
 The root document's nested `example` frontmatter also demonstrates that authored,
 unknown metadata is retained in the generated Skill manifest.
 

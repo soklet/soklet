@@ -490,7 +490,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			this.admissions = new AtomicInteger();
 			this.createdTaskId = new AtomicReference<>();
 			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-					.withName(TOOL_NAME)
+					.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.jsonObjectArguments()
 					.handler((request, arguments, features) -> {
 						McpTask task = this.taskManager.createTask(
@@ -504,7 +504,9 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
-							"tasks-simulator-test", "4.0.0").build())
+							"tasks-simulator-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+					.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+					.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.serverInfoIncluded(false)
 					.toolRegistrations(java.util.List.of(tool))
 					.build();

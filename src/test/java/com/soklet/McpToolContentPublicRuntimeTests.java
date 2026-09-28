@@ -101,7 +101,7 @@ public class McpToolContentPublicRuntimeTests {
 						.put("rows", nodeBoundaryRows)
 						.build()));
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"tool-content-public-runtime-test", "4.0.0").build())
+						"tool-content-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(imageTool, audioTool, embeddedResourceTool, mixedContentTool, largeStructuredTool, nodeBoundaryStructuredTool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -178,7 +178,7 @@ public class McpToolContentPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			McpToolOutput output) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolOutput(output))

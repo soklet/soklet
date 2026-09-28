@@ -604,7 +604,7 @@ public class McpServerPublicRuntimeTests {
 				.description("Operation-free public projection")
 				.websiteUrl(URI.create("https://example.test/soklet-mcp"))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, implementation)
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use the public discovery endpoint.")
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
@@ -671,7 +671,7 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://phase-five-subscriptions"),
-						"phase-five-subscriptions")
+						"phase-five-subscriptions", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					throw new AssertionError(
 							"Discovery must not invoke the resource handler.");
@@ -679,9 +679,9 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("phase-five-subscriptions", "1.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(resource))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
@@ -724,7 +724,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("omitted-server-info", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
@@ -792,7 +792,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(context.isNotification());
 			Assertions.assertEquals(McpRequestId.fromString("admission-1"),
 					context.getRequestId().orElseThrow());
-			Assertions.assertEquals(PROTOCOL_VERSION, context.getProtocolVersion());
+			Assertions.assertEquals(McpProtocolVersion.V2026_07_28,
+					context.getProtocolVersion());
 			McpClientCapabilities capabilities =
 					context.getClientCapabilities().orElseThrow();
 			Assertions.assertTrue(capabilities.toJson().find("roots").isPresent());
@@ -1229,7 +1230,7 @@ public class McpServerPublicRuntimeTests {
 	private static McpEndpoint newEndpoint() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("public-runtime-test", "1.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 

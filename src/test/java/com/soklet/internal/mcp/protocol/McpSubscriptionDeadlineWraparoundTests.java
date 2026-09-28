@@ -70,7 +70,7 @@ public class McpSubscriptionDeadlineWraparoundTests {
 			Instant.parse("2026-09-18T12:00:00Z");
 	private static final McpEndpoint PUBLIC_ENDPOINT = McpEndpoint.withPath("/mcp",
 			McpImplementation.withNameAndVersion(
-					"subscription-deadline-wrap-test", "4.0.0").build()).build();
+					"subscription-deadline-wrap-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 
 	@Test
 	public void catalogProjectionDeadlineRemainsOrderedAcrossNanoTimeWrap()

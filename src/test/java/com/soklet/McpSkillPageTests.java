@@ -155,12 +155,12 @@ class McpSkillPageTests {
 		McpEndpoint defaults = endpointBuilder().build();
 		assertTrue(defaults.getSkillListHandler().isEmpty());
 		assertSame(McpCachePolicy.privateNoCacheInstance(), defaults.getSkillListCachePolicy());
-		McpEndpoint.Builder builder = endpointBuilder().skillListHandler(handler).skillListCachePolicy(policy);
+		McpEndpoint.Builder builder = endpointBuilder().skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).skillListCachePolicy(policy);
 		McpEndpoint configured = builder.build();
 		assertSame(handler, configured.getSkillListHandler().orElseThrow());
 		assertSame(policy, configured.getSkillListCachePolicy());
-		assertSame(replacement, builder.skillListHandler(replacement).build().getSkillListHandler().orElseThrow());
-		McpEndpoint reset = builder.skillListHandler(null).skillListCachePolicy(null).build();
+		assertSame(replacement, builder.skillListHandler(replacement, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build().getSkillListHandler().orElseThrow());
+		McpEndpoint reset = builder.skillListHandler(null, java.util.Set.of()).skillListCachePolicy(null).build();
 		assertTrue(reset.getSkillListHandler().isEmpty());
 		assertSame(McpCachePolicy.privateNoCacheInstance(), reset.getSkillListCachePolicy());
 		McpSubscriptionConfig subscription = McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
@@ -184,12 +184,13 @@ class McpSkillPageTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpSkillRegistration registration(String name) {
 		byte[] root = ("---\nname: " + name + "\ndescription: Synthetic description\n---\nOpaque body.\n").getBytes(StandardCharsets.UTF_8);
 		return McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host.invalid/" + name + "/SKILL.md"),
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", root))).build();
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root)), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 }

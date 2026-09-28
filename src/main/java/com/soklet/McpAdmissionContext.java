@@ -66,7 +66,7 @@ public interface McpAdmissionContext {
 	@NonNull Optional<@NonNull McpRequestId> getRequestId();
 
 	/** @return the validated MCP protocol version */
-	@NonNull String getProtocolVersion();
+	@NonNull McpProtocolVersion getProtocolVersion();
 
 	/**
 	 * @return the selected tool, prompt, resource, or task ID, when applicable

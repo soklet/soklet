@@ -178,7 +178,7 @@ class McpSkillRuntimeBridgeTests {
 		var bundle = McpSkillRuntimeBridge.fromFiles(Map.of("SKILL.md", root("demo")));
 		var registration = McpSkillRuntimeBridge.register(ROOT, bundle, CACHE);
 		var endpoint = com.soklet.McpEndpoint.withPath("/skills",
-				com.soklet.McpImplementation.withNameAndVersion("test", "1").build()).build();
+				com.soklet.McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		var metadata = com.soklet.McpJsonObject.builder().put("example/items",
 				com.soklet.McpJsonArray.fromElements(java.util.Collections.nCopies(99_988,
 						com.soklet.McpJsonString.fromValue("x")))).build();
@@ -196,7 +196,7 @@ class McpSkillRuntimeBridgeTests {
 		var bundle = McpSkillRuntimeBridge.fromFiles(Map.of("SKILL.md", root("demo")));
 		var registration = McpSkillRuntimeBridge.register(ROOT, bundle, CACHE);
 		var endpoint = com.soklet.McpEndpoint.withPath("/skills",
-				com.soklet.McpImplementation.withNameAndVersion("test", "1").build()).build();
+				com.soklet.McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		String large = "x".repeat(1_048_570);
 		var metadata = com.soklet.McpJsonObject.builder()
 				.put("example/one", large).put("example/two", large).put("example/three", large).build();

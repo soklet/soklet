@@ -33,7 +33,8 @@ class McpAppToolMetadataTests {
 
 	@Test
 	void defaultsHaveBothAudiencesButNoResourceAssociation() {
-		McpAppToolMetadata metadata = McpAppToolMetadata.builder().build();
+		McpAppToolMetadata metadata = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
+		assertEquals(Set.of(McpProtocolVersion.V2026_07_28), metadata.getProtocolVersions());
 		assertTrue(metadata.getResourceUri().isEmpty());
 		assertEquals(List.of(MODEL, APP), List.copyOf(metadata.getVisibility()));
 		assertThrows(UnsupportedOperationException.class, () -> metadata.getVisibility().clear());
@@ -42,12 +43,12 @@ class McpAppToolMetadataTests {
 
 	@Test
 	void explicitEmptyAndAppOnlyRemainIndependentOfResourceAssociation() {
-		assertTrue(McpAppToolMetadata.builder().visibility(Set.of()).build().getVisibility().isEmpty());
-		McpAppToolMetadata helper = McpAppToolMetadata.builder().visibility(Set.of(APP)).build();
+		assertTrue(McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(Set.of()).build().getVisibility().isEmpty());
+		McpAppToolMetadata helper = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(Set.of(APP)).build();
 		assertEquals(Set.of(APP), helper.getVisibility());
 		assertTrue(helper.getResourceUri().isEmpty());
 		URI uri = URI.create("ui://orders/dashboard");
-		McpAppToolMetadata hidden = McpAppToolMetadata.builder().resourceUri(uri).visibility(Set.of()).build();
+		McpAppToolMetadata hidden = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(uri).visibility(Set.of()).build();
 		assertEquals(uri, hidden.getResourceUri().orElseThrow());
 		assertTrue(hidden.getVisibility().isEmpty());
 	}
@@ -55,7 +56,7 @@ class McpAppToolMetadataTests {
 	@Test
 	void snapshotsAreImmutableOrderedAndIndependentAcrossBuilds() {
 		Set<McpAppToolMetadata.Visibility> input = new LinkedHashSet<>(List.of(APP, MODEL));
-		McpAppToolMetadata.Builder builder = McpAppToolMetadata.builder().visibility(input);
+		McpAppToolMetadata.Builder builder = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(input);
 		input.clear();
 		McpAppToolMetadata first = builder.build();
 		McpAppToolMetadata second = builder.visibility(Set.of(APP)).resourceUri(URI.create("ui://orders/new")).build();
@@ -68,7 +69,7 @@ class McpAppToolMetadataTests {
 	@Test
 	void rejectedSettersLeaveTheBuilderUnchanged() {
 		URI original = URI.create("ui://orders/dashboard");
-		McpAppToolMetadata.Builder builder = McpAppToolMetadata.builder().resourceUri(original).visibility(Set.of(MODEL));
+		McpAppToolMetadata.Builder builder = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(original).visibility(Set.of(MODEL));
 		assertThrows(NullPointerException.class, () -> builder.resourceUri(null));
 		assertThrows(IllegalArgumentException.class, () -> builder.resourceUri(URI.create("https://orders/dashboard")));
 		assertThrows(NullPointerException.class, () -> builder.visibility(null));
@@ -82,26 +83,29 @@ class McpAppToolMetadataTests {
 
 	@Test
 	void structuralEqualityIncludesOptionalUriAndEffectiveVisibility() {
-		McpAppToolMetadata omitted = McpAppToolMetadata.builder().build();
-		McpAppToolMetadata explicit = McpAppToolMetadata.builder().visibility(Set.of(APP, MODEL)).build();
+		McpAppToolMetadata omitted = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
+		McpAppToolMetadata explicit = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(Set.of(APP, MODEL)).build();
 		assertEquals(omitted, omitted);
 		assertEquals(omitted, explicit);
 		assertEquals(explicit, omitted);
 		assertEquals(omitted.hashCode(), explicit.hashCode());
-		assertNotEquals(omitted, McpAppToolMetadata.builder().visibility(Set.of()).build());
-		assertNotEquals(omitted, McpAppToolMetadata.builder().resourceUri(URI.create("ui://orders/dashboard")).build());
-		McpAppToolMetadata first = McpAppToolMetadata.builder().resourceUri(URI.create("ui://orders/dashboard")).build();
-		McpAppToolMetadata copy = McpAppToolMetadata.builder().resourceUri(first.getResourceUri().orElseThrow()).visibility(first.getVisibility()).build();
+		assertNotEquals(omitted, McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(Set.of()).build());
+		assertNotEquals(omitted, McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(URI.create("ui://orders/dashboard")).build());
+		McpAppToolMetadata first = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(URI.create("ui://orders/dashboard")).build();
+		McpAppToolMetadata copy = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(first.getResourceUri().orElseThrow()).visibility(first.getVisibility()).build();
 		assertEquals(first, copy);
 		assertEquals(first.hashCode(), copy.hashCode());
-		assertNotEquals(first, McpAppToolMetadata.builder().resourceUri(URI.create("ui://orders/other")).build());
+		assertNotEquals(first, McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(URI.create("ui://orders/other")).build());
+		assertNotEquals(first, McpAppToolMetadata.withProtocolVersions(
+				Set.of(McpProtocolVersion.V2025_11_25))
+				.resourceUri(first.getResourceUri().orElseThrow()).build());
 		assertNotEquals(omitted, null);
 		assertNotEquals(omitted, "metadata");
 	}
 
 	@Test
 	void diagnosticsDoNotExposeConfigurationAndConstructionStaysPrivate() {
-		McpAppToolMetadata metadata = McpAppToolMetadata.builder().resourceUri(URI.create("ui://private-tenant/secret")).visibility(Set.of(APP)).build();
+		McpAppToolMetadata metadata = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(URI.create("ui://private-tenant/secret")).visibility(Set.of(APP)).build();
 		assertEquals("McpAppToolMetadata{resourceUri=<redacted>, visibility=<redacted>}", metadata.toString());
 		for (Class<?> type : List.of(McpAppToolMetadata.class, McpAppToolMetadata.Builder.class)) {
 			assertTrue(Modifier.isFinal(type.getModifiers()));

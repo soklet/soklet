@@ -318,7 +318,7 @@ public class McpRateLimiterTests {
 	private static McpRateLimitContext context(String endpointPath,
 			String partitionKey, McpRateLimitTarget target) {
 		McpEndpoint endpoint = McpEndpoint.withPath(endpointPath, McpImplementation.withNameAndVersion(
-						"test", "1").build())
+						"test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpAdmissionIdentity identity = McpAdmissionIdentity
 				.withRateLimitPartitionKey(partitionKey)
@@ -333,6 +333,11 @@ public class McpRateLimiterTests {
 			@Override
 			public McpEndpoint getEndpoint() {
 				return endpoint;
+			}
+
+			@Override
+			public McpProtocolVersion getProtocolVersion() {
+				return McpProtocolVersion.V2026_07_28;
 			}
 
 			@Override

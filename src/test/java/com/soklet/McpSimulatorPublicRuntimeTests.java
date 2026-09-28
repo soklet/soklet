@@ -160,7 +160,7 @@ public class McpSimulatorPublicRuntimeTests {
 					});
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-default-host-test",
-							"4.0.0").build())
+							"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.toolRegistrations(java.util.List.of(tool))
 					.build();
 			return List.of(endpoint);
@@ -330,7 +330,7 @@ public class McpSimulatorPublicRuntimeTests {
 		AtomicInteger handlerCalls = new AtomicInteger();
 		RecordingMetrics metrics = new RecordingMetrics(0, 0, 2);
 		ServerFixture server = server(() -> List.of(McpToolRegistration
-				.withName("multi-round-trip")
+				.withName("multi-round-trip", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
@@ -525,10 +525,10 @@ public class McpSimulatorPublicRuntimeTests {
 					.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-subscription-test",
-							"4.0.0").build())
+							"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 							URI.create("https://example.com/simulator-resource"),
-							"Simulator resource")
+							"Simulator resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.handler((resourceRequest, read, features) ->
 									McpCompleteResult.fromResourceOutput(
 											McpResourceOutput.withContent(McpTextResourceContents
@@ -537,7 +537,7 @@ public class McpSimulatorPublicRuntimeTests {
 															.build())
 													.build()))
 							.build()))
-					.subscriptionConfig(subscriptions)
+					.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 					.build();
 			return List.of(endpoint);
 		}, McpAdmissionController.acceptAllInstance(),
@@ -784,7 +784,7 @@ public class McpSimulatorPublicRuntimeTests {
 				});
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-capture-isolation-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(slow, fast))
 				.build();
 			return List.of(endpoint);
@@ -1203,7 +1203,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(
 			@NonNull String name, @NonNull McpToolHandler<McpJsonObject> handler) {
-		return McpToolRegistration.withName(name).jsonObjectArguments()
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler(handler).build();
 	}
 
@@ -1231,7 +1231,7 @@ public class McpSimulatorPublicRuntimeTests {
 			tools.addAll(toolsFactory.get());
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 							"simulator-public-runtime-test",
-							"4.0.0").build())
+							"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.serverInfoIncluded(false)
 					.toolRegistrations(tools)
 					.build();

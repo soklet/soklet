@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -42,6 +43,7 @@ import static java.util.Objects.requireNonNull;
 public final class McpSkillRegistration {
 	@NonNull private final URI uri;
 	@NonNull private final McpSkillBundle skillBundle;
+	@NonNull private final Set<@NonNull McpProtocolVersion> protocolVersions;
 	@Nullable private final Locale locale;
 	@NonNull private final McpCachePolicy cachePolicy;
 	@NonNull private final List<@NonNull Resource> resources;
@@ -50,6 +52,7 @@ public final class McpSkillRegistration {
 	private McpSkillRegistration(@NonNull Builder builder) {
 		this.uri = builder.uri;
 		this.skillBundle = builder.skillBundle;
+		this.protocolVersions = builder.protocolVersions;
 		this.locale = builder.locale;
 		this.cachePolicy = builder.cachePolicy;
 		this.runtimeRegistration = McpSkillRuntimeBridge.register(this.uri,
@@ -64,12 +67,16 @@ public final class McpSkillRegistration {
 	 * {@code /SKILL.md}, without query, fragment, dot segments, or encoded separators
 	 * @param skillBundle validated immutable snapshot whose name matches the URI's
 	 * final skill-directory segment
+	 * @param protocolVersions nonempty exact revisions serving this Skill
 	 * @return mutable builder with no locale and private zero-TTL cache policy
 	 * @throws NullPointerException if either argument is null
 	 */
 	@NonNull
-	public static Builder withUriAndSkillBundle(@NonNull URI uri, @NonNull McpSkillBundle skillBundle) {
-		return new Builder(uri, skillBundle);
+	public static Builder withUriAndSkillBundle(@NonNull URI uri,
+			@NonNull McpSkillBundle skillBundle,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new Builder(uri, skillBundle,
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	/** @return original root {@code SKILL.md} URI */
@@ -79,6 +86,12 @@ public final class McpSkillRegistration {
 	/** @return the supplied immutable bundle */
 	@NonNull
 	public McpSkillBundle getSkillBundle() { return this.skillBundle; }
+
+	/** @return exact protocol revisions on which this Skill is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
+	}
 
 	/** @return configured locale, or empty when omitted */
 	@NonNull
@@ -103,12 +116,14 @@ public final class McpSkillRegistration {
 	public boolean equals(@Nullable Object other) {
 		return this == other || other instanceof McpSkillRegistration registration
 				&& this.uri.equals(registration.uri) && this.skillBundle.equals(registration.skillBundle)
+				&& this.protocolVersions.equals(registration.protocolVersions)
 				&& Objects.equals(this.locale, registration.locale) && this.cachePolicy.equals(registration.cachePolicy);
 	}
 
 	/** @return structural registration hash code */
 	@Override
-	public int hashCode() { return Objects.hash(this.uri, this.skillBundle, this.locale, this.cachePolicy); }
+	public int hashCode() { return Objects.hash(this.uri, this.skillBundle,
+			this.protocolVersions, this.locale, this.cachePolicy); }
 
 	/** @return diagnostic rendering without registration or bundle content */
 	@Override
@@ -171,12 +186,15 @@ public final class McpSkillRegistration {
 	public static final class Builder {
 		@NonNull private final URI uri;
 		@NonNull private final McpSkillBundle skillBundle;
+		@NonNull private final Set<@NonNull McpProtocolVersion> protocolVersions;
 		@Nullable private Locale locale;
 		@NonNull private McpCachePolicy cachePolicy = McpCachePolicy.privateNoCacheInstance();
 
-		private Builder(@NonNull URI uri, @NonNull McpSkillBundle skillBundle) {
+		private Builder(@NonNull URI uri, @NonNull McpSkillBundle skillBundle,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.uri = requireNonNull(uri, "A Skills root URI is required.");
 			this.skillBundle = requireNonNull(skillBundle, "A Skills bundle is required.");
+			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
 		/**

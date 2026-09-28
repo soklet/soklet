@@ -35,6 +35,12 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpOperationType {
+	/** 2025-era protocol initialization through {@code initialize}. */
+	INITIALIZE,
+	/** 2025-era initialization acknowledgement. */
+	NOTIFICATIONS_INITIALIZED,
+	/** Liveness probe through {@code ping}. */
+	PING,
 	/** Server discovery through {@code server/discover}. */
 	SERVER_DISCOVER,
 	/** Tool catalog retrieval through {@code tools/list}. */
@@ -73,6 +79,9 @@ public enum McpOperationType {
 	@NonNull
 	static McpOperationType fromJsonRpcMethod(@NonNull String jsonRpcMethod) {
 		return switch (requireNonNull(jsonRpcMethod)) {
+			case "initialize" -> INITIALIZE;
+			case "notifications/initialized" -> NOTIFICATIONS_INITIALIZED;
+			case "ping" -> PING;
 			case "server/discover" -> SERVER_DISCOVER;
 			case "tools/list" -> TOOLS_LIST;
 			case "tools/call" -> TOOLS_CALL;

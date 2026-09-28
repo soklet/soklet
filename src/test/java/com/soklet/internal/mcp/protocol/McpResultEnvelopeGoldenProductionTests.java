@@ -278,7 +278,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger resourceHandlerInvocations = new AtomicInteger();
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolHandlerInvocations.incrementAndGet();
@@ -286,14 +286,14 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					promptHandlerInvocations.incrementAndGet();
 					return completePrompt("handler prompt complete", "handler-prompt");
 				})
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Result envelope resource")
+				.withUriAndName(RESOURCE_URI, "Result envelope resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					resourceHandlerInvocations.incrementAndGet();
 					return completeResource(read.getUri(),
@@ -377,7 +377,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger listHandlerInvocations = new AtomicInteger();
 		AtomicInteger listInterceptorInvocations = new AtomicInteger();
 		McpResourceRegistration listedResource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Custom-listed result resource")
+				.withUriAndName(RESOURCE_URI, "Custom-listed result resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> completeResource(
 						read.getUri(), "unused", "unused"))
 				.build();
@@ -390,7 +390,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 							.resourceDescriptors(list.getRegisteredResourceDescriptors())
 							.metadata(metadata("custom-resource-list"))
 							.build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer customListServer = serverBuilder(customListEndpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -440,7 +440,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger promptInvocations = new AtomicInteger();
 		AtomicInteger resourceInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(INPUT_TOOL_NAME)
+				.withName(INPUT_TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
@@ -453,7 +453,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.inputRequestDeclarations(java.util.List.of(roots))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(INPUT_PROMPT_NAME)
+				.withName(INPUT_PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					promptInvocations.incrementAndGet();
 					if (request.getApplicationRequestState().isEmpty())
@@ -468,7 +468,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(INPUT_RESOURCE_URI, "Combined input resource")
+				.withUriAndName(INPUT_RESOURCE_URI, "Combined input resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					resourceInvocations.incrementAndGet();
 					if (request.getFrameworkRequestState().isEmpty())
@@ -558,7 +558,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger completeInvocations = new AtomicInteger();
 		AtomicInteger inputInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> complete = McpToolRegistration
-				.withName("result.sse.complete")
+				.withName("result.sse.complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					completeInvocations.incrementAndGet();
@@ -568,7 +568,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpToolRegistration<McpJsonObject> input = McpToolRegistration
-				.withName("result.sse.input")
+				.withName("result.sse.input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					inputInvocations.incrementAndGet();
@@ -616,7 +616,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Subscription result resource")
+				.withUriAndName(RESOURCE_URI, "Subscription result resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> completeResource(
 						read.getUri(), "subscription resource", "subscription-resource"))
 				.build();
@@ -624,7 +624,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				"result-envelope-subscription")
 				.serverInfoIncluded(true)
 				.resourceRegistrations(java.util.List.of(resource))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		McpServer subscriptionServer = serverBuilder(subscriptionEndpoint).build();
 		assertSubscriptionTerminalGolden(subscriptionServer, "303",
@@ -634,7 +634,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				"result-envelope-localized-subscription")
 				.serverInfoIncluded(true)
 				.resourceRegistrations(java.util.List.of(resource))
-				.subscriptionConfig(McpSubscriptionConfig
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								Set.of(
@@ -657,7 +657,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<TypedArguments> tool = McpToolRegistration
-				.withName("result.typed")
+				.withName("result.typed", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(TypedArguments.class, TypedResult.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -1004,7 +1004,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static McpEndpoint.Builder endpointBuilder(String name) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						name, "4.0.0").build())
+						name, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 	}
 
@@ -1013,7 +1013,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 						name, "4.0.0")
 						.title("Canonical result title")
 						.description("Canonical result description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 	}
 

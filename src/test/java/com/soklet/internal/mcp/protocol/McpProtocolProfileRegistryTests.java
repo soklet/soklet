@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -226,7 +227,7 @@ public class McpProtocolProfileRegistryTests {
 		String runtime = Files.readString(productionRoot.resolve(Path.of(
 				"internal", "mcp", "protocol", "McpHttpServerRuntime.java")));
 		Assertions.assertTrue(runtime.contains(
-				"this.protocolProfiles.resolve(headerProtocolVersion)"));
+				"this.protocolProfiles.resolve(selectedRevision)"));
 		Assertions.assertTrue(runtime.contains(
 				"this.protocolProfiles.resolve(protocolVersion)"));
 		Assertions.assertTrue(runtime.contains(
@@ -304,7 +305,9 @@ public class McpProtocolProfileRegistryTests {
 			McpProtocolProfileRegistry registry) {
 		McpNormalizedEndpoint endpoint = endpoint();
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
-				policy(), endpoint, McpApplicationRequestRouter.empty());
+				policy(), endpoint, McpApplicationRequestRouter.empty(),
+				McpRuntimeObservationSink.disabledInstance(), List.of(),
+				Optional.empty(), Map.of(CURRENT, endpoint, FAKE, endpoint));
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
 				List.of(binding), McpJsonLimits.productionDefaults(),

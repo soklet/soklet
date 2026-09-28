@@ -66,12 +66,12 @@ public class McpMultiEndpointPublicRuntimeTests {
 				"Second shared tool", "Tool registered only on the second endpoint",
 				"second-result", secondHandlerInvocations, secondObservedEndpoint);
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
-						"multi-endpoint-first", "1.0").build())
+						"multi-endpoint-first", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Instructions for the first endpoint.")
 				.toolRegistrations(java.util.List.of(firstTool))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
-						"multi-endpoint-second", "2.0").build())
+						"multi-endpoint-second", "2.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Instructions for the second endpoint.")
 				.toolRegistrations(java.util.List.of(secondTool))
 				.build();
@@ -163,13 +163,13 @@ public class McpMultiEndpointPublicRuntimeTests {
 		List<McpEndpoint> requestLimitedEndpoints = new CopyOnWriteArrayList<>();
 		List<McpEndpoint> toolLimitedEndpoints = new CopyOnWriteArrayList<>();
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
-						"multi-endpoint-policy-first", "1.0").build())
+						"multi-endpoint-policy-first", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool("First policy tool", "First policy tool",
 						"first-policy-result", new AtomicInteger(),
 						new AtomicReference<>())))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
-						"multi-endpoint-policy-second", "1.0").build())
+						"multi-endpoint-policy-second", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool("Second policy tool", "Second policy tool",
 						"second-policy-result", new AtomicInteger(),
 						new AtomicReference<>())))
@@ -237,12 +237,12 @@ public class McpMultiEndpointPublicRuntimeTests {
 		McpResourceRegistration secondResource = resource("Second shared resource",
 				"second-resource-result", secondResourceEndpoint);
 		McpEndpoint firstEndpoint = McpEndpoint.withPath(FIRST_PATH, McpImplementation.withNameAndVersion(
-						"multi-capability-first", "1.0").build())
+						"multi-capability-first", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(firstPrompt))
 				.resourceRegistrations(java.util.List.of(firstResource))
 				.build();
 		McpEndpoint secondEndpoint = McpEndpoint.withPath(SECOND_PATH, McpImplementation.withNameAndVersion(
-						"multi-capability-second", "1.0").build())
+						"multi-capability-second", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(secondPrompt))
 				.resourceRegistrations(java.util.List.of(secondResource))
 				.build();
@@ -332,7 +332,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			@NonNull String description, @NonNull String result,
 			@NonNull AtomicInteger invocations,
 			@NonNull AtomicReference<McpEndpoint> observedEndpoint) {
-		return McpToolRegistration.withName(TOOL_NAME)
+		return McpToolRegistration.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();
@@ -348,7 +348,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 	private static McpPromptRegistration prompt(@NonNull String title,
 			@NonNull String result,
 			@NonNull AtomicReference<McpEndpoint> observedEndpoint) {
-		return McpPromptRegistration.withName(PROMPT_NAME)
+		return McpPromptRegistration.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) -> {
 					observedEndpoint.set(request.getEndpoint());
 					return McpCompleteResult.fromPromptOutput(
@@ -364,7 +364,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 	private static McpResourceRegistration resource(@NonNull String name,
 			@NonNull String result,
 			@NonNull AtomicReference<McpEndpoint> observedEndpoint) {
-		return McpResourceRegistration.withUriAndName(RESOURCE_URI, name)
+		return McpResourceRegistration.withUriAndName(RESOURCE_URI, name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					observedEndpoint.set(request.getEndpoint());
 					return McpCompleteResult.fromResourceOutput(

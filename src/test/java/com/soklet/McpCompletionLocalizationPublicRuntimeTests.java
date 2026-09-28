@@ -154,24 +154,24 @@ class McpCompletionLocalizationPublicRuntimeTests {
 		};
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-localization", "1.0")
-						.build())
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("localized")
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("localized", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, prompt, features) -> {
 							observations.ordinaryHandlerCalls.incrementAndGet();
 							return McpCompleteResult.fromPromptOutput(
 									McpPromptOutput.fromMessages());
 						})
 						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject").build(), McpPromptArgumentDeclaration.withName("tone").build()))
-						.completionHandler(handler).build()))
+						.completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(
-						TEMPLATE, "Localized")
+						TEMPLATE, "Localized", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) -> {
 							observations.ordinaryHandlerCalls.incrementAndGet();
 							return McpCompleteResult.fromResourceOutput(
 									McpResourceOutput.withContent(McpTextResourceContents
 											.withUriAndText(resource.getUri(), "unused")
 											.build()).build());
-						}).completionHandler(handler).build())).build();
+						}).completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build())).build();
 		return McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(context -> {

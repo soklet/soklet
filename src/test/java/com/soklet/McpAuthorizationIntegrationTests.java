@@ -222,7 +222,7 @@ public class McpAuthorizationIntegrationTests {
 
 	private static McpServer server(FixtureState state) {
 		McpToolRegistration<ScopedArguments> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(ScopedArguments.class)
 				.handler((request, arguments, features) -> {
 					state.handlerInvocations.incrementAndGet();
@@ -230,7 +230,7 @@ public class McpAuthorizationIntegrationTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"authorization-integration-test", "4.0.0").build())
+						"authorization-integration-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {

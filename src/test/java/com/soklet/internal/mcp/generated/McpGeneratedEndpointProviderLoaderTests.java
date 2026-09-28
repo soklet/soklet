@@ -713,7 +713,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 		byte[] root = ("---\nname: " + name + "\ndescription: Synthetic description\n---\nOpaque body.\n")
 				.getBytes(StandardCharsets.UTF_8);
 		return McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host.invalid/" + name + "/SKILL.md"),
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", root))).build();
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root)), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 
 	@NonNull
@@ -809,7 +809,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 				  private Fixtures() {}
 
-				  @McpServerEndpoint(path = "/a", name = "endpoint-a", version = "1")
+				  @McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/a", name = "endpoint-a", version = "1")
 				  public static final class EndpointA {
 				    public EndpointA() {}
 				    public Result invoke(Arguments arguments) {
@@ -819,7 +819,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public record Result(String value) {}
 				  }
 
-				  @McpServerEndpoint(path = "/b", name = "endpoint-b", version = "1")
+				  @McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, subscriptionProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/b", name = "endpoint-b", version = "1")
 				  public static final class EndpointB {
 				    @SuppressWarnings("unused")
 				    private static final int INITIALIZED = failIfInitialized();
@@ -834,7 +834,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public record Result(String value) {}
 				  }
 
-				  @McpServerEndpoint(path = "/b", name = "impostor", version = "1")
+				  @McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/b", name = "impostor", version = "1")
 				  public static final class UnindexedEndpoint {
 				    public UnindexedEndpoint() {}
 				  }
@@ -845,13 +845,13 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public McpEndpoint endpoint(
 				        Function<McpRequestContext, EndpointA> instanceResolver) {
 				      McpToolRegistration<EndpointA.Arguments> tool =
-				          McpToolRegistration.withName("tool-a")
+				          McpToolRegistration.withName("tool-a", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				              .argumentAndOutputTypes(EndpointA.Arguments.class, EndpointA.Result.class)
 				              .handler((request, arguments, features) -> instanceResolver
 				                  .apply(request).invoke(arguments.getConvertedArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/a", McpImplementation
-				              .withNameAndVersion("endpoint-a", "1").build())
+				              .withNameAndVersion("endpoint-a", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				          .toolRegistrations(java.util.List.of(tool))
 				          .build();
 				    }
@@ -866,13 +866,14 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public McpEndpoint endpoint(
 				        Function<McpRequestContext, EndpointB> instanceResolver) {
 				      McpToolRegistration<EndpointB.Arguments> tool =
-				          McpToolRegistration.withName("tool-b")
+				          McpToolRegistration.withName("tool-b", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				              .argumentAndOutputTypes(EndpointB.Arguments.class, EndpointB.Result.class)
 				              .handler((request, arguments, features) -> instanceResolver
 				                  .apply(request).invoke(arguments.getConvertedArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/b", McpImplementation
-				              .withNameAndVersion("endpoint-b", "1").build())
+				              .withNameAndVersion("endpoint-b", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				          .subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				          .toolRegistrations(java.util.List.of(tool))
 				          .build();
 				    }
@@ -912,7 +913,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				        Function<McpRequestContext, EndpointB> instanceResolver) {
 				      McpEndpoint original = new ProviderB().endpoint(instanceResolver);
 				      return McpEndpoint.withPath("/a", McpImplementation
-				              .withNameAndVersion("endpoint-b", "1").build())
+				              .withNameAndVersion("endpoint-b", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				          .toolRegistrations(java.util.List.of(original.getToolRegistrations().get(0)))
 				          .build();
 				    }

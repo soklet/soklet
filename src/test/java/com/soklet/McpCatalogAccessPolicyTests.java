@@ -41,11 +41,11 @@ class McpCatalogAccessPolicyTests {
 	private final McpInvocationFeatures invocationFeatures =
 			McpInvocationFeatures.fromFeatures(Map.of());
 	private final McpToolRegistration<McpJsonObject> toolRegistration =
-			McpToolRegistration.withName("tool").jsonObjectArguments()
+			McpToolRegistration.withName("tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 					.handler((requestContext, toolArguments, invocationFeatures) ->
 							McpCompleteResult.fromToolText("result")).build();
 	private final McpPromptRegistration promptRegistration =
-			McpPromptRegistration.withName("prompt")
+			McpPromptRegistration.withName("prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.handler((requestContext, promptGetContext, invocationFeatures) ->
 							McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages()))
 					.build();
@@ -173,12 +173,12 @@ class McpCatalogAccessPolicyTests {
 		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(
 				"/caller-filtered-node-budget", McpImplementation
 						.withNameAndVersion("caller-filtered-node-budget", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (int index = 0; index < 100; ++index)
 			toolRegistrations.add(McpToolRegistration
-					.withName("hidden." + index)
+					.withName("hidden." + index, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.jsonObjectArguments()
 					.handler((request, arguments, features) ->
 							McpCompleteResult.fromToolText("unused"))
@@ -212,7 +212,7 @@ class McpCatalogAccessPolicyTests {
 	private static McpServer.Builder serverBuilder() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/catalog-access-policy",
 				McpImplementation.withNameAndVersion(
-						"catalog-access-policy-tests", "4.0.0").build())
+						"catalog-access-policy-tests", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(
 				McpEndpointRegistry.fromEndpoints(List.of(endpoint)));

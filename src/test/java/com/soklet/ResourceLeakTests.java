@@ -165,7 +165,7 @@ public class ResourceLeakTests {
 			throws Exception {
 		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp-resource-leak", McpImplementation.withNameAndVersion(
-						"resource-leak", "4.0.0").build())
+						"resource-leak", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")

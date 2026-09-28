@@ -35,7 +35,7 @@ class McpAppMetadataSupportTests {
 	void typedToolWireMetadataComposesCanonicalFieldsAndPreservesExtensions() {
 		McpJsonObject raw = McpJsonObject.builder().put("vendor", "root")
 				.put("ui", McpJsonObject.builder().put("vendor", "ui").build()).build();
-		McpAppToolMetadata typed = McpAppToolMetadata.builder()
+		McpAppToolMetadata typed = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceUri(URI.create("ui://orders/dashboard"))
 				.visibility(new LinkedHashSet<>(List.of(McpAppToolMetadata.Visibility.APP,
 						McpAppToolMetadata.Visibility.MODEL))).build();
@@ -47,41 +47,50 @@ class McpAppMetadataSupportTests {
 		assertEquals(McpJsonObject.builder().put("vendor", "ui").build(), raw.find("ui").orElseThrow());
 		assertEquals(McpJsonObject.builder().put("visibility", array("model", "app")).build(),
 				McpAppMetadataSupport.toolMetadata(McpJsonObject.emptyInstance(),
-						McpAppToolMetadata.builder().build(), true).find("ui").orElseThrow());
+						McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build(), true).find("ui").orElseThrow());
 		assertEquals(McpJsonObject.builder().put("visibility", array()).build(),
 				McpAppMetadataSupport.toolMetadata(McpJsonObject.emptyInstance(),
-						McpAppToolMetadata.builder().visibility(Set.of()).build(), true).find("ui").orElseThrow());
+						McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(Set.of()).build(), true).find("ui").orElseThrow());
 	}
 
 	@Test
-	void rawToolWireMetadataCanonicalizesOnlyPresentOwnedFields() {
+	void rawToolWireMetadataCannotSupplyUnversionedAppsFields() {
 		McpJsonObject raw = metadata(McpJsonObject.builder().put("visibility", array("app", "model"))
 				.put("resourceUri", "ui://orders/dashboard").put("vendor", "preserved").build());
-		McpJsonObject wireUi = (McpJsonObject) McpAppMetadataSupport.toolMetadata(raw, null, true)
+		assertThrows(IllegalArgumentException.class,
+				() -> McpAppMetadataSupport.toolMetadata(raw, null, true));
+		assertThrows(IllegalArgumentException.class,
+				() -> McpAppMetadataSupport.toolMetadata(raw, null, false));
+		McpJsonObject unrelated = metadata(McpJsonObject.builder()
+				.put("vendor", "preserved").build());
+		McpAppToolMetadata typed = McpAppToolMetadata.withProtocolVersions(
+				Set.of(McpProtocolVersion.V2026_07_28))
+				.resourceUri(URI.create("ui://orders/dashboard"))
+				.visibility(Set.of(McpAppToolMetadata.Visibility.APP,
+						McpAppToolMetadata.Visibility.MODEL)).build();
+		McpJsonObject wireUi = (McpJsonObject) McpAppMetadataSupport.toolMetadata(unrelated, typed, true)
 				.find("ui").orElseThrow();
 		assertEquals(List.of("vendor", "resourceUri", "visibility"), List.copyOf(wireUi.getMembers().keySet()));
 		assertEquals(array("model", "app"), wireUi.find("visibility").orElseThrow());
 		assertEquals(array("app", "model"), ((McpJsonObject) raw.find("ui").orElseThrow())
 				.find("visibility").orElseThrow());
-		McpJsonObject omitted = metadata(McpJsonObject.builder().put("resourceUri", "ui://orders/dashboard").build());
-		assertEquals(omitted, McpAppMetadataSupport.toolMetadata(omitted, null, true));
 	}
 
 	@Test
-	void nonAppsToolProjectionRemovesOnlyOwnedFieldsAndDoesNotChangeRaw() {
+	void nonAppsToolProjectionOmitsTypedFieldsAndDoesNotChangeRaw() {
 		McpJsonObject raw = McpJsonObject.builder().put("vendor-root", "root")
-				.put("ui", McpJsonObject.builder().put("resourceUri", "ui://orders/dashboard")
-						.put("visibility", array("model")).put("vendor-ui", "ui").build()).build();
-		assertEquals(McpJsonObject.builder().put("vendor-root", "root")
-				.put("ui", McpJsonObject.builder().put("vendor-ui", "ui").build()).build(),
-				McpAppMetadataSupport.toolMetadata(raw, null, false));
+				.put("ui", McpJsonObject.builder().put("vendor-ui", "ui").build()).build();
+		McpAppToolMetadata typed = McpAppToolMetadata.withProtocolVersions(
+				Set.of(McpProtocolVersion.V2026_07_28))
+				.resourceUri(URI.create("ui://orders/dashboard"))
+				.visibility(Set.of(McpAppToolMetadata.Visibility.MODEL)).build();
+		assertEquals(raw, McpAppMetadataSupport.toolMetadata(raw, typed, false));
 		assertEquals(McpJsonObject.emptyInstance(), McpAppMetadataSupport.toolMetadata(
-				metadata(McpJsonObject.builder().put("visibility", array("model")).build()), null, false));
+				McpJsonObject.emptyInstance(), typed, false));
 		McpJsonObject unrelated = McpJsonObject.builder().put("vendor", true).build();
 		assertEquals(unrelated, McpAppMetadataSupport.toolMetadata(unrelated,
-				McpAppToolMetadata.builder().resourceUri(URI.create("ui://orders/dashboard")).build(), false));
-		assertTrue(((McpJsonObject) raw.find("ui").orElseThrow()).find("resourceUri").isPresent());
-		assertTrue(((McpJsonObject) raw.find("ui").orElseThrow()).find("visibility").isPresent());
+				typed, false));
+		assertTrue(((McpJsonObject) raw.find("ui").orElseThrow()).find("vendor-ui").isPresent());
 	}
 
 	@Test
@@ -198,7 +207,7 @@ class McpAppMetadataSupportTests {
 		McpJsonObject resourceRaw = metadata(McpJsonObject.builder().put("prefersBorder", false).build());
 		for (boolean supportsApps : List.of(false, true)) {
 			assertThrows(IllegalArgumentException.class, () -> McpAppMetadataSupport.toolMetadata(toolRaw,
-					McpAppToolMetadata.builder().build(), supportsApps));
+					McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build(), supportsApps));
 			assertThrows(IllegalArgumentException.class, () -> McpAppMetadataSupport.toolMetadata(
 					metadata(McpJsonObject.builder().put("visibility", array("future")).build()), null, supportsApps));
 		}
@@ -226,9 +235,9 @@ class McpAppMetadataSupportTests {
 	@Test
 	void differentlyOrderedInputsSerializeToIdenticalCanonicalAppsBytes() {
 		McpJsonCodec codec = new McpJsonCodec(McpJsonLimits.productionDefaults());
-		McpAppToolMetadata firstTool = McpAppToolMetadata.builder().visibility(new LinkedHashSet<>(List.of(
+		McpAppToolMetadata firstTool = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(new LinkedHashSet<>(List.of(
 				McpAppToolMetadata.Visibility.APP, McpAppToolMetadata.Visibility.MODEL))).build();
-		McpAppToolMetadata secondTool = McpAppToolMetadata.builder().visibility(new LinkedHashSet<>(List.of(
+		McpAppToolMetadata secondTool = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(new LinkedHashSet<>(List.of(
 				McpAppToolMetadata.Visibility.MODEL, McpAppToolMetadata.Visibility.APP))).build();
 		assertArrayEquals(codec.toUtf8Bytes(McpPublicJsonValueConverter.toInternal(
 				McpAppMetadataSupport.toolMetadata(McpJsonObject.emptyInstance(), firstTool, true))),
@@ -260,20 +269,26 @@ class McpAppMetadataSupportTests {
 	}
 
 	@Test
-	void rawVisibilityHasTypedDefaultsAndCanonicalOrderWithoutMutatingRaw() {
+	void typedVisibilityHasCanonicalOrderAndRawFieldsAreRejected() {
 		McpJsonObject raw = metadata(McpJsonObject.builder()
 				.put("resourceUri", "ui://orders/dashboard")
 				.put("visibility", array("app", "model")).put("vendor", 9).build());
-		McpAppToolMetadata effective = McpAppMetadataSupport.effectiveToolMetadata(raw, null).orElseThrow();
+		assertThrows(IllegalArgumentException.class,
+				() -> McpAppMetadataSupport.effectiveToolMetadata(raw, null));
+		McpAppToolMetadata effective = McpAppToolMetadata.withProtocolVersions(
+				Set.of(McpProtocolVersion.V2026_07_28))
+				.resourceUri(URI.create("ui://orders/dashboard"))
+				.visibility(Set.of(McpAppToolMetadata.Visibility.APP,
+						McpAppToolMetadata.Visibility.MODEL)).build();
 		assertEquals(URI.create("ui://orders/dashboard"), effective.getResourceUri().orElseThrow());
 		assertEquals(List.of(McpAppToolMetadata.Visibility.MODEL, McpAppToolMetadata.Visibility.APP),
 				List.copyOf(effective.getVisibility()));
 		assertEquals(array("app", "model"), ((McpJsonObject) raw.find("ui").orElseThrow()).find("visibility").orElseThrow());
-		assertEquals(McpAppToolMetadata.builder().build().getVisibility(),
-				McpAppMetadataSupport.effectiveToolMetadata(metadata(McpJsonObject.builder()
-						.put("resourceUri", "ui://orders/dashboard").build()), null).orElseThrow().getVisibility());
-		assertTrue(McpAppMetadataSupport.effectiveToolMetadata(metadata(McpJsonObject.builder()
-				.put("visibility", array()).build()), null).orElseThrow().getVisibility().isEmpty());
+		assertEquals(effective, McpAppMetadataSupport.effectiveToolMetadata(
+				metadata(McpJsonObject.builder().put("vendor", 9).build()), effective).orElseThrow());
+		assertTrue(McpAppToolMetadata.withProtocolVersions(Set.of(
+				McpProtocolVersion.V2026_07_28)).visibility(Set.of()).build()
+				.getVisibility().isEmpty());
 	}
 
 	@Test

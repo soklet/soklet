@@ -244,9 +244,9 @@ class McpLocalizationCatalogExtractionTests {
 						.withNameAndVersion("subscribed", "1")
 						.title("Subscribed title")
 						.description("Subscribed description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("catalog://subscribed"), "subscribed")
+						URI.create("catalog://subscribed"), "subscribed", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -256,7 +256,7 @@ class McpLocalizationCatalogExtractionTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
@@ -280,16 +280,16 @@ class McpLocalizationCatalogExtractionTests {
 								.withNameAndVersion("generated", "1")
 								.title("Generated server")
 								.description("Generated description")
-								.build())
+								.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.instructions("Generated instructions")
-						.toolRegistrations(java.util.List.of(McpToolRegistration.withName("generated.search")
+						.toolRegistrations(java.util.List.of(McpToolRegistration.withName("generated.search", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 								.argumentType(GeneratedArguments.class)
 								.handler((request, arguments, features) ->
 										McpCompleteResult.fromToolText("unused"))
 								.title("Generated tool")
 								.description("Generated tool description")
 								.build()))
-						.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("generated.prompt")
+						.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("generated.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 								.handler((request, prompt, features) ->
 										McpCompleteResult.fromPromptOutput(
 												McpPromptOutput.fromMessages()))
@@ -453,7 +453,7 @@ class McpLocalizationCatalogExtractionTests {
 						.withNameAndVersion("localization-wire", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use canonical instructions.")
 				.build();
 	}
@@ -626,16 +626,16 @@ class McpLocalizationCatalogExtractionTests {
 						.withNameAndVersion("localized-catalog", "1.0")
 						.title("Catalog server")
 						.description("Catalog server description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use catalog.search.")
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.search")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.search", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(ParityArguments.class, ParityResult.class)
 						.handler((request, arguments, features) ->
 								new ParityResult("unused"))
 						.title("Catalog search")
 						.description("Searches the catalog")
 						.build()))
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.compose")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.compose", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, prompt, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -648,12 +648,12 @@ class McpLocalizationCatalogExtractionTests {
 								.build()))
 						.build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("catalog://summary"), "summary")
+						URI.create("catalog://summary"), "summary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Catalog summary")
 						.description("Summary contents")
 						.build(), McpResourceRegistration.withUriTemplateAndName(
-						"catalog://items/{id}", "item")
+						"catalog://items/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Catalog item")
 						.description("Item contents")
@@ -665,11 +665,11 @@ class McpLocalizationCatalogExtractionTests {
 		McpPromptHandler handler = (request, prompt, features) ->
 				McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages());
 		return McpEndpoint.withPath("/prompt-remapping", McpImplementation
-						.withNameAndVersion("prompt-remapping", "1").build())
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("hidden.prompt")
+						.withNameAndVersion("prompt-remapping", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("hidden.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(handler)
 						.title("Hidden prompt title")
-						.build(), McpPromptRegistration.withName("visible.prompt")
+						.build(), McpPromptRegistration.withName("visible.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(handler)
 						.title("Visible prompt title")
 						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("first")
@@ -743,7 +743,7 @@ class McpLocalizationCatalogExtractionTests {
 				import com.soklet.annotation.McpToolArgument;
 				import com.soklet.annotation.McpToolProperty;
 
-				@McpServerEndpoint(
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				    path = "/localized/catalog",
 				    name = "localized-catalog",
 				    version = "1.0",
@@ -751,7 +751,7 @@ class McpLocalizationCatalogExtractionTests {
 				    description = "Catalog server description",
 				    instructions = "Use catalog.search.")
 				public final class LocalizedCatalogEndpoint {
-				  @McpTool(
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      name = "catalog.search",
 				      title = "Catalog search",
 				      description = "Searches the catalog")
@@ -763,7 +763,7 @@ class McpLocalizationCatalogExtractionTests {
 				    return new SearchResult(query);
 				  }
 
-				  @McpPrompt(
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      name = "catalog.compose",
 				      title = "Catalog composer",
 				      description = "Builds a catalog prompt")
@@ -775,14 +775,14 @@ class McpLocalizationCatalogExtractionTests {
 				    return McpPromptOutput.fromMessages();
 				  }
 
-				  @McpResource(
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      uri = "catalog://summary",
 				      name = "summary",
 				      title = "Catalog summary",
 				      description = "Summary contents")
 				  public McpResourceOutput summary() { return null; }
 
-				  @McpResource(
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      uri = "catalog://items/{id}",
 				      name = "item",
 				      title = "Catalog item",
@@ -824,7 +824,7 @@ class McpLocalizationCatalogExtractionTests {
 						.build())
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("catalog.search")
+				.withName("catalog.search", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.inputSchema(inputSchema)
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
@@ -834,13 +834,13 @@ class McpLocalizationCatalogExtractionTests {
 						.title("Annotation title").build())
 				.build();
 		McpToolRegistration<EmptyArguments> outputTool = McpToolRegistration
-				.withName("catalog.output")
+				.withName("catalog.output", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(EmptyArguments.class, OutputArguments.class)
 				.handler((request, arguments, features) ->
 						new OutputArguments("value"))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("support.summary")
+				.withName("support.summary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, context, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
@@ -862,24 +862,24 @@ class McpLocalizationCatalogExtractionTests {
 						.withNameAndVersion("catalog", "1")
 						.title("Server title")
 						.description("Server description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Endpoint instructions")
 				.toolRegistrations(java.util.List.of(tool, outputTool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("catalog://summary"), "summary")
+						URI.create("catalog://summary"), "summary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Resource title")
 						.description("Resource description")
 						.build(), McpResourceRegistration.withUriTemplateAndName(
-						"catalog://item/{id}", "item")
+						"catalog://item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler)
 						.title("Template title")
 						.description("Template description")
 						.build()));
 		if (customResourceList)
 			builder.resourceListHandler((request, list, features) ->
-					McpResourcePage.builder().build());
+					McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		return builder.build();
 	}
 

@@ -113,7 +113,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
@@ -167,7 +167,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		TraceRecordingLifecycleObserver observer =
 				new TraceRecordingLifecycleObserver(2);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					DefaultMcpRequestContext internalContext =
@@ -274,7 +274,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				new TraceRecordingLifecycleObserver(4);
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -347,7 +347,7 @@ public class McpRequestObservationPublicRuntimeTests {
 	public void defaultOffAndIndependentRawIdOptInHaveExactLogContracts()
 			throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("raw-id-independent"))
@@ -452,7 +452,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				new RecordingDefaultMetricsCollector(
 						TRACE_CARDINALITY_REQUEST_COUNT);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("metric-cardinality-checked"))
@@ -793,7 +793,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
@@ -837,7 +837,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		IllegalStateException handlerFailure = new IllegalStateException(
 				"sentinel-handler-failure");
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((context, arguments, features) -> {
 					throw handlerFailure;
@@ -1124,7 +1124,7 @@ public class McpRequestObservationPublicRuntimeTests {
 	private static McpEndpoint.@NonNull Builder endpointBuilder(
 			@NonNull String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0").build());
+						implementationName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(

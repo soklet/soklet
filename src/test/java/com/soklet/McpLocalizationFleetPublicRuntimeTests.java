@@ -831,10 +831,10 @@ class McpLocalizationFleetPublicRuntimeTests {
 							.withNameAndVersion(this.name, "1.0")
 							.title("Canonical server title")
 							.description("Canonical server description")
-							.build());
+							.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 			List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 			for (String toolName : List.of(SHARED_TOOL, ALPHA_TOOL, BETA_TOOL))
-				toolRegistrations.add(McpToolRegistration.withName(toolName)
+				toolRegistrations.add(McpToolRegistration.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.jsonObjectArguments()
 							.handler((request, arguments, features) ->
 									McpCompleteResult.fromToolText("unused"))
@@ -844,7 +844,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			McpEndpoint endpoint = endpointBuilder
 					.toolRegistrations(toolRegistrations)
 					.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-							URI.create("fleet://resource"), "fleet-resource")
+							URI.create("fleet://resource"), "fleet-resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(
 											McpResourceOutput.withContent(McpTextResourceContents
@@ -853,7 +853,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 															.build())
 													.build()))
 							.build()))
-					.subscriptionConfig(McpSubscriptionConfig
+					.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig
 							.withEventPublisherAndNotificationTypes(
 									this.publisher,
 									EnumSet.of(

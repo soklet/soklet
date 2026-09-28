@@ -1442,7 +1442,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	private static McpEndpoint taskEndpoint(@NonNull String path,
 			@NonNull ScriptedTaskManager taskManager) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpJsonValue taskIdValue = arguments.getRawArguments()
@@ -1464,7 +1464,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		return McpEndpoint.withPath(path,
 				McpImplementation.withNameAndVersion(
 						"task-subscription-public-runtime-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
@@ -1481,10 +1483,10 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"task-subscription-resource-only-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, resourceList, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(subscriptionConfig)
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptionConfig)
 				.build();
 		return server(List.of(endpoint), taskManager, admissions);
 	}

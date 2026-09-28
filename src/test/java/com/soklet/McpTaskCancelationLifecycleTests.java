@@ -423,14 +423,15 @@ public class McpTaskCancelationLifecycleTests {
 			@NonNull McpToolHandler<McpJsonObject> handler,
 			@NonNull Duration requestTimeout) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler(handler)
 				.structuredContentMirroredAsText(false)
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion(
-						"task-cancelation-lifecycle-test", "4.0.0").build())
+						"task-cancelation-lifecycle-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();

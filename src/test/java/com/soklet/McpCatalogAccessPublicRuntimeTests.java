@@ -252,13 +252,13 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger lookupInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder(
 				"catalog-access-explicit-allow-all-runtime-test")
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("allow-all.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("allow-all.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Canonical tool title")
 						.build()))
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("allow-all.prompt")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("allow-all.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, promptGet, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -326,7 +326,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			throws Exception {
 		List<String> stages = new CopyOnWriteArrayList<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("pipeline.tool")
+				.withName("pipeline.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					stages.add("handler:tools/call");
@@ -334,7 +334,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("pipeline.prompt")
+				.withName("pipeline.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					stages.add("handler:prompts/get");
 					return McpCompleteResult.fromPromptOutput(
@@ -426,7 +426,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("null-limiter.tool")
+				.withName("null-limiter.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -501,7 +501,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicReference<McpRequestContext> promptHandlerRequest =
 				new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("context.tool")
+				.withName("context.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolHandlerRequest.set(request);
@@ -511,7 +511,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("context.prompt")
+				.withName("context.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					promptHandlerRequest.set(request);
 					promptHandlerContext.set(features.find(
@@ -591,7 +591,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<RequiredArguments> hidden = McpToolRegistration
-				.withName(hiddenName)
+				.withName(hiddenName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(RequiredArguments.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -678,7 +678,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpPromptRegistration hidden = McpPromptRegistration
-				.withName(hiddenName)
+				.withName(hiddenName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -877,7 +877,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(
 			@NonNull String name, @NonNull AtomicInteger handlerInvocations) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -888,7 +888,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 
 	private static McpPromptRegistration prompt(@NonNull String name,
 			@NonNull AtomicInteger handlerInvocations) {
-		return McpPromptRegistration.withName(name)
+		return McpPromptRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -902,7 +902,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			@NonNull String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0").build())
+						implementationName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 	}
 

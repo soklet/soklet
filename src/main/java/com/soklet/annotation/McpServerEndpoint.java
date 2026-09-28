@@ -17,6 +17,7 @@
 package com.soklet.annotation;
 
 import com.soklet.McpCacheScope;
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -40,6 +41,30 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpServerEndpoint {
+	/**
+	 * The exact MCP protocol revisions available at this endpoint. At least one
+	 * revision must be specified; revisions are never inferred or upgraded.
+	 *
+	 * @return supported protocol revisions
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
+
+	/**
+	 * Revisions on which this endpoint exposes the Tasks facility.
+	 *
+	 * @return task-enabled revisions, or an empty array when disabled
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] taskProtocolVersions() default {};
+
+	/**
+	 * Revisions on which this endpoint exposes {@code subscriptions/listen}.
+	 *
+	 * @return subscription-enabled revisions, or an empty array when disabled
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] subscriptionProtocolVersions() default {};
 	/**
 	 * The fixed, non-root URL path exposed by the dedicated MCP server. It must
 	 * be a normalized ASCII raw URI path of at most 8192 bytes; non-ASCII

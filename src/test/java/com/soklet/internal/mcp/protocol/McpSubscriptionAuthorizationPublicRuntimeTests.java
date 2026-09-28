@@ -1087,8 +1087,8 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpEndpoint.Builder endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"subscription-authorization-runtime-test", "4.0.0")
-						.build())
-				.subscriptionConfig(subscriptions);
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions);
 		endpoint.resourceRegistrations(List.of(resource(FIRST_RESOURCE_URI),
 				resource(SECOND_RESOURCE_URI)));
 		Assertions.assertEquals(2, endpoint.build().getResourceRegistrations().size());
@@ -1122,7 +1122,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 	@NonNull
 	private static McpResourceRegistration resource(@NonNull URI resourceUri) {
 		return McpResourceRegistration
-				.withUriAndName(resourceUri, "Subscription authorization resource")
+				.withUriAndName(resourceUri, "Subscription authorization resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(

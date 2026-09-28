@@ -633,10 +633,10 @@ class McpLifecycleB3Tests {
 					}
 				};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-pre-ready-self-join"))
+				implementation("b3-pre-ready-self-join"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -707,10 +707,10 @@ class McpLifecycleB3Tests {
 					}
 				};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-startup-primary-election"))
+				implementation("b3-startup-primary-election"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -793,10 +793,10 @@ class McpLifecycleB3Tests {
 					}
 				};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-synchronous-startup-election"))
+				implementation("b3-synchronous-startup-election"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -878,10 +878,10 @@ class McpLifecycleB3Tests {
 					}
 				};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-registration-close-self-join"))
+				implementation("b3-registration-close-self-join"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -1641,10 +1641,10 @@ class McpLifecycleB3Tests {
 			}
 		};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-post-bind-failure"))
+				implementation("b3-post-bind-failure"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())
@@ -2046,10 +2046,10 @@ class McpLifecycleB3Tests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("b3-subscription"))
+				implementation("b3-subscription"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(subscriptions)
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		Duration gracefulTimeout = Duration.ofSeconds(10);
 		McpServer server = serverBuilder(endpoint, gracefulTimeout)
@@ -2265,14 +2265,14 @@ class McpLifecycleB3Tests {
 
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String path) {
-		return McpEndpoint.withPath(path, implementation("b3-lifecycle"))
+		return McpEndpoint.withPath(path, implementation("b3-lifecycle"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String path,
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
-		return McpEndpoint.withPath(path, implementation("b3-lifecycle"))
+		return McpEndpoint.withPath(path, implementation("b3-lifecycle"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
@@ -2285,7 +2285,7 @@ class McpLifecycleB3Tests {
 	@NonNull
 	private static McpToolRegistration<McpJsonObject> tool(@NonNull String name,
 			@NonNull McpToolHandler<McpJsonObject> handler) {
-		return McpToolRegistration.withName(name).jsonObjectArguments()
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler(handler).build();
 	}
 

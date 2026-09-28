@@ -104,7 +104,7 @@ class McpCollectionReplacementTests {
 	@Test
 	void completeToolIconsReplaceAndToolAnnotationsUseTheAlignedName() {
 		McpToolRegistration.CompleteBuilder<Arguments> builder = McpToolRegistration
-				.withName("complete").argumentAndOutputTypes(Arguments.class, Result.class)
+				.withName("complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).argumentAndOutputTypes(Arguments.class, Result.class)
 				.handler((request, arguments, features) -> new Result("result"));
 		assertReplacement(builder::icons, () -> builder.build().getIcons(), icon("first"), icon("second"), true);
 		McpToolAnnotations annotations = McpToolAnnotations.builder().readOnlyHint(true).build();
@@ -206,30 +206,30 @@ class McpCollectionReplacementTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
-		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpToolRegistration.OperationBuilder<McpJsonObject> operationBuilder(String name) {
-		return McpToolRegistration.withName(name).jsonObjectArguments().handler((request, arguments, features) -> {
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments().handler((request, arguments, features) -> {
 			throw new AssertionError("Collection replacement must not invoke application handlers");
 		});
 	}
 
 	private static McpPromptRegistration.Builder promptBuilder(String name) {
-		return McpPromptRegistration.withName(name).handler((request, prompt, features) -> {
+		return McpPromptRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).handler((request, prompt, features) -> {
 			throw new AssertionError("Collection replacement must not invoke application handlers");
 		});
 	}
 
 	private static McpResourceRegistration.ExactBuilder exactBuilder(String name) {
-		return McpResourceRegistration.withUriAndName(URI.create("test://" + name), name)
+		return McpResourceRegistration.withUriAndName(URI.create("test://" + name), name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					throw new AssertionError("Collection replacement must not invoke application handlers");
 				});
 	}
 
 	private static McpResourceRegistration.TemplateBuilder templateBuilder(String name) {
-		return McpResourceRegistration.withUriTemplateAndName("test://" + name + "/{id}", name)
+		return McpResourceRegistration.withUriTemplateAndName("test://" + name + "/{id}", name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					throw new AssertionError("Collection replacement must not invoke application handlers");
 				});

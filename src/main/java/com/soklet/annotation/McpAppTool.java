@@ -17,6 +17,7 @@
 package com.soklet.annotation;
 
 import com.soklet.McpAppToolMetadata;
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -38,6 +39,14 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpAppTool {
+	/**
+	 * Exact revisions on which this tool advertises its Apps association.
+	 * This must be a nonempty subset of the owning tool's revisions.
+	 *
+	 * @return Apps association revisions
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 
 	/**
 	 * Associates an exact UI resource registered in the same endpoint.

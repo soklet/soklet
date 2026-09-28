@@ -31,7 +31,7 @@ class McpSkillRegistrationTests {
 	@Test
 	void defaultsKeepOriginalUriAndBundleAndCacheTheImmutableResourceViews() {
 		McpSkillBundle bundle = bundle();
-		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle).build();
+		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		assertSame(ROOT_URI, registration.getUri());
 		assertSame(ROOT_URI, registration.getResources().get(0).getUri());
 		assertSame(bundle, registration.getSkillBundle());
@@ -43,7 +43,7 @@ class McpSkillRegistrationTests {
 
 	@Test
 	void builderChangesDoNotMutatePublishedValuesAndNullSettersAreFailAtomic() {
-		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle());
+		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		McpCachePolicy privatePolicy = McpCachePolicy.fromPrivateTimeToLive(Duration.ofSeconds(5));
 		McpSkillRegistration first = builder.locale(Locale.CANADA_FRENCH).cachePolicy(privatePolicy).build();
 		assertThrows(NullPointerException.class, () -> builder.locale(null));
@@ -62,7 +62,7 @@ class McpSkillRegistrationTests {
 		String path = "refs/café space+#?.bin";
 		byte[] binary = {0, (byte) 0xff, 2};
 		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md", ROOT, path, binary));
-		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle).build();
+		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		assertEquals(URI.create("skill://test-skill/refs/caf%C3%A9%20space%2B%23%3F.bin"),
 				registration.getResources().get(1).getUri());
 		for (int index = 0; index < 2; ++index) {
@@ -77,19 +77,19 @@ class McpSkillRegistrationTests {
 	@Test
 	void registrationAndResourceEqualityFollowUriIdentityAndStructuralValues() {
 		McpSkillRegistration first = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("SKILL://HOST.invalid/test-skill/SKILL.md"), bundle()).build();
+				URI.create("SKILL://HOST.invalid/test-skill/SKILL.md"), bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpSkillRegistration equal = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/test-skill/SKILL.md"), bundle()).build();
+				URI.create("skill://host.invalid/test-skill/SKILL.md"), bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		assertEquals(first, equal);
 		assertEquals(first.hashCode(), equal.hashCode());
 		assertEquals(first.getResources(), equal.getResources());
 		assertEquals(first.getResources().get(0).hashCode(), equal.getResources().get(0).hashCode());
-		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle()).build());
-		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), bundle()).locale(Locale.ROOT).build());
-		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), bundle())
+		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
+		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).locale(Locale.ROOT).build());
+		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.cachePolicy(McpCachePolicy.fromPrivateTimeToLive(Duration.ofSeconds(1))).build());
 		McpSkillBundle changed = McpSkillBundle.fromFiles(Map.of("SKILL.md", ROOT, "extra", new byte[0]));
-		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), changed).build());
+		assertNotEquals(first, McpSkillRegistration.withUriAndSkillBundle(first.getUri(), changed, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 		assertNotEquals(first, null);
 		assertNotEquals(first.getResources().get(0), "resource");
 	}
@@ -97,12 +97,12 @@ class McpSkillRegistrationTests {
 	@Test
 	void invalidRootsAndNullRequiredArgumentsFailWithoutExposingInput() {
 		McpSkillBundle bundle = bundle();
-		assertThrows(NullPointerException.class, () -> McpSkillRegistration.withUriAndSkillBundle(null, bundle));
-		assertThrows(NullPointerException.class, () -> McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, null));
+		assertThrows(NullPointerException.class, () -> McpSkillRegistration.withUriAndSkillBundle(null, bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
+		assertThrows(NullPointerException.class, () -> McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, null, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		for (String uri : List.of("skill://private-canary/SKILL.md", "skill://test-skill/wrong.md",
 				"skill://test-skill/SKILL.md?private-canary")) {
 			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-					() -> McpSkillRegistration.withUriAndSkillBundle(URI.create(uri), bundle).build());
+					() -> McpSkillRegistration.withUriAndSkillBundle(URI.create(uri), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 			assertFalse(failure.getMessage().contains("private-canary"));
 			assertNull(failure.getCause());
 		}
@@ -110,7 +110,7 @@ class McpSkillRegistrationTests {
 
 	@Test
 	void diagnosticsNeverExposeRegistrationOrResourceContent() {
-		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle()).build();
+		McpSkillRegistration registration = McpSkillRegistration.withUriAndSkillBundle(ROOT_URI, bundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		assertEquals("McpSkillRegistration[redacted]", registration.toString());
 		assertEquals("McpSkillRegistration.Resource[redacted]", registration.getResources().get(0).toString());
 	}

@@ -342,11 +342,11 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	private static McpEndpoint toolEndpoint(
 			@NonNull McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler(handler)
 				.build();
-		return McpEndpoint.withPath(TOOL_PATH, serverInformation())
+		return McpEndpoint.withPath(TOOL_PATH, serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
@@ -370,7 +370,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "diagnostics-subscription")
+				.withUriAndName(RESOURCE_URI, "diagnostics-subscription", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(McpTextResourceContents
@@ -378,9 +378,9 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 												.build())
 										.build()))
 				.build();
-		return McpEndpoint.withPath(SUBSCRIPTION_PATH, serverInformation())
+		return McpEndpoint.withPath(SUBSCRIPTION_PATH, serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(resource))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 	}
 

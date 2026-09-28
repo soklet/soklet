@@ -147,8 +147,8 @@ public class McpSubscriptionConfigurationTests {
 								McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(
-					"/catalog-subscriptions", serverInformation())
-				.subscriptionConfig(configuration)
+					"/catalog-subscriptions", serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(configuration)
 				.build();
 
 		Assertions.assertEquals(List.of(
@@ -401,16 +401,16 @@ public class McpSubscriptionConfigurationTests {
 		McpSubscriptionConfig second = configuration(
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
 		McpEndpoint withoutSubscriptions = endpoint("/without");
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", serverInformation())
-				.subscriptionConfig(first)
-				.subscriptionConfig(second)
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(first)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(second)
 				.build();
 
 		Assertions.assertTrue(withoutSubscriptions.getSubscriptionConfig().isEmpty());
 		Assertions.assertSame(second, endpoint.getSubscriptionConfig().orElseThrow());
-		McpEndpoint cleared = McpEndpoint.withPath("/mcp", serverInformation())
-				.subscriptionConfig(first)
-				.subscriptionConfig(null)
+		McpEndpoint cleared = McpEndpoint.withPath("/mcp", serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(first)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(null)
 				.build();
 		Assertions.assertTrue(cleared.getSubscriptionConfig().isEmpty());
 	}
@@ -418,21 +418,21 @@ public class McpSubscriptionConfigurationTests {
 	@Test
 	public void resolverOverlayCopiesOnlyTheSelectedGeneratedEndpoint() {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("copy-tool")
+				.withName("copy-tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					throw new AssertionError("The copy fixture must not execute.");
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("copy-prompt")
+				.withName("copy-prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) -> {
 					throw new AssertionError("The copy fixture must not execute.");
 				})
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(URI.create("test://copy-resource"),
-						"copy-resource")
+						"copy-resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					throw new AssertionError("The copy fixture must not execute.");
 				})
@@ -446,19 +446,21 @@ public class McpSubscriptionConfigurationTests {
 				McpCachePolicy.fromPublicTimeToLive(Duration.ofSeconds(11));
 		McpRateLimiter directToolRateLimiter = context ->
 				McpRateLimitDecision.allowed();
-		McpEndpoint generated = McpEndpoint.withPath("/generated", serverInformation())
+		McpEndpoint generated = McpEndpoint.withPath("/generated", serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.instructions("generated instructions")
 				.toolRegistrations(java.util.List.of(tool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.resourceRegistrations(java.util.List.of(resource))
-				.resourceListHandler(resourceListHandler)
+				.resourceListHandler(resourceListHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(resourceListCachePolicy)
 				.resourceTemplateListCachePolicy(
 						resourceTemplateListCachePolicy)
 				.toolRateLimiter(directToolRateLimiter)
 				.build();
-		McpEndpoint namedLimiter = McpEndpoint.withPath("/named-limiter", serverInformation())
+		McpEndpoint namedLimiter = McpEndpoint.withPath("/named-limiter", serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRateLimiterName("named-limiter")
 				.build();
 		McpEndpoint other = endpoint("/other");
@@ -566,26 +568,26 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	private static McpEndpoint endpoint(String path) {
-		return McpEndpoint.withPath(path, serverInformation())
+		return McpEndpoint.withPath(path, serverInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 
-	@McpServerEndpoint(path = "/generated//", name = "generated", version = "1")
+	@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, subscriptionProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/generated//", name = "generated", version = "1")
 	public static final class GeneratedEndpoint {
 		static {
 			GENERATED_ENDPOINT_INITIALIZED.set(true);
 		}
 	}
 
-	@McpServerEndpoint(path = "/missing", name = "missing", version = "1")
+	@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/missing", name = "missing", version = "1")
 	public static final class MissingGeneratedEndpoint {
 	}
 
-	@McpServerEndpoint(path = "/generated", name = "impostor", version = "1")
+	@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/generated", name = "impostor", version = "1")
 	public static final class SamePathImpostorEndpoint {
 	}
 
-	@McpServerEndpoint(path = "/named-limiter", name = "named", version = "1")
+	@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, subscriptionProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/named-limiter", name = "named", version = "1")
 	public static final class NamedLimiterGeneratedEndpoint {
 	}
 }

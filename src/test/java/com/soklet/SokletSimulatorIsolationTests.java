@@ -449,7 +449,7 @@ public class SokletSimulatorIsolationTests {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger calls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("complete").jsonObjectArguments()
+				.withName("complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					calls.incrementAndGet();
 					return McpCompleteResult.fromToolText("complete");
@@ -969,7 +969,7 @@ public class SokletSimulatorIsolationTests {
 		CountDownLatch releaseExecutorTask = new CountDownLatch(1);
 		AtomicReference<ExecutorService> handlerExecutor = new AtomicReference<>();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"rejected-session-proof-test", "4.0.0").build())
+						"rejected-session-proof-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -1164,7 +1164,7 @@ public class SokletSimulatorIsolationTests {
 		AtomicReference<McpServer> escapedServer = new AtomicReference<>();
 		AtomicInteger handlerCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("complete").jsonObjectArguments()
+				.withName("complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromToolText("scope complete");
@@ -1211,7 +1211,7 @@ public class SokletSimulatorIsolationTests {
 	@Test
 	public void rejectsMultipleMcpBuildsAndEscapedBuilder() throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("complete").jsonObjectArguments()
+				.withName("complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))
 				.build();
@@ -1557,7 +1557,7 @@ public class SokletSimulatorIsolationTests {
 	private static McpEndpointRegistry mcpEndpointRegistry(
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"isolated-simulator-test", "4.0.0").build())
+						"isolated-simulator-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(tools)
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
@@ -1578,10 +1578,10 @@ public class SokletSimulatorIsolationTests {
 			@NonNull McpSubscriptionEventPublisher publisher) {
 		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"isolated-simulator-subscription-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, resourceList, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED))
 						.build())

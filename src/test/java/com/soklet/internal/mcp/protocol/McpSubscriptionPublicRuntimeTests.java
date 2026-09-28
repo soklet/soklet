@@ -213,18 +213,18 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 						McpImplementation.withNameAndVersion(
 								"catalog-subscription-runtime-test", "4.0.0")
-								.build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.tool")
+								.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("catalog.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.build()))
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.prompt")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("catalog.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, prompt, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		AtomicReference<McpSubscriptionAuthorizationContext> authorizationContext =
 				new AtomicReference<>();
@@ -1423,13 +1423,13 @@ public class McpSubscriptionPublicRuntimeTests {
 				.build();
 		McpEndpoint.Builder builder = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"subscription-public-runtime-test",
-						"4.0.0").build())
-				.subscriptionConfig(subscriptions);
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions);
 		List<McpResourceRegistration> resourceRegistrations = new ArrayList<>();
 		for (URI resourceUri : resourceUris) {
 			resourceRegistrations.add(McpResourceRegistration
 					.withUriAndName(resourceUri,
-							"Subscription test resource")
+							"Subscription test resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.handler((request, read, features) ->
 							McpCompleteResult.fromResourceOutput(
 									McpResourceOutput.withContent(McpTextResourceContents

@@ -70,7 +70,7 @@ public class SokletMcpLifecycleTests {
 		AtomicReference<ShutdownResult> globalResult = new AtomicReference<>();
 		CountDownLatch terminalObserved = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerEntered.countDown();
@@ -90,7 +90,7 @@ public class SokletMcpLifecycleTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
-						"residual-lifecycle-test", "4.0.0").build())
+						"residual-lifecycle-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -571,7 +571,7 @@ public class SokletMcpLifecycleTests {
 
 	@NonNull
 	private static McpServer newMcpServer() {
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test-server", "1.0").build())
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("test-server", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

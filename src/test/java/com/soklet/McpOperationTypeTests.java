@@ -87,6 +87,10 @@ class McpOperationTypeTests {
 
 	private static Map<String, McpOperationType> recognizedMethods() {
 		Map<String, McpOperationType> methods = new LinkedHashMap<>();
+		methods.put("initialize", McpOperationType.INITIALIZE);
+		methods.put("notifications/initialized",
+				McpOperationType.NOTIFICATIONS_INITIALIZED);
+		methods.put("ping", McpOperationType.PING);
 		methods.put("server/discover", McpOperationType.SERVER_DISCOVER);
 		methods.put("tools/list", McpOperationType.TOOLS_LIST);
 		methods.put("tools/call", McpOperationType.TOOLS_CALL);

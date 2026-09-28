@@ -74,7 +74,7 @@ public class McpRequestStatePublicRuntimeTests {
 				Collections.synchronizedList(new ArrayList<>());
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(APPLICATION_TOOL)
+				.withName(APPLICATION_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
@@ -193,7 +193,7 @@ public class McpRequestStatePublicRuntimeTests {
 				.put("sequence", 1)
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -279,7 +279,7 @@ public class McpRequestStatePublicRuntimeTests {
 				.put("origin", "server-a")
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -400,7 +400,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -478,7 +478,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -546,7 +546,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -621,7 +621,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(FRAMEWORK_TOOL)
+				.withName(FRAMEWORK_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -701,7 +701,7 @@ public class McpRequestStatePublicRuntimeTests {
 			throws Exception {
 		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Request-state resource")
+				.withUriAndName(RESOURCE_URI, "Request-state resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					handlerContext.set(request);
 					String state =
@@ -751,7 +751,7 @@ public class McpRequestStatePublicRuntimeTests {
 
 	private static McpEndpoint.Builder endpointBuilder(String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0").build());
+						implementationName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
@@ -793,7 +793,7 @@ public class McpRequestStatePublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> noopTool(String name,
 			McpRequestStateMode requestStateMode) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))

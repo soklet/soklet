@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -57,6 +58,8 @@ public final class McpResourceRegistration {
 	private final String uriTemplate;
 	@NonNull
 	private final String name;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> protocolVersions;
 	@Nullable
 	private final String title;
 	@Nullable
@@ -81,6 +84,8 @@ public final class McpResourceRegistration {
 	private final McpResourceReadHandler handler;
 	@Nullable
 	private final McpCompletionHandler completionHandler;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> completionProtocolVersions;
 
 	/**
 	 * Begins a staged exact-resource registration.
@@ -95,14 +100,17 @@ public final class McpResourceRegistration {
 	 *
 	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param name nonblank resource name
+	 * @param protocolVersions nonempty exact revisions serving this resource
 	 * @return required-handler stage
 	 * @throws IllegalArgumentException if the URI is relative, not normalized,
 	 * not in ASCII wire form, or the name is blank
 	 */
 	@NonNull
 	public static ExactHandlerStage withUriAndName(@NonNull URI uri,
-			@NonNull String name) {
-		return new ExactHandlerStage(requireExactUri(uri), requireName(name));
+			@NonNull String name,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new ExactHandlerStage(requireExactUri(uri), requireName(name),
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	/**
@@ -121,15 +129,18 @@ public final class McpResourceRegistration {
 	 * @param uriTemplate nonblank URI template containing simple
 	 * {@code {variable}} expressions
 	 * @param name nonblank resource name
+	 * @param protocolVersions nonempty exact revisions serving this resource
 	 * @return required-handler stage
 	 * @throws IllegalArgumentException if the template fails local structural
 	 * validation or the name is blank
 	 */
 	@NonNull
 	public static TemplateHandlerStage withUriTemplateAndName(
-			@NonNull String uriTemplate, @NonNull String name) {
+			@NonNull String uriTemplate, @NonNull String name,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 		return new TemplateHandlerStage(
-				requireBasicUriTemplate(uriTemplate), requireName(name));
+				requireBasicUriTemplate(uriTemplate), requireName(name),
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	private McpResourceRegistration(@NonNull BuilderState state) {
@@ -137,6 +148,7 @@ public final class McpResourceRegistration {
 		this.uri = state.uri;
 		this.uriTemplate = state.uriTemplate;
 		this.name = state.name;
+		this.protocolVersions = state.protocolVersions;
 		this.title = state.title;
 		this.description = state.description;
 		this.mimeType = state.mimeType;
@@ -150,6 +162,7 @@ public final class McpResourceRegistration {
 		this.metadata = state.metadata;
 		this.handler = state.handler;
 		this.completionHandler = state.completionHandler;
+		this.completionProtocolVersions = state.completionProtocolVersions;
 	}
 
 	/** @return whether this registration uses an exact URI or URI template */
@@ -174,6 +187,12 @@ public final class McpResourceRegistration {
 	@NonNull
 	public String getName() {
 		return this.name;
+	}
+
+	/** @return exact protocol revisions on which this resource is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
 	}
 
 	/** @return human-readable title, if configured */
@@ -266,6 +285,12 @@ public final class McpResourceRegistration {
 		return Optional.ofNullable(this.completionHandler);
 	}
 
+	/** @return exact revisions on which the completion handler is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getCompletionProtocolVersions() {
+		return this.completionProtocolVersions;
+	}
+
 	@NonNull
 	private static URI requireExactUri(@NonNull URI uri) {
 		return McpResourceValueSupport.requireAbsoluteNormalizedUri(uri);
@@ -337,10 +362,14 @@ public final class McpResourceRegistration {
 		private final URI uri;
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 
-		private ExactHandlerStage(@NonNull URI uri, @NonNull String name) {
+		private ExactHandlerStage(@NonNull URI uri, @NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.uri = requireNonNull(uri);
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
 		/**
@@ -352,7 +381,7 @@ public final class McpResourceRegistration {
 		@NonNull
 		public ExactBuilder handler(@NonNull McpResourceReadHandler handler) {
 			return new ExactBuilder(new BuilderState(this.uri, null,
-					this.name, requireNonNull(handler)));
+					this.name, this.protocolVersions, requireNonNull(handler)));
 		}
 	}
 
@@ -367,11 +396,15 @@ public final class McpResourceRegistration {
 		private final String uriTemplate;
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 
 		private TemplateHandlerStage(@NonNull String uriTemplate,
-				@NonNull String name) {
+				@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.uriTemplate = requireNonNull(uriTemplate);
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
 		/**
@@ -383,7 +416,8 @@ public final class McpResourceRegistration {
 		@NonNull
 		public TemplateBuilder handler(@NonNull McpResourceReadHandler handler) {
 			return new TemplateBuilder(new BuilderState(null,
-					this.uriTemplate, this.name, requireNonNull(handler)));
+					this.uriTemplate, this.name, this.protocolVersions,
+					requireNonNull(handler)));
 		}
 	}
 
@@ -643,12 +677,20 @@ public final class McpResourceRegistration {
 		 * Repeated calls replace the previous handler.
 		 *
 		 * @param completionHandler non-null argument completer
+		 * @param protocolVersions nonempty subset of this resource's revisions
 		 * @return this builder
 		 */
 		@NonNull
 		public TemplateBuilder completionHandler(
-				@NonNull McpCompletionHandler completionHandler) {
-			this.state.completionHandler = requireNonNull(completionHandler);
+				@NonNull McpCompletionHandler completionHandler,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			requireNonNull(completionHandler);
+			Set<McpProtocolVersion> versions = McpProtocolVersion.requiredSet(protocolVersions);
+			if (!this.state.protocolVersions.containsAll(versions))
+				throw new IllegalArgumentException(
+						"MCP resource completion revisions must be a subset of resource revisions.");
+			this.state.completionHandler = completionHandler;
+			this.state.completionProtocolVersions = versions;
 			return this;
 		}
 
@@ -669,6 +711,8 @@ public final class McpResourceRegistration {
 		private final String uriTemplate;
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 		@Nullable
 		private String title;
 		@Nullable
@@ -695,9 +739,12 @@ public final class McpResourceRegistration {
 		private final McpResourceReadHandler handler;
 		@Nullable
 		private McpCompletionHandler completionHandler;
+		@NonNull
+		private Set<@NonNull McpProtocolVersion> completionProtocolVersions = Set.of();
 
 		private BuilderState(@Nullable URI uri,
 				@Nullable String uriTemplate, @NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull McpResourceReadHandler handler) {
 			if ((uri == null) == (uriTemplate == null))
 				throw new IllegalArgumentException(
@@ -708,6 +755,7 @@ public final class McpResourceRegistration {
 			this.uri = uri;
 			this.uriTemplate = uriTemplate;
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.handler = requireNonNull(handler);
 		}
 	}

@@ -209,7 +209,7 @@ class McpLocalizationMrtrRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL)
+				.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -232,7 +232,7 @@ class McpLocalizationMrtrRuntimeTests {
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
-						.withNameAndVersion("localization-mrtr", "1.0").build())
+						.withNameAndVersion("localization-mrtr", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}

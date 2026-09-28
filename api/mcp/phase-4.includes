@@ -81,6 +81,7 @@ com.soklet.McpPromptOutput$Builder
 com.soklet.McpPromptRegistration
 com.soklet.McpPromptRegistration$Builder
 com.soklet.McpPromptRegistration$HandlerStage
+com.soklet.McpProtocolVersion
 com.soklet.McpRateLimitContext
 com.soklet.McpRateLimitDecision
 com.soklet.McpRateLimitDecision$Allowed

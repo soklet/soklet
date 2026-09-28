@@ -20,6 +20,7 @@ import com.soklet.McpAdmissionController;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpServer;
 import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
@@ -64,11 +65,13 @@ public final class SkillsExample {
 						"/references/catalog.csv"),
 				"assets/sample.bin", SAMPLE_BINARY));
 		McpSkillRegistration skill = McpSkillRegistration
-				.withUriAndSkillBundle(SKILL_URI, bundle)
+				.withUriAndSkillBundle(SKILL_URI, bundle,
+						Set.of(McpProtocolVersion.V2026_07_28))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH,
 				McpImplementation.withNameAndVersion(
-						"soklet-skills-example", "1.0.0").build())
+						"soklet-skills-example", "1.0.0").build(),
+				Set.of(McpProtocolVersion.V2026_07_28))
 				.instructions("Explore the synthetic toy catalog guide and its supporting files.")
 				.skillRegistrations(List.of(skill))
 				.build();

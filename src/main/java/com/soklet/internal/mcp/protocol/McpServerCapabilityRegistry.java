@@ -101,7 +101,7 @@ final class McpServerCapabilityRegistry {
 	static McpServerCapabilityRegistry fromEndpoint(
 			@NonNull McpNormalizedEndpoint endpoint) {
 		return new McpServerCapabilityRegistry(endpoint, Set.of(),
-				McpProductionProtocolProfiles.REGISTRY);
+				McpProductionProtocolProfiles.REGISTRY.revisions());
 	}
 
 	/**
@@ -115,7 +115,7 @@ final class McpServerCapabilityRegistry {
 			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
 					localizedResponseKinds) {
 		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds,
-				McpProductionProtocolProfiles.REGISTRY);
+				McpProductionProtocolProfiles.REGISTRY.revisions());
 	}
 
 	@NonNull
@@ -125,16 +125,29 @@ final class McpServerCapabilityRegistry {
 					localizedResponseKinds,
 			@NonNull McpProtocolProfileRegistry protocolProfiles) {
 		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds,
-				protocolProfiles);
+				protocolProfiles.revisions());
+	}
+
+	@NonNull
+	static McpServerCapabilityRegistry fromEndpoint(
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds,
+			@NonNull List<@NonNull String> advertisedRevisions) {
+		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds,
+				advertisedRevisions);
 	}
 
 	private McpServerCapabilityRegistry(@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
 					localizedResponseKinds,
-			@NonNull McpProtocolProfileRegistry protocolProfiles) {
+			@NonNull List<@NonNull String> advertisedRevisions) {
 		requireNonNull(localizedResponseKinds);
 		requireNonNull(endpoint);
-		requireNonNull(protocolProfiles);
+		advertisedRevisions = List.copyOf(requireNonNull(advertisedRevisions));
+		if (advertisedRevisions.isEmpty())
+			throw new IllegalArgumentException(
+					"MCP discovery requires at least one supported protocol revision.");
 		this.toolOperations = List.copyOf(endpoint.tools());
 		Map<String, McpNormalizedToolDescriptor> toolDescriptors =
 				new LinkedHashMap<>();
@@ -238,7 +251,7 @@ final class McpServerCapabilityRegistry {
 				new McpResultMetadata(serverInformation, endpoint.discoveryMetadata());
 		Optional<McpResultMetadata> optionalResultMetadata =
 				resultMetadata.isEmpty() ? Optional.empty() : Optional.of(resultMetadata);
-		this.discoverResult = new McpDiscoverResult(protocolProfiles.revisions(),
+		this.discoverResult = new McpDiscoverResult(advertisedRevisions,
 				capabilities, endpoint.instructions(),
 				endpoint.discoveryCachePolicy().timeToLiveMilliseconds(),
 				endpoint.discoveryCachePolicy().scope(), optionalResultMetadata);
@@ -422,7 +435,7 @@ final class McpServerCapabilityRegistry {
 	}
 
 	@NonNull
-	private static McpNormalizedToolDescriptor withoutAppPresentation(
+	static McpNormalizedToolDescriptor withoutAppPresentation(
 			McpNormalizedToolDescriptor descriptor) {
 		if (!hasAppMetadata(descriptor))
 			return descriptor;

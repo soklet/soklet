@@ -576,7 +576,7 @@ public class McpSimulatorEveryOperationTests {
 		@NonNull
 		private SimulatorConfig config() {
 			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME).jsonObjectArguments()
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					this.handlerCalls.incrementAndGet();
 					if (this.blockingTool) {
@@ -588,7 +588,7 @@ public class McpSimulatorEveryOperationTests {
 					return McpCompleteResult.fromToolText("matrix tool complete");
 				}).build();
 			McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) -> {
 					this.handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
@@ -599,13 +599,13 @@ public class McpSimulatorEveryOperationTests {
 							.build());
 				}).build();
 			McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create(RESOURCE_URI), "Matrix resource")
+				.withUriAndName(URI.create(RESOURCE_URI), "Matrix resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					this.handlerCalls.incrementAndGet();
 					return completeText(read.getUri(), "matrix resource complete");
 				}).build();
 			McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName(TEMPLATE_URI, "Matrix template")
+				.withUriTemplateAndName(TEMPLATE_URI, "Matrix template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					this.handlerCalls.incrementAndGet();
 					return completeText(read.getUri(), "matrix template complete");
@@ -616,12 +616,12 @@ public class McpSimulatorEveryOperationTests {
 				.build();
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"simulator-every-operation-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(this.serverInformationIncluded)
 				.toolRegistrations(java.util.List.of(tool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.resourceRegistrations(java.util.List.of(exact, template))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 			McpEndpointRegistry endpointRegistry =
 					McpEndpointRegistry.fromEndpoints(List.of(endpoint));

@@ -123,8 +123,9 @@ class McpLocalizationReloadRuntimeTests {
 		// Only the prompt carries localizable text: no tools, and the resource
 		// surface and application publishers are deliberately absent.
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
-						.withNameAndVersion("reload-prompts-only", "1.0").build())
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("reload.prompt")
+						.withNameAndVersion("reload-prompts-only", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("reload.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -177,12 +178,12 @@ class McpLocalizationReloadRuntimeTests {
 
 		// The framework-owned localization publisher supplies the delivery channel;
 		// no unrelated application publisher is required.
-		String noSubscriptions = discoveryBody(false, localizer(
+		String noApplicationPublisher = discoveryBody(false, localizer(
 				text -> McpLocalizationResult.useDefaultText()));
-		assertTrue(noSubscriptions.contains("\"tools\":{\"listChanged\":true}"),
-				noSubscriptions);
-		assertTrue(noSubscriptions.contains("\"prompts\":{\"listChanged\":true}"),
-				noSubscriptions);
+		assertTrue(noApplicationPublisher.contains("\"tools\":{\"listChanged\":true}"),
+				noApplicationPublisher);
+		assertTrue(noApplicationPublisher.contains("\"prompts\":{\"listChanged\":true}"),
+				noApplicationPublisher);
 	}
 
 	@Test
@@ -552,9 +553,9 @@ class McpLocalizationReloadRuntimeTests {
 				.withNameAndVersion(path.substring(path.lastIndexOf('/') + 1), "1.0");
 		if (title != null)
 			information.title(title);
-		return McpEndpoint.withPath(path, information.build())
+		return McpEndpoint.withPath(path, information.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("shared:" + path), "shared")
+						URI.create("shared:" + path), "shared", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -563,7 +564,7 @@ class McpLocalizationReloadRuntimeTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 	}
 
@@ -696,21 +697,22 @@ class McpLocalizationReloadRuntimeTests {
 						.withNameAndVersion("localization-reload", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
-						.build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("reload.tool")
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("reload.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build()))
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("reload.prompt")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("reload.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
 						.title("Prompt title")
 						.build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("reload://text"), "text")
+						URI.create("reload://text"), "text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -780,7 +782,7 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static McpResourceRegistration bareResource() {
 		return McpResourceRegistration.withUriAndName(
-				URI.create("reload://bare"), "bare")
+				URI.create("reload://bare"), "bare", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(McpTextResourceContents

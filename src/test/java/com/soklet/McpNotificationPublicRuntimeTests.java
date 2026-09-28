@@ -70,7 +70,7 @@ public class McpNotificationPublicRuntimeTests {
 				.addHeader("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("must-not-run")
+				.withName("must-not-run", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
@@ -78,7 +78,7 @@ public class McpNotificationPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"notification-boundary-test", "4.0.0").build())
+						"notification-boundary-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -203,7 +203,7 @@ public class McpNotificationPublicRuntimeTests {
 		AtomicInteger handlerCalls = new AtomicInteger();
 		AtomicInteger interceptorCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> progressTool = McpToolRegistration
-				.withName("emit-progress")
+				.withName("emit-progress", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
@@ -217,12 +217,12 @@ public class McpNotificationPublicRuntimeTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"notification-output-test", "4.0.0").build())
+						"notification-output-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(progressTool))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						URI.create("https://example.com/notification-resource"),
-						"Notification resource")
+						"Notification resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, read, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -231,7 +231,7 @@ public class McpNotificationPublicRuntimeTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 

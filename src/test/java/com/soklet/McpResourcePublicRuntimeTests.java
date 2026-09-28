@@ -66,7 +66,7 @@ public class McpResourcePublicRuntimeTests {
 		AtomicReference<McpResourceReadContext> templateRead = new AtomicReference<>();
 
 		McpResourceRegistration text = McpResourceRegistration
-				.withUriAndName(TEXT_URI, "Static text")
+				.withUriAndName(TEXT_URI, "Static text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					stages.add("handler:" + resource.getUri());
 					handlerInvocations.incrementAndGet();
@@ -81,7 +81,7 @@ public class McpResourcePublicRuntimeTests {
 				.metadata(McpJsonObject.builder().put("kind", "text").build())
 				.build();
 		McpResourceRegistration binary = McpResourceRegistration
-				.withUriAndName(BINARY_URI, "Static binary")
+				.withUriAndName(BINARY_URI, "Static binary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					stages.add("handler:" + resource.getUri());
 					handlerInvocations.incrementAndGet();
@@ -97,7 +97,7 @@ public class McpResourcePublicRuntimeTests {
 						Duration.ofMillis(60)))
 				.build();
 		McpResourceRegistration exactSpecial = McpResourceRegistration
-				.withUriAndName(SPECIAL_URI, "Special exact resource")
+				.withUriAndName(SPECIAL_URI, "Special exact resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					stages.add("handler:" + resource.getUri());
 					handlerInvocations.incrementAndGet();
@@ -109,7 +109,7 @@ public class McpResourcePublicRuntimeTests {
 						Duration.ofMillis(70)))
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName(TEMPLATE_URI, "Template resource")
+				.withUriTemplateAndName(TEMPLATE_URI, "Template resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					stages.add("handler:" + resource.getUri());
 					handlerInvocations.incrementAndGet();
@@ -297,12 +297,12 @@ public class McpResourcePublicRuntimeTests {
 				new AtomicReference<>();
 
 		McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create("test://registered"), "Registered")
+				.withUriAndName(URI.create("test://registered"), "Registered", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						completeText(resource.getUri(), "registered", "text/plain"))
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic")
+				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						completeText(resource.getUri(), "dynamic", "text/plain"))
 				.build();
@@ -333,7 +333,7 @@ public class McpResourcePublicRuntimeTests {
 		};
 		McpEndpoint endpoint = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(exact, template))
-				.resourceListHandler(listHandler)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(500)))
 				.build();
@@ -441,11 +441,11 @@ public class McpResourcePublicRuntimeTests {
 	@Test
 	public void dynamicListCanVaryByAdmittedIdentity() throws Exception {
 		McpResourceRegistration alpha = McpResourceRegistration
-				.withUriAndName(URI.create("test://tenant/alpha"), "Alpha")
+				.withUriAndName(URI.create("test://tenant/alpha"), "Alpha", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 		McpResourceRegistration beta = McpResourceRegistration
-				.withUriAndName(URI.create("test://tenant/beta"), "Beta")
+				.withUriAndName(URI.create("test://tenant/beta"), "Beta", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
@@ -462,7 +462,7 @@ public class McpResourcePublicRuntimeTests {
 											.endsWith("/" + tenant))
 									.toList())
 							.build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(250)))
 				.build();
@@ -525,18 +525,18 @@ public class McpResourcePublicRuntimeTests {
 			}
 		};
 		McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create("test://registered"), "Registered")
+				.withUriAndName(URI.create("test://registered"), "Registered", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						completeText(resource.getUri(), "registered", "text/plain"))
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic")
+				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						completeText(resource.getUri(), "dynamic", "text/plain"))
 				.build();
 		McpResourceRegistration invalidContentMetadata = McpResourceRegistration
 				.withUriAndName(URI.create("test://invalid-content-metadata"),
-						"Invalid content metadata")
+						"Invalid content metadata", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) ->
 						McpCompleteResult.fromResourceOutput(McpResourceOutput.withContent(McpTextResourceContents
 										.withUriAndText(resource.getUri(), "secret")
@@ -578,7 +578,7 @@ public class McpResourcePublicRuntimeTests {
 		};
 		McpEndpoint endpoint = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(exact, template, invalidContentMetadata))
-				.resourceListHandler(listHandler)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
@@ -654,7 +654,7 @@ public class McpResourcePublicRuntimeTests {
 
 		McpEndpoint exactPrecedence = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("test://items/special"), "Special")
+						URI.create("test://items/special"), "Special", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler()).build(), templateRegistration("test://items/{id}")))
 				.build();
 		McpServer server = Assertions.assertDoesNotThrow(
@@ -701,14 +701,14 @@ public class McpResourcePublicRuntimeTests {
 		String boundaryUri = prefix + "a".repeat(1_048_576 - prefix.length());
 		McpEndpoint acceptedUri = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create(boundaryUri), "Boundary URI")
+						URI.create(boundaryUri), "Boundary URI", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler()).build()))
 				.build();
 		Assertions.assertDoesNotThrow(() -> serverBuilder(acceptedUri).build());
 
 		McpEndpoint oversizedUri = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create(boundaryUri + "a"), "Oversized URI")
+						URI.create(boundaryUri + "a"), "Oversized URI", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler()).build()))
 				.build();
 		IllegalArgumentException uriFailure = Assertions.assertThrows(
@@ -751,10 +751,10 @@ public class McpResourcePublicRuntimeTests {
 		};
 		McpEndpoint endpoint = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(
-						"test://aggregate-page/{id}", "Aggregate page resource")
+						"test://aggregate-page/{id}", "Aggregate page resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler())
 						.build()))
-				.resourceListHandler(listHandler)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = managedSoklet(server);
@@ -811,19 +811,19 @@ public class McpResourcePublicRuntimeTests {
 		McpResourceOutput aggregateContents = McpResourceOutput.fromContents(aggregateOutput);
 		McpEndpoint endpoint = endpointBuilder()
 					.resourceRegistrations(java.util.List.of(McpResourceRegistration
-						.withUriAndName(boundaryUri, "Boundary blob")
+						.withUriAndName(boundaryUri, "Boundary blob", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(boundaryContents)
 												.build()))
 						.build(), McpResourceRegistration
-						.withUriAndName(oversizedUri, "Oversized blob")
+						.withUriAndName(oversizedUri, "Oversized blob", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(oversizedContents)
 												.build()))
 							.build(), McpResourceRegistration
-							.withUriAndName(aggregateUri, "Aggregate oversized blobs")
+							.withUriAndName(aggregateUri, "Aggregate oversized blobs", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.handler((request, resource, features) ->
 									McpCompleteResult.fromResourceOutput(aggregateContents))
 							.build()))
@@ -867,7 +867,7 @@ public class McpResourcePublicRuntimeTests {
 		for (int index = 0; index < 5; ++index) {
 			URI uri = URI.create("test://large-static-resource/" + index);
 			resourceRegistrations.add(McpResourceRegistration.withUriAndName(
-						uri, "Large resource " + index)
+						uri, "Large resource " + index, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.handler(resourceHandler())
 					.description(largeDescription)
 					.build());
@@ -890,14 +890,14 @@ public class McpResourcePublicRuntimeTests {
 						Collections.nCopies(50_000, McpJsonNull.INSTANCE)))
 				.build();
 		McpToolRegistration<McpJsonObject> first = McpToolRegistration
-				.withName("aggregate-catalog-first")
+				.withName("aggregate-catalog-first", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("first"))
 				.metadata(metadata)
 				.build();
 		McpToolRegistration<McpJsonObject> second = McpToolRegistration
-				.withName("aggregate-catalog-second")
+				.withName("aggregate-catalog-second", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("second"))
@@ -937,19 +937,19 @@ public class McpResourcePublicRuntimeTests {
 						Collections.nCopies(50_000, McpJsonNull.INSTANCE)))
 				.build();
 		McpResourceRegistration first = McpResourceRegistration
-				.withUriAndName(URI.create("test://custom-list/first"), "First")
+				.withUriAndName(URI.create("test://custom-list/first"), "First", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.metadata(metadata)
 				.build();
 		McpResourceRegistration second = McpResourceRegistration
-				.withUriAndName(URI.create("test://custom-list/second"), "Second")
+				.withUriAndName(URI.create("test://custom-list/second"), "Second", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.metadata(metadata)
 				.build();
 		McpEndpoint endpoint = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(first, second))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 
 		McpServer server = Assertions.assertDoesNotThrow(
@@ -960,7 +960,7 @@ public class McpResourcePublicRuntimeTests {
 
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"resource-public-runtime-test", "4.0.0").build());
+						"resource-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpEndpoint endpointWithTemplateRegistrations(int count) {
@@ -997,7 +997,7 @@ public class McpResourcePublicRuntimeTests {
 
 	private static McpResourceRegistration templateRegistration(String uriTemplate) {
 		return McpResourceRegistration
-				.withUriTemplateAndName(uriTemplate, "Template")
+				.withUriTemplateAndName(uriTemplate, "Template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 	}

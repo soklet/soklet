@@ -372,7 +372,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 	@NonNull
 	private static McpEndpoint endpoint(@NonNull String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0").build())
+						implementationName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 

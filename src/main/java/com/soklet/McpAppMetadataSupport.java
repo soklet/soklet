@@ -165,34 +165,10 @@ final class McpAppMetadataSupport {
 				throw new IllegalArgumentException("Typed and raw MCP Apps tool fields must not overlap.");
 			return Optional.of(typed);
 		}
-		if (!recognized)
-			return Optional.empty();
-
-		McpAppToolMetadata.Builder builder = McpAppToolMetadata.builder();
-		McpJsonValue resourceUri = ui.getMembers().get("resourceUri");
-		if (resourceUri != null) {
-			String value = string(resourceUri);
-			try {
-				builder.resourceUri(URI.create(value));
-			} catch (IllegalArgumentException exception) {
-				// URI syntax exceptions contain the supplied URI; do not retain one
-				// in the cause chain at this configuration boundary.
-				throw new IllegalArgumentException("MCP Apps resource URIs must be normalized absolute ASCII ui:// identifiers.");
-			}
-		}
-		McpJsonValue visibility = ui.getMembers().get("visibility");
-		if (visibility != null) {
-			Set<McpAppToolMetadata.Visibility> audiences = EnumSet.noneOf(McpAppToolMetadata.Visibility.class);
-			for (String audience : strings(visibility)) {
-				audiences.add(switch (audience) {
-					case "model" -> McpAppToolMetadata.Visibility.MODEL;
-					case "app" -> McpAppToolMetadata.Visibility.APP;
-					default -> throw new IllegalArgumentException("MCP Apps visibility contains an unsupported audience.");
-				});
-			}
-			builder.visibility(audiences);
-		}
-		return Optional.of(builder.build());
+		if (recognized)
+			throw new IllegalArgumentException(
+					"MCP Apps tool fields require typed, versioned Apps metadata.");
+		return Optional.empty();
 	}
 
 	@NonNull

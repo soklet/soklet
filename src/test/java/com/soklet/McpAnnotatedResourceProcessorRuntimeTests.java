@@ -391,8 +391,8 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			@Override public Optional<McpRequestId> getRequestId() {
 				return Optional.of(McpRequestId.fromString("resource-test"));
 			}
-			@Override public String getProtocolVersion() {
-				return "2026-07-28";
+			@Override public McpProtocolVersion getProtocolVersion() {
+				return McpProtocolVersion.V2026_07_28;
 			}
 			@Override public Optional<String> getOperationName() {
 				return Optional.empty();
@@ -518,7 +518,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				import com.soklet.annotation.McpServerEndpoint;
 				import java.time.Duration;
 
-				@McpServerEndpoint(
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				    path = "/resources/mcp",
 				    name = "resource-catalog",
 				    version = "4.0.0",
@@ -528,7 +528,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				public final class ResourceEndpoint {
 				  public ResourceEndpoint() {}
 
-				  @McpResource(
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      uri = "test://catalog/static",
 				      name = "static-catalog",
 				      title = "Static catalog",
@@ -554,7 +554,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				        .build();
 				  }
 
-				  @McpResource(
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      uri = "test://catalog/item/{identifier}/{section}",
 				      name = "catalog-item",
 				      cacheTimeToLiveInMilliseconds = 250)
@@ -580,7 +580,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				    return McpCompleteResult.fromResourceOutput(output);
 				  }
 
-				  @McpResourceList
+				  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public McpResourcePage resources(
 				      McpInvocationFeatures features,
 				      CancelationToken cancelationToken,

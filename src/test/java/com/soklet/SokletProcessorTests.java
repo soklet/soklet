@@ -370,13 +370,13 @@ public class SokletProcessorTests {
 		Files.writeString(firstEndpoint, """
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
-				@McpServerEndpoint(path="/a", name="a", version="1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path="/a", name="a", version="1")
 				public final class AEndpoint {}
 				""", StandardCharsets.UTF_8);
 		Files.writeString(secondEndpoint, """
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
-				@McpServerEndpoint(path="/b", name="b", version="1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path="/b", name="b", version="1")
 				public final class BEndpoint {}
 				""", StandardCharsets.UTF_8);
 

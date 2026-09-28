@@ -331,10 +331,10 @@ public class McpSubscriptionCatalogOfferBoundaryTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
 							"catalog-offer-boundary-test", "4.0.0")
-							.build())
+							.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool(STABLE_TOOL), tool(CONDITIONAL_TOOL)))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		McpCatalogAccessPolicy accessPolicy =
 				McpCatalogAccessPolicy.fromEvaluators(
@@ -372,7 +372,7 @@ public class McpSubscriptionCatalogOfferBoundaryTests {
 	@NonNull
 	private static McpToolRegistration<McpJsonObject> tool(
 			@NonNull String name) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))

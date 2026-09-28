@@ -418,7 +418,7 @@ public class McpDeferredTaskOutputSafetyTests {
 				new AtomicReference<>(CatalogPolicyMode.ALLOW);
 		AtomicInteger policyInvocations = new AtomicInteger();
 		McpToolRegistration<TaskArguments> replacementTool =
-				McpToolRegistration.withName("tasks.replacement")
+				McpToolRegistration.withName("tasks.replacement", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(TaskArguments.class,
 								TaskOutput.class)
 						.operationHandler((request, arguments, features) -> {
@@ -536,7 +536,7 @@ public class McpDeferredTaskOutputSafetyTests {
 
 	private static McpToolRegistration<TaskArguments> tool(
 			@NonNull TaskManager taskManager, @NonNull List<@NonNull String> stages) {
-		return McpToolRegistration.withName(TOOL_NAME)
+		return McpToolRegistration.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(TaskArguments.class, TaskOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					stages.add("handler");
@@ -682,7 +682,8 @@ public class McpDeferredTaskOutputSafetyTests {
 			@NonNull Duration requestTimeout) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"deferred-task-output-safety-test", "4.0.0").build())
+						"deferred-task-output-safety-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		return McpServer.withPort(0)

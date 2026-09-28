@@ -362,7 +362,7 @@ class McpTasksFleetPublicRuntimeTests {
 			@NonNull List<@NonNull McpInputRequestDeclaration> declarations) {
 		McpToolRegistration.OperationBuilder<FleetArguments> toolBuilder =
 				McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(FleetArguments.class, outputType)
 				.operationHandler((request, arguments, features) -> {
 					String taskId = arguments.getConvertedArguments().taskId();
@@ -374,7 +374,7 @@ class McpTasksFleetPublicRuntimeTests {
 		toolBuilder.inputRequestDeclarations(declarations);
 		McpToolRegistration<FleetArguments> tool = toolBuilder.build();
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
-				McpImplementation.withNameAndVersion(node, "4.0.0").build())
+				McpImplementation.withNameAndVersion(node, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -385,7 +385,7 @@ class McpTasksFleetPublicRuntimeTests {
 	private static McpServer serverWithoutTool(@NonNull String node,
 			@NonNull DurableFleetTaskManager taskManager) {
 		McpEndpoint mainEndpoint = McpEndpoint.withPath(MAIN_PATH,
-				McpImplementation.withNameAndVersion(node, "4.0.0").build())
+				McpImplementation.withNameAndVersion(node, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.build();
 		return server(node, taskManager, mainEndpoint);
@@ -397,7 +397,7 @@ class McpTasksFleetPublicRuntimeTests {
 			@NonNull McpEndpoint mainEndpoint) {
 		McpEndpoint otherEndpoint = McpEndpoint.withPath(OTHER_PATH,
 				McpImplementation.withNameAndVersion(node + "-other", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.build();
 		return McpServer.withPort(0)

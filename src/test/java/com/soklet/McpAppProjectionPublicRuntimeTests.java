@@ -60,11 +60,11 @@ class McpAppProjectionPublicRuntimeTests {
 	private static final McpJsonCodec JSON = new McpJsonCodec(McpJsonLimits.productionDefaults());
 
 	@Test
-	void typedAndRawAudiencesUseEachRequestsCapabilitiesWithoutCatalogLeaks() {
+	void typedAudiencesUseEachRequestsCapabilitiesWithoutCatalogLeaks() {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.toolRegistrations(java.util.List.of(tool("ordinary", calls).metadata(unknownMetadata()).build(), tool("typed-both", calls).appToolMetadata(McpAppToolMetadata.builder()
-						.resourceUri(UI_URI).build()).metadata(unknownMetadata()).build(), tool("raw-model", calls).metadata(rawVisibility("model")).build(), tool("raw-app", calls).metadata(rawVisibility("app")).build(), tool("empty", calls).appToolMetadata(McpAppToolMetadata.builder()
+				.toolRegistrations(java.util.List.of(tool("ordinary", calls).metadata(unknownMetadata()).build(), tool("typed-both", calls).appToolMetadata(McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+						.resourceUri(UI_URI).build()).metadata(unknownMetadata()).build(), tool("typed-model", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.MODEL)).build(), tool("typed-app", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.APP)).build(), tool("empty", calls).appToolMetadata(McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.visibility(Set.of()).build()).build()))
 				.resourceRegistrations(java.util.List.of(resource())).build();
 		run(endpoint, builder -> {}, simulator -> {
@@ -78,8 +78,8 @@ class McpAppProjectionPublicRuntimeTests {
 				Capture capture = execute(simulator, request("tools/list", null,
 						capabilities, "allowed", "fr"));
 				assertEquals(200, capture.status(), capture.body());
-				assertEquals(apps ? List.of("ordinary", "typed-both", "raw-model", "raw-app")
-						: List.of("ordinary", "typed-both", "raw-model"), names(capture));
+				assertEquals(apps ? List.of("ordinary", "typed-both", "typed-model", "typed-app")
+						: List.of("ordinary", "typed-both", "typed-model"), names(capture));
 				List<McpJsonObject> tools = tools(capture);
 				assertEquals(unknownMetadata(), tools.get(0).getMembers().get("_meta"));
 				McpJsonObject typedMetadata = object(tools.get(1).getMembers().get("_meta"));
@@ -99,7 +99,7 @@ class McpAppProjectionPublicRuntimeTests {
 		AtomicInteger calls = new AtomicInteger();
 		List<String> evaluated = new ArrayList<>();
 		McpEndpoint endpoint = endpoint()
-				.toolRegistrations(java.util.List.of(tool("app", calls).metadata(rawVisibility("app")).build(), tool("empty", calls).metadata(rawVisibility()).build(), tool("model", calls).metadata(rawVisibility("model")).build()))
+				.toolRegistrations(java.util.List.of(tool("app", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.APP)).build(), tool("empty", calls).appToolMetadata(visibility()).build(), tool("model", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.MODEL)).build()))
 				.build();
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(context, registration, features) -> {
@@ -133,8 +133,8 @@ class McpAppProjectionPublicRuntimeTests {
 	void directAppOnlyCallsRequireExactMimeEvenWithoutExplicitCatalogPolicy() {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.toolRegistrations(java.util.List.of(tool("app", calls).appToolMetadata(McpAppToolMetadata.builder()
-						.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build()).build(), tool("empty", calls).metadata(rawVisibility()).build(), tool("model", calls).metadata(rawVisibility("model")).build())).build();
+				.toolRegistrations(java.util.List.of(tool("app", calls).appToolMetadata(McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+						.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build()).build(), tool("empty", calls).appToolMetadata(visibility()).build(), tool("model", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.MODEL)).build())).build();
 		run(endpoint, builder -> {}, simulator -> {
 			List<String> capabilityCases = List.of("{}",
 					"{\"extensions\":{\"io.modelcontextprotocol/ui\":{}}}",
@@ -163,7 +163,7 @@ class McpAppProjectionPublicRuntimeTests {
 		AtomicInteger calls = new AtomicInteger();
 		AtomicInteger lookups = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.toolRegistrations(java.util.List.of(tool("app", calls).title("App title").metadata(rawVisibility("app")).build(), tool("model", calls).title("Model title").metadata(rawVisibility("model")).build()))
+				.toolRegistrations(java.util.List.of(tool("app", calls).title("App title").appToolMetadata(visibility(McpAppToolMetadata.Visibility.APP)).build(), tool("model", calls).title("Model title").appToolMetadata(visibility(McpAppToolMetadata.Visibility.MODEL)).build()))
 				.build();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 			Locale locale = Locale.forLanguageTag(request.getLanguageRanges().get(0).getRange());
@@ -193,7 +193,7 @@ class McpAppProjectionPublicRuntimeTests {
 		McpEndpoint endpoint = endpoint().resourceRegistrations(java.util.List.of(resource()))
 				.resourceListHandler((request, list, features) -> {
 					throw new AssertionError("Discovery must not invoke custom listing.");
-				}).build();
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		run(endpoint, builder -> {}, simulator -> {
 			Capture discovery = execute(simulator, request("server/discover", null, "{}", "allowed", "fr"));
 			assertEquals(200, discovery.status(), discovery.body());
@@ -212,7 +212,7 @@ class McpAppProjectionPublicRuntimeTests {
 		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (int index = 0; index < 5; ++index)
 			toolRegistrations.add(tool("large-app-" + index, calls)
-					.appToolMetadata(McpAppToolMetadata.builder()
+					.appToolMetadata(McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 							.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build())
 					.metadata(McpJsonObject.builder().put("retained", largeValue).build()).build());
 		endpoint.toolRegistrations(toolRegistrations);
@@ -233,7 +233,7 @@ class McpAppProjectionPublicRuntimeTests {
 	void listenerAndSimulatorReturnIdenticalCatalogBytesAcrossCapabilityChanges() throws Exception {
 		AtomicInteger calls = new AtomicInteger();
 		McpEndpoint endpoint = endpoint()
-				.toolRegistrations(java.util.List.of(tool("app", calls).metadata(rawVisibility("app")).build(), tool("model", calls).metadata(rawVisibility("model")).build())).build();
+				.toolRegistrations(java.util.List.of(tool("app", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.APP)).build(), tool("model", calls).appToolMetadata(visibility(McpAppToolMetadata.Visibility.MODEL)).build())).build();
 		List<Capture> simulated = new ArrayList<>();
 		List<String> capabilities = List.of("{}", APPS, "{}", APPS);
 		assertEquals(4, capabilities.size());
@@ -286,31 +286,30 @@ class McpAppProjectionPublicRuntimeTests {
 	}
 
 	private static McpEndpoint.Builder endpoint() {
-		return McpEndpoint.withPath(PATH, McpImplementation.withNameAndVersion("apps", "test").build())
+		return McpEndpoint.withPath(PATH, McpImplementation.withNameAndVersion("apps", "test").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false);
 	}
 
 	private static McpResourceRegistration resource() {
-		return McpResourceRegistration.withUriAndName(UI_URI, "view")
+		return McpResourceRegistration.withUriAndName(UI_URI, "view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> {
 					throw new AssertionError("Must not invoke resource handler.");
 				}).mimeType("TEXT/HTML; profile=\"mcp-app\"").build();
 	}
 
 	private static McpToolRegistration.OperationBuilder<McpJsonObject> tool(String name, AtomicInteger calls) {
-		return McpToolRegistration.withName(name).jsonObjectArguments()
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					calls.incrementAndGet();
 					return McpCompleteResult.fromToolOutput(McpToolOutput.fromText("ordinary text fallback"));
 				});
 	}
 
-	private static McpJsonObject rawVisibility(String... visibility) {
-		McpJsonArray.Builder audiences = McpJsonArray.builder();
-		for (String audience : visibility)
-			audiences.add(audience);
-		return McpJsonObject.builder().put("ui", McpJsonObject.builder()
-				.put("visibility", audiences.build()).build()).build();
+	private static McpAppToolMetadata visibility(
+			McpAppToolMetadata.Visibility... audiences) {
+		return McpAppToolMetadata.withProtocolVersions(Set.of(
+				McpProtocolVersion.V2026_07_28))
+				.visibility(Set.of(audiences)).build();
 	}
 
 	private static McpJsonObject unknownMetadata() {

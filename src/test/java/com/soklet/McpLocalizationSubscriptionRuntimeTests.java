@@ -239,9 +239,9 @@ class McpLocalizationSubscriptionRuntimeTests {
 						.withNameAndVersion("localization-subscription", "1.0")
 						.title("Canonical title")
 						.description("Canonical description")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						java.net.URI.create("subscription://text"), "text")
+						java.net.URI.create("subscription://text"), "text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -251,7 +251,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionConfig(McpSubscriptionConfig
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								EnumSet.of(

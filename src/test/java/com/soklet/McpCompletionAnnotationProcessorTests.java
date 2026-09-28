@@ -35,12 +35,14 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.annotation.Retention;
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,18 +55,20 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
 public class McpCompletionAnnotationProcessorTests {
 	@Test
 	void completionAnnotationsHaveOnlyReviewedElementsAndMethodTargets() {
-		Assertions.assertEquals(1,
+		Assertions.assertEquals(2,
 				McpPromptCompletion.class.getDeclaredMethods().length);
-		Assertions.assertEquals(1,
+		Assertions.assertEquals(2,
 				McpResourceCompletion.class.getDeclaredMethods().length);
-		Assertions.assertEquals(Set.of("name"), Set.of(
-				McpPromptCompletion.class.getDeclaredMethods()[0].getName()));
-		Assertions.assertEquals(Set.of("uri"), Set.of(
-				McpResourceCompletion.class.getDeclaredMethods()[0].getName()));
-		Assertions.assertNull(
-				McpPromptCompletion.class.getDeclaredMethods()[0].getDefaultValue());
-		Assertions.assertNull(
-				McpResourceCompletion.class.getDeclaredMethods()[0].getDefaultValue());
+		Assertions.assertEquals(Set.of("name", "protocolVersions"),
+				Arrays.stream(McpPromptCompletion.class.getDeclaredMethods())
+						.map(Method::getName).collect(Collectors.toSet()));
+		Assertions.assertEquals(Set.of("uri", "protocolVersions"),
+				Arrays.stream(McpResourceCompletion.class.getDeclaredMethods())
+						.map(Method::getName).collect(Collectors.toSet()));
+		for (Method method : McpPromptCompletion.class.getDeclaredMethods())
+			Assertions.assertNull(method.getDefaultValue(), method.toString());
+		for (Method method : McpResourceCompletion.class.getDeclaredMethods())
+			Assertions.assertNull(method.getDefaultValue(), method.toString());
 		Assertions.assertEquals(Set.of(ElementType.METHOD), Set.of(
 				McpPromptCompletion.class.getAnnotation(Target.class).value()));
 		Assertions.assertEquals(Set.of(ElementType.METHOD), Set.of(
@@ -83,13 +87,13 @@ public class McpCompletionAnnotationProcessorTests {
 				import com.soklet.*;
 				import com.soklet.annotation.*;
 				import java.util.Optional;
-				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 				public final class CompletionEndpoint {
-				  @McpPrompt(name = "code_review")
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "code_review")
 				  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
-				  @McpResource(uri = "catalog://products/{sku}", name = "product")
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}", name = "product")
 				  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
-				  @McpPromptCompletion(name = "code_review")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "code_review")
 				  public McpArgumentCompletionResult completePrompt(
 				      McpRequestContext requestContext,
 				      McpCompletionContext.Prompt completionContextPrompt,
@@ -98,7 +102,7 @@ public class McpCompletionAnnotationProcessorTests {
 				      Optional<McpProgressReporter> progressReporter) throws Exception {
 				    return null;
 				  }
-				  @McpResourceCompletion(uri = "catalog://products/{sku}")
+				  @McpResourceCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}")
 				  public McpArgumentCompletionResult completeResource(
 				      Optional<McpProgressReporter> progressReporter,
 				      McpCompletionContext completionContextResource,
@@ -147,20 +151,20 @@ public class McpCompletionAnnotationProcessorTests {
 				import com.soklet.*;
 				import com.soklet.annotation.*;
 				import java.util.List;
-				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 				public final class LiveCompletionEndpoint {
-				  @McpPrompt(name = "review")
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "review")
 				  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
-				  @McpResource(uri = "catalog://products/{sku}", name = "product")
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}", name = "product")
 				  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
-				  @McpPromptCompletion(name = "review")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "review")
 				  public McpArgumentCompletionResult promptCompletion(
 				      McpCompletionContext.Prompt completionContextPrompt) {
 				    return McpArgumentCompletionResult.fromValues(List.of(
 				        completionContextPrompt.getPromptRegistration().getName()
 				        + ":" + completionContextPrompt.getArgumentValue()));
 				  }
-				  @McpResourceCompletion(uri = "catalog://products/{sku}")
+				  @McpResourceCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}")
 				  public McpArgumentCompletionResult resourceCompletion(
 				      McpCompletionContext.Resource completionContextResource) {
 				    return McpArgumentCompletionResult.fromValues(List.of(
@@ -238,19 +242,19 @@ public class McpCompletionAnnotationProcessorTests {
 				package example;
 				import com.soklet.*;
 				import com.soklet.annotation.*;
-				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 				public final class BadTargets {
-				  @McpPrompt(name = "present")
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "present")
 				  public McpPromptOutput prompt() { return null; }
-				  @McpResource(uri = "catalog://exact", name = "exact")
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://exact", name = "exact")
 				  public McpResourceOutput exact() { return null; }
-				  @McpPromptCompletion(name = "missing")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "missing")
 				  public McpArgumentCompletionResult missing(McpCompletionContext.Prompt context) { return null; }
-				  @McpPromptCompletion(name = "present")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "present")
 				  public McpArgumentCompletionResult first(McpCompletionContext.Prompt context) { return null; }
-				  @McpPromptCompletion(name = "present")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "present")
 				  public McpArgumentCompletionResult second(McpCompletionContext.Prompt context) { return null; }
-				  @McpResourceCompletion(uri = "catalog://exact")
+				  @McpResourceCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://exact")
 				  public McpArgumentCompletionResult exactCompletion(McpCompletionContext.Resource context) { return null; }
 				}
 				""");
@@ -270,17 +274,17 @@ public class McpCompletionAnnotationProcessorTests {
 				import com.soklet.*;
 				import com.soklet.annotation.*;
 				import org.jspecify.annotations.Nullable;
-				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 				public final class BadCompletionSignatures {
-				  @McpPrompt(name = "prompt")
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt")
 				  public McpPromptOutput prompt() { return null; }
-				  @McpResource(uri = "catalog://products/{sku}", name = "product")
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}", name = "product")
 				  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
-				  @McpPromptCompletion(name = "prompt")
+				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt")
 				  public McpOperationResult wrongReturn(
 				      McpCompletionContext.Resource wrongContext,
 				      @McpPromptArgument String ordinaryArgument) { return null; }
-				  @McpResourceCompletion(uri = "catalog://products/{sku}")
+				  @McpResourceCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}")
 				  public @Nullable McpArgumentCompletionResult wrongParameters(
 				      McpCompletionContext context,
 				      McpCompletionContext.Resource duplicateContext,

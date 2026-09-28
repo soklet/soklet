@@ -584,7 +584,7 @@ public class McpInMemoryTaskManagerTests {
 	private static McpRequestContext requestContext(@NonNull String endpointPath,
 			@Nullable String authorizationPartitionKey) {
 		McpEndpoint endpoint = McpEndpoint.withPath(endpointPath,
-				McpImplementation.withNameAndVersion("test", "1").build())
+				McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpAdmissionIdentity identity;
 		if (authorizationPartitionKey == null) {

@@ -324,13 +324,13 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		String origin = "https://allowed.example";
 		AtomicInteger admissions = new AtomicInteger();
 		McpEndpoint tenantEndpoint = endpoint("/tenant",
-				McpToolRegistration.withName("tenant.lookup")
+				McpToolRegistration.withName("tenant.lookup", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(TenantArguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("tenant"))
 						.build());
 		McpEndpoint regionEndpoint = endpoint("/region",
-				McpToolRegistration.withName("region.lookup")
+				McpToolRegistration.withName("region.lookup", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(RegionArguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("region"))
@@ -368,7 +368,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			String name, AtomicInteger handlers,
 			AtomicReference<MirroredArguments> observed,
 			AtomicReference<McpJsonObject> observedRaw) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(MirroredArguments.class)
 				.handler((request, arguments, features) -> {
 					handlers.incrementAndGet();
@@ -396,7 +396,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			McpToolRegistration<?> tool) {
 		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
 						"mirrored-header-public-runtime-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}

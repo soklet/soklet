@@ -97,7 +97,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		List<String> stages = new ArrayList<>();
 		AtomicInteger shortCircuitedHandlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> ordinaryTool = McpToolRegistration
-				.withName("ordinary")
+				.withName("ordinary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					stages.add("handler:ordinary");
@@ -105,7 +105,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				})
 				.build();
 		McpToolRegistration<McpJsonObject> shortCircuitedTool = McpToolRegistration
-				.withName("short-circuited")
+				.withName("short-circuited", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					shortCircuitedHandlerInvocations.incrementAndGet();
@@ -247,13 +247,13 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			throws Exception {
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<TypedArguments> tool = McpToolRegistration
-				.withName("typed")
+				.withName("typed", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(TypedArguments.class, TypedResult.class)
 				.handler((request, arguments, features) ->
 						new TypedResult("ORIGINAL-TYPED-VALUE"))
 				.build();
 		McpToolRegistration<TypedArguments> toolWithoutMirror = McpToolRegistration
-				.withName("typed-without-mirror")
+				.withName("typed-without-mirror", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(TypedArguments.class, TypedResult.class)
 				.handler((request, arguments, features) ->
 						new TypedResult("ORIGINAL-TYPED-VALUE"))
@@ -385,7 +385,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		String toolName = "sanitizer-failure-" + suffix;
 		String handlerSecret = "HANDLER-OUTPUT-MUST-NOT-LEAK-" + suffix;
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText(handlerSecret))
@@ -412,7 +412,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> jsonTool(String name,
 			java.util.function.Supplier<McpCompleteResult> resultSupplier) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> resultSupplier.get())
 				.build();
@@ -445,7 +445,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			McpToolResultSanitizer sanitizer) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"sanitizer-public-runtime-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(tools)
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

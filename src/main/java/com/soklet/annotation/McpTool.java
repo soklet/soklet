@@ -17,6 +17,7 @@
 package com.soklet.annotation;
 
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -49,6 +50,14 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpTool {
+	/**
+	 * Exact MCP revisions on which this tool is available. At least one is
+	 * required, and every revision must be exposed by the owning endpoint.
+	 *
+	 * @return supported protocol revisions
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 	/**
 	 * The tool name published to MCP clients.
 	 *

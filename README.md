@@ -863,8 +863,13 @@ The development coordinate for this section is `4.0.0`.
 
 ##### Recommended MCP setup
 
-Soklet supports exactly the MCP `2026-07-28` server profile through a dedicated,
-stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
+Soklet's qualified 4.0.0 MCP server target is `2026-07-28`. It uses a
+dedicated, stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
+The development source is adding explicitly selected `2025-06-18` and
+`2025-11-25` compatibility for synchronous tools; a release or host claim
+requires qualification against the exact candidate artifact. Endpoints and
+operations name their exact `McpProtocolVersion` values, with no implicit
+"latest" default. See [the MCP guide](MCP.md#exact-protocol-revisions).
 MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
 derives each endpoint's advertised capabilities from its registered
@@ -929,11 +934,13 @@ For a programmatic registration, attach the callback to the prompt or template
 builder and install a server-wide request limiter:
 
 ```java
-McpPromptRegistration prompt = McpPromptRegistration.withName("code_review")
+McpPromptRegistration prompt = McpPromptRegistration.withName("code_review",
+        Set.of(McpProtocolVersion.V2026_07_28))
   .handler(promptHandler)
   .arguments(List.of(McpPromptArgumentDeclaration.withName("language").build()))
   .completionHandler((requestContext, completionContext, invocationFeatures) ->
-    McpArgumentCompletionResult.fromValues(List.of("java")))
+    McpArgumentCompletionResult.fromValues(List.of("java")),
+    Set.of(McpProtocolVersion.V2026_07_28))
   .build();
 
 McpServer mcpServer = McpServer.withPort(8081)
@@ -948,7 +955,8 @@ beside its `@McpPrompt(name = "code_review", ...)` method and configure the
 same request-wide limiter on the server:
 
 ```java
-@McpPromptCompletion(name = "code_review")
+@McpPromptCompletion(name = "code_review",
+    protocolVersions = {McpProtocolVersion.V2026_07_28})
 @NonNull
 public McpArgumentCompletionResult completeCodeReviewArgument(
     @NonNull McpRequestContext requestContext,
@@ -962,7 +970,8 @@ McpServer mcpServer = McpServer.withPort(8081)
   .build();
 ```
 
-Use `@McpResourceCompletion(uri = "catalog://products/{sku}")` and
+Use `@McpResourceCompletion(uri = "catalog://products/{sku}",
+protocolVersions = {McpProtocolVersion.V2026_07_28})` and
 `McpCompletionContext.Resource` for a template method. Each annotated target
 must be registered in the same endpoint. Server construction fails when any
 completer is configured without `requestRateLimiter`. This limiter is charged
@@ -1083,10 +1092,15 @@ Soklet implements the MCP Tasks extension for `tools/call`. Configure one
 application-wide
 [`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
 through
-[`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>)
-to advertise and enable it:
+[`McpServer.Builder::taskManager`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#taskManager(com.soklet.McpTaskManager)>).
+Also select `V2026_07_28` in that endpoint's `taskProtocolVersions`;
+the manager alone does not advertise Tasks:
 
 ```java
+// The endpoint uses taskProtocolVersions =
+// {McpProtocolVersion.V2026_07_28} in @McpServerEndpoint,
+// or .taskProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+// on its programmatic builder.
 McpServer mcpServer = McpServer.withPort(8081)
     .taskManager(taskManager)
     .toolRateLimiter(toolRateLimiter)
@@ -1099,7 +1113,8 @@ and can accept one unannotated
 [`McpTaskCreationContext`](https://javadoc.soklet.com/com/soklet/McpTaskCreationContext.html):
 
 ```java
-@McpTool(name = "reports.generate")
+@McpTool(name = "reports.generate",
+    protocolVersions = {McpProtocolVersion.V2026_07_28})
 public McpTaskCreatedResult<GeneratedReport> generateReport(
     McpTaskCreationContext taskCreationContext) {
   String ownerKey = deriveTaskOwnerKey(taskCreationContext.getRequestContext());
@@ -1143,8 +1158,10 @@ distributed-operation contract.
 
 ##### Protocol scope and unsupported features
 
-The selected MCP profile is fixed; Soklet neither selects an automatic
-"latest" profile nor falls back to another revision. Soklet does not implement
+An endpoint and operation explicitly select exact MCP revisions.
+Soklet neither selects an automatic
+"latest" profile nor falls back to another revision.
+Soklet does not implement
 MCP Roots, Sampling, or Logging. Pass file or directory information through
 explicit tool parameters, resource URIs, or server configuration, and integrate
 directly with a model provider when needed. Use application logging and

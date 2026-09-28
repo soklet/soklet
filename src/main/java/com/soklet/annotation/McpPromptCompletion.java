@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -32,6 +33,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpPromptCompletion {
+	/** @return the required exact MCP revisions handled by this completer */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 	/** @return the target prompt's published name */
 	@NonNull
 	String name();

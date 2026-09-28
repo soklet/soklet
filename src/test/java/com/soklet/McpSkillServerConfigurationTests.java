@@ -226,7 +226,7 @@ class McpSkillServerConfigurationTests {
 	}
 
 	private static McpEndpoint.Builder endpointBuilder(String path) {
-		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpSkillAccessPolicy unusedPolicy() {
@@ -247,9 +247,9 @@ class McpSkillServerConfigurationTests {
 		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md",
 				"---\nname: sample\ndescription: Sample skill\n---\nBody\n".getBytes(StandardCharsets.UTF_8)));
 		return List.of(
-				McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/en/sample/SKILL.md"), bundle)
+				McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/en/sample/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.locale(Locale.ENGLISH).build(),
-				McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/fr/sample/SKILL.md"), bundle)
+				McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/fr/sample/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.locale(Locale.FRENCH).build());
 	}
 

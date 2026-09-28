@@ -500,7 +500,7 @@ public class McpTransportMetricsAggregationTests {
 	private static DefaultMetricsCollector configuredCollector() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/transport-metrics", McpImplementation.withNameAndVersion(
-						"transport-metrics-test", "4.0.0").build())
+						"transport-metrics-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host("127.0.0.1")

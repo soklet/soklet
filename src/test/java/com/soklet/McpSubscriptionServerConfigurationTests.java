@@ -124,13 +124,24 @@ public class McpSubscriptionServerConfigurationTests {
 	@Test
 	public void taskAndFrameworkLocalizationSubscriptionsRequireSelection() {
 		McpEndpointRegistry plainRegistry = registry(plainEndpoint());
+		McpServer.withPort(0)
+				.endpointRegistry(plainRegistry)
+				.taskManager(McpTaskManager.fromInMemoryDefaults())
+				.build();
+		McpEndpoint taskSubscriptions = McpEndpoint
+				.withPath("/task-subscriptions", implementation(),
+						Set.of(McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.build();
+		McpEndpointRegistry taskRegistry = registry(taskSubscriptions);
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> McpServer.withPort(0)
-						.endpointRegistry(plainRegistry)
+						.endpointRegistry(taskRegistry)
 						.taskManager(McpTaskManager.fromInMemoryDefaults())
 						.build());
 		McpServer.withPort(0)
-				.endpointRegistry(plainRegistry)
+				.endpointRegistry(taskRegistry)
 				.taskManager(McpTaskManager.fromInMemoryDefaults())
 				.subscriptionAuthorizer(
 						McpSubscriptionAuthorizer.denyAllInstance())
@@ -141,8 +152,9 @@ public class McpSubscriptionServerConfigurationTests {
 					throw new AssertionError("No localization request is expected");
 				}).build();
 		McpEndpoint localizedEndpoint = McpEndpoint
-				.withPath("/localized", implementation())
+				.withPath("/localized", implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Localizable instructions")
+				.subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
 				.build();
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> McpServer.withPort(0)
@@ -218,13 +230,13 @@ public class McpSubscriptionServerConfigurationTests {
 						McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED))
 				.build();
-		return McpEndpoint.withPath("/subscriptions", implementation())
-				.subscriptionConfig(config)
+		return McpEndpoint.withPath("/subscriptions", implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(config)
 				.build();
 	}
 
 	private static McpEndpoint plainEndpoint() {
-		return McpEndpoint.withPath("/plain", implementation()).build();
+		return McpEndpoint.withPath("/plain", implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 
 	private static McpEndpointRegistry registry(McpEndpoint endpoint) {

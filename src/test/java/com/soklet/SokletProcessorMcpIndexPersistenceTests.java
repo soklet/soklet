@@ -358,7 +358,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 		return """
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
-				@McpServerEndpoint(path="%s", name="%s", version="1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path="%s", name="%s", version="1")
 				public final class %s {}
 				""".formatted(path, className, className);
 	}

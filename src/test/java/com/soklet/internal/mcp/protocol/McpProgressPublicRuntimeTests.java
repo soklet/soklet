@@ -227,7 +227,7 @@ public class McpProgressPublicRuntimeTests {
 		AtomicBoolean completeReporterSuppressed = new AtomicBoolean();
 		AtomicBoolean inputReporterSuppressed = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> complete =
-				McpToolRegistration.withName("progress.conditional-complete")
+				McpToolRegistration.withName("progress.conditional-complete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							if (request.getClientCapabilities().supports(
@@ -244,7 +244,7 @@ public class McpProgressPublicRuntimeTests {
 						.inputRequestDeclarations(java.util.List.of(roots))
 						.build();
 		McpToolRegistration<McpJsonObject> input =
-				McpToolRegistration.withName("progress.conditional-input")
+				McpToolRegistration.withName("progress.conditional-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							inputReporterSuppressed.set(features
@@ -758,7 +758,7 @@ public class McpProgressPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			McpToolHandler<McpJsonObject> handler) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler(handler)
 				.build();
@@ -767,7 +767,7 @@ public class McpProgressPublicRuntimeTests {
 	private static McpServer server(
 			List<McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"progress-public-runtime-test", "4.0.0").build())
+						"progress-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(tools)
 				.build();

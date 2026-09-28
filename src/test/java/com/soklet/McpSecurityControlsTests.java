@@ -418,7 +418,7 @@ public class McpSecurityControlsTests {
 		byte[] associatedData = bytesFrom(0);
 		McpRequestStateProtectionContext context =
 				McpRequestStateProtectionContext.fromComponents(
-						"/mcp", "2026-07-28",
+						"/mcp", McpProtocolVersion.V2026_07_28,
 						"tools/call", associatedData);
 		Arrays.fill(associatedData, (byte) 127);
 		byte[] firstCopy = context.getAssociatedData();
@@ -426,20 +426,21 @@ public class McpSecurityControlsTests {
 		Arrays.fill(firstCopy, (byte) 126);
 		Assertions.assertArrayEquals(bytesFrom(0), context.getAssociatedData());
 		Assertions.assertEquals("/mcp", context.getEndpointPath());
-		Assertions.assertEquals("2026-07-28", context.getProtocolVersion());
+		Assertions.assertEquals(McpProtocolVersion.V2026_07_28,
+				context.getProtocolVersion());
 		Assertions.assertEquals("tools/call", context.getJsonRpcMethod());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpRequestStateProtectionContext.fromComponents(null,
-						"2026-07-28", "tools/call", bytesFrom(0)));
+						McpProtocolVersion.V2026_07_28, "tools/call", bytesFrom(0)));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
 						null, "tools/call", bytesFrom(0)));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
-						"2026-07-28", null, bytesFrom(0)));
+						McpProtocolVersion.V2026_07_28, null, bytesFrom(0)));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpRequestStateProtectionContext.fromComponents("/mcp",
-						"2026-07-28", "tools/call", null));
+						McpProtocolVersion.V2026_07_28, "tools/call", null));
 
 		McpRequestStateProtectionException invalid =
 				McpRequestStateProtectionException.fromInvalidState();
@@ -1450,7 +1451,7 @@ public class McpSecurityControlsTests {
 	private static McpRequestStateProtectionContext protectionContext(
 			int firstBindingByte) {
 		return McpRequestStateProtectionContext.fromComponents(
-				"/mcp", "2026-07-28", "tools/call",
+				"/mcp", McpProtocolVersion.V2026_07_28, "tools/call",
 				bytesFrom(firstBindingByte));
 	}
 

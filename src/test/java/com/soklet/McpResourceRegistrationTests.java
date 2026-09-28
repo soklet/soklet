@@ -54,7 +54,7 @@ class McpResourceRegistrationTests {
 				.build();
 		McpResourceReadHandler handler = resourceHandler();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(uri, "catalog-item")
+				.withUriAndName(uri, "catalog-item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler)
 				.title("Catalog item")
 				.description("One catalog item")
@@ -87,13 +87,13 @@ class McpResourceRegistrationTests {
 	void templateRegistrationHasNoSizeBuilderAndSharesCommonMetadata() {
 		McpResourceReadHandler handler = resourceHandler();
 		Object exactBuilder = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://items/42"), "exact")
+				.withUriAndName(URI.create("catalog://items/42"), "exact", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler);
 		Object templateBuilder = McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", "template")
+				.withUriTemplateAndName("catalog://items/{itemId}", "template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler);
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", "template")
+				.withUriTemplateAndName("catalog://items/{itemId}", "template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler)
 				.title("Catalog template")
 				.description("One templated catalog item")
@@ -199,24 +199,24 @@ class McpResourceRegistrationTests {
 		McpResourceReadHandler handler = resourceHandler();
 
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriAndName(URI.create("relative"), "resource"));
+				.withUriAndName(URI.create("relative"), "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriAndName(URI.create("catalog://item"), " "));
+				.withUriAndName(URI.create("catalog://item"), " ", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriTemplateAndName(" ", "resource"));
+				.withUriTemplateAndName(" ", "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", ""));
+				.withUriTemplateAndName("catalog://items/{itemId}", "", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriAndName(URI.create("catalog://item"), "resource")
+				.withUriAndName(URI.create("catalog://item"), "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler).mimeType(" "));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
-				.withUriAndName(URI.create("catalog://item"), "resource")
+				.withUriAndName(URI.create("catalog://item"), "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler).sizeInBytes(-1L));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://item"), "resource")
 				.sizeInBytes(-1L));
 		assertThrows(NullPointerException.class, () -> McpResourceRegistration
-				.withUriAndName(URI.create("catalog://item"), "resource")
+				.withUriAndName(URI.create("catalog://item"), "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(handler).sizeInBytes(null));
 		assertThrows(NullPointerException.class, () -> McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://item"), "resource")
@@ -250,11 +250,11 @@ class McpResourceRegistrationTests {
 	@Test
 	void endpointPreservesResourceOrderPoliciesAndSoleListAuthority() {
 		McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://readme"), "readme")
+				.withUriAndName(URI.create("catalog://readme"), "readme", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", "item")
+				.withUriTemplateAndName("catalog://items/{itemId}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 		McpResourceListHandler listHandler = (request, list, features) ->
@@ -269,7 +269,7 @@ class McpResourceRegistrationTests {
 				Duration.ofMinutes(1));
 		McpEndpoint endpoint = endpointBuilder()
 				.resourceRegistrations(java.util.List.of(exact, template))
-				.resourceListHandler(listHandler)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(listPolicy)
 				.resourceTemplateListCachePolicy(templatePolicy)
 				.build();
@@ -282,14 +282,14 @@ class McpResourceRegistrationTests {
 		assertThrows(UnsupportedOperationException.class,
 				() -> endpoint.getResourceRegistrations().clear());
 		McpEndpoint replaced = endpointBuilder()
-				.resourceListHandler(listHandler)
-				.resourceListHandler(replacementListHandler)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.resourceListHandler(replacementListHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		assertSame(replacementListHandler,
 				replaced.getResourceListHandler().orElseThrow());
 		McpEndpoint staticFallback = endpointBuilder()
-				.resourceListHandler(listHandler)
-				.resourceListHandler(null)
+				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.resourceListHandler(null, java.util.Set.of())
 				.build();
 		assertTrue(staticFallback.getResourceListHandler().isEmpty());
 
@@ -303,16 +303,16 @@ class McpResourceRegistrationTests {
 	@Test
 	void endpointRejectsDuplicateExactUrisAndTemplates() {
 		McpResourceRegistration firstExact = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://readme"), "first")
+				.withUriAndName(URI.create("catalog://readme"), "first", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).build();
 		McpResourceRegistration secondExact = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://readme"), "second")
+				.withUriAndName(URI.create("catalog://readme"), "second", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).build();
 		McpResourceRegistration firstTemplate = McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", "first")
+				.withUriTemplateAndName("catalog://items/{itemId}", "first", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).build();
 		McpResourceRegistration secondTemplate = McpResourceRegistration
-				.withUriTemplateAndName("catalog://items/{itemId}", "second")
+				.withUriTemplateAndName("catalog://items/{itemId}", "second", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).build();
 
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
@@ -373,6 +373,6 @@ class McpResourceRegistrationTests {
 
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"resource-tests", "4.0.0").build());
+						"resource-tests", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 }

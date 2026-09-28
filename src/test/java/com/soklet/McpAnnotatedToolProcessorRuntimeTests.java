@@ -534,7 +534,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				import java.util.List;
 				import java.util.Optional;
 
-				@McpServerEndpoint(
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				    path = "/catalog/mcp",
 				    name = "catalog",
 				    version = "4.0.0",
@@ -554,7 +554,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 
 				  public CatalogEndpoint() {}
 
-				  @McpTool(
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      name = "catalog.search",
 				      title = "Catalog search",
 				      description = "Searches the catalog",
@@ -580,7 +580,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					            features.find(McpProgressReporter.class)));
 				  }
 
-				  @McpPrompt(
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 				      name = "catalog.compose",
 				      title = "Catalog composer",
 				      description = "Builds a catalog prompt")

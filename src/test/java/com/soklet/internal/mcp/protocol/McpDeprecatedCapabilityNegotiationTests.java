@@ -71,7 +71,7 @@ public class McpDeprecatedCapabilityNegotiationTests {
 			}
 		};
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"deprecated-capability-test", "4.0.0").build())
+						"deprecated-capability-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)

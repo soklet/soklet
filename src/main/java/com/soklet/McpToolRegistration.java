@@ -28,6 +28,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
@@ -61,6 +62,8 @@ public final class McpToolRegistration<A> {
 
 	@NonNull
 	private final String name;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> protocolVersions;
 	@Nullable
 	private final String title;
 	@Nullable
@@ -112,17 +115,21 @@ public final class McpToolRegistration<A> {
 	 * a handler has been supplied.
 	 *
 	 * @param name published MCP tool name
+	 * @param protocolVersions nonempty exact revisions serving this tool
 	 * @return argument-shape selection stage
 	 * @throws IllegalArgumentException if the name is not 1-128 characters
 	 * from {@code A-Z}, {@code a-z}, {@code 0-9}, underscore, hyphen, and dot
 	 */
 	@NonNull
-	public static ArgumentTypeStage withName(@NonNull String name) {
-		return new ArgumentTypeStage(requireName(name));
+	public static ArgumentTypeStage withName(@NonNull String name,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new ArgumentTypeStage(requireName(name),
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	private McpToolRegistration(@NonNull RegistrationState<A> state) {
 		this.name = state.name;
+		this.protocolVersions = state.protocolVersions;
 		this.title = state.title;
 		this.description = state.description;
 		this.icons = List.copyOf(state.icons);
@@ -151,6 +158,12 @@ public final class McpToolRegistration<A> {
 	@NonNull
 	public String getName() {
 		return this.name;
+	}
+
+	/** @return exact protocol revisions on which this tool is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
 	}
 
 	/** @return human-readable title, if configured */
@@ -392,9 +405,13 @@ public final class McpToolRegistration<A> {
 	public static final class ArgumentTypeStage {
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 
-		private ArgumentTypeStage(@NonNull String name) {
+		private ArgumentTypeStage(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
 		/**
@@ -503,7 +520,7 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public OperationHandlerStage<@NonNull McpJsonObject>
 				jsonObjectArguments() {
-			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
+			return new OperationHandlerStage<>(this.name, this.protocolVersions, McpJsonObject.class,
 					JSON_OBJECT_SCHEMA, EMPTY_MIRRORED_HEADER_PLAN,
 					rawArguments -> rawArguments);
 		}
@@ -533,7 +550,7 @@ public final class McpToolRegistration<A> {
 			McpRuntimeToolInputSchemaBridge bridge =
 					McpRuntimeToolInputSchemaBridge.compileToolInput(
 							requireNonNull(inputSchema));
-			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
+			return new OperationHandlerStage<>(this.name, this.protocolVersions, McpJsonObject.class,
 					new McpToolSchema(bridge.getSchemaDocument()),
 					bridge.getMirroredHeaderPlan(), bridge::decode);
 		}
@@ -547,7 +564,7 @@ public final class McpToolRegistration<A> {
 					McpRuntimeTypedSchemaBridge.compileToolInput(argumentType);
 			McpRuntimeTypedSchemaBridge<R> outputBridge =
 					McpRuntimeTypedSchemaBridge.compileToolOutput(outputType);
-			return new CompleteHandlerStage<>(this.name, argumentType,
+			return new CompleteHandlerStage<>(this.name, this.protocolVersions, argumentType,
 					outputType, inputBridge, outputBridge);
 		}
 
@@ -559,7 +576,7 @@ public final class McpToolRegistration<A> {
 					McpRuntimeTypedSchemaBridge.compileToolInput(argumentType);
 			McpToolSchema inputSchema =
 					new McpToolSchema(inputBridge.getSchemaDocument());
-			return new OperationHandlerStage<>(this.name, argumentType,
+			return new OperationHandlerStage<>(this.name, this.protocolVersions, argumentType,
 					inputSchema, inputBridge.getMirroredHeaderPlan(),
 					inputBridge::decode);
 		}
@@ -585,6 +602,8 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final String name;
 		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
+		@NonNull
 		private final Type argumentType;
 		@NonNull
 		private final Type outputType;
@@ -594,10 +613,12 @@ public final class McpToolRegistration<A> {
 		private final McpRuntimeTypedSchemaBridge<R> outputBridge;
 
 		private CompleteHandlerStage(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull Type argumentType, @NonNull Type outputType,
 				@NonNull McpRuntimeTypedSchemaBridge<A> inputBridge,
 				@NonNull McpRuntimeTypedSchemaBridge<R> outputBridge) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.outputType = requireNonNull(outputType);
 			this.inputBridge = requireNonNull(inputBridge);
@@ -623,7 +644,7 @@ public final class McpToolRegistration<A> {
 				return McpCompleteResult.fromToolStructuredContent(
 						structuredContent);
 			};
-			RegistrationState<A> state = new RegistrationState<>(this.name,
+			RegistrationState<A> state = new RegistrationState<>(this.name, this.protocolVersions,
 					this.argumentType,
 					new McpToolSchema(this.inputBridge.getSchemaDocument()),
 					this.inputBridge.getMirroredHeaderPlan(),
@@ -676,7 +697,7 @@ public final class McpToolRegistration<A> {
 		private OperationBuilder<@NonNull A> operationBuilder(
 				@NonNull McpToolHandler<@NonNull A> handler,
 				boolean taskRequired) {
-			RegistrationState<A> state = new RegistrationState<>(this.name,
+			RegistrationState<A> state = new RegistrationState<>(this.name, this.protocolVersions,
 					this.argumentType,
 					new McpToolSchema(this.inputBridge.getSchemaDocument()),
 					this.inputBridge.getMirroredHeaderPlan(),
@@ -706,6 +727,8 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final String name;
 		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
+		@NonNull
 		private final Type argumentType;
 		@NonNull
 		private final McpToolSchema inputSchema;
@@ -715,10 +738,12 @@ public final class McpToolRegistration<A> {
 		private final ArgumentDecoder<A> argumentDecoder;
 
 		private OperationHandlerStage(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull Type argumentType, @NonNull McpToolSchema inputSchema,
 				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
 			this.mirroredHeaderPlan = requireNonNull(mirroredHeaderPlan);
@@ -738,7 +763,7 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public OperationBuilder<@NonNull A> handler(
 				@NonNull McpToolHandler<@NonNull A> handler) {
-			RegistrationState<A> state = new RegistrationState<>(this.name,
+			RegistrationState<A> state = new RegistrationState<>(this.name, this.protocolVersions,
 					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
 					null, null, null,
 					requireNonNull(handler), this.argumentDecoder, false);
@@ -821,6 +846,10 @@ public final class McpToolRegistration<A> {
 		public OperationBuilder<@NonNull A> appToolMetadata(
 				@NonNull McpAppToolMetadata appToolMetadata) {
 			requireNonNull(appToolMetadata);
+			if (!this.state.protocolVersions.containsAll(
+					appToolMetadata.getProtocolVersions()))
+				throw new IllegalArgumentException(
+						"MCP Apps revisions must be a subset of tool revisions.");
 			McpAppMetadataSupport.effectiveToolMetadata(this.state.metadata,
 					appToolMetadata);
 			this.state.appToolMetadata = appToolMetadata;
@@ -1011,6 +1040,10 @@ public final class McpToolRegistration<A> {
 		public CompleteBuilder<@NonNull A> appToolMetadata(
 				@NonNull McpAppToolMetadata appToolMetadata) {
 			requireNonNull(appToolMetadata);
+			if (!this.state.protocolVersions.containsAll(
+					appToolMetadata.getProtocolVersions()))
+				throw new IllegalArgumentException(
+						"MCP Apps revisions must be a subset of tool revisions.");
 			McpAppMetadataSupport.effectiveToolMetadata(this.state.metadata,
 					appToolMetadata);
 			this.state.appToolMetadata = appToolMetadata;
@@ -1142,6 +1175,8 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final String name;
 		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
+		@NonNull
 		private final Type argumentType;
 		@NonNull
 		private final McpToolSchema inputSchema;
@@ -1182,6 +1217,7 @@ public final class McpToolRegistration<A> {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private RegistrationState(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull Type argumentType, @NonNull McpToolSchema inputSchema,
 				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@Nullable Type outputType, @Nullable McpToolSchema outputSchema,
@@ -1190,6 +1226,7 @@ public final class McpToolRegistration<A> {
 				@NonNull ArgumentDecoder<A> argumentDecoder,
 				boolean taskRequired) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
 			this.mirroredHeaderPlan = requireNonNull(mirroredHeaderPlan);

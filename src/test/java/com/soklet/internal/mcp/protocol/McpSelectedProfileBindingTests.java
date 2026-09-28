@@ -444,6 +444,18 @@ public class McpSelectedProfileBindingTests {
 	static McpHttpServerRuntime runtime(@NonNull McpHttpEndpointBinding binding,
 			@NonNull McpProtocolProfileRegistry profiles,
 			@NonNull McpJsonLimits jsonLimits) {
+		// The fake revision is installed only by these tests. A binding must now
+		// explicitly opt in before the runtime renders or routes that profile.
+		if (profiles.resolve(FAKE).isPresent()
+				&& binding.revisionEndpoint(FAKE).isEmpty()) {
+			Map<String, McpNormalizedEndpoint> revisionEndpoints =
+					new LinkedHashMap<>(binding.revisionEndpoints());
+			revisionEndpoints.put(FAKE, binding.endpoint());
+			binding = new McpHttpEndpointBinding(binding.endpointPolicy(),
+					binding.endpoint(), binding.applicationRouter(),
+					binding.observationSink(), binding.subscriptionEventSources(),
+					binding.taskManagerAdapter(), revisionEndpoints);
+		}
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), List.of(binding),
 				jsonLimits,

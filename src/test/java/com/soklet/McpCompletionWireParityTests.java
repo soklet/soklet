@@ -142,19 +142,19 @@ public class McpCompletionWireParityTests {
 			return result(context.getArgumentValue());
 		};
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
-				McpImplementation.withNameAndVersion("completion-wire", "test").build())
+				McpImplementation.withNameAndVersion("completion-wire", "test").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
-				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("wire")
+				.promptRegistrations(java.util.List.of(McpPromptRegistration.withName("wire", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) -> {
 							throw new AssertionError("Completion must not invoke prompts/get.");
 						})
 						.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("value").build()))
-						.completionHandler(handler).build()))
-				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(TEMPLATE, "wire")
+						.completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()))
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriTemplateAndName(TEMPLATE, "wire", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) -> {
 							throw new AssertionError("Completion must not invoke resources/read.");
 						})
-						.completionHandler(handler).build())).build();
+						.completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build())).build();
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
 		AtomicReference<Capture> listener = new AtomicReference<>();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)

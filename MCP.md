@@ -1,6 +1,9 @@
 # Model Context Protocol (MCP)
 
-Soklet targets the MCP `2026-07-28` server protocol. MCP support is part
+Soklet's qualified 4.0.0 server target is MCP `2026-07-28`. The development
+source is adding explicitly selected 2025 protocol revisions on the same
+endpoint URL, starting with synchronous tools. That adapter still needs its
+release and host qualification. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
@@ -28,11 +31,11 @@ shows the application-owned authentication boundary, and the dated
 [client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md) records
 exactly which host/tool versions were manually exercised.
 
-## Current support
+## Current `2026-07-28` support
 
 | Area | Current behavior |
 | --- | --- |
-| Transport | Dedicated HTTP/1.1 listener and port; direct first-request discovery; no initialization or session lifecycle |
+| Transport | Dedicated HTTP/1.1 listener and port; direct first-request discovery; no initialization or session lifecycle for `2026-07-28` requests |
 | Endpoints | One or more exact, non-root paths on one server; capability and operation catalogs remain endpoint-local |
 | Tools | Annotated and programmatic discovery, typed or JSON-object arguments, complete typed results, content results, rate limiting, interception, and output sanitization |
 | Prompts | Annotated and programmatic catalogs plus string-argument prompt rendering |
@@ -48,6 +51,85 @@ exactly which host/tool versions were manually exercised.
 | Trace logging | Default-off pseudonymous correlation and a separate raw-validated-trace-ID opt-in through bounded `MCP_TRACE_CORRELATION` log records; no trace metric dimensions |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed Soklet MCP Tool Schema Profile 1 with Java-derived schemas and public authored input-schema registration |
+
+## Exact protocol revisions
+
+The 4.0 development API requires at least one exact `McpProtocolVersion` on
+every endpoint and independently callable operation. `@McpServerEndpoint`,
+`@McpTool`, `@McpPrompt`, `@McpResource`, `@McpResourceList`,
+`@McpPromptCompletion`, and `@McpResourceCompletion` have required
+`protocolVersions` members. Programmatic endpoint, tool, prompt, resource,
+and Skill starting factories take a nonempty `Set<McpProtocolVersion>`.
+`@McpAppTool` and `McpAppToolMetadata.withProtocolVersions(...)` separately
+identify the revisions that carry Apps presentation metadata; that set must
+fit inside the owning tool's revisions.
+An operation's revisions must be a subset of its endpoint's revisions. There
+is no implicit "latest" or default protocol revision. The endpoint's
+`version` member is the *application implementation version* reported to
+clients, not the MCP protocol version.
+
+For example, one annotated endpoint can serve a modern tool and expose the
+same synchronous tool to two 2025 revisions at one URL:
+
+```java
+@McpServerEndpoint(
+    path = "/catalog/mcp", name = "catalog", version = "1.0.0",
+    protocolVersions = {
+        McpProtocolVersion.V2026_07_28,
+        McpProtocolVersion.V2025_06_18,
+        McpProtocolVersion.V2025_11_25})
+public final class CatalogMcpEndpoint {
+  @McpTool(
+      name = "catalog.search",
+      protocolVersions = {
+          McpProtocolVersion.V2026_07_28,
+          McpProtocolVersion.V2025_06_18,
+          McpProtocolVersion.V2025_11_25})
+  public SearchResult search(
+      @McpToolArgument(name = "query") String query) {
+    return new SearchResult(List.of("Match for " + query));
+  }
+
+  public record SearchResult(List<String> matches) {}
+}
+```
+
+The equivalent programmatic entry points are
+`McpEndpoint.withPath(path, implementation, protocolVersions)` and
+`McpToolRegistration.withName(name, protocolVersions)`. A tool may select a
+smaller set than the endpoint. The selected revision determines both catalog
+visibility and call eligibility; a name omitted from `tools/list` cannot be
+invoked by guessing it. `McpRequestContext`, `McpAdmissionContext`, and
+`McpRateLimitContext` expose the selected `McpProtocolVersion` through
+`getProtocolVersion()` for application policy.
+
+On `2026-07-28`, clients may send a direct versioned request or call
+`server/discover`. On the planned `2025-06-18` and `2025-11-25` path, clients
+start with `initialize`, may send `notifications/initialized`, and can call
+`ping`. Later POST requests use their selected `MCP-Protocol-Version` header;
+Soklet does not issue a session ID in this first adapter. GET and DELETE do
+not open an SSE channel. The first compatibility slice covers synchronous
+`tools/list` and `tools/call` only. The `2025-03-26` revision has additional
+wire differences and is not part of that slice. A declared enum constant
+does not by itself mean that the runtime supports or has qualified its wire
+revision; unsupported endpoint/operation combinations fail construction.
+
+Tasks and `subscriptions/listen` are separate endpoint opt-ins through
+`taskProtocolVersions` and `subscriptionProtocolVersions`. Empty sets mean
+disabled. For 4.0, these facilities select only `V2026_07_28`; installing a
+server-wide task manager or subscription event publisher alone does not
+advertise them on an endpoint. Skills and Apps metadata also select exact
+revisions. The 2025 tools slice does not include prompts, resources, Skills,
+Apps UI, Tasks, subscriptions, multi-round input, or server-initiated
+requests. In a stateless 2025 call after `initialize`, the request context
+cannot attribute the earlier client's capabilities or information to that
+call; application policy must treat those values as unknown.
+
+The client is configured with the endpoint URL. Soklet does not discover or
+choose a sibling URL on the client's behalf. Only completed adapter tests and
+qualification against the exact candidate artifact can establish a release or
+host compatibility claim. The detailed implementation and gate plan is in
+[the compatibility plan](release/MCP_LEGACY_COMPATIBILITY_PLAN_2026-09-27.md).
 
 `McpLocalizationContext` is a Soklet-owned final request value built through
 `withLocale(locale, localizationLookup)`, with an optional revision and a
@@ -115,10 +197,12 @@ files, fetch URLs, watch directories, or execute skill instructions.
 ```java
 McpSkillBundle bundle = McpSkillBundle.fromFiles(files);
 McpSkillRegistration registration = McpSkillRegistration
-    .withUriAndSkillBundle(URI.create("skill://example/my-skill/SKILL.md"), bundle)
+    .withUriAndSkillBundle(URI.create("skill://example/my-skill/SKILL.md"), bundle,
+        Set.of(McpProtocolVersion.V2026_07_28))
     .build();
 McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
-        McpImplementation.withNameAndVersion("example", "1.0").build())
+        McpImplementation.withNameAndVersion("example", "1.0").build(),
+        Set.of(McpProtocolVersion.V2026_07_28))
     .skillRegistrations(List.of(registration))
     .build();
 ```
@@ -498,7 +582,7 @@ combination is required. An annotation-native equivalent is deferred to 4.1.
 ### Programmatic registration
 
 Programmatic endpoints use the same immutable runtime model. Start with
-`McpEndpoint.withPath(path, implementation)`, supply complete ordered lists with
+`McpEndpoint.withPath(path, implementation, protocolVersions)`, supply complete ordered lists with
 `toolRegistrations(...)`, `promptRegistrations(...)`, and `resourceRegistrations(...)`,
 and pass the built endpoints to `McpEndpointRegistry.fromEndpoints(...)`.
 
@@ -836,6 +920,7 @@ selected elicitation mode. For example:
 
 ```text
 @McpTool(name = "catalog.continue",
+    protocolVersions = {McpProtocolVersion.V2026_07_28},
     mayRequestInput = @McpMayRequestInput(
         type = McpInputRequestType.ELICITATION_FORM,
         requirement = McpInputRequirement.CONDITIONAL))
@@ -851,9 +936,11 @@ declaration exposes the selected type through `getInputRequestType()`, the
 derived wire method through `getJsonRpcMethod()`, and the complete derived
 capability set through `getCapabilities()`.
 
-Soklet supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
-"latest" profile nor falls back. Form and URL elicitation are the supported
-client input operations.
+This multi-round input path is available on the explicitly selected MCP
+`2026-07-28` revision. Soklet's qualified 4.0.0 MCP server target is
+`2026-07-28`. Soklet neither selects an automatic
+"latest" profile nor falls back to another revision. Form and URL elicitation
+are the supported client input operations on that revision.
 
 Those client operations are embedded values, not standalone JSON-RPC
 requests. Soklet writes each `method`/`params` pair only inside the
@@ -895,7 +982,7 @@ carry JSON state between calls:
 McpInputRequestDeclaration form = McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 
 McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-  .withName("catalog.continue")
+  .withName("catalog.continue", Set.of(McpProtocolVersion.V2026_07_28))
   .jsonObjectArguments()
   .handler((request, arguments, features) -> {
     if (request.getFrameworkRequestState().isEmpty()) {
@@ -1063,9 +1150,12 @@ McpServer mcpServer = McpServer.withPort(8082)
     .build();
 ```
 
-There is no implicit task manager. Configuring one advertises
-`io.modelcontextprotocol/tasks` for every endpoint on that server and enables
-`tasks/get`, `tasks/update`, and `tasks/cancel`. The client must declare the
+There is no implicit task manager. An endpoint must also include
+`McpProtocolVersion.V2026_07_28` in its `taskProtocolVersions` set;
+`@McpServerEndpoint` has the equivalent optional annotation member. Together,
+that endpoint gate and the server-wide manager enable the Tasks capability,
+`tasks/get`, `tasks/update`, and `tasks/cancel` for that endpoint. Other
+endpoints on the same server do not inherit Tasks. The client must declare the
 extension capability on each applicable request. A statically task-required
 tool presented by `tools/list` remains discoverable, but Soklet rejects its
 invocation with `-32021` before admission or application work when the client
@@ -1086,7 +1176,8 @@ where `R` is the eventual typed output. It may receive one unannotated
 parameter:
 
 ```java
-@McpTool(name = "reports.generate")
+@McpTool(name = "reports.generate",
+    protocolVersions = {McpProtocolVersion.V2026_07_28})
 public McpTaskCreatedResult<GeneratedReport> generateReport(
     @McpToolArgument(name = "accountId") String accountId,
     McpTaskCreationContext taskCreationContext) {
@@ -1600,8 +1691,10 @@ McpSubscriptionConfig subscriptions =
 McpImplementation implementation = McpImplementation
     .withNameAndVersion("example", "1.0.0")
     .build();
-McpEndpoint endpoint = McpEndpoint.withPath("/mcp", implementation)
+McpEndpoint endpoint = McpEndpoint.withPath("/mcp", implementation,
+        Set.of(McpProtocolVersion.V2026_07_28))
     // registrations
+    .subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
     .subscriptionConfig(subscriptions)
     .build();
 ```
@@ -1804,8 +1897,15 @@ before any profile-specific present `_meta`, admission, and the optional request
 Unsupported selectors return an empty HTTP 400 without profile mapping. An identifiable `notifications/cancelled` skips parameter and present-`_meta` validation, but traverses the other stages before its empty HTTP 202 result.
 Notifications do not acquire request-only mirrored-header, required-`_meta`/capability, tool-limiter, queue/slot, interceptor, handler, sanitizer, or response-envelope semantics.
 
-Soklet does not implement `initialize`, an initialization handshake, or a session. One immutable internal exact-revision registry is the authority for profile selection, discovery advertisement, and every supported-version diagnostic; its sole production entry is `2026-07-28`.
-A bounded diagnostic is attached after either of two triggers: strict JSON exposes the exact readable method `initialize`, or selector cardinality/plain-string validation succeeds and the selector is absent from that registry.
+The `2026-07-28` request path does not implement `initialize`, an
+initialization handshake, or a session. Its exact-revision registry is the
+authority for modern profile selection and diagnostics. The separate 2025
+adapter handles `initialize` at the same URL when an implemented 2025 revision
+is explicitly selected; that adapter is not part of the modern request path.
+On a modern-only endpoint, a bounded unsupported-profile diagnostic is attached
+after either of two triggers: strict JSON exposes the exact readable method
+`initialize`, or selector cardinality/plain-string validation succeeds and the
+selector is absent from that registry.
 Ordinary eligible failures use `data.supportedVersions`; an actual unsupported version retains its defined registry-ordered `supported` then exact header-derived `requested` shape.
 Pre-JSON transport failures, unparseable JSON, unreadable methods, and row-1 envelope failures for other methods cannot acquire selector-derived data because selector validation has not run.
 
@@ -3177,8 +3277,11 @@ second terminal result.
 
 ## Compatibility and unsupported features
 
-Soklet supports exactly the MCP `2026-07-28` server profile. There is no
-adapter, profile fallback, or dual-protocol mode.
+The qualified 4.0.0 server profile remains MCP `2026-07-28`. The source is
+adding a first, explicit `2025-06-18`/`2025-11-25` synchronous-tools adapter
+behind endpoint and operation version declarations. There is no automatic
+version fallback, and a production or host claim awaits the exact-candidate
+qualification described [above](#exact-protocol-revisions).
 
 Client extension settings are open but do not implicitly enable server
 behavior. Keys in `clientCapabilities.extensions` must use a valid namespaced
@@ -3197,9 +3300,10 @@ inspect namespaced inbound request metadata, and return nonreserved
 This remains application-owned behavior. It does not advertise matching server
 support or register a new protocol method.
 
-Tasks is the one namespaced protocol extension implemented by Soklet. It is
-advertised only when an application configures an
-[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html),
+Tasks is a namespaced protocol extension implemented by Soklet on the
+`2026-07-28` profile. It is advertised only when an application configures an
+[`McpTaskManager`](https://javadoc.soklet.com/com/soklet/McpTaskManager.html)
+and opts the endpoint into Tasks for that revision,
 and it is negotiated only when the current request declares the exact
 `io.modelcontextprotocol/tasks` client extension capability. The legacy `task`
 member of `tools/call` is rejected rather than treated as opt-in, and obsolete

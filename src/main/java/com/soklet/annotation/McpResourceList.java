@@ -16,6 +16,9 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpProtocolVersion;
+import org.jspecify.annotations.NonNull;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -33,4 +36,7 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpResourceList {
+	/** @return the required exact MCP revisions handled by this method */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 }

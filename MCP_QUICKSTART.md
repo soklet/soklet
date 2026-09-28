@@ -93,6 +93,7 @@ Save this as `src/main/java/example/CatalogMcpEndpoint.java`:
 package example;
 
 import com.soklet.McpInvocationFeatures;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpRequestContext;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
@@ -104,19 +105,21 @@ import java.util.List;
     path = "/catalog/mcp",
     name = "catalog",
     version = "1.0.0",
+    protocolVersions = {McpProtocolVersion.V2026_07_28},
     instructions = "Search the catalog")
 public final class CatalogMcpEndpoint {
   @McpTool(
       name = "catalog.search",
+      protocolVersions = {McpProtocolVersion.V2026_07_28},
       title = "Search the catalog",
       description = "Searches for matching catalog items")
   public SearchResult search(
-      McpRequestContext request,
+      McpRequestContext requestContext,
       @McpToolArgument(
           name = "query",
           title = "Search query",
           description = "Text to search for") String query,
-      McpInvocationFeatures features) {
+      McpInvocationFeatures invocationFeatures) {
     return new SearchResult(List.of("Match for " + query));
   }
 
@@ -126,11 +129,13 @@ public final class CatalogMcpEndpoint {
 
 This annotation-driven tool's input and output schemas are derived from its
 Java declaration and both are validated. Programmatic registrations may
-instead call `McpToolRegistration.withName(...).inputSchema(...)` with an
-authored Profile 1 object-root input document when Java derivation cannot
+start with `McpToolRegistration.withName(name, protocolVersions)` and configure
+an authored Profile 1 object-root input document when Java derivation cannot
 express the required constraints. The handler then receives the validated
 immutable `McpJsonObject`. Applications cannot replace annotation-derived
 schemas, construct `McpToolSchema` directly, or author output schemas.
+The endpoint and tool name their exact protocol revision; there is no implicit
+"current" or "latest" version.
 
 ## 3. Build and run the server
 

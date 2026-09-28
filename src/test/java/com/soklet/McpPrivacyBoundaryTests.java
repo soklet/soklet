@@ -149,7 +149,8 @@ class McpPrivacyBoundaryTests {
 				Optional.of(clientInformation()), secretJson, secretJson, identity,
 				secretJson, () -> {});
 		RateLimitInput rateLimitInput = new RateLimitInput(request, endpoint,
-				identity, RateLimitTarget.TOOL, SECRET, Optional.of(SECRET));
+				"2026-07-28", identity, RateLimitTarget.TOOL, SECRET,
+				Optional.of(SECRET));
 		McpRequestPropagation propagation = McpRequestPropagation.fromMetadata(
 				McpJsonObject.builder()
 						.put("traceparent", "00-" + SECRET_TRACE_ID + "-"
@@ -424,7 +425,7 @@ class McpPrivacyBoundaryTests {
 	}
 
 	private static McpEndpoint endpoint() {
-		return McpEndpoint.withPath("/" + SECRET, clientInformation())
+		return McpEndpoint.withPath("/" + SECRET, clientInformation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 

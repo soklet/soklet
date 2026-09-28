@@ -76,7 +76,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					assertExactInputResponses(request);
@@ -88,7 +88,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(form, roots))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) -> {
 					assertExactInputResponses(request);
 					Assertions.assertSame(interceptorContexts.get(PROMPT_NAME),
@@ -103,7 +103,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				.inputRequestDeclarations(java.util.List.of(form, roots))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "retry resource")
+				.withUriAndName(RESOURCE_URI, "retry resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					assertExactInputResponses(request);
 					Assertions.assertSame(interceptorContexts.get(
@@ -199,7 +199,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		AtomicInteger toolInvocations = new AtomicInteger();
 		AtomicInteger resourceInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("none.tool")
+				.withName("none.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
@@ -216,7 +216,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				})
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "none resource")
+				.withUriAndName(RESOURCE_URI, "none resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					resourceInvocations.incrementAndGet();
 					Assertions.assertSame(McpInputResponses.emptyInstance(),
@@ -291,7 +291,7 @@ public class McpInputResponsesPublicRuntimeTests {
 						.build())
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("retry.missing")
+				.withName("retry.missing", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -353,7 +353,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -363,7 +363,7 @@ public class McpInputResponsesPublicRuntimeTests {
 						McpInputRequirement.REQUIRED)))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -371,7 +371,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				})
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "retry resource")
+				.withUriAndName(RESOURCE_URI, "retry resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromResourceOutput(
@@ -491,7 +491,7 @@ public class McpInputResponsesPublicRuntimeTests {
 	private static McpEndpoint.@NonNull Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"input-responses-public-runtime-test",
-						"4.0.0").build());
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(

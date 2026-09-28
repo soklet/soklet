@@ -599,7 +599,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	@NonNull
 	private static McpEndpoint emptyEndpoint(@NonNull String path) {
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
-						"handler-diagnostics-test", "4.0.0").build())
+						"handler-diagnostics-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 
@@ -608,12 +608,12 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			@NonNull String toolName,
 			@NonNull McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(requireNonNull(toolName))
+				.withName(requireNonNull(toolName), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler(requireNonNull(handler))
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path), McpImplementation.withNameAndVersion(
-						"handler-diagnostics-test", "4.0.0").build())
+						"handler-diagnostics-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}

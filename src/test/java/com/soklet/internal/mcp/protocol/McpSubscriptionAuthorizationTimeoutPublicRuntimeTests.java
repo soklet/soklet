@@ -429,10 +429,10 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 		McpEndpoint.Builder endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"subscription-authorization-timeout-test", "4.0.0")
-						.build())
-				.subscriptionConfig(subscriptions);
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions);
 		endpoint.resourceRegistrations(java.util.List.of(McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Authorization timeout resource")
+				.withUriAndName(RESOURCE_URI, "Authorization timeout resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(

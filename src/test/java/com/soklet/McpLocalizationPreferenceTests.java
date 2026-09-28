@@ -99,7 +99,7 @@ class McpLocalizationPreferenceTests {
 				new RequestObservationInput(
 						Request.withPath(HttpMethod.POST, "/mcp").build(),
 						McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-										"physical-preference", "1").build()).build(),
+										"physical-preference", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build(),
 						Map.of(), "tools/call",
 						Optional.of(McpRequestId.fromString("request")),
 						"2026-07-28", Optional.of("lookup"), Optional.empty(),
@@ -130,7 +130,7 @@ class McpLocalizationPreferenceTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(path, McpImplementation
 						.withNameAndVersion("physical-preference", "1")
 						.title("Localized surface")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(LOOPBACK)
@@ -328,7 +328,7 @@ class McpLocalizationPreferenceTests {
 		return new DefaultMcpRequestContext(new RequestObservationInput(
 				Request.withPath(HttpMethod.POST, "/mcp").build(),
 				McpEndpoint.withPath("/mcp", McpImplementation
-						.withNameAndVersion("preference-test", "1").build()).build(),
+						.withNameAndVersion("preference-test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build(),
 				Map.of(), "tools/call",
 				Optional.of(McpRequestId.fromString("request")), "2026-07-28",
 				Optional.of("lookup"), Optional.empty(),

@@ -88,7 +88,7 @@ public class McpTasksPublicRuntimeTests {
 				new AtomicReference<>();
 
 		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
-				.withName("tasks.typed-required")
+				.withName("tasks.typed-required", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(RequiredArguments.class,
 						DeferredResult.class)
 				.operationHandler((request, arguments, features) -> {
@@ -116,7 +116,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-required-preflight-test", "4.0.0").build())
+						"tasks-required-preflight-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -235,7 +235,7 @@ public class McpTasksPublicRuntimeTests {
 		String chunk = "x".repeat(900_000);
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpTaskOrigin invocationOrigin = features.getTaskCreationContext()
@@ -251,7 +251,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-large-origin-test", "4.0.0").build())
+						"tasks-large-origin-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -292,7 +292,7 @@ public class McpTasksPublicRuntimeTests {
 	@Test
 	public void taskRequiredRegistrationRequiresConfiguredTaskManager() {
 		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
-				.withName("tasks.manager-required")
+				.withName("tasks.manager-required", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(RequiredArguments.class,
 						DeferredResult.class)
 				.operationHandler((request, arguments, features) ->
@@ -300,7 +300,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-manager-required-test", "4.0.0").build())
+						"tasks-manager-required-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -660,17 +660,10 @@ public class McpTasksPublicRuntimeTests {
 
 		McpEndpoint endpoint = endpoint(new ScriptedTaskManager(),
 				new AtomicInteger());
-		McpServer unconfiguredServer = server(endpoint, Optional.empty(),
-				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet unconfiguredSoklet = managedSoklet(unconfiguredServer);
-		try {
-			unconfiguredSoklet.start();
-			HttpResponse<String> noManager = callTask(boundPort(unconfiguredServer),
-					"tasks/get", "no-manager", "unconfigured-task", true);
-			assertMethodNotFound(noManager);
-		} finally {
-			unconfiguredSoklet.close();
-		}
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> server(endpoint, Optional.empty(),
+						McpHandlerInterceptor.passThroughInstance(),
+						new AtomicInteger()));
 	}
 
 	@Test
@@ -679,7 +672,7 @@ public class McpTasksPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<RequiredArguments> tool = McpToolRegistration
-				.withName("tasks.typed-interceptor")
+				.withName("tasks.typed-interceptor", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(RequiredArguments.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -688,7 +681,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-typed-interceptor-test", "4.0.0").build())
+						"tasks-typed-interceptor-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -726,7 +719,7 @@ public class McpTasksPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("tasks.sanitized")
+				.withName("tasks.sanitized", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					McpTaskOrigin taskOrigin = features.getTaskCreationContext()
@@ -753,7 +746,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-sanitizer-test", "4.0.0").build())
+						"tasks-sanitizer-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
@@ -823,7 +816,7 @@ public class McpTasksPublicRuntimeTests {
 	private static McpEndpoint endpoint(@NonNull ScriptedTaskManager taskManager,
 			@NonNull AtomicInteger handlerInvocations) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -847,7 +840,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		return McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-public-runtime-test", "4.0.0").build())
+						"tasks-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool))
 				.build();

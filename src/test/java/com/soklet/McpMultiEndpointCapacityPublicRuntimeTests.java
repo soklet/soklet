@@ -152,7 +152,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 			@NonNull String implementationName,
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
 		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0").build())
+						implementationName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}
@@ -164,7 +164,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 			@NonNull AtomicInteger invocations,
 			@NonNull AtomicInteger activeHandlers,
 			@NonNull AtomicInteger maximumActiveHandlers) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();

@@ -83,7 +83,7 @@ public interface McpRequestContext {
 
 	/** @return validated MCP protocol version supplied on this request */
 	@NonNull
-	String getProtocolVersion();
+	McpProtocolVersion getProtocolVersion();
 
 	/**
 	 * Returns the selected application operation: a tool name, prompt name,

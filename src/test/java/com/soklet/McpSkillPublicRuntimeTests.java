@@ -218,7 +218,7 @@ public class McpSkillPublicRuntimeTests {
 			return McpSkillPage.builder().skillRegistrations(List.of(snapshot.get().get(1))).build();
 		};
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(standalone))
-				.skillGroups(List.of(group)).skillListHandler(handler).build();
+				.skillGroups(List.of(group)).skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpServer server = serverBuilder(endpoint).skillVariantSelector((request, context, features) -> {
 			selections.incrementAndGet();
 			return Optional.of(french);
@@ -251,7 +251,7 @@ public class McpSkillPublicRuntimeTests {
 					throw new McpJsonRpcException(McpJsonRpcError.fromInvalidParameters(
 							"Application Skills cursor canary",
 							McpJsonObject.builder().put("reason", "application-detail-canary").build()));
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
@@ -301,7 +301,7 @@ public class McpSkillPublicRuntimeTests {
 					}
 					Assertions.assertEquals(Optional.of("continue"), context.getCursor());
 					return McpSkillPage.builder().skillRegistrations(List.of(selected.get())).build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).skillAccessPolicy(policy)
 				.skillVariantSelector((request, context, features) -> {
@@ -350,7 +350,7 @@ public class McpSkillPublicRuntimeTests {
 				.skillListHandler((request, context, features) -> McpSkillPage.builder()
 						.skillRegistrations(context.getInitialSkillRegistrations().orElseThrow())
 						.cacheTimeToLiveOverride(Duration.ofHours(1))
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
@@ -383,7 +383,7 @@ public class McpSkillPublicRuntimeTests {
 								.build();
 						default -> throw new AssertionError("Unexpected cursor");
 					};
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).maximumCursorSizeInBytes(8).build();
 		Soklet owner = managedSoklet(server);
@@ -429,7 +429,7 @@ public class McpSkillPublicRuntimeTests {
 							McpResourceDescriptor.withUriAndName(registration.getUri(),
 									"private-resource-list-canary").build()))
 						.build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
@@ -534,7 +534,7 @@ public class McpSkillPublicRuntimeTests {
 			};
 		};
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(first, second))
-				.skillListHandler(handler).build();
+				.skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpServer server = serverBuilder(endpoint).build();
 		Soklet owner = managedSoklet(server);
 		try {
@@ -567,7 +567,7 @@ public class McpSkillPublicRuntimeTests {
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(registration))
 				.skillListHandler((request, context, features) -> context.getInitialSkillRegistrations().isPresent()
 						? McpSkillPage.builder().skillRegistrations(List.of(registration)).nextCursor("").build()
-						: McpSkillPage.builder().build())
+						: McpSkillPage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).localizer(localizer).build();
 		Soklet owner = managedSoklet(server);
@@ -601,7 +601,7 @@ public class McpSkillPublicRuntimeTests {
 	private static McpSkillRegistration registration(String uri, Map<String, byte[]> files,
 			Locale locale) {
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create(uri), McpSkillBundle.fromFiles(files));
+				URI.create(uri), McpSkillBundle.fromFiles(files), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}
@@ -620,7 +620,7 @@ public class McpSkillPublicRuntimeTests {
 
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-				"skill-public-runtime-test", "4.0.0").build());
+				"skill-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {

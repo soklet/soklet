@@ -250,10 +250,10 @@ final class SokletDirectMcpLifecycleTests {
 				new ThrowingShutdownExecutorService(cleanupFailure);
 		this.executors.add(applicationExecutor);
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("direct-cleanup-evidence"))
+				implementation("direct-cleanup-evidence"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();
@@ -311,10 +311,10 @@ final class SokletDirectMcpLifecycleTests {
 			}
 		};
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("direct-frozen-mcp-primary"))
+				implementation("direct-frozen-mcp-primary"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();
@@ -414,7 +414,7 @@ final class SokletDirectMcpLifecycleTests {
 		AtomicReference<ShutdownComponentDisposition> stopOutcome = new AtomicReference<>();
 		String toolName = "direct.self-stop";
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(toolName).jsonObjectArguments()
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Soklet owner = ownerReference.get();
 					CompletionStage<ShutdownResult> stage = owner.shutdown();
@@ -430,7 +430,7 @@ final class SokletDirectMcpLifecycleTests {
 						handlerExited.countDown();
 					}
 				}).build();
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH, implementation("direct-handler-self-stop"))
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH, implementation("direct-handler-self-stop"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = serverBuilder(endpoint).build();
 		LifecycleObserver observer = new LifecycleObserver() {
@@ -624,10 +624,10 @@ final class SokletDirectMcpLifecycleTests {
 	private static McpFixture blockingFixture(@NonNull BlockingPublisher publisher,
 			@NonNull LifecyclePolicy policy) {
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
-				implementation("direct-blocked-publisher"))
+				implementation("direct-blocked-publisher"), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
 						Set.of(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED)).build())
 				.build();

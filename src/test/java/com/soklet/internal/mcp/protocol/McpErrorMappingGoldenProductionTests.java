@@ -336,7 +336,7 @@ public class McpErrorMappingGoldenProductionTests {
 		McpInputRequestDeclaration conditionalRoots =
 				McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
 		McpToolRegistration<McpJsonObject> regular = McpToolRegistration
-				.withName(REGULAR_TOOL)
+				.withName(REGULAR_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.regularHandlerInvocations.incrementAndGet();
@@ -344,7 +344,7 @@ public class McpErrorMappingGoldenProductionTests {
 				})
 				.build();
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
-				.withName(REQUIRED_TOOL)
+				.withName(REQUIRED_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.requiredHandlerInvocations.incrementAndGet();
@@ -353,7 +353,7 @@ public class McpErrorMappingGoldenProductionTests {
 				.inputRequestDeclarations(java.util.List.of(requiredRoots))
 				.build();
 		McpToolRegistration<McpJsonObject> conditional = McpToolRegistration
-				.withName(CONDITIONAL_TOOL)
+				.withName(CONDITIONAL_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.conditionalHandlerInvocations.incrementAndGet();
@@ -367,7 +367,7 @@ public class McpErrorMappingGoldenProductionTests {
 				.inputRequestDeclarations(java.util.List.of(conditionalRoots))
 				.build();
 		McpToolRegistration<McpJsonObject> hold = McpToolRegistration
-				.withName(HOLD_TOOL)
+				.withName(HOLD_TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					state.holdHandlerInvocations.incrementAndGet();
@@ -382,7 +382,7 @@ public class McpErrorMappingGoldenProductionTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"error-mapping-golden", "4.0.0").build())
+						"error-mapping-golden", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(regular, required, conditional, hold))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

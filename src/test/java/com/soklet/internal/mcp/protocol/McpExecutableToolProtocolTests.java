@@ -276,7 +276,7 @@ public class McpExecutableToolProtocolTests {
 
 	private static McpEndpoint publicEndpoint() {
 		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"executable-tool-test", "4.0.0").build())
+						"executable-tool-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 

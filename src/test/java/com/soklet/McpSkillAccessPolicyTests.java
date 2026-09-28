@@ -180,6 +180,6 @@ class McpSkillAccessPolicyTests {
 	private static McpSkillRegistration registration(String directory) {
 		byte[] root = "---\nname: sample\ndescription: Synthetic description\n---\nOpaque body.\n".getBytes(StandardCharsets.UTF_8);
 		return McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host.invalid/" + directory + "/sample/SKILL.md"),
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", root))).build();
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root)), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 }

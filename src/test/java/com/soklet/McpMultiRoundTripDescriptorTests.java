@@ -340,23 +340,23 @@ class McpMultiRoundTripDescriptorTests {
 						McpInputRequirement.REQUIRED);
 
 		McpToolRegistration.OperationBuilder<McpJsonObject> toolBuilder =
-				McpToolRegistration.withName("catalog.delete")
+				McpToolRegistration.withName("catalog.delete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"));
 		McpPromptRegistration.Builder promptBuilder = McpPromptRegistration
-				.withName("confirm")
+				.withName("confirm", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()));
 		McpResourceRegistration.ExactBuilder exactBuilder =
 				McpResourceRegistration
-						.withUriAndName(URI.create("catalog://item/42"), "item")
+						.withUriAndName(URI.create("catalog://item/42"), "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler());
 		McpResourceRegistration.TemplateBuilder templateBuilder =
 				McpResourceRegistration
 						.withUriTemplateAndName(
-								"catalog://item/{itemId}", "item")
+								"catalog://item/{itemId}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler());
 
 		assertThrows(NullPointerException.class, () ->
@@ -387,7 +387,7 @@ class McpMultiRoundTripDescriptorTests {
 				new ArrayList<>(List.of(approval, roots));
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("catalog.delete")
+				.withName("catalog.delete", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
@@ -397,7 +397,7 @@ class McpMultiRoundTripDescriptorTests {
 		mutableDeclarations.set(0, roots);
 
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("confirm")
+				.withName("confirm", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
@@ -405,13 +405,13 @@ class McpMultiRoundTripDescriptorTests {
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build();
 		McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://item/42"), "item")
+				.withUriAndName(URI.create("catalog://item/42"), "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.inputRequestDeclarations(java.util.List.of(approval))
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName("catalog://item/{itemId}", "item")
+				.withUriTemplateAndName("catalog://item/{itemId}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.inputRequestDeclarations(java.util.List.of(roots))
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
@@ -433,24 +433,24 @@ class McpMultiRoundTripDescriptorTests {
 	@Test
 	void registrationDefaultsRemainNeutralAndCompleteToolsCannotDeclareMrtr() {
 		McpToolRegistration<Arguments> complete = McpToolRegistration
-				.withName("catalog.get")
+				.withName("catalog.get", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
 						new CompleteOutput(arguments.getConvertedArguments().identifier()))
 				.build();
 		Object completeBuilder = McpToolRegistration
-				.withName("catalog.other")
+				.withName("catalog.other", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
 						new CompleteOutput(arguments.getConvertedArguments().identifier()));
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("plain")
+				.withName("plain", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, get, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://plain"), "plain")
+				.withUriAndName(URI.create("catalog://plain"), "plain", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler())
 				.build();
 

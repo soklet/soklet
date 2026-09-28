@@ -73,7 +73,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 		List<String> stages = new ArrayList<>();
 		McpCompleteResult original = complete(SECRET, metadata(SECRET));
 		McpCompleteResult intercepted = original.toBuilder().metadata(metadata("intercepted-" + SECRET)).build();
-		McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(TOOL).jsonObjectArguments()
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					stages.add("handler");
 					return original;
@@ -161,7 +161,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 	void schemaValidationAndStructuredMirroringUseOnlyTheSanitizedCompleteResult() {
 		McpCompleteResult original = McpCompleteResult.withToolOutput(McpToolOutput.fromStructuredContent(
 				McpJsonObject.builder().put("invalidOriginal", SECRET).build())).metadata(metadata(SECRET)).build();
-		McpToolRegistration<ModeArguments> tool = McpToolRegistration.withName(TOOL)
+		McpToolRegistration<ModeArguments> tool = McpToolRegistration.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(ModeArguments.class, SafeOutput.class)
 				.inlineOperationHandler((request, arguments, features) -> original).build();
 		McpToolResultSanitizer sanitizer = (request, toolName, rawArguments, result) -> {
@@ -280,7 +280,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 		assertNotSame(manager.originalOrigin.get(), stored.getTaskOrigin());
 		assertEquals(manager.originalOrigin.get(), stored.getTaskOrigin());
 		AtomicInteger replacementCalls = new AtomicInteger();
-		McpToolRegistration<ModeArguments> incompatibleCurrentRegistration = McpToolRegistration.withName(TOOL)
+		McpToolRegistration<ModeArguments> incompatibleCurrentRegistration = McpToolRegistration.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(ModeArguments.class, IncompatibleOutput.class)
 				.handler((request, arguments, features) -> {
 					replacementCalls.incrementAndGet();
@@ -356,7 +356,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 
 	private static void createCompletedTask(StoredTaskManager manager, McpCompleteResult original,
 			McpToolResultSanitizer sanitizer) {
-		McpToolRegistration<ModeArguments> tool = McpToolRegistration.withName(TOOL)
+		McpToolRegistration<ModeArguments> tool = McpToolRegistration.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(ModeArguments.class, SafeOutput.class)
 				.operationHandler((request, arguments, features) -> {
 					manager.store(features.getTaskCreationContext().orElseThrow().getTaskOrigin(), original);
@@ -385,7 +385,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 	}
 
 	private static McpToolRegistration<McpJsonObject> jsonTool(McpCompleteResult result) {
-		return McpToolRegistration.withName(TOOL).jsonObjectArguments()
+		return McpToolRegistration.withName(TOOL, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> result).build();
 	}
 
@@ -426,7 +426,9 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 			McpToolResultSanitizer sanitizer, McpTaskManager manager,
 			McpHandlerInterceptor interceptor, LifecycleObserver observer, Consumer<Simulator> test) {
 		McpEndpoint.Builder endpoint = McpEndpoint.withPath(PATH,
-				McpImplementation.withNameAndVersion("result-sanitizer-test", "test").build()).serverInfoIncluded(false);
+				McpImplementation.withNameAndVersion("result-sanitizer-test", "test").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).serverInfoIncluded(false);
+		if (manager != null)
+			endpoint.taskProtocolVersions(java.util.Set.of(McpProtocolVersion.V2026_07_28));
 		endpoint.toolRegistrations(new java.util.ArrayList<>(tools));
 		McpServer.Builder server = McpServer.withPort(0).host("127.0.0.1")
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint.build())))

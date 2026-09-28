@@ -65,9 +65,13 @@ public class McpAppToolAnnotationProcessorTests {
 	@Test
 	void annotationHasOnlyReviewedElementsDefaultsAndMethodTarget()
 			throws ReflectiveOperationException {
-		Assertions.assertEquals(Set.of("resourceUri", "visibility"),
+		Assertions.assertEquals(Set.of("protocolVersions", "resourceUri", "visibility"),
 				Arrays.stream(McpAppTool.class.getDeclaredMethods())
 						.map(Method::getName).collect(Collectors.toSet()));
+		Assertions.assertNull(McpAppTool.class
+				.getDeclaredMethod("protocolVersions").getDefaultValue());
+		Assertions.assertEquals(McpProtocolVersion[].class, McpAppTool.class
+				.getDeclaredMethod("protocolVersions").getReturnType());
 		Assertions.assertEquals("", McpAppTool.class
 				.getDeclaredMethod("resourceUri").getDefaultValue());
 		Assertions.assertEquals(String.class, McpAppTool.class
@@ -92,33 +96,35 @@ public class McpAppToolAnnotationProcessorTests {
 				import com.soklet.*;
 				import com.soklet.annotation.*;
 				import static com.soklet.McpAppToolMetadata.Visibility.*;
-				@McpServerEndpoint(path = "/apps", name = "apps", version = "test")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				    taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				    path = "/apps", name = "apps", version = "test")
 				public final class LiveAppEndpoint {
-				  @McpTool(name = "plain")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "plain")
 				  public Reply plain() { return new Reply("plain"); }
-				  @McpTool(name = "defaults")
-				  @McpAppTool(resourceUri = "ui://orders/dashboard")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "defaults")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, resourceUri = "ui://orders/dashboard")
 				  public Reply defaults() { return new Reply("typed"); }
-				  @McpAppTool(visibility = APP)
-				  @McpTool(name = "operation")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, visibility = APP)
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "operation")
 				  public McpOperationResult operation() {
 				    return McpCompleteResult.fromToolText("operation");
 				  }
-				  @McpTool(name = "task")
-				  @McpAppTool(visibility = {APP, MODEL, APP})
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "task")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, visibility = {APP, MODEL, APP})
 				  public McpTaskCreatedResult<Reply> task() {
 				    return McpTaskCreatedResult.fromTaskId("app-task");
 				  }
-				  @McpTool(name = "hidden")
-				  @McpAppTool(visibility = {})
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "hidden")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, visibility = {})
 				  public Reply hidden() { return new Reply("hidden"); }
-				  @McpTool(name = "model")
-				  @McpAppTool(resourceUri = "", visibility = {MODEL, MODEL})
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "model")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, resourceUri = "", visibility = {MODEL, MODEL})
 				  public Reply model() { return new Reply("model"); }
-				  @McpTool(name = "omitted")
-				  @McpAppTool
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "omitted")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public Reply omitted() { return new Reply("omitted"); }
-				  @McpResource(uri = "ui://orders/dashboard", name = "dashboard",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "ui://orders/dashboard", name = "dashboard",
 				      mimeType = "text/html;profile=mcp-app")
 				  public McpResourceOutput dashboard() {
 				    throw new AssertionError("Descriptor discovery must not invoke resources.");
@@ -132,18 +138,18 @@ public class McpAppToolAnnotationProcessorTests {
 							Function.identity()));
 			Assertions.assertEquals(7, tools.size());
 			Assertions.assertTrue(tools.get("plain").getAppToolMetadata().isEmpty());
-			assertMetadata(tools.get("defaults"), McpAppToolMetadata.builder()
+			assertMetadata(tools.get("defaults"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.resourceUri(URI.create("ui://orders/dashboard")).build());
-			assertMetadata(tools.get("operation"), McpAppToolMetadata.builder()
+			assertMetadata(tools.get("operation"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.visibility(Set.of(APP)).build());
-			assertMetadata(tools.get("task"), McpAppToolMetadata.builder().build());
+			assertMetadata(tools.get("task"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 			Assertions.assertEquals(List.of(MODEL, APP), List.copyOf(tools.get("task")
 					.getAppToolMetadata().orElseThrow().getVisibility()));
-			assertMetadata(tools.get("hidden"), McpAppToolMetadata.builder()
+			assertMetadata(tools.get("hidden"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.visibility(Set.of()).build());
-			assertMetadata(tools.get("model"), McpAppToolMetadata.builder()
+			assertMetadata(tools.get("model"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.visibility(Set.of(MODEL)).build());
-			assertMetadata(tools.get("omitted"), McpAppToolMetadata.builder().build());
+			assertMetadata(tools.get("omitted"), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 			Assertions.assertEquals(URI.create("ui://orders/dashboard"),
 					endpoint.getResourceRegistrations().get(0).getUri().orElseThrow());
 			Assertions.assertNotNull(compiled.endpointClass().getMethod("defaults")
@@ -180,12 +186,12 @@ public class McpAppToolAnnotationProcessorTests {
 		StringBuilder methods = new StringBuilder();
 		for (int index = 0; index < uris.size(); ++index) {
 			String uri = uris.get(index);
-			Assertions.assertEquals(URI.create(uri), McpAppToolMetadata.builder()
+			Assertions.assertEquals(URI.create(uri), McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.resourceUri(URI.create(uri)).build().getResourceUri().orElseThrow());
 			methods.append("""
-				  @McpTool(name = "tool%d") @McpAppTool(resourceUri = "%s")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "tool%d") @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, resourceUri = "%s")
 				  public McpOperationResult tool%d() { return null; }
-				  @McpResource(uri = "%s", name = "resource%d",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "resource%d",
 				      mimeType = "text/html;profile=mcp-app")
 				  public McpResourceOutput resource%d() { return null; }
 				""".formatted(index, uri, index, uri, index, index));
@@ -213,9 +219,9 @@ public class McpAppToolAnnotationProcessorTests {
 		for (int index = 0; index < uris.size(); ++index) {
 			String uri = uris.get(index);
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpAppToolMetadata.builder().resourceUri(URI.create(uri)));
+					() -> McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(URI.create(uri)));
 			methods.append("""
-				  @McpTool(name = "invalid%d") @McpAppTool(resourceUri = "%s")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid%d") @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, resourceUri = "%s")
 				  public McpOperationResult invalid%d() { return null; }
 				""".formatted(index, uri, index));
 		}
@@ -235,11 +241,11 @@ public class McpAppToolAnnotationProcessorTests {
 	void rejectsOrphanOnOrdinaryPromptAndResourceMethods() {
 		Compilation compilation = compile("OrphanAppEndpoint",
 				endpointSource("OrphanAppEndpoint", """
-				  @McpAppTool
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public McpOperationResult ordinary() { return null; }
-				  @McpPrompt(name = "prompt") @McpAppTool
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt") @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public McpPromptOutput prompt() { return null; }
-				  @McpResource(uri = "ui://orders/view", name = "view") @McpAppTool
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "ui://orders/view", name = "view") @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public McpResourceOutput resource() { return null; }
 				"""));
 		assertThat(compilation).failed();
@@ -255,7 +261,7 @@ public class McpAppToolAnnotationProcessorTests {
 				package example;
 				import com.soklet.annotation.McpAppTool;
 				public final class StandaloneAppOrphan {
-				  @McpAppTool
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public String orphan() { return "orphan"; }
 				}
 				""");
@@ -272,7 +278,7 @@ public class McpAppToolAnnotationProcessorTests {
 				package example;
 				import com.soklet.annotation.*;
 				public final class StandaloneAppTool {
-				  @McpTool(name = "outside") @McpAppTool
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "outside") @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				  public String outside() { return "outside"; }
 				}
 				""");
@@ -286,10 +292,10 @@ public class McpAppToolAnnotationProcessorTests {
 		Compilation compilation = compile("MisplacedAppAnnotation", """
 				package example;
 				import com.soklet.annotation.McpAppTool;
-				@McpAppTool
+				@McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 				public final class MisplacedAppAnnotation {
-				  @McpAppTool public String field;
-				  public void method(@McpAppTool String parameter) {}
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28) public String field;
+				  public void method(@McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28) String parameter) {}
 				}
 				""");
 		assertThat(compilation).failed();
@@ -298,14 +304,13 @@ public class McpAppToolAnnotationProcessorTests {
 	}
 
 	@Test
-	void generatedEndpointUsesTheSameResourceAssociationValidation(
-			@TempDir Path temporaryDirectory) throws Exception {
+	void generatedEndpointUsesTheSameResourceAssociationValidation() {
 		List<String> resources = List.of("", """
-				  @McpResource(uri = "ui://orders/dashboard", name = "view",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "ui://orders/dashboard", name = "view",
 				      mimeType = "text/html")
 				  public McpResourceOutput resource() { return null; }
 				""", """
-				  @McpResource(uri = "ui://orders/{view}", name = "view",
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "ui://orders/{view}", name = "view",
 				      mimeType = "text/html;profile=mcp-app")
 				  public McpResourceOutput resource(@McpResourceUriParameter String view) {
 				    return null;
@@ -314,15 +319,16 @@ public class McpAppToolAnnotationProcessorTests {
 		for (int index = 0; index < resources.size(); ++index) {
 			String className = "InvalidAppAssociation" + index;
 			String methods = """
-				  @McpTool(name = "view")
-				  @McpAppTool(resourceUri = "ui://orders/dashboard")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "view")
+				  @McpAppTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, resourceUri = "ui://orders/dashboard")
 				  public McpOperationResult view() { return null; }
 				""" + resources.get(index);
-			try (CompiledEndpoint compiled = compileEndpoint(
-					temporaryDirectory.resolve("case" + index), className,
-					endpointSource(className, methods))) {
-				Assertions.assertThrows(IllegalStateException.class, compiled::endpoint);
-			}
+			Compilation compilation = compile(className,
+					endpointSource(className, methods));
+			assertThat(compilation).failed();
+			assertThat(compilation).hadErrorContaining(index == 1
+					? "@McpAppTool resourceUri requires an @McpResource with the Apps MIME profile"
+					: "@McpAppTool resourceUri requires an exact @McpResource in the same endpoint");
 		}
 	}
 
@@ -347,7 +353,7 @@ public class McpAppToolAnnotationProcessorTests {
 				package example;
 				import com.soklet.*;
 				import com.soklet.annotation.*;
-				@McpServerEndpoint(path = "/apps", name = "apps", version = "test")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/apps", name = "apps", version = "test")
 				public final class %s {
 				%s
 				}

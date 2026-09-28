@@ -382,25 +382,25 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 	private static McpServer server(McpCompletionHandler completionHandler,
 			Duration requestTimeout,
 			com.soklet.McpHandlerInterceptor interceptor) {
-		McpPromptRegistration prompt = McpPromptRegistration.withName("suggest")
+		McpPromptRegistration prompt = McpPromptRegistration.withName("suggest", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 								.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 										McpTextContent.fromText("unused")))).build()))
 				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("term").build()))
-				.completionHandler(completionHandler).build();
+				.completionHandler(completionHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriTemplateAndName(TEMPLATE, "Items")
+				.withUriTemplateAndName(TEMPLATE, "Items", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, target, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(
 										McpTextResourceContents.withUriAndText(
 												target.getUri(), "unused").build())
 										.build()))
-				.completionHandler(completionHandler).build();
+				.completionHandler(completionHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion("completion-lifecycle", "1.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.promptRegistrations(java.util.List.of(prompt)).resourceRegistrations(java.util.List.of(resource)).build();
 		McpServer.Builder builder = McpServer.withPort(0).host(HOST)

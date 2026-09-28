@@ -257,7 +257,7 @@ public class McpBootstrapValueTests {
 		McpImplementation serverInformation = McpImplementation
 				.withNameAndVersion("catalog", "4.0.0")
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ", serverInformation)
+		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ", serverInformation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use this endpoint for catalog discovery.")
 				.build();
 
@@ -273,7 +273,7 @@ public class McpBootstrapValueTests {
 		McpImplementation replacementServerInfo = McpImplementation
 				.withNameAndVersion("replacement-server", "2.0").build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation
-						.withNameAndVersion("test-server", "1.0").build())
+						.withNameAndVersion("test-server", "1.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfo(replacementServerInfo)
 				.serverInfoIncluded(false)
 				.build();
@@ -286,19 +286,19 @@ public class McpBootstrapValueTests {
 	public void endpointEntrypointRequiresImplementationAndAValidPath() {
 		McpImplementation implementation = implementation();
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpEndpoint.withPath("/mcp", null));
+				() -> McpEndpoint.withPath("/mcp", null, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpEndpoint.withPath(null, implementation));
+				() -> McpEndpoint.withPath(null, implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("mcp", implementation));
+				() -> McpEndpoint.withPath("mcp", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/", implementation));
+				() -> McpEndpoint.withPath("/", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp?tenant=1", implementation));
+				() -> McpEndpoint.withPath("/mcp?tenant=1", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp#fragment", implementation));
+				() -> McpEndpoint.withPath("/mcp#fragment", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/mcp", implementation)
+				() -> McpEndpoint.withPath("/mcp", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.instructions(" "));
 	}
 
@@ -315,11 +315,11 @@ public class McpBootstrapValueTests {
 				endpoint("/caf%C3%A9").getPath());
 		McpImplementation implementation = implementation();
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath("/café", implementation));
+				() -> McpEndpoint.withPath("/café", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath(asciiBoundary + "a", implementation));
+				() -> McpEndpoint.withPath(asciiBoundary + "a", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpEndpoint.withPath(percentEncodedBoundary + "a", implementation));
+				() -> McpEndpoint.withPath(percentEncodedBoundary + "a", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 	}
 
 	@Test
@@ -391,7 +391,7 @@ public class McpBootstrapValueTests {
 	}
 
 	private static McpEndpoint endpoint(String path) {
-		return McpEndpoint.withPath(path, implementation())
+		return McpEndpoint.withPath(path, implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 

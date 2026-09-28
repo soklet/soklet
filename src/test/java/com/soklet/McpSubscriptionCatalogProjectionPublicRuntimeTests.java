@@ -558,11 +558,11 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
 							"catalog-projection-runtime-test", "4.0.0")
-							.build())
+							.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool(STABLE_TOOL), tool(CONDITIONAL_TOOL)))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						RESOURCE_URI, "Projection resource")
+						RESOURCE_URI, "Projection resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(
@@ -571,7 +571,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		return SimulatorConfig.builder()
 				.configureMcpServer(builder -> builder
@@ -602,7 +602,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	@NonNull
 	private static McpToolRegistration<McpJsonObject> tool(
 			@NonNull String name) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))

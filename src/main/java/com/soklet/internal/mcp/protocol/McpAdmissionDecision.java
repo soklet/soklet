@@ -435,12 +435,14 @@ enum McpRateLimitTarget {
 @ThreadSafe
 record McpRateLimitContext(@NonNull Request request,
 		@NonNull McpNormalizedEndpoint endpoint,
+		@NonNull String protocolVersion,
 		@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 		@NonNull McpRateLimitTarget target, @NonNull String jsonRpcMethod,
 		@NonNull Optional<@NonNull String> operationName) {
 	McpRateLimitContext {
 		requireNonNull(request);
 		requireNonNull(endpoint);
+		requireNonNull(protocolVersion);
 		requireNonNull(admissionIdentity);
 		requireNonNull(target);
 		requireNonNull(jsonRpcMethod);

@@ -68,7 +68,7 @@ public class McpCompletionPublicRuntimeTests {
 					return McpArgumentCompletionResult.fromValues(List.of());
 				});
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName(TEMPLATE, "Items")
+				.withUriTemplateAndName(TEMPLATE, "Items", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> text(resource.getUri()))
 				.completionHandler((request, context, features) -> {
 					resourceEntries.incrementAndGet();
@@ -76,19 +76,19 @@ public class McpCompletionPublicRuntimeTests {
 					resourceContext.set((McpCompletionContext.Resource) context);
 					return McpArgumentCompletionResult.withValues(List.of("sku-1"))
 							.hasMore(false).build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpResourceRegistration noCompleterTemplate = McpResourceRegistration
-				.withUriTemplateAndName("catalog://other/{sku}", "Other")
+				.withUriTemplateAndName("catalog://other/{sku}", "Other", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> text(resource.getUri()))
 				.build();
 		McpResourceRegistration exact = McpResourceRegistration
-				.withUriAndName(URI.create("catalog://items/sku-1"), "Exact")
+				.withUriAndName(URI.create("catalog://items/sku-1"), "Exact", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, resource, features) -> text(resource.getUri()))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(prompt, noCompleter, hidden))
 				.resourceRegistrations(java.util.List.of(template, noCompleterTemplate, exact)).build();
 		McpServer server = McpServer.withPort(0).host(HOST)
@@ -220,7 +220,7 @@ public class McpCompletionPublicRuntimeTests {
 	public void configuredCompleterRequiresRequestLimiter() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(prompt("enabled", true,
 						(request, context, features) ->
 								McpArgumentCompletionResult.fromValues(List.of()))))
@@ -236,7 +236,7 @@ public class McpCompletionPublicRuntimeTests {
 	public void noCompleterDoesNotAdvertiseOrRouteCompletion() throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(prompt("plain", false, null))).build();
 		McpServer server = McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -275,7 +275,7 @@ public class McpCompletionPublicRuntimeTests {
 		AtomicInteger handlerEntries = new AtomicInteger();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(prompt("visible", true,
 						(request, context, features) -> {
 							handlerEntries.incrementAndGet();
@@ -311,14 +311,14 @@ public class McpCompletionPublicRuntimeTests {
 	private static McpPromptRegistration prompt(String name, boolean completer,
 			McpCompletionHandler handler) {
 		McpPromptRegistration.Builder builder = McpPromptRegistration
-				.withName(name)
+				.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
 								.messages(java.util.List.of(McpPromptMessage.fromUserContent(
 										McpTextContent.fromText("unused")))).build()))
 				.arguments(java.util.List.of(McpPromptArgumentDeclaration.withName("subject").build(), McpPromptArgumentDeclaration.withName("tone").build()));
 		if (completer)
-			builder.completionHandler(handler);
+			builder.completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		return builder.build();
 	}
 

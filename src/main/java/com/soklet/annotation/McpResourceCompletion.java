@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -33,6 +34,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpResourceCompletion {
+	/** @return the required exact MCP revisions handled by this completer */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 	/** @return the target resource template's registered URI template */
 	@NonNull
 	String uri();

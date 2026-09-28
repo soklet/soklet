@@ -67,7 +67,7 @@ public class McpTypedToolPublicRuntimeTests {
 		AtomicReference<ExecutorService> suppliedExecutor = new AtomicReference<>();
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("bounded")
+				.withName("bounded", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					int invocation = handlerInvocations.incrementAndGet();
@@ -87,7 +87,7 @@ public class McpTypedToolPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"bounded-public-runtime-test", "4.0.0").build())
+						"bounded-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -182,7 +182,7 @@ public class McpTypedToolPublicRuntimeTests {
 		AtomicReference<McpRequestContext> observedRequest = new AtomicReference<>();
 
 		McpToolRegistration<SearchArguments> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(SearchArguments.class, SearchResult.class)
 				.handler((request, arguments, features) -> {
 					stages.add("handler:" + TOOL_NAME);
@@ -196,7 +196,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.description("Searches the catalog")
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"typed-tool-public-runtime-test", "4.0.0").build())
+						"typed-tool-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpRateLimiter requestRateLimiter = context -> {
@@ -345,7 +345,7 @@ public class McpTypedToolPublicRuntimeTests {
 		AtomicReference<TraceContext> handlerHttpTraceContext = new AtomicReference<>();
 		AtomicReference<Map<String, String>> handlerBaggage = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("propagation")
+				.withName("propagation", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerTraceContext.set(request.getTraceContext().orElseThrow());
@@ -356,7 +356,7 @@ public class McpTypedToolPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"propagation-public-runtime-test", "4.0.0").build())
+						"propagation-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {

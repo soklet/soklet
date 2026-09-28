@@ -98,7 +98,7 @@ class McpPromptRegistrationTests {
 				URI.create("https://example.com/prompt.png")).build();
 		AtomicReference<McpPromptGetContext> observed = new AtomicReference<>();
 		McpPromptRegistration registration = McpPromptRegistration
-				.withName("catalog.recommend")
+				.withName("catalog.recommend", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) -> {
 					observed.set(prompt);
 					return McpCompleteResult.fromPromptOutput(
@@ -153,7 +153,7 @@ class McpPromptRegistrationTests {
 	void validatesRequiredDeclaredStringArgumentsBeforeHandlerInvocation() {
 		AtomicInteger invocations = new AtomicInteger();
 		McpPromptRegistration registration = McpPromptRegistration
-				.withName("validate")
+				.withName("validate", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) -> {
 					invocations.incrementAndGet();
 					return McpCompleteResult.fromPromptOutput(
@@ -176,7 +176,7 @@ class McpPromptRegistrationTests {
 	void distinguishesHandlerFailuresAndRejectsInvalidDefinitions()
 			throws Exception {
 		assertThrows(IllegalArgumentException.class,
-				() -> McpPromptRegistration.withName(" "));
+				() -> McpPromptRegistration.withName(" ", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpPromptArgumentDeclaration.withName(""));
 		assertThrows(NullPointerException.class,
@@ -186,7 +186,7 @@ class McpPromptRegistrationTests {
 		McpPromptArgumentDeclaration duplicate =
 				McpPromptArgumentDeclaration.withName("same").build();
 		assertThrows(IllegalStateException.class, () -> McpPromptRegistration
-				.withName("duplicates")
+				.withName("duplicates", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
@@ -196,7 +196,7 @@ class McpPromptRegistrationTests {
 		IllegalArgumentException applicationFailure =
 				new IllegalArgumentException("application failure");
 		McpPromptRegistration failing = McpPromptRegistration
-				.withName("failure")
+				.withName("failure", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) -> {
 					throw applicationFailure;
 				})
@@ -206,7 +206,7 @@ class McpPromptRegistrationTests {
 						McpInvocationFeatures.fromFeatures(Map.of()))));
 
 		McpPromptRegistration nullResult = McpPromptRegistration
-				.withName("null-result")
+				.withName("null-result", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) -> null)
 				.build();
 		assertThrows(NullPointerException.class, () -> nullResult.invoke(
@@ -216,7 +216,7 @@ class McpPromptRegistrationTests {
 
 	@Test
 	void endpointDefensivelyCopiesAndRejectsDuplicatePromptNames() {
-		McpPromptRegistration prompt = McpPromptRegistration.withName("one")
+		McpPromptRegistration prompt = McpPromptRegistration.withName("one", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, context, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))
@@ -227,7 +227,7 @@ class McpPromptRegistrationTests {
 		assertThrows(UnsupportedOperationException.class,
 				() -> endpoint.getPromptRegistrations().clear());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
-				.promptRegistrations(java.util.List.of(prompt, McpPromptRegistration.withName("one")
+				.promptRegistrations(java.util.List.of(prompt, McpPromptRegistration.withName("one", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, context, features) ->
 								McpCompleteResult.fromPromptOutput(
 										McpPromptOutput.fromMessages()))
@@ -237,7 +237,7 @@ class McpPromptRegistrationTests {
 
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"prompt-tests", "4.0.0").build());
+						"prompt-tests", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static void assertInvalid(McpPromptRegistration registration,
@@ -264,8 +264,8 @@ class McpPromptRegistrationTests {
 			@Override public Optional<McpRequestId> getRequestId() {
 				return Optional.of(McpRequestId.fromString("test"));
 			}
-			@Override public String getProtocolVersion() {
-				return "2026-07-28";
+			@Override public McpProtocolVersion getProtocolVersion() {
+				return McpProtocolVersion.V2026_07_28;
 			}
 			@Override public Optional<String> getOperationName() {
 				return Optional.empty();

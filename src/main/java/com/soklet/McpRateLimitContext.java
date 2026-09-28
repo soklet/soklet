@@ -49,6 +49,10 @@ public interface McpRateLimitContext {
 	@NonNull
 	McpEndpoint getEndpoint();
 
+	/** @return exact validated protocol revision for this acquisition */
+	@NonNull
+	McpProtocolVersion getProtocolVersion();
+
 	/**
 	 * Returns the identity accepted by request admission.
 	 *

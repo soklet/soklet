@@ -134,7 +134,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 	void explicitPolicyAppliesLocalizationBudgetToExactProjection() {
 		McpEndpoint endpoint = McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("catalog-localization-budget", "1")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool("budget.visible", "Visible title"), tool("budget.hidden", "Hidden title")))
 				.build();
@@ -307,7 +307,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 	private static McpEndpoint endpoint() {
 		return McpEndpoint.withPath(WIRE_PATH, McpImplementation
 						.withNameAndVersion("catalog-access-localization", "1")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool("tool.alpha", "Alpha tool"), tool("tool.neutral", null), tool("tool.shared", "Shared tool"), tool("tool.beta", "Beta tool")))
 				.promptRegistrations(java.util.List.of(prompt("prompt.alpha", "Alpha prompt", List.of(
 						argument("alpha", "Alpha argument"))), prompt("prompt.neutral", null, List.of()), prompt("prompt.shared", "Shared prompt", List.of(
@@ -320,7 +320,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			String title) {
 		McpToolRegistration.OperationBuilder<McpJsonObject> builder =
-				McpToolRegistration.withName(name)
+				McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"));
@@ -331,7 +331,7 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 
 	private static McpPromptRegistration prompt(String name, String title,
 			List<McpPromptArgumentDeclaration> arguments) {
-		McpPromptRegistration.Builder builder = McpPromptRegistration.withName(name)
+		McpPromptRegistration.Builder builder = McpPromptRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, prompt, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()));

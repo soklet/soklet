@@ -47,6 +47,12 @@ public final class McpEndpoint {
 	@NonNull
 	private final String path;
 	@NonNull
+	private final Set<@NonNull McpProtocolVersion> protocolVersions;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> taskProtocolVersions;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> subscriptionProtocolVersions;
+	@NonNull
 	private final McpImplementation serverInformation;
 	private final boolean serverInformationIncluded;
 	@Nullable
@@ -66,9 +72,13 @@ public final class McpEndpoint {
 	@Nullable
 	private final McpSkillListHandler skillListHandler;
 	@NonNull
+	private final Set<@NonNull McpProtocolVersion> skillListHandlerProtocolVersions;
+	@NonNull
 	private final McpCachePolicy skillListCachePolicy;
 	@Nullable
 	private final McpResourceListHandler resourceListHandler;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> resourceListHandlerProtocolVersions;
 	@NonNull
 	private final McpCachePolicy resourceListCachePolicy;
 	@NonNull
@@ -86,6 +96,7 @@ public final class McpEndpoint {
 	 * @param path the absolute endpoint path in ASCII raw URI form; percent-encode
 	 *             non-ASCII characters
 	 * @param implementation implementation information advertised by the endpoint
+	 * @param protocolVersions nonempty exact revisions served at this URL
 	 * @return a builder for endpoint registrations
 	 * @throws NullPointerException if an argument is null
 	 * @throws IllegalArgumentException if the path is not a non-root absolute
@@ -95,14 +106,19 @@ public final class McpEndpoint {
 	 */
 	@NonNull
 	public static Builder withPath(@NonNull String path,
-			@NonNull McpImplementation implementation) {
-		return new Builder(normalizePath(path), implementation);
+			@NonNull McpImplementation implementation,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new Builder(normalizePath(path), implementation,
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	private McpEndpoint(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.path = builder.path;
+		this.protocolVersions = builder.protocolVersions;
+		this.taskProtocolVersions = builder.taskProtocolVersions;
+		this.subscriptionProtocolVersions = builder.subscriptionProtocolVersions;
 		this.serverInformation = builder.serverInformation;
 		this.serverInformationIncluded = builder.serverInformationIncluded;
 		this.instructions = builder.instructions;
@@ -114,23 +130,72 @@ public final class McpEndpoint {
 		this.skillIndex = McpSkillEndpointIndex.from(this.skillRegistrations, this.skillGroups,
 				this.resourceRegistrations);
 		this.skillListHandler = builder.skillListHandler;
+		this.skillListHandlerProtocolVersions = builder.skillListHandlerProtocolVersions;
 		this.skillListCachePolicy = builder.skillListCachePolicy;
 		this.resourceListHandler = builder.resourceListHandler;
+		this.resourceListHandlerProtocolVersions = builder.resourceListHandlerProtocolVersions;
 		this.resourceListCachePolicy = builder.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
 				builder.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = builder.toolRateLimiterName;
 		this.toolRateLimiter = builder.toolRateLimiter;
 		this.subscriptionConfig = builder.subscriptionConfig;
+		if (this.protocolVersions.contains(McpProtocolVersion.V2025_03_26))
+			throw new IllegalStateException(
+					"MCP 2025-03-26 is not implemented by this adapter.");
+
+		requireSubset(this.taskProtocolVersions, this.protocolVersions, "Tasks");
+		requireSubset(this.subscriptionProtocolVersions, this.protocolVersions,
+				"subscriptions");
+		requireSubset(this.skillListHandlerProtocolVersions, this.protocolVersions,
+				"Skills-list handler");
+		requireSubset(this.resourceListHandlerProtocolVersions, this.protocolVersions,
+				"resource-list handler");
+		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
+				this.taskProtocolVersions))
+			throw new IllegalStateException(
+					"Tasks currently require MCP 2026-07-28.");
+		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
+				this.subscriptionProtocolVersions))
+			throw new IllegalStateException(
+					"Subscriptions currently require MCP 2026-07-28.");
+		if (this.subscriptionConfig != null && this.subscriptionProtocolVersions.isEmpty())
+			throw new IllegalStateException(
+					"MCP subscription configuration requires an enabled protocol revision.");
 
 		Set<String> toolNames = new LinkedHashSet<>();
 		for (McpToolRegistration<?> tool : this.toolRegistrations) {
+			requireSubset(tool.getProtocolVersions(), this.protocolVersions,
+					"tool " + tool.getName());
+			if (containsLegacyVersion(tool.getProtocolVersions())
+					&& (!tool.getInputRequestDeclarations().isEmpty()
+						|| tool.getRequestStateMode() != McpRequestStateMode.NONE
+						|| !tool.getMirroredHeaderPlan().declarations().isEmpty()))
+				throw new IllegalStateException(
+						"The 2025 tools adapter cannot serve input requests, request state, or mirrored headers for tool "
+								+ tool.getName() + ".");
+			tool.getAppToolMetadata().ifPresent(metadata -> {
+				if (containsLegacyVersion(metadata.getProtocolVersions()))
+					throw new IllegalStateException(
+							"MCP Apps metadata is not implemented by the 2025 adapter.");
+				if (!metadata.getVisibility().contains(McpAppToolMetadata.Visibility.MODEL)
+						&& containsLegacyVersion(tool.getProtocolVersions()))
+					throw new IllegalStateException(
+							"App-only tools cannot be exposed by the 2025 tools-only adapter.");
+			});
+			if (tool.isTaskRequired())
+				requireSubset(tool.getProtocolVersions(), this.taskProtocolVersions,
+						"task-required tool " + tool.getName());
 			if (!toolNames.add(tool.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP tool name: " + tool.getName());
 		}
 		Set<String> promptNames = new LinkedHashSet<>();
 		for (McpPromptRegistration prompt : this.promptRegistrations) {
+			requireSubset(prompt.getProtocolVersions(), this.protocolVersions,
+					"prompt " + prompt.getName());
+			requireModernOnly(prompt.getProtocolVersions(), "prompts");
+			requireModernOnly(prompt.getCompletionProtocolVersions(), "prompt completion");
 			if (!promptNames.add(prompt.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP prompt name: " + prompt.getName());
@@ -138,6 +203,10 @@ public final class McpEndpoint {
 		Map<URI, McpResourceRegistration> exactResources = new LinkedHashMap<>();
 		Set<String> resourceUriTemplates = new LinkedHashSet<>();
 		for (McpResourceRegistration resource : this.resourceRegistrations) {
+			requireSubset(resource.getProtocolVersions(), this.protocolVersions,
+					"resource " + resource.getName());
+			requireModernOnly(resource.getProtocolVersions(), "resources");
+			requireModernOnly(resource.getCompletionProtocolVersions(), "resource completion");
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
 				if (exactResources.putIfAbsent(uri, resource) != null)
@@ -150,6 +219,15 @@ public final class McpEndpoint {
 							"Duplicate MCP resource URI template: " + uriTemplate);
 			}
 		}
+		for (McpSkillRegistration skill : this.skillRegistrations)
+			requireSkillVersions(skill);
+		for (McpSkillGroup group : this.skillGroups)
+			for (McpSkillRegistration skill : group.getSkillRegistrations())
+				requireSkillVersions(skill);
+		requireModernOnly(this.resourceListHandlerProtocolVersions,
+				"resource-list handlers");
+		requireModernOnly(this.skillListHandlerProtocolVersions,
+				"Skills-list handlers");
 		for (McpToolRegistration<?> tool : this.toolRegistrations) {
 			Optional<URI> resourceUri = McpAppMetadataSupport
 					.effectiveToolMetadata(tool.getMetadata(),
@@ -161,9 +239,44 @@ public final class McpEndpoint {
 					throw new IllegalStateException(
 							"MCP Apps tool associations require an exact UI resource "
 									+ "registration with the Apps MIME profile on the same endpoint.");
+				tool.getAppToolMetadata().ifPresent(metadata -> requireSubset(
+						metadata.getProtocolVersions(), resource.getProtocolVersions(),
+						"Apps UI resource for tool " + tool.getName()));
 			}
 		}
 		McpSkillEndpointIndex.preflight(this);
+	}
+
+	private void requireSkillVersions(@NonNull McpSkillRegistration skill) {
+		requireSubset(skill.getProtocolVersions(), this.protocolVersions,
+				"Skill " + skill.getSkillBundle().getName());
+		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
+				skill.getProtocolVersions()))
+			throw new IllegalStateException(
+					"Skills currently require MCP 2026-07-28.");
+	}
+
+	private static void requireModernOnly(
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
+			@NonNull String feature) {
+		if (containsLegacyVersion(protocolVersions))
+			throw new IllegalStateException("The 2025 adapter does not implement MCP "
+					+ feature + ".");
+	}
+
+	private static boolean containsLegacyVersion(
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return protocolVersions.stream().anyMatch(version ->
+				version != McpProtocolVersion.V2026_07_28);
+	}
+
+	private static void requireSubset(
+			@NonNull Set<@NonNull McpProtocolVersion> selected,
+			@NonNull Set<@NonNull McpProtocolVersion> owner,
+			@NonNull String feature) {
+		if (!owner.containsAll(selected))
+			throw new IllegalStateException("MCP " + feature
+					+ " revisions must be a subset of their owner revisions.");
 	}
 
 	private static boolean hasAppsMimeType(@NonNull McpResourceRegistration resource) {
@@ -184,6 +297,9 @@ public final class McpEndpoint {
 			@Nullable McpSubscriptionConfig subscriptionConfig) {
 		requireNonNull(endpoint);
 		this.path = endpoint.path;
+		this.protocolVersions = endpoint.protocolVersions;
+		this.taskProtocolVersions = endpoint.taskProtocolVersions;
+		this.subscriptionProtocolVersions = endpoint.subscriptionProtocolVersions;
 		this.serverInformation = endpoint.serverInformation;
 		this.serverInformationIncluded = endpoint.serverInformationIncluded;
 		this.instructions = endpoint.instructions;
@@ -194,8 +310,10 @@ public final class McpEndpoint {
 		this.skillGroups = skillGroups;
 		this.skillIndex = skillIndex;
 		this.skillListHandler = endpoint.skillListHandler;
+		this.skillListHandlerProtocolVersions = endpoint.skillListHandlerProtocolVersions;
 		this.skillListCachePolicy = endpoint.skillListCachePolicy;
 		this.resourceListHandler = endpoint.resourceListHandler;
+		this.resourceListHandlerProtocolVersions = endpoint.resourceListHandlerProtocolVersions;
 		this.resourceListCachePolicy = endpoint.resourceListCachePolicy;
 		this.resourceTemplateListCachePolicy =
 				endpoint.resourceTemplateListCachePolicy;
@@ -212,6 +330,24 @@ public final class McpEndpoint {
 	@NonNull
 	public String getPath() {
 		return this.path;
+	}
+
+	/** @return exact protocol revisions served at this endpoint */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
+	}
+
+	/** @return exact revisions that enable Tasks on this endpoint */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getTaskProtocolVersions() {
+		return this.taskProtocolVersions;
+	}
+
+	/** @return exact revisions that enable subscriptions on this endpoint */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getSubscriptionProtocolVersions() {
+		return this.subscriptionProtocolVersions;
 	}
 
 	/**
@@ -319,6 +455,12 @@ public final class McpEndpoint {
 		return Optional.ofNullable(this.skillListHandler);
 	}
 
+	/** @return revisions on which the custom Skills-list handler applies */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getSkillListHandlerProtocolVersions() {
+		return this.skillListHandlerProtocolVersions;
+	}
+
 	/** @return fixed Skills-list cache scope and default time to live */
 	@NonNull
 	public McpCachePolicy getSkillListCachePolicy() { return this.skillListCachePolicy; }
@@ -335,6 +477,12 @@ public final class McpEndpoint {
 	@NonNull
 	public Optional<@NonNull McpResourceListHandler> getResourceListHandler() {
 		return Optional.ofNullable(this.resourceListHandler);
+	}
+
+	/** @return revisions on which the custom resource-list handler applies */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getResourceListHandlerProtocolVersions() {
+		return this.resourceListHandlerProtocolVersions;
 	}
 
 	/**
@@ -397,6 +545,9 @@ public final class McpEndpoint {
 	@NonNull
 	McpEndpoint withSubscriptionConfig(
 			@NonNull McpSubscriptionConfig subscriptionConfig) {
+		if (this.subscriptionProtocolVersions.isEmpty())
+			throw new IllegalStateException(
+					"MCP subscription configuration requires an enabled protocol revision.");
 		return new McpEndpoint(this, this.skillRegistrations, this.skillGroups, this.skillIndex,
 				requireNonNull(subscriptionConfig));
 	}
@@ -409,6 +560,8 @@ public final class McpEndpoint {
 				this.skillGroups, this.resourceRegistrations);
 		McpEndpoint endpoint = new McpEndpoint(this, snapshot, this.skillGroups, skillIndex,
 				this.subscriptionConfig);
+		for (McpSkillRegistration skill : snapshot)
+			endpoint.requireSkillVersions(skill);
 		McpSkillEndpointIndex.preflight(endpoint);
 		return endpoint;
 	}
@@ -421,6 +574,9 @@ public final class McpEndpoint {
 				snapshot, this.resourceRegistrations);
 		McpEndpoint endpoint = new McpEndpoint(this, this.skillRegistrations, snapshot, skillIndex,
 				this.subscriptionConfig);
+		for (McpSkillGroup group : snapshot)
+			for (McpSkillRegistration skill : group.getSkillRegistrations())
+				endpoint.requireSkillVersions(skill);
 		McpSkillEndpointIndex.preflight(endpoint);
 		return endpoint;
 	}
@@ -455,6 +611,12 @@ public final class McpEndpoint {
 		@NonNull
 		private final String path;
 		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
+		@NonNull
+		private Set<@NonNull McpProtocolVersion> taskProtocolVersions = Set.of();
+		@NonNull
+		private Set<@NonNull McpProtocolVersion> subscriptionProtocolVersions = Set.of();
+		@NonNull
 		private McpImplementation serverInformation;
 		private boolean serverInformationIncluded;
 		@Nullable
@@ -472,9 +634,13 @@ public final class McpEndpoint {
 		@Nullable
 		private McpSkillListHandler skillListHandler;
 		@NonNull
+		private Set<@NonNull McpProtocolVersion> skillListHandlerProtocolVersions = Set.of();
+		@NonNull
 		private McpCachePolicy skillListCachePolicy;
 		@Nullable
 		private McpResourceListHandler resourceListHandler;
+		@NonNull
+		private Set<@NonNull McpProtocolVersion> resourceListHandlerProtocolVersions = Set.of();
 		@NonNull
 		private McpCachePolicy resourceListCachePolicy;
 		@NonNull
@@ -487,8 +653,10 @@ public final class McpEndpoint {
 		private McpSubscriptionConfig subscriptionConfig;
 
 		private Builder(@NonNull String path,
-				@NonNull McpImplementation implementation) {
+				@NonNull McpImplementation implementation,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.path = requireNonNull(path);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.serverInformation = requireNonNull(implementation);
 			this.serverInformationIncluded = true;
 			this.toolRegistrations = List.of();
@@ -501,6 +669,34 @@ public final class McpEndpoint {
 					McpCachePolicy.privateNoCacheInstance();
 			this.resourceTemplateListCachePolicy =
 					McpCachePolicy.privateNoCacheInstance();
+		}
+
+		/**
+		 * Enables Tasks for an explicit subset of endpoint revisions. An empty set
+		 * disables Tasks. The task manager remains a server dependency.
+		 *
+		 * @param protocolVersions exact task-enabled revisions
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder taskProtocolVersions(
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			this.taskProtocolVersions = McpProtocolVersion.optionalSet(protocolVersions);
+			return this;
+		}
+
+		/**
+		 * Enables subscription listening for an explicit subset of endpoint
+		 * revisions. An empty set disables subscription listening.
+		 *
+		 * @param protocolVersions exact subscription-enabled revisions
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder subscriptionProtocolVersions(
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			this.subscriptionProtocolVersions = McpProtocolVersion.optionalSet(protocolVersions);
+			return this;
 		}
 
 		/**
@@ -643,11 +839,20 @@ public final class McpEndpoint {
 		 * access without changing canonical file-read handling.
 		 *
 		 * @param skillListHandler custom Skills-list handler, or null for automatic listing
+		 * @param protocolVersions nonempty handler revisions, or empty when clearing
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder skillListHandler(@Nullable McpSkillListHandler skillListHandler) {
+		public Builder skillListHandler(@Nullable McpSkillListHandler skillListHandler,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			Set<McpProtocolVersion> versions = skillListHandler == null
+					? McpProtocolVersion.optionalSet(protocolVersions)
+					: McpProtocolVersion.requiredSet(protocolVersions);
+			if (skillListHandler == null && !versions.isEmpty())
+				throw new IllegalArgumentException(
+						"A null MCP Skills-list handler requires an empty version set.");
 			this.skillListHandler = skillListHandler;
+			this.skillListHandlerProtocolVersions = versions;
 			return this;
 		}
 
@@ -680,12 +885,21 @@ public final class McpEndpoint {
 		 *
 		 * @param resourceListHandler custom list handler, or null for the static
 		 *                            fallback
+		 * @param protocolVersions nonempty handler revisions, or empty when clearing
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder resourceListHandler(
-				@Nullable McpResourceListHandler resourceListHandler) {
+				@Nullable McpResourceListHandler resourceListHandler,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			Set<McpProtocolVersion> versions = resourceListHandler == null
+					? McpProtocolVersion.optionalSet(protocolVersions)
+					: McpProtocolVersion.requiredSet(protocolVersions);
+			if (resourceListHandler == null && !versions.isEmpty())
+				throw new IllegalArgumentException(
+						"A null MCP resource-list handler requires an empty version set.");
 			this.resourceListHandler = resourceListHandler;
+			this.resourceListHandlerProtocolVersions = versions;
 			return this;
 		}
 

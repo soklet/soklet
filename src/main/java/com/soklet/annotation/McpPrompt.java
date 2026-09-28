@@ -17,6 +17,7 @@
 package com.soklet.annotation;
 
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpProtocolVersion;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.annotation.ElementType;
@@ -36,6 +37,9 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpPrompt {
+	/** @return the required exact MCP revisions on which this prompt is available */
+	@NonNull
+	McpProtocolVersion @NonNull [] protocolVersions();
 	/**
 	 * The prompt name published to MCP clients.
 	 *

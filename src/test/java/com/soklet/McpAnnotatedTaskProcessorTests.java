@@ -70,9 +70,9 @@ public class McpAnnotatedTaskProcessorTests {
 				import com.soklet.annotation.McpTool;
 				import java.util.List;
 
-				@McpServerEndpoint(path = "/tasks", name = "tasks", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/tasks", name = "tasks", version = "1")
 				public final class TaskEndpoint {
-				  @McpTool(name = "reports.generate")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "reports.generate")
 				  public McpTaskCreatedResult<Report> generate(
 				      McpTaskCreationContext taskCreationContext) {
 				    return McpTaskCreatedResult.fromTaskId(
@@ -167,9 +167,9 @@ public class McpAnnotatedTaskProcessorTests {
 							import com.soklet.annotation.McpServerEndpoint;
 							import com.soklet.annotation.McpTool;
 
-							@McpServerEndpoint(path = "/tasks%s", name = "tasks", version = "1")
+							@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/tasks%s", name = "tasks", version = "1")
 							public final class InvalidTaskEndpoint%s%s {
-							  @McpTool(name = "reports.generate")
+							  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "reports.generate")
 							  public %s generate() { return null; }
 							}
 							""".formatted(index, index, typeParameter,
@@ -196,9 +196,9 @@ public class McpAnnotatedTaskProcessorTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/tasks", name = "tasks", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/tasks", name = "tasks", version = "1")
 						public final class InaccessibleTaskEndpoint {
-						  @McpTool(name = "reports.generate")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "reports.generate")
 						  public McpTaskCreatedResult<Hidden> generate() { return null; }
 
 						  private record Hidden(String value) {}
@@ -225,9 +225,9 @@ public class McpAnnotatedTaskProcessorTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/tasks", name = "tasks", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/tasks", name = "tasks", version = "1")
 						public final class UnsupportedTaskEndpoint {
-						  @McpTool(name = "reports.generate")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "reports.generate")
 						  public McpTaskCreatedResult<Object> generate() { return null; }
 						}
 						""");
@@ -256,20 +256,20 @@ public class McpAnnotatedTaskProcessorTests {
 						import com.soklet.annotation.McpTool;
 						import com.soklet.annotation.McpToolArgument;
 
-						@McpServerEndpoint(path = "/tasks", name = "tasks", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, taskProtocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/tasks", name = "tasks", version = "1")
 						public final class InvalidTaskCreationContextEndpoint {
-						  @McpTool(name = "inline")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "inline")
 						  public McpCompleteResult inline(McpTaskCreationContext taskCreationContext) {
 						    return null;
 						  }
 
-						  @McpTool(name = "duplicate")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "duplicate")
 						  public McpTaskCreatedResult<Report> duplicate(
 						      McpTaskCreationContext first, McpTaskCreationContext second) {
 						    return null;
 						  }
 
-						  @McpTool(name = "annotated")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "annotated")
 						  public McpTaskCreatedResult<Report> annotated(
 						      @McpToolArgument McpTaskCreationContext taskCreationContext) {
 						    return null;

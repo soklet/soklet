@@ -46,7 +46,7 @@ class McpAppToolAttachmentTests {
 		assertTrue(builder.build().getAppToolMetadata().isEmpty());
 		McpJsonObject raw = unrelatedMetadata();
 		McpAppToolMetadata first = appMetadata();
-		McpAppToolMetadata replacement = McpAppToolMetadata.builder()
+		McpAppToolMetadata replacement = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.visibility(Set.of(McpAppToolMetadata.Visibility.APP)).build();
 		assertSame(builder, builder.metadata(raw));
 		assertSame(builder, builder.appToolMetadata(first));
@@ -65,7 +65,7 @@ class McpAppToolAttachmentTests {
 		assertTrue(builder.build().getAppToolMetadata().isEmpty());
 		McpJsonObject raw = unrelatedMetadata();
 		McpAppToolMetadata first = appMetadata();
-		McpAppToolMetadata replacement = McpAppToolMetadata.builder()
+		McpAppToolMetadata replacement = McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.visibility(Set.of()).build();
 		assertSame(builder, builder.appToolMetadata(first));
 		assertSame(builder, builder.metadata(raw));
@@ -79,7 +79,7 @@ class McpAppToolAttachmentTests {
 	}
 
 	@Test
-	void operationBuilderRejectsBothOwnedFieldsInEitherOrderWithoutMutation() {
+	void operationBuilderRequiresTypedVersionedAppsFieldsWithoutMutation() {
 		for (McpJsonObject conflicting : conflictingMetadata()) {
 			McpAppToolMetadata typed = appMetadata();
 			McpJsonObject safe = unrelatedMetadata();
@@ -91,18 +91,18 @@ class McpAppToolAttachmentTests {
 			assertSame(typed, typedFirst.build().getAppToolMetadata().orElseThrow());
 
 			McpToolRegistration.OperationBuilder<McpJsonObject> rawFirst =
-					operationBuilder().metadata(conflicting);
+					operationBuilder().metadata(safe);
 			assertThrows(IllegalArgumentException.class,
-					() -> rawFirst.appToolMetadata(typed));
+					() -> rawFirst.metadata(conflicting));
 			assertTrue(rawFirst.build().getAppToolMetadata().isEmpty());
-			assertSame(conflicting, rawFirst.build().getMetadata());
-			rawFirst.metadata(safe).appToolMetadata(typed);
+			assertSame(safe, rawFirst.build().getMetadata());
+			rawFirst.appToolMetadata(typed);
 			assertSame(typed, rawFirst.build().getAppToolMetadata().orElseThrow());
 		}
 	}
 
 	@Test
-	void completeBuilderRejectsBothOwnedFieldsInEitherOrderWithoutMutation() {
+	void completeBuilderRequiresTypedVersionedAppsFieldsWithoutMutation() {
 		for (McpJsonObject conflicting : conflictingMetadata()) {
 			McpAppToolMetadata typed = appMetadata();
 			McpJsonObject safe = unrelatedMetadata();
@@ -114,12 +114,12 @@ class McpAppToolAttachmentTests {
 			assertSame(typed, typedFirst.build().getAppToolMetadata().orElseThrow());
 
 			McpToolRegistration.CompleteBuilder<Arguments> rawFirst =
-					completeBuilder().metadata(conflicting);
+					completeBuilder().metadata(safe);
 			assertThrows(IllegalArgumentException.class,
-					() -> rawFirst.appToolMetadata(typed));
+					() -> rawFirst.metadata(conflicting));
 			assertTrue(rawFirst.build().getAppToolMetadata().isEmpty());
-			assertSame(conflicting, rawFirst.build().getMetadata());
-			rawFirst.metadata(safe).appToolMetadata(typed);
+			assertSame(safe, rawFirst.build().getMetadata());
+			rawFirst.appToolMetadata(typed);
 			assertSame(typed, rawFirst.build().getAppToolMetadata().orElseThrow());
 		}
 	}
@@ -184,7 +184,7 @@ class McpAppToolAttachmentTests {
 			McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource))
 					.resourceListHandler((request, list, features) -> {
 						throw new AssertionError("Must not invoke the resource-list handler.");
-					}).build();
+					}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 			assertSame(tool, endpoint.getToolRegistrations().get(0));
 			assertSame(resource, endpoint.getResourceRegistrations().get(0));
 			assertDoesNotThrow(() -> endpointBuilder().resourceRegistrations(java.util.List.of(resource)).toolRegistrations(java.util.List.of(tool)).build());
@@ -205,7 +205,7 @@ class McpAppToolAttachmentTests {
 			assertTrue(failure.getCause() == null);
 		}
 		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
-				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI, "view")
+				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI, "view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler()).build())).build());
 	}
 
@@ -223,7 +223,7 @@ class McpAppToolAttachmentTests {
 		McpToolRegistration<McpJsonObject> tool = operationBuilder()
 				.appToolMetadata(appMetadata()).build();
 		McpResourceRegistration template = McpResourceRegistration
-				.withUriTemplateAndName("ui://private-catalog/{view}", "view")
+				.withUriTemplateAndName("ui://private-catalog/{view}", "view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).mimeType("text/html;profile=mcp-app").build();
 		assertThrows(IllegalStateException.class,
 				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(template)).build());
@@ -231,12 +231,12 @@ class McpAppToolAttachmentTests {
 				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
 						.resourceListHandler((request, list, features) -> {
 							throw new AssertionError("Must not ask custom listing to establish eligibility.");
-						}).build());
+						}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 		assertThrows(IllegalStateException.class,
 				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(template))
 						.resourceListHandler((request, list, features) -> McpResourcePage.builder()
 								.resourceDescriptors(java.util.List.of(McpResourceDescriptor.withUriAndName(UI_URI, "view")
-										.mimeType("text/html;profile=mcp-app").build())).build()).build());
+										.mimeType("text/html;profile=mcp-app").build())).build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 	}
 
 	@Test
@@ -247,26 +247,21 @@ class McpAppToolAttachmentTests {
 		McpToolRegistration<McpJsonObject> tool = operationBuilder()
 				.appToolMetadata(appMetadata()).build();
 		assertThrows(IllegalStateException.class, () -> McpEndpoint
-				.withPath("/other", separate.getServerInfo()).toolRegistrations(java.util.List.of(tool)).build());
+				.withPath("/other", separate.getServerInfo(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).toolRegistrations(java.util.List.of(tool)).build());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("ui://private-catalog/dashboard-other"), "view")
+						URI.create("ui://private-catalog/dashboard-other"), "view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler(resourceHandler()).mimeType("text/html;profile=mcp-app").build()))
 				.build());
 	}
 
 	@Test
-	void rawOnlyAssociationUsesTheSameEndpointEligibilityWithoutBecomingTyped() {
+	void rawOnlyAssociationIsRejectedBeforeEndpointConstruction() {
 		McpJsonObject raw = ui(McpJsonObject.builder().put("resourceUri", UI_URI.toString())
 				.put("visibility", McpJsonArray.builder().add("app").build()).build());
-		McpToolRegistration<McpJsonObject> tool = operationBuilder().metadata(raw).build();
-		assertTrue(tool.getAppToolMetadata().isEmpty());
-		assertSame(raw, tool.getMetadata());
-		assertThrows(IllegalStateException.class, () -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).build());
-		assertThrows(IllegalStateException.class,
-				() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource("text/html"))).build());
-		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(tool))
-				.resourceRegistrations(java.util.List.of(resource("text/html;profile=mcp-app"))).build());
+		McpToolRegistration.OperationBuilder<McpJsonObject> builder = operationBuilder();
+		assertThrows(IllegalArgumentException.class, () -> builder.metadata(raw));
+		assertEquals(McpJsonObject.emptyInstance(), builder.build().getMetadata());
 	}
 
 	@Test
@@ -274,13 +269,12 @@ class McpAppToolAttachmentTests {
 		for (Set<McpAppToolMetadata.Visibility> visibility : List.of(
 				Set.of(McpAppToolMetadata.Visibility.APP), Set.<McpAppToolMetadata.Visibility>of())) {
 			McpToolRegistration<McpJsonObject> tool = operationBuilder().appToolMetadata(
-					McpAppToolMetadata.builder().visibility(visibility).build()).build();
+					McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).visibility(visibility).build()).build();
 			assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).build());
 			assertEquals(visibility, tool.getAppToolMetadata().orElseThrow().getVisibility());
 		}
-		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().metadata(
-				ui(McpJsonObject.builder().put("visibility", McpJsonArray.emptyInstance()).build()))
-				.build())).build());
+		assertThrows(IllegalArgumentException.class, () -> operationBuilder().metadata(
+				ui(McpJsonObject.builder().put("visibility", McpJsonArray.emptyInstance()).build())));
 	}
 
 	@Test
@@ -288,12 +282,12 @@ class McpAppToolAttachmentTests {
 		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().build()))
 				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
 		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().appToolMetadata(
-				McpAppToolMetadata.builder().build()).build()))
+				McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()).build()))
 				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
 	}
 
 	private static McpAppToolMetadata appMetadata() {
-		return McpAppToolMetadata.builder().resourceUri(UI_URI).build();
+		return McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).resourceUri(UI_URI).build();
 	}
 
 	private static McpJsonObject ui(McpJsonObject ui) {
@@ -313,7 +307,7 @@ class McpAppToolAttachmentTests {
 	}
 
 	private static McpResourceRegistration resource(String mimeType) {
-		return McpResourceRegistration.withUriAndName(UI_URI, "view")
+		return McpResourceRegistration.withUriAndName(UI_URI, "view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(resourceHandler()).mimeType(mimeType).build();
 	}
 
@@ -324,14 +318,14 @@ class McpAppToolAttachmentTests {
 	}
 
 	private static McpToolRegistration.OperationBuilder<McpJsonObject> operationBuilder() {
-		return McpToolRegistration.withName("show_view").jsonObjectArguments()
+		return McpToolRegistration.withName("show_view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					throw new AssertionError("Must not invoke the tool handler.");
 				});
 	}
 
 	private static McpToolRegistration.CompleteBuilder<Arguments> completeBuilder() {
-		return McpToolRegistration.withName("complete_view")
+		return McpToolRegistration.withName("complete_view", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, Output.class)
 				.handler((request, arguments, features) -> {
 					throw new AssertionError("Must not invoke the complete tool handler.");
@@ -340,7 +334,7 @@ class McpAppToolAttachmentTests {
 
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath("/mcp", McpImplementation
-				.withNameAndVersion("apps-attachment-tests", "test").build());
+				.withNameAndVersion("apps-attachment-tests", "test").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private record Arguments(String value) {}

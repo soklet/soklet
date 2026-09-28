@@ -47,7 +47,7 @@ class McpToolRegistrationTests {
 			throws Exception {
 		AtomicReference<McpJsonObject> rawArguments = new AtomicReference<>();
 		McpToolRegistration<Arguments> registration =
-				McpToolRegistration.withName("catalog.search")
+				McpToolRegistration.withName("catalog.search", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.handler((request, arguments, features) -> {
 							rawArguments.set(arguments.getRawArguments());
@@ -103,7 +103,7 @@ class McpToolRegistrationTests {
 	void typedOperationRegistrationRetainsEventualOutputContractAndRequiresTasks()
 			throws Exception {
 		McpToolRegistration<Arguments> registration =
-				McpToolRegistration.withName("reports.generate")
+				McpToolRegistration.withName("reports.generate", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.operationHandler((request, arguments, features) -> {
 							assertEquals("exact",
@@ -127,19 +127,19 @@ class McpToolRegistrationTests {
 		assertTrue(registration.isTaskRequired());
 
 		McpToolRegistration<Arguments> alwaysComplete =
-				McpToolRegistration.withName("reports.inline")
+				McpToolRegistration.withName("reports.inline", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.handler((request, arguments, features) ->
 								new Result(List.of()))
 						.build();
 		McpToolRegistration<Arguments> dynamic =
-				McpToolRegistration.withName("reports.dynamic")
+				McpToolRegistration.withName("reports.dynamic", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpTaskCreatedResult.<Result>fromTaskId("task-2"))
 						.build();
 		McpToolRegistration<Arguments> typedInlineOperation =
-				McpToolRegistration.withName("reports.inline-operation")
+				McpToolRegistration.withName("reports.inline-operation", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.inlineOperationHandler((request, arguments, features) ->
 								McpCompleteResult.fromToolErrorText(
@@ -159,11 +159,11 @@ class McpToolRegistrationTests {
 		assertTrue(assertInstanceOf(McpToolOutput.class,
 				inlineError.getPayload()).isError());
 		assertThrows(NullPointerException.class, () ->
-				McpToolRegistration.withName("null-task-handler")
+				McpToolRegistration.withName("null-task-handler", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.operationHandler(null));
 		assertThrows(NullPointerException.class, () ->
-				McpToolRegistration.withName("null-inline-operation-handler")
+				McpToolRegistration.withName("null-inline-operation-handler", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.inlineOperationHandler(null));
 	}
@@ -171,7 +171,7 @@ class McpToolRegistrationTests {
 	@Test
 	void mirroredHeadersArePublishedAndRejectedOutsideTheirInputContract() {
 		McpToolRegistration<MirroredArguments> registration =
-				McpToolRegistration.withName("mirrored")
+				McpToolRegistration.withName("mirrored", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(MirroredArguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
@@ -192,16 +192,16 @@ class McpToolRegistrationTests {
 				.find("x-mcp-header").isEmpty());
 
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("invalid-header-name")
+				() -> McpToolRegistration.withName("invalid-header-name", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(InvalidHeaderName.class));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("duplicate-header-name")
+				() -> McpToolRegistration.withName("duplicate-header-name", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(DuplicateHeaders.class));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("nonprimitive-header")
+				() -> McpToolRegistration.withName("nonprimitive-header", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(NonprimitiveHeader.class));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("mirrored-output")
+				() -> McpToolRegistration.withName("mirrored-output", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(MirroredArguments.class, MirroredOutput.class));
 	}
 
@@ -212,21 +212,21 @@ class McpToolRegistrationTests {
 		TypeReference<List<Item>> results =
 				new TypeReference<>() {};
 
-		assertEquals(Result.class, McpToolRegistration.withName("one")
+		assertEquals(Result.class, McpToolRegistration.withName("one", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, Result.class)
 				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getOutputType().orElseThrow());
-		assertEquals(results.getType(), McpToolRegistration.withName("two")
+		assertEquals(results.getType(), McpToolRegistration.withName("two", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, results)
 				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
-		assertEquals(argumentType.getType(), McpToolRegistration.withName("three")
+		assertEquals(argumentType.getType(), McpToolRegistration.withName("three", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(argumentType, Result.class)
 				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getArgumentType());
-		assertEquals(results.getType(), McpToolRegistration.withName("four")
+		assertEquals(results.getType(), McpToolRegistration.withName("four", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(argumentType, results)
 				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
@@ -236,7 +236,7 @@ class McpToolRegistrationTests {
 	void advancedAndRawRegistrationsUseTheirSelectedArgumentModels()
 			throws Exception {
 		McpToolRegistration<Arguments> advanced =
-				McpToolRegistration.withName("advanced")
+				McpToolRegistration.withName("advanced", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
@@ -244,7 +244,7 @@ class McpToolRegistrationTests {
 						.structuredContentMirroredAsText(false)
 						.build();
 		McpToolRegistration<McpJsonObject> raw =
-				McpToolRegistration.withName("raw")
+				McpToolRegistration.withName("raw", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolStructuredContent(
@@ -252,13 +252,13 @@ class McpToolRegistrationTests {
 						.build();
 		McpJsonObject input = argumentsJson();
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
-				.withName("advanced-null-mirror")
+				.withName("advanced-null-mirror", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(Arguments.class)
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
 				.structuredContentMirroredAsText(null));
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
-				.withName("typed-null-mirror")
+				.withName("typed-null-mirror", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentAndOutputTypes(Arguments.class, Result.class)
 				.handler((request, arguments, features) -> new Result(List.of()))
 				.structuredContentMirroredAsText(null));
@@ -287,20 +287,20 @@ class McpToolRegistrationTests {
 	@Test
 	void validatesNamesTypesArgumentsAndHandlerResultsSynchronously() {
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName(""));
+				() -> McpToolRegistration.withName("", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("contains spaces"));
+				() -> McpToolRegistration.withName("contains spaces", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("a".repeat(129)));
+				() -> McpToolRegistration.withName("a".repeat(129), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("bad-input")
+				() -> McpToolRegistration.withName("bad-input", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(String.class));
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("bad-output")
+				() -> McpToolRegistration.withName("bad-output", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, String.class));
 
 		McpToolRegistration<Arguments> nullResult =
-				McpToolRegistration.withName("null-result")
+				McpToolRegistration.withName("null-result", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentAndOutputTypes(Arguments.class, Result.class)
 						.handler((request, arguments, features) -> null)
 						.build();
@@ -314,7 +314,7 @@ class McpToolRegistrationTests {
 		IllegalArgumentException expectedApplicationFailure =
 				new IllegalArgumentException("application failure");
 		McpToolRegistration<Arguments> registration =
-				McpToolRegistration.withName("failure-classification")
+				McpToolRegistration.withName("failure-classification", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) -> {
 							throw expectedApplicationFailure;
@@ -365,7 +365,7 @@ class McpToolRegistrationTests {
 				.build();
 		AtomicReference<McpJsonObject> decodedArguments = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> registration =
-				McpToolRegistration.withName("conformance_schema")
+				McpToolRegistration.withName("conformance_schema", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.inputSchema(inputSchema)
 						.handler((request, arguments, features) -> {
 							decodedArguments.set(arguments.getConvertedArguments());
@@ -404,7 +404,7 @@ class McpToolRegistrationTests {
 				.put("unknown-keyword", true)
 				.build();
 		assertThrows(IllegalArgumentException.class,
-				() -> McpToolRegistration.withName("unsupported_schema")
+				() -> McpToolRegistration.withName("unsupported_schema", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.inputSchema(unsupportedSchema));
 	}
 
@@ -413,7 +413,7 @@ class McpToolRegistrationTests {
 		McpRateLimiter direct =
 				context -> McpRateLimitDecision.allowed();
 		McpToolRegistration<Arguments> named =
-				McpToolRegistration.withName("named")
+				McpToolRegistration.withName("named", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
@@ -421,7 +421,7 @@ class McpToolRegistrationTests {
 						.rateLimiterName("distributed")
 						.build();
 		McpToolRegistration<Arguments> directLast =
-				McpToolRegistration.withName("direct")
+				McpToolRegistration.withName("direct", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
@@ -435,7 +435,7 @@ class McpToolRegistrationTests {
 		assertSame(direct, directLast.getRateLimiter().orElseThrow());
 		assertTrue(directLast.getRateLimiterName().isEmpty());
 		assertThrows(IllegalArgumentException.class, () ->
-				McpToolRegistration.withName("blank-limiter")
+				McpToolRegistration.withName("blank-limiter", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
@@ -505,8 +505,8 @@ class McpToolRegistrationTests {
 			}
 
 			@Override
-			public String getProtocolVersion() {
-				return "2026-07-28";
+			public McpProtocolVersion getProtocolVersion() {
+				return McpProtocolVersion.V2026_07_28;
 			}
 
 			@Override

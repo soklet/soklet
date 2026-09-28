@@ -40,6 +40,7 @@ import com.soklet.McpLocalizationContext;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
+import com.soklet.McpProtocolVersion;
 import com.soklet.McpTask;
 import com.soklet.McpTaskEventPublisher;
 import com.soklet.McpTaskNotFoundException;
@@ -1166,8 +1167,11 @@ public final class McpServerRuntimeBridge {
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
 		Set<McpResourceNotificationType> notificationTypes =
 				EnumSet.noneOf(McpResourceNotificationType.class);
+		boolean subscriptionsEnabled = !publicEndpoint
+				.getSubscriptionProtocolVersions().isEmpty();
 		Optional<McpSubscriptionEventSource> resourceSubscriptionEventSource =
-				publicEndpoint.getSubscriptionConfig().map(configuration -> {
+				(subscriptionsEnabled ? publicEndpoint.getSubscriptionConfig()
+						: Optional.<McpSubscriptionConfig>empty()).map(configuration -> {
 					for (McpSubscriptionNotificationType notificationType
 							: configuration.getNotificationTypes())
 						notificationTypes.add(switch (notificationType) {
@@ -1183,7 +1187,8 @@ public final class McpServerRuntimeBridge {
 					return toInternal(configuration);
 				});
 		Optional<McpSubscriptionEventSource> taskSubscriptionEventSource =
-				endpointPlan.taskManagerAdapter()
+				(subscriptionsEnabled ? endpointPlan.taskManagerAdapter()
+						: Optional.<TaskManagerAdapter>empty())
 						.flatMap(TaskManagerAdapter::taskEventPublisher)
 						.map(McpServerRuntimeBridge::toInternal);
 		List<McpSubscriptionEventSource> subscriptionEventSources =
@@ -1191,7 +1196,7 @@ public final class McpServerRuntimeBridge {
 		resourceSubscriptionEventSource.ifPresent(
 				subscriptionEventSources::add);
 		taskSubscriptionEventSource.ifPresent(subscriptionEventSources::add);
-		if (endpointPlan.catalogLocalizer().isPresent()) {
+		if (subscriptionsEnabled && endpointPlan.catalogLocalizer().isPresent()) {
 			// The framework publisher is an endpoint-local supplemental source that
 			// rides the same generation, filter, coalescing, and shutdown machinery as
 			// application resource and task publishers.
@@ -1378,6 +1383,8 @@ public final class McpServerRuntimeBridge {
 						"Duplicate MCP Completion reference.");
 		}
 		McpNormalizedEndpoint endpoint = endpointBuilder.build();
+		Map<String, McpNormalizedEndpoint> revisionEndpoints =
+				revisionEndpoints(endpoint, publicEndpoint);
 
 		McpProtocolAdmissionController protocolAdmissionController = context -> {
 			AdmissionInput input = new AdmissionInput(context.request(), publicEndpoint,
@@ -1455,7 +1462,7 @@ public final class McpServerRuntimeBridge {
 					applicationRouter,
 					McpRuntimeObservationSink.disabledInstance(),
 					subscriptionEventSources,
-					endpointPlan.taskManagerAdapter());
+					endpointPlan.taskManagerAdapter(), revisionEndpoints);
 
 		RequestObservationAdapter observationAdapter =
 				requestObservationAdapter.orElseThrow();
@@ -1549,7 +1556,130 @@ public final class McpServerRuntimeBridge {
 		};
 		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
 				applicationRouter, observationSink, subscriptionEventSources,
-				endpointPlan.taskManagerAdapter());
+				endpointPlan.taskManagerAdapter(), revisionEndpoints);
+	}
+
+	/**
+	 * Builds immutable exact-revision catalog views from one shared application
+	 * router. The transport selects one view before admission or dispatch.
+	 */
+	@NonNull
+	private static Map<String, McpNormalizedEndpoint> revisionEndpoints(
+			@NonNull McpNormalizedEndpoint complete,
+			@NonNull McpEndpoint publicEndpoint) {
+		Map<String, McpNormalizedEndpoint> views = new LinkedHashMap<>();
+		for (McpProtocolVersion version : publicEndpoint.getProtocolVersions()) {
+			if (version == McpProtocolVersion.V2025_03_26)
+				throw new IllegalArgumentException(
+						"MCP 2025-03-26 is not implemented by the HTTP compatibility adapter.");
+			McpNormalizedEndpoint.Builder view =
+					McpNormalizedEndpoint.withServerInformation(
+							complete.serverInformation())
+							.serverInformationIncluded(
+								complete.serverInformationIncluded())
+							.discoveryCachePolicy(complete.discoveryCachePolicy())
+							.discoveryMetadata(complete.discoveryMetadata())
+							.resourceListCachePolicy(complete.resourceListCachePolicy())
+							.resourceTemplateListCachePolicy(
+								complete.resourceTemplateListCachePolicy())
+							.maximumCursorSizeInBytes(
+								complete.maximumCursorSizeInBytes());
+			complete.instructions().ifPresent(view::instructions);
+			complete.catalogAccessAdapter().ifPresent(view::catalogAccessAdapter);
+
+			Map<String, com.soklet.McpToolRegistration<?>> toolsByName =
+					new LinkedHashMap<>();
+			for (com.soklet.McpToolRegistration<?> tool
+					: publicEndpoint.getToolRegistrations())
+				toolsByName.put(tool.getName(), tool);
+			for (McpNormalizedOperation operation : complete.tools()) {
+				com.soklet.McpToolRegistration<?> tool =
+						toolsByName.get(operation.name());
+				if (tool == null && version != McpProtocolVersion.V2026_07_28)
+					continue;
+				if (tool != null && !tool.getProtocolVersions().contains(version))
+					continue;
+				boolean appsOnRevision = tool != null && tool.getAppToolMetadata()
+							.map(metadata -> metadata.getProtocolVersions()
+									.contains(version)).orElse(false);
+					if (appsOnRevision || operation.toolDescriptor().isEmpty())
+						view.tool(operation);
+					else
+						view.tool(McpNormalizedOperation.tool(
+								McpServerCapabilityRegistry.withoutAppPresentation(
+										operation.toolDescriptor().orElseThrow()),
+								operation.inputRequestPlan(),
+								operation.mirroredHeaderPlan()));
+				}
+
+			// The first 2025 adapter deliberately serves synchronous tools only.
+			// These other surfaces become selectable only with their own adapters.
+			if (version == McpProtocolVersion.V2026_07_28) {
+				List<com.soklet.McpPromptRegistration> prompts =
+						publicEndpoint.getPromptRegistrations();
+				Map<String, com.soklet.McpPromptRegistration> promptsByName =
+						new LinkedHashMap<>();
+				for (com.soklet.McpPromptRegistration prompt : prompts)
+					promptsByName.put(prompt.getName(), prompt);
+				for (McpNormalizedOperation prompt : complete.prompts()) {
+					com.soklet.McpPromptRegistration registration =
+							promptsByName.get(prompt.name());
+					if (registration == null
+							|| registration.getProtocolVersions().contains(version))
+						view.prompt(prompt);
+				}
+
+				List<com.soklet.McpResourceRegistration> resources =
+						publicEndpoint.getResourceRegistrations();
+				Map<String, com.soklet.McpResourceRegistration> resourcesByAddress =
+						new LinkedHashMap<>();
+				for (com.soklet.McpResourceRegistration resource : resources)
+					resourcesByAddress.put(resource.getAddressType()
+							== com.soklet.McpResourceAddressType.URI
+							? resource.getUri().orElseThrow().toString()
+							: resource.getUriTemplate().orElseThrow(), resource);
+				for (McpNormalizedOperation resource : complete.exactResources())
+					if (resourcesByAddress.get(resource.name()) == null
+							|| resourcesByAddress.get(resource.name())
+									.getProtocolVersions().contains(version))
+						view.exactResource(resource.resourceDescriptor().orElseThrow(),
+								resource.inputRequestPlan());
+				for (McpNormalizedOperation resource : complete.resourceTemplates())
+					if (resourcesByAddress.get(resource.name()) == null
+							|| resourcesByAddress.get(resource.name())
+									.getProtocolVersions().contains(version))
+						view.resourceTemplate(
+								resource.resourceTemplateDescriptor().orElseThrow(),
+								resource.inputRequestPlan());
+
+				if (complete.customResourceListHandler()
+						&& (publicEndpoint.getResourceListHandler().isEmpty()
+								|| publicEndpoint.getResourceListHandlerProtocolVersions()
+										.contains(version)))
+					view.customResourceListHandler();
+				boolean completionSupported = prompts.stream().anyMatch(prompt ->
+						prompt.getCompletionProtocolVersions().contains(version))
+						|| resources.stream().anyMatch(resource ->
+								resource.getCompletionProtocolVersions().contains(version))
+						|| (complete.completionSupported()
+							&& prompts.isEmpty() && resources.isEmpty());
+				view.completionSupported(completionSupported);
+				if (publicEndpoint.getSubscriptionProtocolVersions().contains(version))
+					complete.subscriptionConfig().ifPresent(view::subscriptionConfig);
+				if (complete.skillsPlan().isPresent()) {
+					view.skillsPlan(complete.skillsPlan().orElseThrow());
+					view.serverExtension(SKILLS_EXTENSION_IDENTIFIER,
+							com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+				}
+				if (publicEndpoint.getTaskProtocolVersions().contains(version)
+						&& complete.serverExtensions().containsKey(
+								TASKS_EXTENSION_IDENTIFIER))
+					view.serverExtension(TASKS_EXTENSION_IDENTIFIER,
+							complete.serverExtensions().get(TASKS_EXTENSION_IDENTIFIER));
+			}
+			views.put(version.getWireValue(), view.build());
+		}
+		return java.util.Collections.unmodifiableMap(views);
 	}
 
 	@NonNull
@@ -3444,6 +3574,7 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public record RateLimitInput(@NonNull Request request,
 			@NonNull McpEndpoint endpoint,
+			@NonNull String protocolVersion,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull RateLimitTarget target,
 			@NonNull String jsonRpcMethod,
@@ -3451,6 +3582,7 @@ public final class McpServerRuntimeBridge {
 		public RateLimitInput {
 			requireNonNull(request);
 			requireNonNull(endpoint);
+			requireNonNull(protocolVersion);
 			requireNonNull(admissionIdentity);
 			requireNonNull(target);
 			jsonRpcMethod = McpProtocolSupport.requireNonBlank(
@@ -3958,6 +4090,11 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpInputRequestPlan inputRequestPlan) {
 		requireNonNull(invocation);
 		requireNonNull(inputRequestPlan);
+		// The 2025 compatibility path serves a single JSON response. A legacy
+		// progress token must not turn tools/call into an SSE response.
+		if (McpLegacyHttpWire.isLegacyRevision(
+				selectedProtocolRevision(invocation)))
+			return Optional.empty();
 		McpRequestMetadata requestMetadata = invocation.request().params().metadata();
 		Optional<McpProgressToken> progressToken = requestMetadata.progressToken();
 		if (progressToken.isEmpty()
@@ -4955,6 +5092,7 @@ public final class McpServerRuntimeBridge {
 			case TOOL -> RateLimitTarget.TOOL;
 		};
 		return new RateLimitInput(context.request(), publicEndpoint,
+				context.protocolVersion(),
 				toPublic(context.admissionIdentity().admittedIdentity()), target,
 				context.jsonRpcMethod(), context.operationName());
 	}

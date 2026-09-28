@@ -221,11 +221,11 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 		McpEndpoint.Builder endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"subscription-authorization-terminal-test", "4.0.0")
-						.build())
-				.subscriptionConfig(subscriptions)
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI,
-								"Subscription authorization terminal resource")
+								"Subscription authorization terminal resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, read, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(

@@ -166,7 +166,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -187,7 +187,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"extension-compatibility-test", "4.0.0").build())
+						"extension-compatibility-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
@@ -269,7 +269,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		List<McpAdmissionContext> admissions = new CopyOnWriteArrayList<>();
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -280,7 +280,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				})
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"tasks-compatibility-test", "4.0.0").build())
+						"tasks-compatibility-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = server(endpoint, context -> {
@@ -337,7 +337,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-capability-test", "4.0.0").build())
+						"tasks-capability-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -378,7 +379,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		List<McpRequestContext> observedRequestContexts =
 				new CopyOnWriteArrayList<>();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					observedRequestContexts.add(request);
@@ -388,7 +389,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.structuredContentMirroredAsText(false)
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("tasks.control.prompt")
+				.withName("tasks.control.prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, arguments, features) -> {
 					observedPromptTaskCreationContexts.add(features.getTaskCreationContext());
 					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
@@ -399,7 +400,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-control-test", "4.0.0").build())
+						"tasks-control-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.build();
@@ -426,7 +428,14 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			configuredSoklet.close();
 		}
 
-		McpServer unconfiguredServer = taskCreationContextServer(endpoint, Optional.empty());
+		McpEndpoint unconfiguredEndpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion(
+						"tasks-control-test", "4.0.0").build(),
+				java.util.Set.of(McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(tool))
+				.promptRegistrations(java.util.List.of(prompt))
+				.build();
+		McpServer unconfiguredServer = taskCreationContextServer(unconfiguredEndpoint, Optional.empty());
 		Soklet unconfiguredSoklet = managedSoklet(unconfiguredServer);
 		try {
 			unconfiguredSoklet.start();
@@ -476,7 +485,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		List<Optional<McpTaskCreationContext>> observedTaskCreationContexts =
 				new CopyOnWriteArrayList<>();
 		McpToolRegistration<TaskCreationContextArguments> tool = McpToolRegistration
-				.withName(toolName)
+				.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.argumentType(TaskCreationContextArguments.class)
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
@@ -485,7 +494,8 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"tasks-typed-control-test", "4.0.0").build())
+						"tasks-typed-control-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
@@ -643,7 +653,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 
 	private static McpServer server(McpAdmissionController admissionController) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"extension-compatibility-test", "4.0.0").build())
+						"extension-compatibility-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return server(endpoint, admissionController,
 				McpHandlerInterceptor.passThroughInstance());

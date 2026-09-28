@@ -323,21 +323,21 @@ class McpSkillPolicyEvaluatorTests {
 		return McpSkillGroup.fromKeyAndSkillRegistrations(key, List.of(registrations));
 	}
 	private static McpEndpoint endpoint(List<McpSkillRegistration> registrations, List<McpSkillGroup> groups) {
-		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build())
+		return McpEndpoint.withPath("/skills", McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.skillRegistrations(registrations).skillGroups(groups).build();
 	}
 	private static McpSkillRegistration skill(String name, Locale locale) { return variant(name, "version", locale); }
 	private static McpSkillRegistration variant(String name, String prefix, Locale locale) {
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host/" + prefix + "/" + name + "/SKILL.md"), McpSkillBundle.fromFiles(Map.of("SKILL.md", root(name))));
+				URI.create("skill://host/" + prefix + "/" + name + "/SKILL.md"), McpSkillBundle.fromFiles(Map.of("SKILL.md", root(name))), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}
 	private static List<McpSkillRegistration> family() {
 		return List.of(McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/parent/SKILL.md"),
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", root("parent"), "child/SKILL.md", root("child")))).build(),
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root("parent"), "child/SKILL.md", root("child"))), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build(),
 				McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host/parent/child/SKILL.md"),
-						McpSkillBundle.fromFiles(Map.of("SKILL.md", root("child")))).build());
+						McpSkillBundle.fromFiles(Map.of("SKILL.md", root("child"))), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build());
 	}
 	private static byte[] root(String name) {
 		return ("---\nname: " + name + "\ndescription: Test description\n---\nOriginal bytes.\n").getBytes(StandardCharsets.UTF_8);

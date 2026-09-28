@@ -77,7 +77,7 @@ class McpRequestPropagationTests {
 
 		AtomicBoolean invoked = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> registration =
-				McpToolRegistration.withName("propagation")
+				McpToolRegistration.withName("propagation", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((handlerRequest, arguments, features) -> {
 							assertEquals(traceContext,
@@ -189,7 +189,7 @@ class McpRequestPropagationTests {
 	private static McpEndpoint endpoint() {
 		return McpEndpoint.withPath("/mcp", McpImplementation
 						.withNameAndVersion("test-server", "1")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 	}
 }

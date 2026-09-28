@@ -362,12 +362,12 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	private static McpEndpoint endpoint(String serverName,
 			McpToolHandler<McpJsonObject> handler) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler(handler)
 				.build();
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						serverName, "4.0.0").build())
+						serverName, "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 	}

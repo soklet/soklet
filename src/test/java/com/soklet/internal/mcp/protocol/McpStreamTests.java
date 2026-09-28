@@ -94,7 +94,7 @@ public class McpStreamTests {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromElicitationUrl(McpInputRequirement.REQUIRED);
 		McpToolRegistration<com.soklet.McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					features.find(McpProgressReporter.class).ifPresent(reporter ->
@@ -110,7 +110,7 @@ public class McpStreamTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Stream test resource")
+				.withUriAndName(RESOURCE_URI, "Stream test resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) ->
 						McpCompleteResult.fromResourceOutput(
 								McpResourceOutput.withContent(McpTextResourceContents
@@ -119,10 +119,10 @@ public class McpStreamTests {
 										.build()))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"stream-test", "4.0.0").build())
+						"stream-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.resourceRegistrations(java.util.List.of(resource))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.subscriptionAuthorizer((context, features) ->

@@ -42,7 +42,7 @@ public class McpProtocolProfileMetricsTests {
 			throws Exception {
 		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"profile-metrics-test", "4.0.0").build())
+						"profile-metrics-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.host(HOST)

@@ -83,15 +83,15 @@ public class McpPublicApiReflectionContractTests {
 			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 168;
+	private static final int PHASE_FOUR_TYPE_COUNT = 169;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
 	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 294;
+	private static final int CURRENT_MCP_TYPE_COUNT = 295;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"87c330ed965a54db0e0a0fcdf5f2f6a60ca398091157364c4f25496feba6647c";
+			"a6b33a86b5db5d0e5fe9bb66eccac7c1e0b88876ae64cac990f0454953d2a276";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"a90379f987dd745bf305b11668b7da224c88990373f749a2fe6644003ea80226";
+			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"c5583ef492ffb4b8305bb7d6e590821b27361e0dbe0a7d11c9e39e74dbbdc29b";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -156,6 +156,7 @@ public class McpPublicApiReflectionContractTests {
 							List.of("LIGHT", "DARK")),
 					Map.entry("com.soklet.McpJsonNull", List.of("INSTANCE")),
 					Map.entry("com.soklet.McpOperationType", List.of(
+							"INITIALIZE", "NOTIFICATIONS_INITIALIZED", "PING",
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
 							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
@@ -163,6 +164,9 @@ public class McpPublicApiReflectionContractTests {
 							"COMPLETION_COMPLETE",
 							"SUBSCRIPTIONS_LISTEN", "TASKS_GET", "TASKS_UPDATE",
 							"TASKS_CANCEL", "NOTIFICATIONS_CANCELED", "OTHER")),
+					Map.entry("com.soklet.McpProtocolVersion", List.of(
+							"V2025_03_26", "V2025_06_18", "V2025_11_25",
+							"V2026_07_28")),
 					Map.entry("com.soklet.McpRateLimitTarget",
 							List.of("REQUEST", "TOOL")),
 					Map.entry("com.soklet.McpResourceAddressType",
@@ -346,9 +350,11 @@ public class McpPublicApiReflectionContractTests {
 				.getAnnotatedReturnType()).getAnnotatedActualTypeArguments()[0], NonNull.class));
 
 		assertRequiredFactory(McpSkillRegistration.class.getMethod("withUriAndSkillBundle", URI.class,
-				McpSkillBundle.class), McpSkillRegistration.Builder.class, "uri", "skillBundle");
+				McpSkillBundle.class, Set.class), McpSkillRegistration.Builder.class,
+				"uri", "skillBundle", "protocolVersions");
 		assertGetter(McpSkillRegistration.class, "getUri", URI.class);
 		assertGetter(McpSkillRegistration.class, "getSkillBundle", McpSkillBundle.class);
+		assertGetter(McpSkillRegistration.class, "getProtocolVersions", Set.class);
 		assertGetter(McpSkillRegistration.class, "getCachePolicy", McpCachePolicy.class);
 		assertNonNullOptionalPayload(McpSkillRegistration.class.getMethod("getLocale"), Locale.class);
 		Method resources = McpSkillRegistration.class.getMethod("getResources");
@@ -548,14 +554,19 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertArrayEquals(new Class<?>[]{Exception.class}, handle.getExceptionTypes());
 		assertNonNullOptionalPayload(McpEndpoint.class.getMethod("getSkillListHandler"), McpSkillListHandler.class);
 		assertGetter(McpEndpoint.class, "getSkillListCachePolicy", McpCachePolicy.class);
-		for (Map.Entry<String, Class<?>> entry : Map.<String, Class<?>>of("skillListHandler", McpSkillListHandler.class,
-				"skillListCachePolicy", McpCachePolicy.class).entrySet()) {
-			Method setter = assertInstanceMethod(McpEndpoint.Builder.class, entry.getKey(), McpEndpoint.Builder.class,
-					MethodShape.CONCRETE, false, entry.getValue());
-			assertParameterNames(setter, entry.getKey());
-			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedReturnType(), NonNull.class));
-			Assertions.assertTrue(hasExactNullness(setter.getAnnotatedParameterTypes()[0], Nullable.class));
-		}
+		Method skillListHandlerSetter = assertInstanceMethod(McpEndpoint.Builder.class,
+				"skillListHandler", McpEndpoint.Builder.class,
+				MethodShape.CONCRETE, false, McpSkillListHandler.class, Set.class);
+		assertParameterNames(skillListHandlerSetter, "skillListHandler", "protocolVersions");
+		Assertions.assertTrue(hasExactNullness(skillListHandlerSetter.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(skillListHandlerSetter.getAnnotatedParameterTypes()[0], Nullable.class));
+		Assertions.assertTrue(hasExactNullness(skillListHandlerSetter.getAnnotatedParameterTypes()[1], NonNull.class));
+		Method skillListCacheSetter = assertInstanceMethod(McpEndpoint.Builder.class,
+				"skillListCachePolicy", McpEndpoint.Builder.class,
+				MethodShape.CONCRETE, false, McpCachePolicy.class);
+		assertParameterNames(skillListCacheSetter, "skillListCachePolicy");
+		Assertions.assertTrue(hasExactNullness(skillListCacheSetter.getAnnotatedReturnType(), NonNull.class));
+		Assertions.assertTrue(hasExactNullness(skillListCacheSetter.getAnnotatedParameterTypes()[0], Nullable.class));
 		Method cursor = assertInstanceMethod(McpLocalizationRequest.class, "getSkillListCursor", Optional.class,
 				MethodShape.ABSTRACT, false);
 		assertNonNullOptionalPayload(cursor, String.class);
@@ -573,7 +584,7 @@ public class McpPublicApiReflectionContractTests {
 				McpSkillPage.Builder.class, Set.of("skillRegistrations", "metadata", "nextCursor", "cacheTimeToLiveOverride", "build"),
 				McpSkillListContext.class, Set.of("getCursor", "getInitialSkillRegistrations", "toString"),
 				McpSkillListHandler.class, Set.of("handle"),
-				McpSkillRegistration.class, Set.of("withUriAndSkillBundle", "getUri", "getSkillBundle",
+				McpSkillRegistration.class, Set.of("withUriAndSkillBundle", "getUri", "getSkillBundle", "getProtocolVersions",
 						"getLocale", "getCachePolicy", "getResources", "equals", "hashCode", "toString"),
 				McpSkillRegistration.Builder.class, Set.of("locale", "cachePolicy", "build"),
 				McpSkillRegistration.Resource.class, Set.of("getUri", "getDigest", "getSizeInBytes",
@@ -587,6 +598,62 @@ public class McpPublicApiReflectionContractTests {
 			for (Method method : exported)
 				Assertions.assertFalse(method.toGenericString().contains("com.soklet.internal."));
 		}
+	}
+
+	@Test
+	public void exactProtocolVersionApiRequiresExplicitBindings() throws Exception {
+		Assertions.assertArrayEquals(new McpProtocolVersion[] {
+				McpProtocolVersion.V2025_03_26,
+				McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25,
+				McpProtocolVersion.V2026_07_28
+		}, McpProtocolVersion.values());
+		assertGetter(McpProtocolVersion.class, "getWireValue", String.class);
+		assertRequiredFactory(McpEndpoint.class.getMethod("withPath", String.class,
+				McpImplementation.class, Set.class), McpEndpoint.Builder.class,
+				"path", "implementation", "protocolVersions");
+		assertRequiredFactory(McpToolRegistration.class.getMethod("withName",
+				String.class, Set.class), McpToolRegistration.ArgumentTypeStage.class,
+				"name", "protocolVersions");
+		assertRequiredFactory(McpPromptRegistration.class.getMethod("withName",
+				String.class, Set.class), McpPromptRegistration.HandlerStage.class,
+				"name", "protocolVersions");
+		assertRequiredFactory(McpResourceRegistration.class.getMethod("withUriAndName",
+				URI.class, String.class, Set.class), McpResourceRegistration.ExactHandlerStage.class,
+				"uri", "name", "protocolVersions");
+		assertRequiredFactory(McpResourceRegistration.class.getMethod("withUriTemplateAndName",
+				String.class, String.class, Set.class), McpResourceRegistration.TemplateHandlerStage.class,
+				"uriTemplate", "name", "protocolVersions");
+		assertRequiredFactory(McpAppToolMetadata.class.getMethod("withProtocolVersions",
+				Set.class), McpAppToolMetadata.Builder.class, "protocolVersions");
+		for (Class<?> type : List.of(McpEndpoint.class, McpToolRegistration.class,
+				McpPromptRegistration.class, McpResourceRegistration.class,
+				McpSkillRegistration.class, McpAppToolMetadata.class))
+			assertGetter(type, "getProtocolVersions", Set.class);
+		for (String getter : List.of("getTaskProtocolVersions",
+				"getSubscriptionProtocolVersions",
+				"getResourceListHandlerProtocolVersions",
+				"getSkillListHandlerProtocolVersions"))
+			assertGetter(McpEndpoint.class, getter, Set.class);
+		assertGetter(McpPromptRegistration.class, "getCompletionProtocolVersions", Set.class);
+		assertGetter(McpResourceRegistration.class, "getCompletionProtocolVersions", Set.class);
+		for (Class<?> type : List.of(McpRequestContext.class, McpAdmissionContext.class,
+				McpRateLimitContext.class))
+			assertInstanceMethod(type, "getProtocolVersion", McpProtocolVersion.class,
+					MethodShape.ABSTRACT, false);
+		assertGetter(McpRequestStateProtectionContext.class, "getProtocolVersion",
+				McpProtocolVersion.class);
+		for (String method : List.of("taskProtocolVersions", "subscriptionProtocolVersions"))
+			assertParameterNames(McpEndpoint.Builder.class.getMethod(method, Set.class),
+					"protocolVersions");
+		for (String method : List.of("resourceListHandler", "skillListHandler"))
+			assertParameterNames(Arrays.stream(McpEndpoint.Builder.class.getMethods())
+					.filter(candidate -> candidate.getName().equals(method)).findFirst().orElseThrow(),
+					method, "protocolVersions");
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpToolRegistration.class.getMethod("withName", String.class));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpAppToolMetadata.class.getMethod("builder"));
 	}
 
 	@Test
@@ -756,8 +823,7 @@ public class McpPublicApiReflectionContractTests {
 						"serverInfoIncluded", "instructions",
 						"toolRegistrations", "promptRegistrations", "resourceRegistrations",
 						"skillRegistrations", "skillGroups",
-						"skillListHandler", "skillListCachePolicy",
-						"resourceListCachePolicy", "resourceListHandler",
+						"skillListCachePolicy", "resourceListCachePolicy",
 						"resourceTemplateListCachePolicy", "subscriptionConfig",
 						"toolRateLimiter", "toolRateLimiterName"),
 				McpProtectionConfig.Builder.class, Set.of(
@@ -850,9 +916,9 @@ public class McpPublicApiReflectionContractTests {
 				"isPromptAccessible", McpRequestContext.class, McpPromptRegistration.class,
 				McpInvocationFeatures.class), "requestContext", "promptRegistration", "invocationFeatures");
 		Method endpoint = McpEndpoint.class.getMethod("withPath", String.class,
-				McpImplementation.class);
+				McpImplementation.class, Set.class);
 		assertRequiredFactory(endpoint, McpEndpoint.Builder.class,
-				"path", "implementation");
+				"path", "implementation", "protocolVersions");
 		Method resourceOutput = McpResourceOutput.class.getMethod("withContent",
 				McpResourceContents.class);
 		assertRequiredFactory(resourceOutput, McpResourceOutput.Builder.class,
@@ -1516,7 +1582,7 @@ public class McpPublicApiReflectionContractTests {
 				McpRequestStateProtectionContext.class,
 				List.of("endpointPath", "protocolVersion", "jsonRpcMethod",
 						"associatedData"),
-				String.class, String.class, String.class, byte[].class);
+				String.class, McpProtocolVersion.class, String.class, byte[].class);
 		assertFactory(McpSubscriptionAuthorization.class, "deniedInstance",
 				McpSubscriptionAuthorization.Denied.class, List.of());
 		assertFactory(McpSubscriptionAuthorization.Allowed.class,

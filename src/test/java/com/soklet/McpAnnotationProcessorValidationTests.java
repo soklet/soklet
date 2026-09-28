@@ -55,6 +55,243 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
 @ThreadSafe
 public class McpAnnotationProcessorValidationTests {
 	@Test
+	void generatesEndpointWithExplicitDualEraToolAndModernFeatureGates() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.VersionedEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.McpPromptOutput;
+						import com.soklet.annotation.McpPrompt;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = {McpProtocolVersion.V2025_11_25,
+						        McpProtocolVersion.V2026_07_28},
+						    taskProtocolVersions = McpProtocolVersion.V2026_07_28,
+						    subscriptionProtocolVersions = McpProtocolVersion.V2026_07_28)
+						public final class VersionedEndpoint {
+						  @McpTool(name = "search",
+						      protocolVersions = {McpProtocolVersion.V2025_11_25,
+						          McpProtocolVersion.V2026_07_28})
+						  public Result search() { return new Result("ok"); }
+						  @McpPrompt(name = "suggest",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public McpPromptOutput suggest() { return null; }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).succeeded();
+	}
+
+	@Test
+	void generatesAppsAssociationWithMatchingResourceRevision() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.VersionedAppsEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpAppTool;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = McpProtocolVersion.V2026_07_28)
+						public final class VersionedAppsEndpoint {
+						  @McpTool(name = "app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  @McpAppTool(resourceUri = "ui://example/app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public Result app() { return new Result("ok"); }
+						  @McpResource(uri = "ui://example/app", name = "app",
+						      mimeType = "text/html;profile=mcp-app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public McpResourceOutput ui() { return null; }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).succeeded();
+	}
+
+	@Test
+	void rejectsEmptyAndDuplicateEndpointProtocolRevisions() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.InvalidVersions", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.annotation.McpServerEndpoint;
+						@McpServerEndpoint(path = "/empty", name = "empty", version = "1",
+						    protocolVersions = {})
+						public final class InvalidVersions {}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpServerEndpoint protocolVersions must name at least one MCP protocol revision")
+				.inFile(source);
+
+		JavaFileObject duplicate = JavaFileObjects.forSourceString(
+				"example.DuplicateVersions", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.annotation.McpServerEndpoint;
+						@McpServerEndpoint(path = "/duplicate", name = "duplicate", version = "1",
+						    protocolVersions = {McpProtocolVersion.V2026_07_28,
+						        McpProtocolVersion.V2026_07_28})
+						public final class DuplicateVersions {}
+						""");
+		Compilation duplicateCompilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(duplicate);
+		assertThat(duplicateCompilation).failed();
+		assertThat(duplicateCompilation).hadErrorContaining(
+				"@McpServerEndpoint protocolVersions must not contain duplicate revisions")
+				.inFile(duplicate);
+	}
+
+	@Test
+	void rejectsToolRevisionOutsideEndpointAndUnimplementedResourceAdapter() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.VersionSubsetEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						import com.soklet.annotation.McpResource;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = McpProtocolVersion.V2026_07_28)
+						public final class VersionSubsetEndpoint {
+						  @McpTool(name = "legacy",
+						      protocolVersions = McpProtocolVersion.V2025_11_25)
+						  public Result legacy() { return new Result("ok"); }
+						  @McpResource(uri = "test://example", name = "example",
+						      protocolVersions = McpProtocolVersion.V2025_11_25)
+						  public McpResourceOutput resource() { return null; }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpTool protocolVersions must be a subset of @McpServerEndpoint protocolVersions")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpResource currently supports only MCP protocol revision 2026-07-28")
+				.inFile(source);
+	}
+
+	@Test
+	void rejectsTaskToolWithoutMatchingEndpointGate() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.TaskGateEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.McpTaskCreatedResult;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = McpProtocolVersion.V2026_07_28)
+						public final class TaskGateEndpoint {
+						  @McpTool(name = "task",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public McpTaskCreatedResult<Result> task() { return null; }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"task-only @McpTool protocolVersions must be a subset")
+				.inFile(source);
+	}
+
+	@Test
+	void rejectsAppsAssociationWithoutMatchingUiResource() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.AppsVersionsEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpAppTool;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = McpProtocolVersion.V2026_07_28)
+						public final class AppsVersionsEndpoint {
+						  @McpTool(name = "app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  @McpAppTool(resourceUri = "ui://example/app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public Result app() { return new Result("ok"); }
+						  @McpResource(uri = "ui://example/other", name = "app",
+						      mimeType = "text/html;profile=mcp-app",
+						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public McpResourceOutput ui() { return null; }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpAppTool resourceUri requires an exact @McpResource")
+				.inFile(source);
+	}
+
+	@Test
+	void rejectsAppsRevisionOutsideOwningTool() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.AppsToolSubsetEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.annotation.McpAppTool;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = {McpProtocolVersion.V2025_11_25,
+						        McpProtocolVersion.V2026_07_28})
+						public final class AppsToolSubsetEndpoint {
+						  @McpTool(name = "legacy",
+						      protocolVersions = McpProtocolVersion.V2025_11_25)
+						  @McpAppTool(protocolVersions = McpProtocolVersion.V2026_07_28)
+						  public Result legacy() { return new Result("ok"); }
+						  public record Result(String value) {}
+						}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpAppTool protocolVersions must be a subset of @McpTool protocolVersions")
+				.inFile(source);
+	}
+
+	@Test
+	void rejectsUnsupportedOldRevisionAtEndpoint() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.OldRevisionEndpoint", """
+						package example;
+						import com.soklet.McpProtocolVersion;
+						import com.soklet.annotation.McpServerEndpoint;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+						    protocolVersions = McpProtocolVersion.V2025_03_26)
+						public final class OldRevisionEndpoint {}
+						""");
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpServerEndpoint protocol revision 2025-03-26 is not supported")
+				.inFile(source);
+	}
+	@Test
 	void rejectsInheritedClasspathMcpOperationsOnTheEndpointElement(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Path baseSource = temporaryDirectory.resolve(
@@ -81,11 +318,11 @@ public class McpAnnotationProcessorValidationTests {
 				import com.soklet.annotation.McpResourceList;
 				import com.soklet.annotation.McpTool;
 				public class BaseOperations {
-				  @McpTool(name = "tool") public Result tool() { return null; }
-				  @McpPrompt(name = "prompt") public McpPromptOutput prompt() { return null; }
-				  @McpResource(uri = "test://resource", name = "resource")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "tool") public Result tool() { return null; }
+				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt") public McpPromptOutput prompt() { return null; }
+				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://resource", name = "resource")
 				  public McpResourceOutput resource() { return null; }
-				  @McpResourceList public McpResourcePage resources() { return null; }
+				  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28) public McpResourcePage resources() { return null; }
 				  public record Result(String value) {}
 				}
 				""", StandardCharsets.UTF_8);
@@ -98,7 +335,7 @@ public class McpAnnotationProcessorValidationTests {
 		Files.writeString(endpointSource, """
 				package example;
 				import com.soklet.annotation.McpServerEndpoint;
-				@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 				public final class InheritedEndpoint extends IntermediateOperations {
 				  @Override public BaseOperations.PromptResult prompt() { return null; }
 				}
@@ -171,9 +408,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpTool;
 						import com.soklet.annotation.McpToolArgument;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InaccessibleEndpoint {
-						  @McpTool(name = "hidden")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "hidden")
 						  public Hidden hidden(@McpToolArgument Hidden input) {
 						    return input;
 						  }
@@ -204,9 +441,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ThrowableEndpoint {
-						  @McpTool(name = "invalid")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid")
 						  public Result invalid() throws Throwable {
 						    return new Result("value");
 						  }
@@ -234,9 +471,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class VoidToolEndpoint {
-						  @McpTool(name = "task-like")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "task-like")
 						  public void taskLike() {}
 						}
 						""");
@@ -261,9 +498,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class OperationResultToolEndpoint {
-						  @McpTool(name = "task-like")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "task-like")
 						  public McpOperationResult taskLike() { return null; }
 						}
 						""");
@@ -318,9 +555,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class MisplacedHeaderEndpoint {
-						  @McpTool(name = "invalid")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid")
 						  public Result invalid(@McpHeader(name = "Tenant") String tenant) {
 						    return new Result(tenant);
 						  }
@@ -350,28 +587,28 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpTool;
 						import com.soklet.annotation.McpToolArgument;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidMirroredHeadersEndpoint {
-						  @McpTool(name = "invalid-token")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid-token")
 						  public Result invalidToken(
 						      @McpToolArgument @McpHeader(name = "bad name") String value) {
 						    return new Result(value);
 						  }
 
-						  @McpTool(name = "duplicate-headers")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "duplicate-headers")
 						  public Result duplicateHeaders(
 						      @McpToolArgument @McpHeader(name = "Tenant") String first,
 						      @McpToolArgument @McpHeader(name = "tenant") boolean second) {
 						    return new Result(first + second);
 						  }
 
-						  @McpTool(name = "invalid-scalar")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid-scalar")
 						  public Result invalidScalar(
 						      @McpToolArgument @McpHeader(name = "Ratio") double ratio) {
 						    return new Result(Double.toString(ratio));
 						  }
 
-						  @McpTool(name = "output-placement")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "output-placement")
 						  public InvalidOutput outputPlacement(
 						      @McpToolArgument String value) {
 						    return new InvalidOutput(value);
@@ -411,9 +648,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpTool;
 						import com.soklet.annotation.McpToolArgument;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class DuplicateArgumentsEndpoint {
-						  @McpTool(name = "duplicate")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "duplicate")
 						  public Result duplicate(
 						      @McpToolArgument(name = %s) String first,
 						      @McpToolArgument(name = %s) String second) {
@@ -453,9 +690,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class DeepEndpoint {
-						  @McpTool(name = "deep")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "deep")
 						  public Node0 deep() { return null; }
 						%s
 						}
@@ -482,9 +719,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import java.util.Optional;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidPromptEndpoint {
-						  @McpPrompt(name = "invalid")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "invalid")
 						  public String invalid(
 						      @McpPromptArgument Integer wrongType,
 						      String missingAnnotation,
@@ -544,9 +781,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpToolArgument;
 						import java.util.Optional;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvocationFeatureEndpoint {
-						  @McpTool(name = "tool")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "tool")
 						  public Result tool(
 						      McpRequestContext request,
 						      CancelationToken cancelationToken,
@@ -556,7 +793,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return new Result(value);
 						  }
 
-						  @McpPrompt(name = "prompt")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt")
 						  public McpPromptOutput prompt(
 						      McpInvocationFeatures features,
 						      Optional<McpProgressReporter> progressReporter,
@@ -565,7 +802,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return McpPromptOutput.fromMessages();
 						  }
 
-						  @McpResource(uri = "test://resource", name = "resource")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://resource", name = "resource")
 						  public McpResourceOutput resource(
 						      McpResourceReadContext resource,
 						      CancelationToken cancelationToken,
@@ -575,7 +812,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return null;
 						  }
 
-						  @McpResourceList
+						  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 						  public McpResourcePage resources(
 						      CancelationToken cancelationToken,
 						      McpResourceListContext list,
@@ -618,9 +855,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpToolArgument;
 						import java.util.Optional;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidInvocationFeatureEndpoint {
-						  @McpTool(name = "tool")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "tool")
 						  public Result tool(
 						      CancelationToken firstCancelation,
 						      CancelationToken secondCancelation,
@@ -631,7 +868,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return new Result("tool");
 						  }
 
-						  @McpPrompt(name = "prompt")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "prompt")
 						  public McpPromptOutput prompt(
 						      CancelationToken firstCancelation,
 						      CancelationToken secondCancelation,
@@ -642,7 +879,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return McpPromptOutput.fromMessages();
 						  }
 
-						  @McpResource(uri = "test://resource", name = "resource")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://resource", name = "resource")
 						  public McpResourceOutput resource(
 						      CancelationToken firstCancelation,
 						      CancelationToken secondCancelation,
@@ -653,7 +890,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return null;
 						  }
 
-						  @McpResourceList
+						  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 						  public McpResourcePage resources(
 						      McpResourceListContext list,
 						      CancelationToken firstCancelation,
@@ -721,28 +958,28 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class DuplicatePromptEndpoint {
-						  @McpPrompt(name = "same")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "same")
 						  public McpPromptOutput first(
 						      @McpPromptArgument String value) {
 						    return McpPromptOutput.fromMessages();
 						  }
 
-						  @McpPrompt(name = "same")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "same")
 						  public McpPromptOutput second() {
 						    return McpPromptOutput.fromMessages();
 						  }
 
-						  @McpPrompt(name = "duplicate-arguments")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "duplicate-arguments")
 						  public McpPromptOutput duplicateArguments(
 						      @McpPromptArgument(name = "duplicate") String first,
 						      @McpPromptArgument(name = "duplicate") String second) {
 						    return McpPromptOutput.fromMessages();
 						  }
 
-						  @McpPrompt(name = "both")
-						  @McpTool(name = "both")
+						  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "both")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "both")
 						  public McpPromptOutput both() {
 						    return McpPromptOutput.fromMessages();
 						  }
@@ -774,9 +1011,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidResourceEndpoint {
-						  @McpResource(
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 						      uri = "test://items/{identifier}",
 						      name = "invalid",
 						      sizeInBytes = 1,
@@ -790,7 +1027,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return "invalid";
 						  }
 
-						  @McpResource(uri = "test://exact", name = "exact")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://exact", name = "exact")
 						  public com.soklet.McpResourceOutput exact(
 						      @McpResourceUriParameter String undeclared) {
 						    return null;
@@ -846,7 +1083,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 						    path = "/mcp",
 						    name = "test",
 						    version = "1",
@@ -854,10 +1091,10 @@ public class McpAnnotationProcessorValidationTests {
 						    resourceListCacheTimeToLiveInMilliseconds = -1,
 						    resourceTemplateListCacheTimeToLiveInMilliseconds = -1)
 						public final class InvalidAnnotationProperties {
-						  @McpTool(name = "tool", rateLimiterName = " ")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "tool", rateLimiterName = " ")
 						  public String tool() { return "tool"; }
 
-						  @McpResource(
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
 						      uri = "test://resource",
 						      name = "resource",
 						      cacheTimeToLiveInMilliseconds = -1)
@@ -901,35 +1138,35 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidResourceContractsEndpoint {
-						  @McpResource(uri = "relative", name = "relative")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "relative", name = "relative")
 						  public McpResourceOutput relative() { return null; }
 
-						  @McpResource(uri = "test://items/{first}{second}", name = "adjacent")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/{first}{second}", name = "adjacent")
 						  public McpResourceOutput adjacent() { return null; }
 
-						  @McpResource(uri = "test://duplicate", name = "first")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://duplicate", name = "first")
 						  public McpResourceOutput first() { return null; }
 
-						  @McpResource(uri = "test://duplicate", name = "second")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://duplicate", name = "second")
 						  public McpResourceOutput second() { return null; }
 
-						  @McpResourceList
+						  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 						  public McpResourcePage firstList(McpResourceListContext list) {
 						    return null;
 						  }
 
-						  @McpResourceList
+						  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 						  public McpResourcePage secondList(McpResourceListContext list) {
 						    return null;
 						  }
 
-						  @McpResourceList
+						  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
 						  public String invalidList() { return "invalid"; }
 
-						  @McpResource(uri = "test://both", name = "both")
-						  @McpTool(name = "both")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://both", name = "both")
+						  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "both")
 						  public McpResourceOutput both() { return null; }
 						}
 						""");
@@ -968,18 +1205,18 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ExactResourceUriEndpoint {
-						  @McpResource(uri = "test://items/%FF", name = "opaque-octet")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/%FF", name = "opaque-octet")
 						  public McpResourceOutput opaqueOctet() { return null; }
 
-						  @McpResource(uri = "test://items/café", name = "unicode")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/café", name = "unicode")
 						  public McpResourceOutput unicode() { return null; }
 
-						  @McpResource(uri = "test://items/%GG", name = "bad-percent")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/%GG", name = "bad-percent")
 						  public McpResourceOutput badPercent() { return null; }
 
-						  @McpResource(uri = "test://items/a/../b", name = "not-normalized")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/a/../b", name = "not-normalized")
 						  public McpResourceOutput notNormalized() { return null; }
 						}
 						""");
@@ -1005,12 +1242,12 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class EquivalentExactResourceUriEndpoint {
-						  @McpResource(uri = "CATALOG://ITEMS/a%2Fb", name = "first")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "CATALOG://ITEMS/a%2Fb", name = "first")
 						  public McpResourceOutput first() { return null; }
 
-						  @McpResource(uri = "catalog://items/a%2fb", name = "second")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://items/a%2fb", name = "second")
 						  public McpResourceOutput second() { return null; }
 						}
 						""");
@@ -1032,13 +1269,13 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class CaseDistinctResourceTemplateEndpoint {
-						  @McpResource(uri = "CATALOG://ITEMS/{id}", name = "upper")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "CATALOG://ITEMS/{id}", name = "upper")
 						  public McpResourceOutput upper(
 						      @McpResourceUriParameter String id) { return null; }
 
-						  @McpResource(uri = "catalog://items/{slug}", name = "lower")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://items/{slug}", name = "lower")
 						  public McpResourceOutput lower(
 						      @McpResourceUriParameter String slug) { return null; }
 						}
@@ -1062,9 +1299,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class UnicodeResourceTemplateEndpoint {
-						  @McpResource(uri = "test://items/café/{id}", name = "unicode")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/café/{id}", name = "unicode")
 						  public McpResourceOutput unicode(
 						      @McpResourceUriParameter String id) { return null; }
 						}
@@ -1095,13 +1332,13 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class CanonicalUnicodeResourceTemplateEndpoint {
-						  @McpResource(uri = "test://items/café/{id}", name = "raw")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/café/{id}", name = "raw")
 						  public McpResourceOutput raw(
 						      @McpResourceUriParameter String id) { return null; }
 
-						  @McpResource(uri = "test://items/caf%c3%a9/{slug}", name = "encoded")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/caf%c3%a9/{slug}", name = "encoded")
 						  public McpResourceOutput encoded(
 						      @McpResourceUriParameter String slug) { return null; }
 						}
@@ -1128,36 +1365,36 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class InvalidResourceTemplateLiteralsEndpoint {
-						  @McpResource(uri = "test://h/bad'/{value}", name = "apostrophe")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad'/{value}", name = "apostrophe")
 						  public McpResourceOutput apostrophe(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad path/{value}", name = "space")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad path/{value}", name = "space")
 						  public McpResourceOutput space(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad" + '"' + "/{value}", name = "quote")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad" + '"' + "/{value}", name = "quote")
 						  public McpResourceOutput quote(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad</{value}", name = "left-angle")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad</{value}", name = "left-angle")
 						  public McpResourceOutput leftAngle(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad>/{value}", name = "right-angle")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad>/{value}", name = "right-angle")
 						  public McpResourceOutput rightAngle(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad" + (char) 92 + "/{value}", name = "backslash")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad" + (char) 92 + "/{value}", name = "backslash")
 						  public McpResourceOutput backslash(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad^/{value}", name = "caret")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad^/{value}", name = "caret")
 						  public McpResourceOutput caret(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad`/{value}", name = "grave")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad`/{value}", name = "grave")
 						  public McpResourceOutput grave(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad|/{value}", name = "pipe")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad|/{value}", name = "pipe")
 						  public McpResourceOutput pipe(@McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/bad" + (char) 9 + "/{value}", name = "control")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/bad" + (char) 9 + "/{value}", name = "control")
 						  public McpResourceOutput control(@McpResourceUriParameter String value) { return null; }
 						}
 						""");
@@ -1184,13 +1421,13 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class DisjointResourceTemplateEndpoint {
-						  @McpResource(uri = "test://h/{value}", name = "parent")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/{value}", name = "parent")
 						  public McpResourceOutput parent(
 						      @McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/{child}/details", name = "child")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/{child}/details", name = "child")
 						  public McpResourceOutput child(
 						      @McpResourceUriParameter String child) { return null; }
 						}
@@ -1211,13 +1448,13 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class EncodedDelimiterResourceTemplateEndpoint {
-						  @McpResource(uri = "test://h/{value}", name = "all")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/{value}", name = "all")
 						  public McpResourceOutput all(
 						      @McpResourceUriParameter String value) { return null; }
 
-						  @McpResource(uri = "test://h/{prefix}%2fdetails", name = "encoded")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://h/{prefix}%2fdetails", name = "encoded")
 						  public McpResourceOutput encoded(
 						      @McpResourceUriParameter String prefix) { return null; }
 						}
@@ -1373,17 +1610,17 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class OverlappingResourceEndpoint {
-						  @McpResource(uri = "test://items/{id}", name = "by-id")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/{id}", name = "by-id")
 						  public McpResourceOutput byId(
 						      @McpResourceUriParameter String id) { return null; }
 
-						  @McpResource(uri = "test://items/{slug}", name = "by-slug")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/{slug}", name = "by-slug")
 						  public McpResourceOutput bySlug(
 						      @McpResourceUriParameter String slug) { return null; }
 
-						  @McpResource(uri = "test://items/fixed", name = "fixed")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/fixed", name = "fixed")
 						  public McpResourceOutput fixed() { return null; }
 						}
 						""");
@@ -1413,9 +1650,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class PercentEncodedResourceEndpoint {
-						  @McpResource(uri = "test://items/{%6Eame.part}", name = "encoded")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/{%6Eame.part}", name = "encoded")
 						  public McpResourceOutput read(
 						      @McpResourceUriParameter(name = "%6Eame.part") String value) {
 						    return null;
@@ -1440,9 +1677,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/resource", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/resource", name = "test", version = "1")
 						public final class GeneratedResourceEndpoint {
-						  @McpResource(uri = "test://generated", name = "generated")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://generated", name = "generated")
 						  public McpResourceOutput read() throws GeneratedException {
 						    return null;
 						  }
@@ -1477,9 +1714,9 @@ public class McpAnnotationProcessorValidationTests {
 				import com.soklet.annotation.McpTool;
 				import com.soklet.annotation.McpToolArgument;
 
-				@McpServerEndpoint(path = "/generated", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/generated", name = "test", version = "1")
 				public final class GeneratedEndpoint {
-				  @McpTool(name = "generated")
+				  @McpTool(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "generated")
 				  public Envelope generated(
 				      @McpToolArgument GeneratedDto input)
 				      throws GeneratedException {
@@ -1540,9 +1777,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ResourceTemplateVariableCountEndpoint {
-						  @McpResource(uri = "%s", name = "many")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "many")
 						  public McpResourceOutput many(
 						      %s) { return null; }
 						}
@@ -1558,7 +1795,7 @@ public class McpAnnotationProcessorValidationTests {
 
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "%s", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "%s", name = "test", version = "1")
 						public final class EndpointPathBoundEndpoint {}
 						""".formatted(path));
 		return Compiler.javac().withProcessors(new SokletProcessor())
@@ -1576,9 +1813,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ResourceTemplateBoundEndpoint {
-						  @McpResource(uri = "%s", name = "bounded")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "bounded")
 						  public McpResourceOutput read(
 						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
@@ -1604,9 +1841,9 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ExactResourceBoundEndpoint {
-						  @McpResource(uri = "%s", name = "bounded"%s)
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "bounded"%s)
 						  public McpResourceOutput read() { return null; }
 						}
 						""".formatted(uri, sizeDeclaration));
@@ -1620,7 +1857,7 @@ public class McpAnnotationProcessorValidationTests {
 			String variable = "value" + index;
 			methods.append("""
 
-					  @McpResource(uri = "test:///route-%d/{%s}", name = "resource-%d")
+					  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test:///route-%d/{%s}", name = "resource-%d")
 					  public McpResourceOutput resource%d(
 					      @McpResourceUriParameter(name = "%s") String value) {
 					    return null;
@@ -1636,7 +1873,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ResourceTemplateCountEndpoint {
 						%s
 						}
@@ -1657,15 +1894,15 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ResourceTemplateOverlapBoundEndpoint {
-						  @McpResource(uri = "%s", name = "left")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "left")
 						  public McpResourceOutput left(
 						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
 						  }
 
-						  @McpResource(uri = "%s", name = "right")
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "right")
 						  public McpResourceOutput right(
 						      @McpResourceUriParameter(name = "%s") String value) {
 						    return null;
@@ -1687,7 +1924,7 @@ public class McpAnnotationProcessorValidationTests {
 					+ (char) ('A' + index);
 			methods.append("""
 
-					  @McpResource(uri = "%s", name = "resource-%d")
+					  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "%s", name = "resource-%d")
 					  public McpResourceOutput resource%d(
 					      @McpResourceUriParameter(name = "%s") String value) {
 					    return null;
@@ -1703,7 +1940,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.annotation.McpResourceUriParameter;
 						import com.soklet.annotation.McpServerEndpoint;
 
-						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
 						public final class ResourceTemplateOverlapSetEndpoint {
 						%s
 						}

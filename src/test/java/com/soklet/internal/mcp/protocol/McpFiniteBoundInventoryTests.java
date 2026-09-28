@@ -647,7 +647,7 @@ public class McpFiniteBoundInventoryTests {
 	private static McpServer.Builder publicServerBuilder() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion(
-						"finite-bound-inventory-tests", "4.0.0").build())
+						"finite-bound-inventory-tests", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		return McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)));
 	}

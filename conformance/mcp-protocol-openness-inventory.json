@@ -431,6 +431,24 @@
     },
     {
       "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Accepted notification names remain explicit; legacy initialization and cancellation follow revision-specific validation and shared admission. A new notification kind requires a reviewed profile and transport-policy update; unknown names remain rejected.",
+      "conformanceRows": [
+        "MCP-BASE-002",
+        "MCP-HTTP-025"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-060",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processNotification",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "processNotification",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
       "compatibleOptionalMemberBehavior": "A compatible HTTP or CORS preflight surface requires an explicit transport-policy widening; an authorizer cannot add methods or request headers outside Soklet's MCP allowlist.",
       "conformanceRows": [
         "SOK-CORS-003",

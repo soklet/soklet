@@ -334,7 +334,7 @@ final class SokletApplicationObservationTests {
 			}
 		};
 		McpEndpoint mcpEndpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"mixed-observation-test", "4.0.0").build())
+						"mixed-observation-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(http)
 				.sseServer(SseServer.withPort(0).build())
@@ -1019,7 +1019,7 @@ final class SokletApplicationObservationTests {
 	private static SokletConfig realMixedTransportConfig(
 			@NonNull LifecycleObserver observer) {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
-						"observation-test", "4.0.0").build())
+						"observation-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer mcpServer = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

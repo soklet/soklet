@@ -100,3 +100,17 @@ final class McpProductionProtocolProfiles {
 	private McpProductionProtocolProfiles() {
 	}
 }
+
+/** Opt-in 2025 HTTP adapter profiles, separate from the frozen 2026 evidence. */
+@ThreadSafe
+final class McpCompatibilityProtocolProfiles {
+	@NonNull
+	static final McpProtocolProfileRegistry REGISTRY =
+			new McpProtocolProfileRegistry(List.of(
+					Mcp20260728ProtocolProfile.INSTANCE,
+					Mcp2025ProtocolProfile.JUNE_18,
+					Mcp2025ProtocolProfile.NOVEMBER_25));
+
+	private McpCompatibilityProtocolProfiles() {
+	}
+}

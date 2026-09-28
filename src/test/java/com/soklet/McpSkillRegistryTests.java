@@ -125,9 +125,9 @@ class McpSkillRegistryTests {
 	void groupReplacementIndexesEveryLocaleWithoutSelectingOrTranslatingIt() {
 		McpSkillBundle bundle = registration("guide").getSkillBundle();
 		McpSkillRegistration english = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/en/guide/SKILL.md"), bundle).locale(Locale.ENGLISH).build();
+				URI.create("skill://host.invalid/en/guide/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).locale(Locale.ENGLISH).build();
 		McpSkillRegistration german = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/de/guide/SKILL.md"), bundle).locale(Locale.GERMAN).build();
+				URI.create("skill://host.invalid/de/guide/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).locale(Locale.GERMAN).build();
 		McpSkillGroup group = McpSkillGroup.fromKeyAndSkillRegistrations("guide", List.of(german, english));
 		McpEndpoint original = builder("/selected").build();
 		McpEndpoint endpoint = new McpEndpointRegistry(Map.of(SelectedEndpoint.class, original))
@@ -143,9 +143,9 @@ class McpSkillRegistryTests {
 
 	@Test
 	void skillsAndSubscriptionOverlaysPreserveEveryOtherEndpointValueInEveryOrder() {
-		McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName("tool").jsonObjectArguments()
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName("tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
 				.handler((request, arguments, features) -> { throw new AssertionError("Must not invoke"); }).build();
-		McpPromptRegistration prompt = McpPromptRegistration.withName("prompt")
+		McpPromptRegistration prompt = McpPromptRegistration.withName("prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, arguments, features) -> { throw new AssertionError("Must not invoke"); }).build();
 		McpResourceRegistration resource = resource("test://ordinary");
 		McpSkillGroup group = McpSkillGroup.fromKeyAndSkillRegistrations("group", List.of(registration("grouped")));
@@ -155,11 +155,13 @@ class McpSkillRegistryTests {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 				McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)).build();
 		McpSkillRegistration skill = registration("single");
-		McpEndpoint original = builder("/selected").serverInfoIncluded(false).instructions("Instructions")
+		McpEndpoint original = builder("/selected")
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.serverInfoIncluded(false).instructions("Instructions")
 				.toolRegistrations(List.of(tool)).promptRegistrations(List.of(prompt)).resourceRegistrations(List.of(resource))
-				.skillGroups(List.of(group("previous-group"))).skillListHandler(skillList)
+				.skillGroups(List.of(group("previous-group"))).skillListHandler(skillList, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.skillListCachePolicy(McpCachePolicy.fromPublicTimeToLive(Duration.ofSeconds(3)))
-				.resourceListHandler(resourceList)
+				.resourceListHandler(resourceList, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(Duration.ofSeconds(5)))
 				.resourceTemplateListCachePolicy(McpCachePolicy.fromPublicTimeToLive(Duration.ofSeconds(7)))
 				.toolRateLimiter(limiter).build();
@@ -285,7 +287,7 @@ class McpSkillRegistryTests {
 	void replacementRevalidatesExactAndTemplateResourceCollisions() {
 		McpSkillRegistration skill = registration("collision");
 		McpResourceRegistration template = McpResourceRegistration.withUriTemplateAndName(
-				"skill://host.invalid/collision/{file}", "template")
+				"skill://host.invalid/collision/{file}", "template", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> { throw new AssertionError("Must not invoke"); }).build();
 		for (McpResourceRegistration resource : List.of(resource(skill.getUri().toString()),
 				resource("skill://host.invalid/collision/support.txt"), template)) {
@@ -309,7 +311,7 @@ class McpSkillRegistryTests {
 		McpEndpointRegistry registry = new McpEndpointRegistry(Map.of(SelectedEndpoint.class, endpoint));
 		assertThrows(IllegalStateException.class, () -> registry.withSkillRegistrations(SelectedEndpoint.class, List.of(member)));
 		McpSkillRegistration sameName = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/alternate/grouped/SKILL.md"), member.getSkillBundle()).build();
+				URI.create("skill://host.invalid/alternate/grouped/SKILL.md"), member.getSkillBundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		assertThrows(IllegalStateException.class, () -> registry.withSkillRegistrations(SelectedEndpoint.class, List.of(sameName)));
 		assertSame(endpoint, registry.getEndpoints().get(0));
 		assertEquals(List.of(member), endpoint.skillIndex().registrations());
@@ -321,7 +323,7 @@ class McpSkillRegistryTests {
 		McpEndpoint endpoint = builder("/selected").skillRegistrations(List.of(standalone)).build();
 		McpEndpointRegistry registry = new McpEndpointRegistry(Map.of(SelectedEndpoint.class, endpoint));
 		McpSkillRegistration sameName = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/alternate/standalone/SKILL.md"), standalone.getSkillBundle()).build();
+				URI.create("skill://host.invalid/alternate/standalone/SKILL.md"), standalone.getSkillBundle(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		for (McpSkillRegistration conflicting : List.of(standalone, sameName))
 			assertThrows(IllegalStateException.class, () -> registry.withSkillGroups(SelectedEndpoint.class,
 					List.of(McpSkillGroup.fromKeyAndSkillRegistrations("group", List.of(conflicting)))));
@@ -341,7 +343,7 @@ class McpSkillRegistryTests {
 		assertEquals(32, registry.withSkillRegistrations(SelectedEndpoint.class, skills.subList(0, 32))
 				.getEndpoints().get(0).getSkillRegistrations().size());
 		McpSkillListHandler handler = (request, context, features) -> { throw new AssertionError("Must not invoke"); };
-		McpEndpoint paged = builder("/selected").skillListHandler(handler).build();
+		McpEndpoint paged = builder("/selected").skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpEndpoint copied = new McpEndpointRegistry(Map.of(SelectedEndpoint.class, paged))
 				.withSkillRegistrations(SelectedEndpoint.class, skills).getEndpoints().get(0);
 		assertEquals(skills, copied.getSkillRegistrations());
@@ -360,7 +362,7 @@ class McpSkillRegistryTests {
 		assertEquals(32, registry.withSkillGroups(SelectedEndpoint.class, groups.subList(0, 32))
 				.getEndpoints().get(0).getSkillGroups().size());
 		McpSkillListHandler handler = (request, context, features) -> { throw new AssertionError("Must not invoke"); };
-		McpEndpoint paged = builder("/selected").skillListHandler(handler).build();
+		McpEndpoint paged = builder("/selected").skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpEndpoint copied = new McpEndpointRegistry(Map.of(SelectedEndpoint.class, paged))
 				.withSkillGroups(SelectedEndpoint.class, groups).getEndpoints().get(0);
 		assertEquals(groups, copied.getSkillGroups());
@@ -368,7 +370,7 @@ class McpSkillRegistryTests {
 	}
 
 	private static McpEndpoint.Builder builder(String path) {
-		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion("test", "1").build());
+		return McpEndpoint.withPath(path, McpImplementation.withNameAndVersion("test", "1").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 	}
 
 	private static McpSkillGroup group(String name) {
@@ -379,11 +381,11 @@ class McpSkillRegistryTests {
 		byte[] root = ("---\nname: " + name + "\ndescription: Synthetic description\n---\nOpaque body.\n")
 				.getBytes(StandardCharsets.UTF_8);
 		return McpSkillRegistration.withUriAndSkillBundle(URI.create("skill://host.invalid/" + name + "/SKILL.md"),
-				McpSkillBundle.fromFiles(Map.of("SKILL.md", root, "support.txt", new byte[]{65}))).build();
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", root, "support.txt", new byte[]{65})), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 
 	private static McpResourceRegistration resource(String uri) {
-		return McpResourceRegistration.withUriAndName(URI.create(uri), "ordinary")
+		return McpResourceRegistration.withUriAndName(URI.create(uri), "ordinary", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> { throw new AssertionError("Must not invoke"); }).build();
 	}
 

@@ -42,7 +42,7 @@ public class McpBuilderResetContractTests {
 				List.of(skillRegistration("third-skill", "third")));
 		McpSkillGroup secondGroup = McpSkillGroup.fromKeyAndSkillRegistrations("second-group",
 				List.of(skillRegistration("fourth-skill", "fourth")));
-		McpEndpoint.Builder builder = McpEndpoint.withPath("/skills", implementation());
+		McpEndpoint.Builder builder = McpEndpoint.withPath("/skills", implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		Assertions.assertTrue(builder.build().getSkillRegistrations().isEmpty());
 		Assertions.assertTrue(builder.build().getSkillGroups().isEmpty());
 
@@ -91,25 +91,25 @@ public class McpBuilderResetContractTests {
 		McpCachePolicy customCachePolicy =
 				McpCachePolicy.fromPublicTimeToLive(Duration.ofMinutes(1));
 
-		McpEndpoint replacedHandler = McpEndpoint.withPath("/mcp", implementation)
-				.resourceListHandler(firstHandler)
-				.resourceListHandler(secondHandler)
-				.skillListHandler(firstSkillHandler)
-				.skillListHandler(secondSkillHandler)
+		McpEndpoint replacedHandler = McpEndpoint.withPath("/mcp", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.resourceListHandler(firstHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.resourceListHandler(secondHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.skillListHandler(firstSkillHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.skillListHandler(secondSkillHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		Assertions.assertSame(secondHandler,
 				replacedHandler.getResourceListHandler().orElseThrow());
 		Assertions.assertSame(secondSkillHandler, replacedHandler.getSkillListHandler().orElseThrow());
 
-		McpEndpoint reset = McpEndpoint.withPath("/mcp", implementation)
+		McpEndpoint reset = McpEndpoint.withPath("/mcp", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.serverInfoIncluded(null)
 				.instructions("Custom instructions")
 				.instructions(null)
-				.resourceListHandler(firstHandler)
-				.resourceListHandler(null)
-				.skillListHandler(firstSkillHandler)
-				.skillListHandler(null)
+				.resourceListHandler(firstHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.resourceListHandler(null, java.util.Set.of())
+				.skillListHandler(firstSkillHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.skillListHandler(null, java.util.Set.of())
 				.skillListCachePolicy(customCachePolicy)
 				.skillListCachePolicy(null)
 				.resourceListCachePolicy(customCachePolicy)
@@ -134,7 +134,7 @@ public class McpBuilderResetContractTests {
 		Assertions.assertTrue(reset.getToolRateLimiter().isEmpty());
 
 		McpEndpoint namedThenDirect = McpEndpoint
-				.withPath("/named-then-direct", implementation)
+				.withPath("/named-then-direct", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRateLimiterName("named")
 				.toolRateLimiter(directLimiter)
 				.build();
@@ -143,7 +143,7 @@ public class McpBuilderResetContractTests {
 				namedThenDirect.getToolRateLimiter().orElseThrow());
 
 		McpEndpoint directThenNamed = McpEndpoint
-				.withPath("/direct-then-named", implementation)
+				.withPath("/direct-then-named", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRateLimiter(directLimiter)
 				.toolRateLimiterName("named")
 				.build();
@@ -152,7 +152,7 @@ public class McpBuilderResetContractTests {
 		Assertions.assertTrue(directThenNamed.getToolRateLimiter().isEmpty());
 
 		McpEndpoint namedClearedByDirectReset = McpEndpoint
-				.withPath("/named-cleared", implementation)
+				.withPath("/named-cleared", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRateLimiterName("named")
 				.toolRateLimiter(null)
 				.build();
@@ -162,7 +162,7 @@ public class McpBuilderResetContractTests {
 				namedClearedByDirectReset.getToolRateLimiter().isEmpty());
 
 		McpEndpoint directClearedByNamedReset = McpEndpoint
-				.withPath("/direct-cleared", implementation)
+				.withPath("/direct-cleared", implementation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRateLimiter(directLimiter)
 				.toolRateLimiterName(null)
 				.build();
@@ -175,7 +175,7 @@ public class McpBuilderResetContractTests {
 	@Test
 	public void serverOptionalAndDefaultedPropertiesResetAfterCustomization() {
 		McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(
-				List.of(McpEndpoint.withPath("/mcp", implementation()).build()));
+				List.of(McpEndpoint.withPath("/mcp", implementation(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()));
 		McpAdmissionController customAdmissionController =
 				context -> McpAdmissionDecision.accepted();
 		McpRateLimiter rateLimiter = context -> McpRateLimitDecision.allowed();
@@ -409,6 +409,6 @@ public class McpBuilderResetContractTests {
 				("---\nname: " + name + "\ndescription: Test skill\n---\nBody\n")
 						.getBytes(StandardCharsets.UTF_8)));
 		return McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/" + uriPart + "/" + name + "/SKILL.md"), bundle).build();
+				URI.create("skill://host.invalid/" + uriPart + "/" + name + "/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 	}
 }

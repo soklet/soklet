@@ -57,7 +57,7 @@ public class McpPromptPublicRuntimeTests {
 		AtomicReference<McpRequestContext> observedRequest =
 				new AtomicReference<>();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					stages.add("handler:" + PROMPT_NAME);
 					handlerInvocations.incrementAndGet();
@@ -96,7 +96,7 @@ public class McpPromptPublicRuntimeTests {
 				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
-						"prompt-public-runtime-test", "4.0.0").build())
+						"prompt-public-runtime-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(context -> {

@@ -591,7 +591,16 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull RequestStateProtectionInput input) {
 		requireNonNull(input);
 		return new McpRequestStateProtectionContext(input.endpointPath(),
-				input.protocolVersion(), input.method(), input.associatedData());
+				requireProtocolVersion(input.protocolVersion()), input.method(),
+				input.associatedData());
+	}
+
+	@NonNull
+	static McpProtocolVersion requireProtocolVersion(
+			@NonNull String wireValue) {
+		return McpProtocolVersion.fromWireValue(requireNonNull(wireValue))
+				.orElseThrow(() -> new IllegalArgumentException(
+						"Unsupported MCP protocol revision."));
 	}
 
 	private static void validateRequestStateProtection(
@@ -620,10 +629,12 @@ final class DefaultMcpServer implements McpServer {
 		if (subscriptionAuthorizerExplicitlyConfigured)
 			return;
 		boolean endpointSubscriptions = requireNonNull(endpointPlans).stream()
-				.anyMatch(endpointPlan -> endpointPlan.endpoint()
-						.getSubscriptionConfig().isPresent()
-						|| endpointPlan.catalogLocalizer().isPresent());
-		if (endpointSubscriptions || taskEventPublisher != null)
+				.anyMatch(endpointPlan -> !endpointPlan.endpoint()
+						.getSubscriptionProtocolVersions().isEmpty()
+						&& (endpointPlan.endpoint().getSubscriptionConfig().isPresent()
+								|| endpointPlan.catalogLocalizer().isPresent()
+								|| taskEventPublisher != null));
+		if (endpointSubscriptions)
 			throw new IllegalStateException(
 					"An MCP subscription authorizer must be explicitly configured when subscription support is enabled.");
 	}
@@ -974,8 +985,11 @@ final class DefaultMcpServer implements McpServer {
 	private Optional<@NonNull TaskManagerAdapter> taskManagerAdapter(
 			@NonNull McpEndpoint endpoint) {
 		McpTaskManager configuredTaskManager = this.taskManager;
-		if (configuredTaskManager == null)
+		if (endpoint.getTaskProtocolVersions().isEmpty())
 			return Optional.empty();
+		if (configuredTaskManager == null)
+			throw new IllegalStateException(
+					"An MCP endpoint declaring Tasks requires a configured task manager.");
 		return Optional.of(new TaskManagerAdapter() {
 			@Override
 			@NonNull
@@ -2562,7 +2576,8 @@ final class DefaultMcpServer implements McpServer {
 
 		McpJsonObject.Builder persistedState = McpJsonObject.builder()
 				.put("formatVersion", 1)
-				.put("protocolVersion", requestContext.getProtocolVersion())
+				.put("protocolVersion", requestContext.getProtocolVersion()
+						.getWireValue())
 				.put("endpointPath", requestContext.getEndpoint().getPath())
 				.put("operationType", "tools_call")
 				.put("operationName", tool.getName())
@@ -2626,6 +2641,8 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(requestContext);
 		return this.taskManager != null
 				&& "tools/call".equals(requestContext.getJsonRpcMethod())
+				&& requestContext.getEndpoint().getTaskProtocolVersions()
+						.contains(requestContext.getProtocolVersion())
 				&& requestContext.getClientCapabilities()
 						.findExtension(TASKS_EXTENSION_IDENTIFIER).isPresent();
 	}
@@ -4259,7 +4276,9 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 	@Override public @NonNull Optional<@NonNull McpRequestId> getRequestId() {
 		return this.input.requestId();
 	}
-	@Override public @NonNull String getProtocolVersion() { return this.input.protocolVersion(); }
+	@Override public @NonNull McpProtocolVersion getProtocolVersion() {
+		return DefaultMcpServer.requireProtocolVersion(this.input.protocolVersion());
+	}
 	@Override public @NonNull Optional<@NonNull String> getOperationName() {
 		return this.input.operationName();
 	}
@@ -4313,6 +4332,9 @@ final class DefaultMcpRateLimitContext implements McpRateLimitContext {
 
 	@Override public @NonNull Request getRequest() { return this.input.request(); }
 	@Override public @NonNull McpEndpoint getEndpoint() { return this.input.endpoint(); }
+	@Override public @NonNull McpProtocolVersion getProtocolVersion() {
+		return DefaultMcpServer.requireProtocolVersion(this.input.protocolVersion());
+	}
 	@Override public @NonNull McpAdmissionIdentity getAdmissionIdentity() {
 		return this.input.admissionIdentity();
 	}
@@ -4592,8 +4614,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	@Override public @NonNull Optional<@NonNull McpRequestId> getRequestId() {
 		return this.requestId;
 	}
-	@Override public @NonNull String getProtocolVersion() {
-		return this.protocolVersion;
+	@Override public @NonNull McpProtocolVersion getProtocolVersion() {
+		return DefaultMcpServer.requireProtocolVersion(this.protocolVersion);
 	}
 	@Override public @NonNull Optional<@NonNull String> getOperationName() {
 		return this.operationName;

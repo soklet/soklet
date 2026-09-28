@@ -167,13 +167,13 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
 						"subscription-authorization-scheduling-test", "4.0.0")
-						.build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("scheduling.probe")
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("scheduling.probe", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.build()))
-				.subscriptionConfig(subscriptions)
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		return McpServer.withPort(0)
 				.host(LOOPBACK)

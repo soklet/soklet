@@ -234,7 +234,7 @@ class McpLocalizationHttpBoundaryTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-http", "1.0")
 						.title("Canonical title")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceListCachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofSeconds(60)))
 				.resourceTemplateListCachePolicy(McpCachePolicy
@@ -243,9 +243,9 @@ class McpLocalizationHttpBoundaryTests {
 						McpResourcePage.builder()
 								.resourceDescriptors(list.getRegisteredResourceDescriptors())
 								.cacheTimeToLiveOverride(Duration.ofSeconds(75))
-								.build())
+								.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						URI.create("http://cache/text"), "text")
+						URI.create("http://cache/text"), "text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -257,7 +257,7 @@ class McpLocalizationHttpBoundaryTests {
 						.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 								Duration.ofSeconds(45)))
 						.build(), McpResourceRegistration.withUriAndName(
-						URI.create("http://cache/dynamic"), "dynamic")
+						URI.create("http://cache/dynamic"), "dynamic", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((resourceRequest, resource, features) -> {
 							Locale locale = features
 									.find(McpLocalizationContext.class)
@@ -275,7 +275,7 @@ class McpLocalizationHttpBoundaryTests {
 											.build());
 						})
 						.build(), McpResourceRegistration.withUriTemplateAndName(
-						"http://cache/item/{id}", "item")
+						"http://cache/item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((resourceRequest, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents
@@ -285,7 +285,7 @@ class McpLocalizationHttpBoundaryTests {
 														.build())
 												.build()))
 						.build()))
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("cache.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("cache.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((toolRequest, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))

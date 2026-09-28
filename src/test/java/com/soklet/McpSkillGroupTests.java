@@ -72,9 +72,9 @@ class McpSkillGroupTests {
 	void rejectsDuplicateUrisUsingUriEqualsRatherThanStringSpelling() {
 		McpSkillBundle bundle = bundle("test-skill");
 		McpSkillRegistration first = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("SKILL://HOST.invalid/test-skill/SKILL.md"), bundle).locale(Locale.ENGLISH).build();
+				URI.create("SKILL://HOST.invalid/test-skill/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).locale(Locale.ENGLISH).build();
 		McpSkillRegistration duplicate = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/test-skill/SKILL.md"), bundle).locale(Locale.FRENCH).build();
+				URI.create("skill://host.invalid/test-skill/SKILL.md"), bundle, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).locale(Locale.FRENCH).build();
 		assertThrows(IllegalArgumentException.class,
 				() -> McpSkillGroup.fromKeyAndSkillRegistrations("group", List.of(first, duplicate)));
 	}
@@ -120,7 +120,7 @@ class McpSkillGroupTests {
 
 	private static McpSkillRegistration registration(String name, String variant, Locale locale) {
 		McpSkillRegistration.Builder builder = McpSkillRegistration.withUriAndSkillBundle(
-				URI.create("skill://host.invalid/" + variant + "/" + name + "/SKILL.md"), bundle(name));
+				URI.create("skill://host.invalid/" + variant + "/" + name + "/SKILL.md"), bundle(name), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		if (locale != null) builder.locale(locale);
 		return builder.build();
 	}

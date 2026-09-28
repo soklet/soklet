@@ -65,7 +65,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName(TOOL_NAME)
+				.withName(TOOL_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					Assertions.assertSame(interceptorContexts.get("tools/call"),
@@ -77,7 +77,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName(PROMPT_NAME)
+				.withName(PROMPT_NAME, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					Assertions.assertSame(interceptorContexts.get("prompts/get"),
 							request);
@@ -91,7 +91,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				})
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(RESOURCE_URI, "Intercepted resource")
+				.withUriAndName(RESOURCE_URI, "Intercepted resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, read, features) -> {
 					Assertions.assertSame(interceptorContexts.get("resources/read"),
 							request);
@@ -103,7 +103,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-runtime-test", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.resourceRegistrations(java.util.List.of(resource))
@@ -116,7 +116,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					return McpResourcePage.builder()
 							.resourceDescriptors(list.getRegisteredResourceDescriptors())
 							.build();
-				})
+				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		expectedEndpoint.set(endpoint);
 		McpHandlerInterceptor innerInterceptor =
@@ -228,8 +228,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicInteger shortCircuitHandlerInvocations = new AtomicInteger();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-failure-test", "4.0.0")
-						.build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("short-circuit")
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("short-circuit", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.argumentType(RequiredArguments.class)
 						.handler((request, arguments, features) -> {
 							shortCircuitHandlerInvocations.incrementAndGet();
@@ -283,9 +283,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"static-resource-list-interception-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration
-						.withUriAndName(RESOURCE_URI, "Static resource")
+						.withUriAndName(RESOURCE_URI, "Static resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, read, features) ->
 								completeText(read.getUri(), "not-read"))
 						.build()))
@@ -320,14 +320,14 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"resource-interceptor-error-test",
-						"4.0.0").build())
+						"4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration
-						.withUriAndName(RESOURCE_URI, "Resource")
+						.withUriAndName(RESOURCE_URI, "Resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, read, features) ->
 								completeText(read.getUri(), "must-not-run"))
 						.build()))
 				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
+						McpResourcePage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, features, continuation) -> {
@@ -370,7 +370,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.put("kind", "prompt")
 				.build();
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-				.withName("intentional-tool-error")
+				.withName("intentional-tool-error", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) -> {
 					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
@@ -378,7 +378,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				})
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
-				.withName("intentional-prompt-error")
+				.withName("intentional-prompt-error", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) -> {
 					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
 							1_002, "Prompt precondition failed", promptData));
@@ -386,7 +386,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
-						"handler-json-rpc-error-test", "4.0.0").build())
+						"handler-json-rpc-error-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.toolRegistrations(java.util.List.of(tool))
 				.promptRegistrations(java.util.List.of(prompt))
 				.build();
@@ -426,10 +426,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 
 		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-continuation-runtime-test", "4.0.0")
-						.build());
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28));
 		List<McpToolRegistration<?>> toolRegistrations = new ArrayList<>();
 		for (String toolName : handlerInvocations.keySet()) {
-			toolRegistrations.add(McpToolRegistration.withName(toolName)
+			toolRegistrations.add(McpToolRegistration.withName(toolName, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 					.jsonObjectArguments()
 					.handler((request, arguments, features) -> {
 						handlerInvocations.get(toolName).incrementAndGet();
@@ -504,8 +504,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		CountDownLatch lateContinuationCompleted = new CountDownLatch(1);
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion(
 						"handler-interception-deadline-test", "4.0.0")
-						.build())
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("late")
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("late", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) -> {
 							handlerInvocations.incrementAndGet();
@@ -570,7 +570,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText(name + "-handled"))

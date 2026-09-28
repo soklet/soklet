@@ -38,6 +38,7 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderIndex;
+import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
 import com.soklet.internal.mcp.schema.McpTypeMirrorTypedSchemaBridge;
 import com.google.errorprone.annotations.FormatMethod;
@@ -1014,6 +1015,27 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		String name = annotationString(annotation, "name");
 		String version = annotationString(annotation, "version");
+		List<String> protocolVersions = validateMcpProtocolVersions(endpointType,
+				annotation, "@McpServerEndpoint", "protocolVersions", true);
+		validateMcpReleasedAdapterVersions(endpointType, "@McpServerEndpoint",
+				protocolVersions);
+		List<String> taskProtocolVersions = validateMcpProtocolVersions(endpointType,
+				annotation, "@McpServerEndpoint", "taskProtocolVersions", false);
+		List<String> subscriptionProtocolVersions = validateMcpProtocolVersions(
+				endpointType, annotation, "@McpServerEndpoint",
+				"subscriptionProtocolVersions", false);
+		validateMcpVersionSubset(endpointType, "@McpServerEndpoint taskProtocolVersions",
+				taskProtocolVersions, protocolVersions,
+				"@McpServerEndpoint protocolVersions");
+		validateMcpVersionSubset(endpointType,
+				"@McpServerEndpoint subscriptionProtocolVersions",
+				subscriptionProtocolVersions, protocolVersions,
+				"@McpServerEndpoint protocolVersions");
+		validateMcpModernOnlyVersions(endpointType, "@McpServerEndpoint taskProtocolVersions",
+				taskProtocolVersions);
+		validateMcpModernOnlyVersions(endpointType,
+				"@McpServerEndpoint subscriptionProtocolVersions",
+				subscriptionProtocolVersions);
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
 		String websiteUrl = annotationString(annotation, "websiteUrl");
@@ -1137,6 +1159,14 @@ public final class SokletProcessor extends AbstractProcessor {
 						.collect(Collectors.joining(","))));
 		Set<String> toolNames = new LinkedHashSet<>();
 		for (McpToolModel tool : tools) {
+			validateMcpVersionSubset(tool.method(), "@McpTool protocolVersions",
+					tool.protocolVersions(), protocolVersions,
+					"@McpServerEndpoint protocolVersions");
+			if (tool.returnKind() == McpToolReturnKind.TASK_CREATED)
+				validateMcpVersionSubset(tool.method(),
+						"task-only @McpTool protocolVersions",
+						tool.protocolVersions(), taskProtocolVersions,
+						"@McpServerEndpoint taskProtocolVersions");
 			if (!toolNames.add(tool.name()))
 				mcpError(tool.method(),
 						"Soklet: Duplicate MCP tool name '%s' in endpoint %s.",
@@ -1150,6 +1180,9 @@ public final class SokletProcessor extends AbstractProcessor {
 						.collect(Collectors.joining(","))));
 		Set<String> promptNames = new LinkedHashSet<>();
 		for (McpPromptModel prompt : prompts) {
+			validateMcpVersionSubset(prompt.method(), "@McpPrompt protocolVersions",
+					prompt.protocolVersions(), protocolVersions,
+					"@McpServerEndpoint protocolVersions");
 			if (!promptNames.add(prompt.name()))
 				mcpError(prompt.method(),
 						"Soklet: Duplicate MCP prompt name '%s' in endpoint %s.",
@@ -1158,6 +1191,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		Map<String, McpCompletionModel> promptCompletionByName =
 				new LinkedHashMap<>();
 		for (McpCompletionModel completion : promptCompletions) {
+			McpPromptModel owner = prompts.stream()
+					.filter(prompt -> prompt.name().equals(completion.target()))
+					.findFirst().orElse(null);
+			if (owner != null)
+				validateMcpVersionSubset(completion.method(),
+						"@McpPromptCompletion protocolVersions",
+						completion.protocolVersions(), owner.protocolVersions(),
+						"@McpPrompt protocolVersions");
 			if (!promptNames.contains(completion.target()))
 				mcpError(completion.method(),
 						"Soklet: @McpPromptCompletion target '%s' has no @McpPrompt registration in this endpoint.",
@@ -1178,6 +1219,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		Set<URI> exactResourceUris = new LinkedHashSet<>();
 		Set<String> resourceTemplateAddresses = new LinkedHashSet<>();
 		for (McpResourceModel resource : resources) {
+			validateMcpVersionSubset(resource.method(),
+					"@McpResource protocolVersions",
+					resource.protocolVersions(), protocolVersions,
+					"@McpServerEndpoint protocolVersions");
 			boolean unique = resource.template()
 					? resourceTemplateAddresses.add(resource.address())
 					: exactResourceUris.add(URI.create(resource.address()));
@@ -1189,6 +1234,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		Map<String, McpCompletionModel> resourceCompletionByAddress =
 				new LinkedHashMap<>();
 		for (McpCompletionModel completion : resourceCompletions) {
+			McpResourceModel owner = resources.stream()
+					.filter(resource -> resource.template()
+							&& resource.address().equals(completion.target()))
+					.findFirst().orElse(null);
+			if (owner != null)
+				validateMcpVersionSubset(completion.method(),
+						"@McpResourceCompletion protocolVersions",
+						completion.protocolVersions(), owner.protocolVersions(),
+						"@McpResource protocolVersions");
 			if (!resourceTemplateAddresses.contains(completion.target()))
 				mcpError(completion.method(),
 						"Soklet: @McpResourceCompletion target '%s' has no @McpResource URI-template registration in this endpoint.",
@@ -1201,6 +1255,39 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		List<McpResourceModel> templates = resources.stream()
 				.filter(McpResourceModel::template).toList();
+		if (resourceList != null)
+			validateMcpVersionSubset(resourceList.method(),
+					"@McpResourceList protocolVersions",
+					resourceList.protocolVersions(), protocolVersions,
+					"@McpServerEndpoint protocolVersions");
+		for (McpToolModel tool : tools) {
+			McpAppToolMetadata metadata = tool.appToolMetadata();
+			if (metadata == null)
+				continue;
+			List<String> appVersions = metadata.getProtocolVersions().stream()
+					.map(Enum::name).toList();
+			validateMcpVersionSubset(tool.method(), "@McpAppTool protocolVersions",
+					appVersions, tool.protocolVersions(),
+					"@McpTool protocolVersions");
+			metadata.getResourceUri().ifPresent(uri -> {
+				McpResourceModel resource = resources.stream()
+						.filter(candidate -> !candidate.template()
+								&& URI.create(candidate.address()).equals(uri))
+						.findFirst().orElse(null);
+				if (resource == null)
+					mcpError(tool.method(),
+							"Soklet: @McpAppTool resourceUri requires an exact @McpResource in the same endpoint.");
+				else {
+					if (!isAppsMimeProfile(resource.mimeType()))
+						mcpError(tool.method(),
+								"Soklet: @McpAppTool resourceUri requires an @McpResource with the Apps MIME profile.");
+					validateMcpVersionSubset(tool.method(),
+							"@McpAppTool resourceUri protocolVersions",
+							appVersions, resource.protocolVersions(),
+							"@McpResource protocolVersions");
+				}
+			});
+		}
 		if (templates.size() > MAXIMUM_MCP_RESOURCE_URI_TEMPLATES) {
 			mcpError(endpointType,
 					"Soklet: An annotated MCP endpoint may declare at most %d resource URI templates.",
@@ -1243,7 +1330,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				resourceTemplateListCacheScope, List.copyOf(tools),
 				List.copyOf(prompts), List.copyOf(resources), resourceList,
 				Map.copyOf(promptCompletionByName),
-				Map.copyOf(resourceCompletionByAddress));
+				Map.copyOf(resourceCompletionByAddress), protocolVersions,
+				taskProtocolVersions, subscriptionProtocolVersions);
 	}
 
 	private void rejectInheritedMcpOperations(
@@ -1418,6 +1506,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
 		String rateLimiterName = annotationString(annotation, "rateLimiterName");
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, "@McpTool", "protocolVersions", true);
+		validateMcpReleasedAdapterVersions(method, "@McpTool", protocolVersions);
 		boolean structuredContentMirroredAsText =
 				annotationBoolean(annotation, "structuredContentMirroredAsText");
 		List<McpInputRequestModel> inputRequestDeclarations =
@@ -1625,7 +1716,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				List.copyOf(bindings),
 				sha256Hex(inputSchemaBytes), structuredOutputType == null
 						? MCP_ABSENT_OUTPUT_SCHEMA_DIGEST
-						: sha256Hex(outputSchemaBytes));
+						: sha256Hex(outputSchemaBytes), protocolVersions);
 	}
 
 	@Nullable
@@ -1635,7 +1726,17 @@ public final class SokletProcessor extends AbstractProcessor {
 				McpAppTool.class.getCanonicalName());
 		if (annotation == null)
 			return null;
-		McpAppToolMetadata.Builder builder = McpAppToolMetadata.builder();
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, "@McpAppTool", "protocolVersions", true);
+		validateMcpModernOnlyVersions(method, "@McpAppTool",
+				protocolVersions);
+		Set<McpProtocolVersion> versionSet = new LinkedHashSet<>();
+		for (String version : protocolVersions)
+			versionSet.add(McpProtocolVersion.valueOf(version));
+		if (versionSet.isEmpty())
+			return null;
+		McpAppToolMetadata.Builder builder =
+				McpAppToolMetadata.withProtocolVersions(versionSet);
 		String resourceUri = annotationString(annotation, "resourceUri");
 		if (!resourceUri.isEmpty()) {
 			try {
@@ -1754,6 +1855,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		String name = annotationString(annotation, "name");
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, "@McpPrompt", "protocolVersions", true);
+		validateMcpModernOnlyVersions(method, "@McpPrompt", protocolVersions);
 		List<McpInputRequestModel> inputRequestDeclarations =
 				validateMcpInputRequestDeclarations(method, annotation);
 		String requestStateMode = annotationEnumConstantName(annotation,
@@ -1871,7 +1975,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			return null;
 		return new McpPromptModel(method, name, title, description,
 				promptOutputReturn, List.copyOf(inputRequestDeclarations),
-				requestStateMode, List.copyOf(bindings));
+				requestStateMode, List.copyOf(bindings), protocolVersions);
 	}
 
 	private McpResourceModel validateMcpResource(
@@ -1905,6 +2009,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
 		String mimeType = annotationString(annotation, "mimeType");
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, "@McpResource", "protocolVersions", true);
+		validateMcpModernOnlyVersions(method, "@McpResource", protocolVersions);
 		long sizeInBytes = annotationLong(annotation, "sizeInBytes");
 		long cacheTimeToLiveInMilliseconds = annotationLong(annotation, "cacheTimeToLiveInMilliseconds");
 		String cacheScope = annotationEnumConstantName(annotation, "cacheScope");
@@ -2106,12 +2213,18 @@ public final class SokletProcessor extends AbstractProcessor {
 				description, mimeType, sizeInBytes,
 				cacheTimeToLiveInMilliseconds, cacheScope,
 				resourceOutputReturn, List.copyOf(inputRequestDeclarations),
-				requestStateMode, List.copyOf(bindings));
+				requestStateMode, List.copyOf(bindings), protocolVersions);
 	}
 
 	private McpResourceListModel validateMcpResourceList(
 			@NonNull ExecutableElement method) {
 		int errorsBefore = mcpProcessingErrorCount;
+		AnnotationMirror annotation = findAnnotation(method,
+				McpResourceList.class.getCanonicalName());
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, "@McpResourceList", "protocolVersions", true);
+		validateMcpModernOnlyVersions(method, "@McpResourceList",
+				protocolVersions);
 		validateConcreteMcpHandlerMethod(method, "@McpResourceList");
 		if (mcpResourcePageType == null || !types.isSameType(
 				method.getReturnType(), mcpResourcePageType))
@@ -2172,7 +2285,8 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
-		return new McpResourceListModel(method, List.copyOf(bindings));
+		return new McpResourceListModel(method, List.copyOf(bindings),
+				protocolVersions);
 	}
 
 	private McpCompletionModel validateMcpCompletion(
@@ -2187,6 +2301,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			return null;
 		validateConcreteMcpHandlerMethod(method, annotationName);
 		String target = annotationString(annotation, prompt ? "name" : "uri");
+		List<String> protocolVersions = validateMcpProtocolVersions(method,
+				annotation, annotationName, "protocolVersions", true);
+		validateMcpModernOnlyVersions(method, annotationName, protocolVersions);
 		if (target.isBlank())
 			mcpError(method, "Soklet: %s target must be nonblank.",
 					annotationName);
@@ -2270,7 +2387,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					annotationName);
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
-		return new McpCompletionModel(method, target, List.copyOf(bindings));
+		return new McpCompletionModel(method, target, List.copyOf(bindings),
+				protocolVersions);
 	}
 
 	private void validateConcreteMcpHandlerMethod(
@@ -2853,7 +2971,18 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append("));\n");
 		source.append("\t\tvar endpointBuilder = com.soklet.McpEndpoint.withPath(")
 				.append(javaStringLiteral(endpoint.path()))
-				.append(", implementationBuilder.build());\n");
+				.append(", implementationBuilder.build(), ")
+				.append(mcpVersionSetExpression(endpoint.protocolVersions()))
+				.append(");\n");
+		if (!endpoint.taskProtocolVersions().isEmpty())
+			source.append("\t\tendpointBuilder.taskProtocolVersions(")
+					.append(mcpVersionSetExpression(endpoint.taskProtocolVersions()))
+					.append(");\n");
+		if (!endpoint.subscriptionProtocolVersions().isEmpty())
+			source.append("\t\tendpointBuilder.subscriptionProtocolVersions(")
+					.append(mcpVersionSetExpression(
+							endpoint.subscriptionProtocolVersions()))
+					.append(");\n");
 		appendOptionalBuilderCall(source, "endpointBuilder", "instructions",
 				endpoint.instructions());
 		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiterName",
@@ -2879,7 +3008,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			String carrierName = "Tool" + index + "Arguments";
 			source.append("\t\tvar toolBuilder").append(index)
 					.append(" = com.soklet.McpToolRegistration.withName(")
-					.append(javaStringLiteral(tool.name())).append(")\n");
+					.append(javaStringLiteral(tool.name())).append(", ")
+					.append(mcpVersionSetExpression(tool.protocolVersions()))
+					.append(")\n");
 			if (tool.returnKind() == McpToolReturnKind.OPERATION_RESULT)
 				source.append("\t\t\t\t.argumentType(").append(carrierName)
 						.append(".class)\n");
@@ -2924,7 +3055,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			McpPromptModel prompt = endpoint.prompts().get(index);
 			source.append("\t\tvar promptBuilder").append(index)
 					.append(" = com.soklet.McpPromptRegistration.withName(")
-					.append(javaStringLiteral(prompt.name())).append(")\n")
+					.append(javaStringLiteral(prompt.name())).append(", ")
+					.append(mcpVersionSetExpression(prompt.protocolVersions()))
+					.append(")\n")
 					.append("\t\t\t\t.handler((requestContext, promptGetContext, invocationFeatures) -> ");
 			if (prompt.promptOutputReturn())
 				source.append("com.soklet.McpCompleteResult.fromPromptOutput(");
@@ -2967,7 +3100,10 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(completion.method().getSimpleName()).append('(')
 						.append(completionInvocationArguments(completion.bindings(),
 								"completionContextPrompt"))
-						.append("));\n");
+						.append("), ")
+						.append(mcpVersionSetExpression(
+								completion.protocolVersions()))
+						.append(");\n");
 			appendInputRequestDeclarations(source, "promptBuilder" + index,
 					prompt.inputRequestDeclarations());
 			appendRequestStateMode(source, "promptBuilder" + index,
@@ -2988,6 +3124,8 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(javaStringLiteral(resource.address()))
 						.append(')');
 			source.append(", ").append(javaStringLiteral(resource.name()))
+					.append(", ")
+					.append(mcpVersionSetExpression(resource.protocolVersions()))
 					.append(")\n")
 					.append("\t\t\t\t.handler((requestContext, resourceReadContext, invocationFeatures) -> ");
 			if (resource.resourceOutputReturn())
@@ -3024,7 +3162,10 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(completion.method().getSimpleName()).append('(')
 						.append(completionInvocationArguments(completion.bindings(),
 								"completionContextResource"))
-						.append("));\n");
+						.append("), ")
+						.append(mcpVersionSetExpression(
+								completion.protocolVersions()))
+						.append(");\n");
 			appendInputRequestDeclarations(source, "resourceBuilder" + index,
 					resource.inputRequestDeclarations());
 			appendRequestStateMode(source, "resourceBuilder" + index,
@@ -3040,7 +3181,10 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(resourceList.method().getSimpleName()).append('(')
 					.append(resourceListInvocationArguments(
 							resourceList.bindings()))
-					.append("));\n");
+					.append("), ")
+					.append(mcpVersionSetExpression(
+							resourceList.protocolVersions()))
+					.append(");\n");
 		}
 		source.append("\t\treturn endpointBuilder.build();\n\t}\n");
 
@@ -3140,7 +3284,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (metadata == null)
 			return;
 		source.append("\t\t").append(builder)
-				.append(".appToolMetadata(com.soklet.McpAppToolMetadata.builder()");
+				.append(".appToolMetadata(com.soklet.McpAppToolMetadata.withProtocolVersions(")
+				.append(mcpVersionSetExpression(metadata.getProtocolVersions()
+						.stream().map(Enum::name).toList()))
+				.append(")");
 		metadata.getResourceUri().ifPresent(resourceUri -> source
 				.append(".resourceUri(java.net.URI.create(")
 				.append(javaStringLiteral(resourceUri.toString())).append("))"));
@@ -3409,6 +3556,88 @@ public final class SokletProcessor extends AbstractProcessor {
 					instanceof AnnotationMirror nestedAnnotation)
 				annotations.add(nestedAnnotation);
 		return List.copyOf(annotations);
+	}
+
+	@NonNull
+	private List<String> validateMcpProtocolVersions(@NonNull Element owner,
+			@NonNull AnnotationMirror annotation, @NonNull String annotationName,
+			@NonNull String member, boolean required) {
+		Object raw = annotationMemberWithDefaults(annotation, member);
+		List<String> versions = new ArrayList<>();
+		if (raw instanceof List<?> values) {
+			for (Object value : values) {
+				if (value instanceof AnnotationValue annotationValue
+						&& annotationValue.getValue() instanceof VariableElement constant) {
+					String name = constant.getSimpleName().toString();
+					try {
+						McpProtocolVersion.valueOf(name);
+						versions.add(name);
+					} catch (IllegalArgumentException exception) {
+						mcpError(owner,
+								"Soklet: %s %s contains an unsupported MCP protocol revision.",
+								annotationName, member);
+					}
+				} else {
+					mcpError(owner,
+							"Soklet: %s %s must contain MCP protocol revisions.",
+							annotationName, member);
+				}
+			}
+		} else {
+			mcpError(owner,
+					"Soklet: %s %s must contain MCP protocol revisions.",
+					annotationName, member);
+		}
+		if (required && versions.isEmpty())
+			mcpError(owner, "Soklet: %s %s must name at least one MCP protocol revision.",
+					annotationName, member);
+		if (new LinkedHashSet<>(versions).size() != versions.size())
+			mcpError(owner, "Soklet: %s %s must not contain duplicate revisions.",
+					annotationName, member);
+		return List.copyOf(versions);
+	}
+
+	private void validateMcpVersionSubset(@NonNull Element owner,
+			@NonNull String selectionName, @NonNull List<String> versions,
+			@NonNull List<String> containingVersions,
+			@NonNull String containingName) {
+		if (!containingVersions.containsAll(versions))
+			mcpError(owner,
+					"Soklet: %s must be a subset of %s.",
+					selectionName, containingName);
+	}
+
+	private void validateMcpModernOnlyVersions(@NonNull Element owner,
+			@NonNull String annotationName, @NonNull List<String> versions) {
+		if (versions.stream().anyMatch(version -> !"V2026_07_28".equals(version)))
+			mcpError(owner,
+					"Soklet: %s currently supports only MCP protocol revision 2026-07-28.",
+					annotationName);
+	}
+
+	private static boolean isAppsMimeProfile(@NonNull String mimeType) {
+		if (mimeType.isBlank())
+			return false;
+		try {
+			return McpAppMimeType.isAppsProfile(mimeType);
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
+	}
+
+	private void validateMcpReleasedAdapterVersions(@NonNull Element owner,
+			@NonNull String annotationName, @NonNull List<String> versions) {
+		if (versions.contains("V2025_03_26"))
+			mcpError(owner,
+					"Soklet: %s protocol revision 2025-03-26 is not supported by the current compatibility adapter.",
+					annotationName);
+	}
+
+	@NonNull
+	private static String mcpVersionSetExpression(@NonNull List<String> versions) {
+		return "java.util.Set.of(" + versions.stream()
+				.map(version -> "com.soklet.McpProtocolVersion." + version)
+				.collect(Collectors.joining(", ")) + ")";
 	}
 
 	@NonNull
@@ -4740,10 +4969,13 @@ public final class SokletProcessor extends AbstractProcessor {
 			List<McpResourceModel> resources,
 			@Nullable McpResourceListModel resourceList,
 			Map<String, McpCompletionModel> promptCompletions,
-			Map<String, McpCompletionModel> resourceCompletions) {}
+			Map<String, McpCompletionModel> resourceCompletions,
+			List<String> protocolVersions, List<String> taskProtocolVersions,
+			List<String> subscriptionProtocolVersions) {}
 
 	private record McpCompletionModel(ExecutableElement method, String target,
-			List<McpCompletionParameterBinding> bindings) {}
+			List<McpCompletionParameterBinding> bindings,
+			List<String> protocolVersions) {}
 
 	private enum McpCompletionParameterBinding {
 		REQUEST_CONTEXT,
@@ -4764,7 +4996,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			String requestStateMode,
 			@Nullable McpAppToolMetadata appToolMetadata,
 			List<McpParameterBinding> bindings, String inputSchemaDigest,
-			String outputSchemaDigest) {}
+			String outputSchemaDigest, List<String> protocolVersions) {}
 
 	private enum McpToolReturnKind {
 		TYPED_COMPLETE,
@@ -4776,7 +5008,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			String title, String description, boolean promptOutputReturn,
 			List<McpInputRequestModel> inputRequestDeclarations,
 			String requestStateMode,
-			List<McpPromptParameterBinding> bindings) {}
+			List<McpPromptParameterBinding> bindings,
+			List<String> protocolVersions) {}
 
 	private record McpInputRequestModel(String type,
 			String requirement) {}
@@ -4813,7 +5046,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			boolean resourceOutputReturn,
 			List<McpInputRequestModel> inputRequestDeclarations,
 			String requestStateMode,
-			List<McpResourceParameterBinding> bindings) {}
+			List<McpResourceParameterBinding> bindings,
+			List<String> protocolVersions) {}
 
 	private record McpResourceParameterBinding(
 			McpResourceParameterBindingKind kind,
@@ -4829,7 +5063,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private record McpResourceListModel(ExecutableElement method,
-			List<McpResourceListParameterBinding> bindings) {}
+			List<McpResourceListParameterBinding> bindings,
+			List<String> protocolVersions) {}
 
 	private record McpLevelOneResourceTemplate(List<String> variables,
 			List<McpTemplateOverlapAtom> overlapAtoms) {}

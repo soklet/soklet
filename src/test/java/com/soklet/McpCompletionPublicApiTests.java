@@ -153,31 +153,31 @@ class McpCompletionPublicApiTests {
 								URI.create("catalog://item"), "text").build())
 						.build());
 
-		assertTrue(McpPromptRegistration.withName("prompt")
+		assertTrue(McpPromptRegistration.withName("prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(promptHandler).build().getCompletionHandler().isEmpty());
-		assertSame(replacement, McpPromptRegistration.withName("prompt")
+		assertSame(replacement, McpPromptRegistration.withName("prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(promptHandler)
-				.completionHandler(first).completionHandler(replacement).build()
+				.completionHandler(first, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).completionHandler(replacement, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()
 				.getCompletionHandler().orElseThrow());
 		assertThrows(NullPointerException.class, () ->
-				McpPromptRegistration.withName("prompt")
-						.handler(promptHandler).completionHandler(null));
+				McpPromptRegistration.withName("prompt", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+						.handler(promptHandler).completionHandler(null, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 
 		assertTrue(McpResourceRegistration.withUriAndName(
-				URI.create("catalog://item"), "item")
+				URI.create("catalog://item"), "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(readHandler).build().getCompletionHandler().isEmpty());
 		assertTrue(McpResourceRegistration.withUriTemplateAndName(
-				"catalog://item/{id}", "item")
+				"catalog://item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(readHandler).build().getCompletionHandler().isEmpty());
 		assertSame(replacement, McpResourceRegistration
-				.withUriTemplateAndName("catalog://item/{id}", "item")
+				.withUriTemplateAndName("catalog://item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler(readHandler)
-				.completionHandler(first).completionHandler(replacement).build()
+				.completionHandler(first, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).completionHandler(replacement, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()
 				.getCompletionHandler().orElseThrow());
 		assertThrows(NullPointerException.class, () ->
 				McpResourceRegistration.withUriTemplateAndName(
-						"catalog://item/{id}", "item")
-						.handler(readHandler).completionHandler(null));
+						"catalog://item/{id}", "item", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+						.handler(readHandler).completionHandler(null, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertFalse(Arrays.stream(McpResourceRegistration.ExactBuilder.class
 				.getMethods()).anyMatch(method ->
 				method.getName().equals("completionHandler")));

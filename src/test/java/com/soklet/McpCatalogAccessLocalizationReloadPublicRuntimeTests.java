@@ -185,7 +185,7 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 	private static McpEndpoint endpoint() {
 		return McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("catalog-access-reload", "4.0.0")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.serverInfoIncluded(false)
 				.toolRegistrations(java.util.List.of(tool("reload.tool.denied-first", "Denied first tool"), tool("reload.tool.shared", "Shared tool"), tool("reload.tool.tenant-a", "Tenant tool"), tool("reload.tool.denied-last", "Denied last tool")))
 				.promptRegistrations(java.util.List.of(prompt("reload.prompt.denied-first",
@@ -196,7 +196,7 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 
 	private static McpToolRegistration<McpJsonObject> tool(String name,
 			String title) {
-		return McpToolRegistration.withName(name)
+		return McpToolRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
@@ -205,7 +205,7 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 	}
 
 	private static McpPromptRegistration prompt(String name, String title) {
-		return McpPromptRegistration.withName(name)
+		return McpPromptRegistration.withName(name, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.handler((request, promptGet, features) ->
 						McpCompleteResult.fromPromptOutput(
 								McpPromptOutput.fromMessages()))

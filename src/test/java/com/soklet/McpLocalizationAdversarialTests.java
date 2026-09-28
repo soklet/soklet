@@ -227,16 +227,16 @@ class McpLocalizationAdversarialTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-adversarial", "1.0")
 						.title("Canonical title")
-						.build())
+						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Canonical instructions.")
-				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("adversarial.tool")
+				.toolRegistrations(java.util.List.of(McpToolRegistration.withName("adversarial.tool", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.jsonObjectArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build()))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
-						java.net.URI.create("adversarial://text"), "text")
+						java.net.URI.create("adversarial://text"), "text", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
 								McpCompleteResult.fromResourceOutput(
 										McpResourceOutput.withContent(McpTextResourceContents

@@ -44,6 +44,8 @@ import static java.util.Objects.requireNonNull;
 public final class McpPromptRegistration {
 	@NonNull
 	private final String name;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> protocolVersions;
 	@Nullable
 	private final String title;
 	@Nullable
@@ -62,21 +64,27 @@ public final class McpPromptRegistration {
 	private final McpPromptHandler handler;
 	@Nullable
 	private final McpCompletionHandler completionHandler;
+	@NonNull
+	private final Set<@NonNull McpProtocolVersion> completionProtocolVersions;
 
 	/**
 	 * Begins a staged registration for a named prompt.
 	 *
 	 * @param name nonblank prompt name published to MCP clients
+	 * @param protocolVersions nonempty exact revisions serving this prompt
 	 * @return required-handler stage
 	 * @throws IllegalArgumentException if {@code name} is blank
 	 */
 	@NonNull
-	public static HandlerStage withName(@NonNull String name) {
-		return new HandlerStage(requireName(name));
+	public static HandlerStage withName(@NonNull String name,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+		return new HandlerStage(requireName(name),
+				McpProtocolVersion.requiredSet(protocolVersions));
 	}
 
 	private McpPromptRegistration(@NonNull Builder builder) {
 		this.name = builder.name;
+		this.protocolVersions = builder.protocolVersions;
 		this.title = builder.title;
 		this.description = builder.description;
 		this.icons = List.copyOf(builder.icons);
@@ -87,12 +95,19 @@ public final class McpPromptRegistration {
 		this.metadata = builder.metadata;
 		this.handler = builder.handler;
 		this.completionHandler = builder.completionHandler;
+		this.completionProtocolVersions = builder.completionProtocolVersions;
 	}
 
 	/** @return published prompt name */
 	@NonNull
 	public String getName() {
 		return this.name;
+	}
+
+	/** @return exact protocol revisions on which this prompt is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getProtocolVersions() {
+		return this.protocolVersions;
 	}
 
 	/** @return human-readable title, if configured */
@@ -156,6 +171,12 @@ public final class McpPromptRegistration {
 	@NonNull
 	public Optional<@NonNull McpCompletionHandler> getCompletionHandler() {
 		return Optional.ofNullable(this.completionHandler);
+	}
+
+	/** @return exact revisions on which the completion handler is available */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getCompletionProtocolVersions() {
+		return this.completionProtocolVersions;
 	}
 
 	/**
@@ -224,9 +245,13 @@ public final class McpPromptRegistration {
 	public static final class HandlerStage {
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 
-		private HandlerStage(@NonNull String name) {
+		private HandlerStage(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
 		/**
@@ -237,7 +262,8 @@ public final class McpPromptRegistration {
 		 */
 		@NonNull
 		public Builder handler(@NonNull McpPromptHandler handler) {
-			return new Builder(this.name, requireNonNull(handler));
+			return new Builder(this.name, this.protocolVersions,
+					requireNonNull(handler));
 		}
 	}
 
@@ -250,6 +276,8 @@ public final class McpPromptRegistration {
 	public static final class Builder {
 		@NonNull
 		private final String name;
+		@NonNull
+		private final Set<@NonNull McpProtocolVersion> protocolVersions;
 		@NonNull
 		private final McpPromptHandler handler;
 		@Nullable
@@ -270,10 +298,14 @@ public final class McpPromptRegistration {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 		@Nullable
 		private McpCompletionHandler completionHandler;
+		@NonNull
+		private Set<@NonNull McpProtocolVersion> completionProtocolVersions = Set.of();
 
 		private Builder(@NonNull String name,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull McpPromptHandler handler) {
 			this.name = requireNonNull(name);
+			this.protocolVersions = requireNonNull(protocolVersions);
 			this.handler = requireNonNull(handler);
 		}
 
@@ -370,12 +402,20 @@ public final class McpPromptRegistration {
 		 * Repeated calls replace the previous handler.
 		 *
 		 * @param completionHandler non-null argument completer
+		 * @param protocolVersions nonempty subset of this prompt's revisions
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder completionHandler(
-				@NonNull McpCompletionHandler completionHandler) {
-			this.completionHandler = requireNonNull(completionHandler);
+				@NonNull McpCompletionHandler completionHandler,
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			requireNonNull(completionHandler);
+			Set<McpProtocolVersion> versions = McpProtocolVersion.requiredSet(protocolVersions);
+			if (!this.protocolVersions.containsAll(versions))
+				throw new IllegalArgumentException(
+						"MCP prompt completion revisions must be a subset of prompt revisions.");
+			this.completionHandler = completionHandler;
+			this.completionProtocolVersions = versions;
 			return this;
 		}
 

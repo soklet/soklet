@@ -19,8 +19,12 @@ package com.soklet.internal.mcp.protocol;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -37,7 +41,23 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		@NonNull List<@NonNull McpSubscriptionEventSource>
 				subscriptionEventSources,
 		@NonNull Optional<McpServerRuntimeBridge.@NonNull TaskManagerAdapter>
-				taskManagerAdapter) {
+				taskManagerAdapter,
+		@NonNull Map<@NonNull String, @NonNull McpNormalizedEndpoint>
+				revisionEndpoints) {
+	private static final String MODERN_REVISION = "2026-07-28";
+
+	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull McpApplicationRequestRouter applicationRouter,
+			@NonNull McpRuntimeObservationSink observationSink,
+			@NonNull List<@NonNull McpSubscriptionEventSource>
+					subscriptionEventSources,
+			@NonNull Optional<McpServerRuntimeBridge.@NonNull TaskManagerAdapter>
+					taskManagerAdapter) {
+		this(endpointPolicy, endpoint, applicationRouter, observationSink,
+				subscriptionEventSources, taskManagerAdapter,
+				Map.of(MODERN_REVISION, endpoint));
+	}
 	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 			@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
@@ -73,6 +93,13 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		subscriptionEventSources = List.copyOf(
 				requireNonNull(subscriptionEventSources));
 		requireNonNull(taskManagerAdapter);
+		revisionEndpoints = Collections.unmodifiableMap(new LinkedHashMap<>(
+				requireNonNull(revisionEndpoints)));
+		if (revisionEndpoints.isEmpty())
+			throw new IllegalArgumentException(
+					"An MCP endpoint must serve at least one exact protocol revision.");
+		if (revisionEndpoints.values().stream().anyMatch(value -> value == null))
+			throw new IllegalArgumentException("An MCP revision endpoint must not be null.");
 		if (!subscriptionEventSources.isEmpty()
 				!= endpoint.subscriptionConfig().isPresent())
 			throw new IllegalArgumentException(
@@ -90,5 +117,13 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		if (taskNotifications && taskManagerAdapter.isEmpty())
 			throw new IllegalArgumentException(
 					"MCP task notifications require a task-manager adapter.");
+	}
+
+	Optional<McpNormalizedEndpoint> revisionEndpoint(String revision) {
+		return Optional.ofNullable(revisionEndpoints.get(requireNonNull(revision)));
+	}
+
+	Set<String> supportedRevisions() {
+		return revisionEndpoints.keySet();
 	}
 }
