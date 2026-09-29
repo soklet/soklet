@@ -108,9 +108,13 @@ present metadata, admission, and the optional request limiter after the common t
 `notifications/cancelled` skips parameter/present-metadata validation only.
 Compound failures never move application callbacks ahead of their documented stage.
 
-A readable post-JSON `initialize` method receives a modern-only rejection diagnostic whose supported-version list names only `2026-07-28`; a selector
-that has passed cardinality/plain-string validation and is absent from the immutable production registry is the only additive trigger for other methods.
-This does not implement initialization or a session. Pre-JSON failures, unparseable JSON, unreadable methods,
+A readable post-JSON `initialize` method on a modern-only endpoint receives a
+rejection diagnostic whose supported-version list names only `2026-07-28`.
+On an endpoint explicitly declaring a compatible 2025 revision, the stateless
+adapter accepts `initialize` without creating a session. For modern requests,
+a selector that has passed cardinality/plain-string validation and is absent
+from the immutable 2026 profile registry is the only additive trigger for
+other methods. Pre-JSON failures, unparseable JSON, unreadable methods,
 and row-1 failures for other methods receive no selector-derived diagnostic.
 Rejected header/metadata values or secret canaries are not reflected beyond the defined request-ID and unsupported-version `requested` fields.
 Every MCP HTTP response family—including early parser errors, fixed empty/JSON/preflight responses, and SSE—carries exactly one `Cache-Control: no-store`.

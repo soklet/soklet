@@ -263,7 +263,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     versionProperty: 'soklet.version',
   }),
   'soklet-website': Object.freeze({
-    access: 'PUBLIC_READ_ONLY',
+    access: 'PRIVATE_READ_ONLY',
     artifactIdentity: 'revetware/soklet.com-source',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/revetware/soklet.com.git',
@@ -992,8 +992,10 @@ function validateGate(gate, index, toolchains) {
   if (gate.repository === null && gate.commit !== null)
     fail(`Local gate ${gate.id} cannot declare an external commit`);
 
-  if ((gate.repository === null && gate.access !== 'LOCAL_CHECKOUT')
-      || (gate.repository !== null && gate.access !== 'PUBLIC_READ_ONLY')) {
+  const expectedAccess = gate.repository === null
+    ? 'LOCAL_CHECKOUT'
+    : gate.id === 'soklet-website' ? 'PRIVATE_READ_ONLY' : 'PUBLIC_READ_ONLY';
+  if (gate.access !== expectedAccess) {
     fail(`Gate ${gate.id} access mode does not match its repository ownership`);
   }
 

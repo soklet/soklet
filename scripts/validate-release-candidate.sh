@@ -99,6 +99,8 @@ release_benchmarks_release_note="$project_root/CHANGELOG.md"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
 javadoc_toolchain_self_test="$project_root/scripts/verify-javadoc-toolchain-self-test.mjs"
+website_mirror_verifier="$project_root/scripts/verify-release-website-mirror.mjs"
+website_mirror_self_test="$project_root/scripts/verify-release-website-mirror-self-test.mjs"
 for release_harness_source in \
 	"$release_harness_registry" "$release_harness_bundle_builder" \
 	"$release_harness_importer" \
@@ -113,6 +115,7 @@ for release_harness_source in \
 	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
 	"$release_benchmarks_release_note" \
 	"$javadoc_toolchain_self_test" \
+	"$website_mirror_verifier" "$website_mirror_self_test" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
@@ -140,6 +143,7 @@ done
 # gate evidence can be recorded or imported.
 node "$release_harness_importer" --verify-config
 node "$javadoc_toolchain_self_test"
+node "$website_mirror_self_test"
 node "$release_harness_importer_self_test"
 node "$release_workflow_artifact_verifier_self_test"
 node "$release_scans_codeql_preparer_self_test"
@@ -543,13 +547,22 @@ clone_pinned_gate() {
 	local gate_id=$1
 	local repository=${gate_repository[$gate_id]:-}
 	local commit=${gate_commit[$gate_id]:-}
+	local fetch_source=$repository
 	local checkout="$checkout_root/$gate_id"
 	[[ -n "$repository" && "$commit" =~ ^[0-9a-f]{40}$ ]] \
 		|| fail "gate $gate_id does not have an immutable repository pin."
+	if [[ "$gate_id" == soklet-website ]]; then
+		[[ -n ${SOKLET_RELEASE_WEBSITE_MIRROR:-} ]] \
+			|| fail "private website mirror is required for the soklet-website gate."
+		node "$website_mirror_verifier" "$manifest_path" \
+			"$SOKLET_RELEASE_WEBSITE_MIRROR" \
+			|| fail "private website mirror does not match the exact candidate pin."
+		fetch_source=$SOKLET_RELEASE_WEBSITE_MIRROR
+	fi
 	[[ ! -e "$checkout" ]] || fail "checkout path already exists: $checkout"
 	mkdir -p "$checkout"
 	git -C "$checkout" init --quiet
-	git -C "$checkout" remote add origin "$repository"
+	git -C "$checkout" remote add origin "$fetch_source"
 	git -C "$checkout" fetch --quiet --no-tags --depth=1 origin "$commit"
 	git -C "$checkout" checkout --quiet --detach FETCH_HEAD
 	[[ $(git -C "$checkout" rev-parse HEAD) == "$commit" ]] \
@@ -1246,6 +1259,19 @@ run_website() {
 	mkdir -p "$raw_root"
 	cp -R "$checkout/dist" "$distribution"
 	record_gate soklet-website "build-log=$log" "distribution=$distribution"
+	[[ -f "$gate_evidence_root/soklet-website.json" \
+			&& ! -L "$gate_evidence_root/soklet-website.json" \
+			&& -d "$checkout" && ! -L "$checkout" \
+			&& -d "$distribution" && ! -L "$distribution" ]] \
+		|| fail "private website evidence or cleanup inputs are invalid."
+	node "$website_mirror_verifier" "$manifest_path" \
+		"$SOKLET_RELEASE_WEBSITE_MIRROR" \
+		|| fail "private website mirror changed before cleanup."
+	rm -rf -- "$checkout" "$distribution" "$SOKLET_RELEASE_WEBSITE_MIRROR"
+	[[ ! -e "$checkout" && ! -e "$distribution" \
+			&& ! -e "$SOKLET_RELEASE_WEBSITE_MIRROR" ]] \
+		|| fail "private website source or distribution remained after the gate."
+	unset SOKLET_RELEASE_WEBSITE_MIRROR
 }
 
 run_interoperability() {

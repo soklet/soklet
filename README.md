@@ -865,7 +865,7 @@ The development coordinate for this section is `4.0.0`.
 
 Soklet's qualified 4.0.0 MCP server target is `2026-07-28`. It uses a
 dedicated, stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
-The development source is adding explicitly selected `2025-06-18` and
+The development source implements explicitly selected `2025-06-18` and
 `2025-11-25` compatibility for synchronous tools; a release or host claim
 requires qualification against the exact candidate artifact. Endpoints and
 operations name their exact `McpProtocolVersion` values, with no implicit

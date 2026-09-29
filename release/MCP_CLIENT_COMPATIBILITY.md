@@ -36,8 +36,8 @@ checks against the exact candidate.
 
 ### Claude Desktop custom connector cloud check
 
-The cloud test used a **different, uncommitted working-tree build** with
-validated hybrid 2025 header handling. Its Soklet JAR SHA-256 was
+The cloud test used a **different, uncommitted working-tree build at test time**
+with validated hybrid 2025 header handling. Its Soklet JAR SHA-256 was
 `64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`.
 A temporary token-gated HTTPS tunnel forwarded the client's MCP headers and
 payloads unchanged to the disposable 2025-only fixture. The temporary URL and
@@ -49,8 +49,11 @@ token are intentionally omitted from this record.
 
 This demonstrates one cloud-hosted connector reaching the stateless 2025 tool
 path through an HTTPS endpoint. It does not qualify cloud GET SSE, denial,
-OAuth recovery, disconnect behavior, or any non-tool operation. The uncommitted
-build and temporary tunnel are not an immutable release candidate or a public
+OAuth recovery, disconnect behavior, or any non-tool operation. On 2026-09-29,
+an isolated export of committed source `98092d27ce2b5bcc64d69b5416261002081e3155`
+produced a Soklet JAR with the same SHA-256 as the cloud-tested build. This
+ties the observed behavior to reproducible committed bytes, but neither the
+temporary tunnel nor that build is an immutable release candidate or public
 artifact. Candidate qualification must repeat the applicable checks on the
 owner's exact release commits.
 

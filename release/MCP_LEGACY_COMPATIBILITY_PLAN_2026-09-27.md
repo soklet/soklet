@@ -1,12 +1,14 @@
 # MCP compatibility layer plan — 2026-09-27
 
 **Status:** API design approved on 2026-09-28. The first synchronous-tools
-increment is implemented and locally verified in the uncommitted working tree;
-the broader layer and host qualification remain open. This file does not
-change the 4.0.0 release claim or record a candidate qualification pass. Only
-completed and tested adapters may be advertised.
+increment is implemented in committed source. Local and cloud development
+host checks are recorded in the [client compatibility matrix](MCP_CLIENT_COMPATIBILITY.md).
+The bounded official 2025 tool subset passed a separate development run from
+the pushed commit; the broader layer and exact-candidate qualification remain
+open. This file does not record a release-candidate PASS; only completed and
+tested adapters may be advertised.
 
-## Local implementation checkpoint — 2026-09-28
+## Development implementation checkpoint — 2026-09-28
 
 - Required exact revision declarations now cover endpoints, core operations,
   Skills, Apps metadata, and endpoint Task/subscription gates. The annotated
@@ -18,9 +20,11 @@ completed and tested adapters may be advertised.
   `V2025_03_26` is a named enum value but cannot be selected for an endpoint
   until its different wire behavior is implemented.
 - The local API freeze, public-evolution and roadmap checks, Javadoc build,
-  and full Java 17/21/25 suites pass on this working tree. Those are
-  development results. The exact-commit candidate, official 2025
-  conformance, and real-host gates have not run for this increment.
+  and full Java 17/21/25 suites passed during implementation. Those are
+  development results. Real-host tool smoke subsequently passed for the exact
+  client versions recorded in the compatibility matrix. Five pinned official
+  2025 scenarios per selected revision also passed in a separate development
+  check; this is not full 2025 conformance or an exact-candidate gate.
 - Prompts, resources, Skills, Apps UI, Tasks, subscriptions, and 2025-03-26
   batching remain outside the first 2025 adapter. Their version declarations
   fail preflight rather than exposing an incomplete operation.

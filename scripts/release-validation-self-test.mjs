@@ -591,6 +591,10 @@ try {
   );
   const trackedBarebonesGate = tracked.gates.find(({ id }) => id === 'barebones-app');
   assert.match(trackedBarebonesGate.reason, /canonical vendored Soklet 4.0.0 JAR/);
+  const trackedWebsiteGate = tracked.gates.find(({ id }) => id === 'soklet-website');
+  assert.equal(trackedWebsiteGate.access, 'PRIVATE_READ_ONLY');
+  assert.equal(trackedWebsiteGate.repository,
+    'https://github.com/revetware/soklet.com.git');
   for (const gateId of ['soklet-servlet-javax', 'soklet-servlet-jakarta']) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.match(gate.reason, /owner-created retrievable commit and a fresh pin/);
@@ -688,6 +692,37 @@ try {
     /^    if: inputs\.phase == 'finalize-benchmark'$/m,
   );
   assert.match(validateWorkflowJob[1], /^    if: inputs\.phase == 'validate'$/m);
+  assert.match(validateWorkflowJob[1],
+    /^    environment: release-candidate-private-source$/m);
+  const privateWebsiteTokenStep = validateWorkflowJob[1].match(
+    /      - name: Mint read-only private website source token\n([\s\S]*?)\n\n      - name: Fetch exact private website source without retaining credentials/,
+  );
+  assert.notEqual(privateWebsiteTokenStep, null);
+  assert.match(privateWebsiteTokenStep[1],
+    /actions\/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1/);
+  assert.match(privateWebsiteTokenStep[1], /owner: revetware/);
+  assert.match(privateWebsiteTokenStep[1], /repositories: soklet\.com/);
+  assert.match(privateWebsiteTokenStep[1], /permission-contents: read/);
+  const privateWebsiteFetchStep = validateWorkflowJob[1].match(
+    /      - name: Fetch exact private website source without retaining credentials\n([\s\S]*?)\n\n      - name: Validate exact release candidate/,
+  );
+  assert.notEqual(privateWebsiteFetchStep, null);
+  assert.match(privateWebsiteFetchStep[1],
+    /SOKLET_WEBSITE_READ_TOKEN: \$\{\{ steps\.website-source-token\.outputs\.token \}\}/);
+  assert.match(privateWebsiteFetchStep[1],
+    /gate-value "\$manifest" soklet-website commit/);
+  assert.match(privateWebsiteFetchStep[1],
+    /gate-value "\$manifest" soklet-website repository/);
+  assert.match(privateWebsiteFetchStep[1], /export HOME="\$private_home" GIT_CONFIG_NOSYSTEM=1/);
+  assert.doesNotMatch(privateWebsiteFetchStep[1], /env -i[\s\S]*?SOKLET_WEBSITE_READ_TOKEN=/);
+  assert.match(privateWebsiteFetchStep[1],
+    /verify-release-website-mirror\.mjs "\$manifest" "\$mirror"/);
+  assert.doesNotMatch(privateWebsiteFetchStep[1],
+    /https:\/\/[^\s]*\$SOKLET_WEBSITE_READ_TOKEN/);
+  assert.match(validateWorkflowJob[1],
+    /!target\/release-validation\/evidence\/raw\/soklet-website\/dist\/\*\*/);
+  assert.match(validateWorkflowJob[1],
+    /target\/release-validation\/evidence\n            !target\/release-validation\/evidence\/raw\/soklet-website\/dist\/\*\*\n            release\/release-validation-manifest\.json/);
   assert.match(
     benchmarkJob[1],
     /SOKLET_BENCHMARK_APPROVAL_REFERENCE: \$\{\{ inputs\.benchmark_approval_reference \}\}/,
@@ -1342,6 +1377,16 @@ try {
     releaseValidator,
     /"apidocs=\$apidocs"[\s\\\n]+"surefire-reports=\$reports"/,
   );
+  const privateWebsiteGate = releaseValidator.match(
+    /run_website\(\) \{([\s\S]*?)\n\}\n/,
+  );
+  assert.notEqual(privateWebsiteGate, null);
+  assert.match(privateWebsiteGate[1],
+    /record_gate soklet-website "build-log=\$log" "distribution=\$distribution"/);
+  assert.match(privateWebsiteGate[1],
+    /rm -rf -- "\$checkout" "\$distribution" "\$SOKLET_RELEASE_WEBSITE_MIRROR"/);
+  assert.ok(privateWebsiteGate[1].indexOf('record_gate soklet-website')
+    < privateWebsiteGate[1].indexOf('rm -rf -- "$checkout"'));
   assert.doesNotMatch(
     releaseValidator,
     /clone_pinned_gate candidate-localization/,
@@ -1765,6 +1810,13 @@ run_barebones
   assertRejectsManifestMutation(
     (manifest) => { manifest.gates.push({ ...manifest.gates[0], id: 'extra' }); },
     /no canonical release contract/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => {
+      manifest.gates.find(({ id }) => id === 'soklet-website').access =
+        'PUBLIC_READ_ONLY';
+    },
+    /access mode does not match its repository ownership/,
   );
   assertRejectsManifestMutation(
     (manifest) => { [manifest.gates[0], manifest.gates[1]] = [manifest.gates[1], manifest.gates[0]]; },

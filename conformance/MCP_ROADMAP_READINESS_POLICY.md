@@ -13,10 +13,10 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 
 | ID | 4.0 status | Statement | Rationale |
 | --- | --- | --- | --- |
-| NI-01 | ABSENT_IN_4_0_0 | support for `2025-11-25` or an earlier/session-era revision | Soklet 4.0 is intentionally scoped to the modern 2026 profile and does not revive session-era behavior. |
-| NI-02 | ABSENT_IN_4_0_0 | more than one production protocol profile | A second production profile requires the deferred R2C dispatcher decomposition and separate approval. |
-| NI-03 | ABSENT_IN_4_0_0 | `initialize`, sessions, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior | The supported transport remains request-scoped and sessionless. |
-| NI-04 | ABSENT_IN_4_0_0 | a public protocol-version enum, codec/profile SPI, arbitrary supported-versions builder, or service loader | Profile selection stays internal and bounded to the sole production revision. |
+| NI-01 | ABSENT_IN_4_0_0 | full `2025-11-25` or earlier/session-era protocol compatibility beyond the opt-in stateless synchronous-tools adapter | An explicitly selected 2025-06-18/2025-11-25 stateless synchronous-tools adapter exists, but a full older-revision surface and 2025-03-26 compatibility are absent. |
+| NI-02 | ABSENT_IN_4_0_0 | more than one complete core protocol profile | The 2026-07-28 core profile remains the release target. The opt-in 2025 synchronous-tools adapter is not another complete core profile; a second modern core profile requires R2C review. |
+| NI-03 | ABSENT_IN_4_0_0 | session-bound initialization, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior | The 2025 adapter accepts stateless `initialize` and `notifications/initialized` but does not issue session IDs, retain client session state, or open GET/DELETE SSE. |
+| NI-04 | ABSENT_IN_4_0_0 | a public codec/profile SPI, arbitrary supported-versions builder, or service loader | `McpProtocolVersion` is a public enum of exact revisions, but codec/profile implementation and routing remain internal and bounded to declared compatible operations. |
 | NI-05 | ABSENT_IN_4_0_0 | automatic Java `@Deprecated` annotations or Javadoc `@deprecated` tags derived only from MCP feature-lifecycle status | MCP feature lifecycle and Soklet Java API lifecycle remain independent axes. The owner explicitly approved removing the Roots, Sampling, and unused Logging APIs before publication; those product decisions do not automatically retire other API based on upstream lifecycle status. |
 | NI-06 | ABSENT_IN_4_0_0 | Soklet-owned task persistence or workers, Triggers & Events, or a general server-event family | The Tasks extension delegates durable state and execution to the application; Soklet still owns no task store, worker runtime, general trigger/event lifecycle, or arbitrary server-event family. |
 | NI-07 | ABSENT_IN_4_0_0 | arbitrary server-side extension advertisement or an arbitrary-method router | Soklet advertises and routes the explicitly implemented Tasks extension only; opaque client settings do not create arbitrary server support or routing. |
@@ -50,11 +50,11 @@ Planning-authority snapshot SHA-256: `b89fc7b70aec8b938b17e854372cc35908e093bb30
 - Negative-inventory keys: `NI-02`, `NI-04`
 - Reviewed no-mapping reason: Not applicable.
 
-### DF-03 — Legacy/session-era compatibility
+### DF-03 — Full legacy/session-era compatibility
 
-- Trigger: Concrete demand and separate product/release decision
-- Landing zone: Separate pipeline, artifact, server mode, or major line; never a string in the modern registry
-- Pre-release hedge: Explicit non-goal and maintenance policy
+- Trigger: Concrete demand for 2025 operations beyond synchronous tools or for stateful 3.x-era session and replay behavior, followed by a separate product/release decision
+- Landing zone: Individually reviewed 2025 operation adapters for stateless paths; a separately approved deployment or major-line design if session-state and replay compatibility is warranted
+- Pre-release hedge: The opt-in 2025-06-18/2025-11-25 adapter is limited to stateless initialization, ping, tools/list, and tools/call; other 2025 operations, 2025-03-26, session state, and GET/SSE replay require separate implementation and qualification
 - Evidence classification: `planned`
 - Test evidence: None.
 - Negative-inventory keys: `NI-01`, `NI-03`, `NI-04`

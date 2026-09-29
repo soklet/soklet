@@ -451,6 +451,7 @@ jobs:
           node conformance/official/self-test.mjs \
             --suite-dir .mcp-conformance-source
           node conformance/official/runner-self-test.mjs
+          node conformance/official/legacy/runner-self-test.mjs
 
       - name: Run all applicable Phase 5 official scenarios
         run: |
@@ -464,6 +465,20 @@ jobs:
             --phase 5 \
             --p0c-policy accepted-2026-09-22
 
+      - name: Run bounded 2025 tool compatibility scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh conformance/official/legacy/build-fixture.sh \
+            "${GITHUB_WORKSPACE}/target/soklet-4.0.0.jar" \
+            "${GITHUB_WORKSPACE}/target/conformance/legacy-fixture" \
+            > target/conformance/official/legacy-fixture-classpath.txt
+          node conformance/official/legacy/run.mjs \
+            --suite-dir "${GITHUB_WORKSPACE}/.mcp-conformance-source" \
+            --work-dir "${GITHUB_WORKSPACE}/target/conformance/official/legacy-preparatory" \
+            --classpath "$(cat target/conformance/official/legacy-fixture-classpath.txt)" \
+            --java "${JAVA_HOME}/bin/java"
+
       - name: Upload MCP conformance evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -473,6 +488,7 @@ jobs:
           path: |
             target/conformance/official
             target/conformance/public-fixture/dependencies.txt
+            target/conformance/legacy-fixture/dependencies.txt
 
   fuzz-nightly:
     name: Nightly Fuzzing (JDK 25, ${{ matrix.target_id }})

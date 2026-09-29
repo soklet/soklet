@@ -1,9 +1,9 @@
 # Model Context Protocol (MCP)
 
 Soklet's qualified 4.0.0 server target is MCP `2026-07-28`. The development
-source is adding explicitly selected 2025 protocol revisions on the same
-endpoint URL, starting with synchronous tools. That adapter still needs its
-release and host qualification. MCP support is part
+source implements explicitly selected `2025-06-18` and `2025-11-25` revisions
+on the same endpoint URL for synchronous tools. Those adapters still need
+exact-candidate release qualification. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
@@ -104,7 +104,7 @@ invoked by guessing it. `McpRequestContext`, `McpAdmissionContext`, and
 `getProtocolVersion()` for application policy.
 
 On `2026-07-28`, clients may send a direct versioned request or call
-`server/discover`. On the planned `2025-06-18` and `2025-11-25` path, clients
+`server/discover`. On the explicitly selected `2025-06-18` and `2025-11-25` path, clients
 start with `initialize`, may send `notifications/initialized`, and can call
 `ping`. Later POST requests use their selected `MCP-Protocol-Version` header;
 Soklet does not issue a session ID in this first adapter. GET and DELETE do
@@ -3277,8 +3277,8 @@ second terminal result.
 
 ## Compatibility and unsupported features
 
-The qualified 4.0.0 server profile remains MCP `2026-07-28`. The source is
-adding a first, explicit `2025-06-18`/`2025-11-25` synchronous-tools adapter
+The qualified 4.0.0 server profile remains MCP `2026-07-28`. The source
+includes an explicit `2025-06-18`/`2025-11-25` synchronous-tools adapter
 behind endpoint and operation version declarations. There is no automatic
 version fallback, and a production or host claim awaits the exact-candidate
 qualification described [above](#exact-protocol-revisions).

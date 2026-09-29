@@ -135,19 +135,21 @@ scope has exactly one owner:
 
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
-| `phase-4.includes` | 168 | current-source Phase 4 types and shared hosts |
+| `phase-4.includes` | 169 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
 | `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
 | `non-mcp-public-api.allowlist` | 86 | reviewed Bearer challenge, lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 294-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
-exactly 380 current types. Ownership alone does not freeze a type. The phase
-and provisional signature ledgers contain the bounded N0/P1b/P2 review;
-the P3/P4 differences remain outside the reviewed snapshots.
+The 295-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
+exactly 381 current types. All 295 MCP owners have reviewed phase or
+provisional signature snapshots: 1,367/240/454/98 records respectively, or
+2,159 MCP signatures. Ownership and signature coverage are checked separately;
+the two reviewed cross-cutting signatures bring the complete frozen set to
+2,161 entries.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
-`208af06ae2a26e6ede4d0408d1accb4216c4ce350fb231ed3d146d2c463b2807`,
+`db7577ffe05d7ccf0cf559668e95d2af32ec925b609972f7518213cabef8da71`,
 `17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
 `b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
@@ -160,14 +162,22 @@ compatibility inventory.
 
 ## Current local evidence
 
-### 2026-09-24 bounded MCP-G2 review (aggregate HOLD)
+### 2026-09-29 current MCP-G2 refreeze
+
+The current owner and signature inventories include the later reviewed Apps,
+Skills, and exact protocol-version API changes. The aggregate API-freeze and
+public-evolution checks pass against the committed 4.0.0 development source.
+This is an API snapshot result; host qualification and immutable-candidate
+release validation remain separate.
+
+### 2026-09-24 bounded MCP-G2 review (historical HOLD)
 
 The [bounded review](mcp-g2-bounded-refreeze-2026-09-24.md) records the exact
-707-record current compatibility set and accepts 161 current-only plus 57
-reviewed-only N0/P1b/P2 signature IDs. P3 Apps and P4 Skills remain outside
-the reviewed signature snapshots, with 170 current-only and six reviewed-only
-IDs still to resolve. This later review supersedes the snapshot-status language
-in the dated historical sections below; it does not assert MCP-G2 completion.
+707-record compatibility set at that checkpoint and accepts 161 current-only
+plus 57 reviewed-only N0/P1b/P2 signature IDs. P3 Apps and P4 Skills remained
+outside those reviewed signature snapshots, with 170 current-only and six
+reviewed-only IDs still to resolve. Later reviews and the current refreeze
+above supersede that HOLD status.
 
 ### 2026-09-22 route-component compatibility amendment
 

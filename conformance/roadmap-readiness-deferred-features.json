@@ -26,19 +26,19 @@
       "trigger": "Stable published revision plus Soklet support decision"
     },
     {
-      "direction": "Legacy/session-era compatibility",
+      "direction": "Full legacy/session-era compatibility",
       "evidenceClassification": "planned",
       "id": "DF-03",
-      "landingZone": "Separate pipeline, artifact, server mode, or major line; never a string in the modern registry",
+      "landingZone": "Individually reviewed 2025 operation adapters for stateless paths; a separately approved deployment or major-line design if session-state and replay compatibility is warranted",
       "negativeInventoryKeys": [
         "NI-01",
         "NI-03",
         "NI-04"
       ],
       "negativeInventoryReason": null,
-      "preReleaseHedge": "Explicit non-goal and maintenance policy",
+      "preReleaseHedge": "The opt-in 2025-06-18/2025-11-25 adapter is limited to stateless initialization, ping, tools/list, and tools/call; other 2025 operations, 2025-03-26, session state, and GET/SSE replay require separate implementation and qualification",
       "testEvidence": null,
-      "trigger": "Concrete demand and separate product/release decision"
+      "trigger": "Concrete demand for 2025 operations beyond synchronous tools or for stateful 3.x-era session and replay behavior, followed by a separate product/release decision"
     },
     {
       "direction": "Future Tasks extension evolution",
@@ -207,26 +207,26 @@
   "negativeInventory": [
     {
       "id": "NI-01",
-      "rationale": "Soklet 4.0 is intentionally scoped to the modern 2026 profile and does not revive session-era behavior.",
-      "statement": "support for `2025-11-25` or an earlier/session-era revision",
+      "rationale": "An explicitly selected 2025-06-18/2025-11-25 stateless synchronous-tools adapter exists, but a full older-revision surface and 2025-03-26 compatibility are absent.",
+      "statement": "full `2025-11-25` or earlier/session-era protocol compatibility beyond the opt-in stateless synchronous-tools adapter",
       "status": "ABSENT_IN_4_0_0"
     },
     {
       "id": "NI-02",
-      "rationale": "A second production profile requires the deferred R2C dispatcher decomposition and separate approval.",
-      "statement": "more than one production protocol profile",
+      "rationale": "The 2026-07-28 core profile remains the release target. The opt-in 2025 synchronous-tools adapter is not another complete core profile; a second modern core profile requires R2C review.",
+      "statement": "more than one complete core protocol profile",
       "status": "ABSENT_IN_4_0_0"
     },
     {
       "id": "NI-03",
-      "rationale": "The supported transport remains request-scoped and sessionless.",
-      "statement": "`initialize`, sessions, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior",
+      "rationale": "The 2025 adapter accepts stateless `initialize` and `notifications/initialized` but does not issue session IDs, retain client session state, or open GET/DELETE SSE.",
+      "statement": "session-bound initialization, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior",
       "status": "ABSENT_IN_4_0_0"
     },
     {
       "id": "NI-04",
-      "rationale": "Profile selection stays internal and bounded to the sole production revision.",
-      "statement": "a public protocol-version enum, codec/profile SPI, arbitrary supported-versions builder, or service loader",
+      "rationale": "`McpProtocolVersion` is a public enum of exact revisions, but codec/profile implementation and routing remain internal and bounded to declared compatible operations.",
+      "statement": "a public codec/profile SPI, arbitrary supported-versions builder, or service loader",
       "status": "ABSENT_IN_4_0_0"
     },
     {

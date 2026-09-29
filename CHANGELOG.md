@@ -120,13 +120,15 @@
   off-network HTTP, SSE, and MCP graph separately with `SimulatorConfig.Builder`.
   See
   [Simulator migration](MIGRATING_TO_4_0.md#simulator-migration).
-- **MCP wire/profile:** the 2025-11-25 initialize/session/GET-SSE design is
-  replaced by the exact modern `2026-07-28` profile. The first request may be
-  `server/discover`; every request supplies its version/capabilities; POST owns
-  the response stream; GET/DELETE return 405; legacy session/event headers are
-  never stored or emitted. Soklet 4.0.0 provides no profile fallback or
-  compatibility adapter. The 4.0.0 migration is intentionally fall-forward
-  only. See [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
+- **MCP wire/profile:** the 3.5.1 session and GET/SSE replay design is removed.
+  The `2026-07-28` profile uses direct requests or `server/discover`, with
+  per-request version/capabilities and no session lifecycle. An explicitly
+  selected `2025-06-18` or `2025-11-25` stateless compatibility adapter accepts
+  `initialize`, `notifications/initialized`, `ping`, and synchronous
+  `tools/list`/`tools/call`. It does not issue session IDs, open GET/DELETE SSE,
+  or expose the full 2025 operation set. Applications declare exact revisions
+  on endpoints and tools; there is no implicit profile fallback. See
+  [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
   immutable `McpJson*` values, operation-specific contexts and registrations,

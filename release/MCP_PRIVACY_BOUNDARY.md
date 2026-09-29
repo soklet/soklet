@@ -171,6 +171,35 @@ substitute for either candidate-bound gate result.
 
 ## Checked boundary and release status
 
+### 2026-09-29 source-inventory repin
+
+The 2025 MCP compatibility implementation changed production declarations after
+the privacy inventory was last sealed. At core commit `98092d27`, the source
+matcher derives 7,384 privacy paths: 84 new paths and 21 superseded signature
+paths relative to the prior inventory. This repin classifies them under the
+existing reviewed boundaries without changing their classifications or the
+delegated release gates:
+
+| Matcher | Added | Superseded | Existing boundary |
+| --- | ---: | ---: | --- |
+| Request and Throwable exposure (`PRIV-MATCH-005`) | 8 | 3 | `PRIV-BOUND-006`, exact application values |
+| Diagnostic surfaces (`PRIV-MATCH-008`) | 25 | 9 | `PRIV-BOUND-010`, exact diagnostic values |
+| JSON-RPC error publication (`PRIV-MATCH-009`) | 4 | 4 | `PRIV-BOUND-013`, redacted framework errors |
+| Throwable construction (`PRIV-MATCH-011`) | 47 | 5 | `PRIV-BOUND-022`, conservatively exact exception surfaces |
+
+The new internal 2025 initialization record holds exact client information and
+capabilities. Its implicit accessors and renderer are classified as exact; the
+adapter uses its accessors to route the request and does not send its renderer
+to Soklet's built-in log channel. The changed framework JSON-RPC error sites
+use fixed messages and, where applicable, a list of configured supported
+versions rather than the client's raw request values. The new explicit
+Throwable sites remain conservatively classified as exact application
+boundaries even where their current messages are fixed. The source inventory's
+semantic seal is now
+`ac4e289ba12273456553e2ff75bf4322924e3b0a166fcd70d55ed3f7e86db2e5`.
+This inventory refresh does not supply the candidate-bound `release-soak` or
+`soklet-otel` evidence.
+
 [`McpPrivacyBoundaryTests`](../src/test/java/com/soklet/McpPrivacyBoundaryTests.java)
 places secret canaries in public request, request-ID, propagation, and bridge
 carriers while proving that diagnostic rendering is redacted and exact

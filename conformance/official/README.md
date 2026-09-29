@@ -102,6 +102,41 @@ also includes 12 legacy-only rows; strict parsing validates those rows but
 excludes them from this modern-profile inventory. Unknown extensions, missing
 Tasks names, duplicate names, or reordered selected rows fail verification.
 
+## September 29 bounded 2025 tool check
+
+A separate preparatory runner now exercises five pinned official scenarios at
+each of `2025-06-18` and `2025-11-25`: `server-initialize`, `ping`, `tools-list`,
+`tools-call-simple-text`, and `tools-call-error`. Its fixture uses only public
+Soklet APIs, declares one exact revision per JVM, registers two synchronous
+tools, and binds to loopback. The runner starts a fresh JVM per scenario,
+checks the exact raw check IDs/statuses and wire-message counts, and bounds
+startup, execution, output, and shutdown. The CI step reuses the job's pinned
+suite and packaged core JAR; it does not alter the 46-row modern selection,
+profiles, final-tag validation, or release-candidate receipt.
+
+The controlled 2026-09-29 development observation used a JAR freshly built
+from clean commit `98092d27ce2b5bcc64d69b5416261002081e3155` (SHA-256
+`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`).
+The verified official suite was alpha.11 commit
+`a983ba93c91e0bb31d0b6849eeb52f0ad1083107`, complete source-tree SHA-256
+`e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d`,
+and built CLI SHA-256
+`b8355fba248c019b667a9c16289748ebfd85ca2668890812054b7997b8df8f3b`.
+Its reviewed dependency-lock overlay had SHA-256
+`4bbf44df937f30f99f56dcb359ec5ca67c8200241b279f49f25d4b646e38fa1f`;
+the original upstream lock and source tree were restored and verified after
+building. The `2025-11-25` scenarios produced 11 `SUCCESS`, one `INFO`
+(optional session ID omitted), and no `FAILURE`, `WARNING`, or `SKIPPED` checks.
+The `2025-06-18` scenarios produced 10 `SUCCESS`, the same one `INFO`, and no
+`FAILURE`, `WARNING`, or `SKIPPED` checks. Every CLI invocation exited zero
+with empty stderr; the separate fixture processes shut down cleanly.
+
+This check covers only initialization, ping, listing, a simple text call, and
+an application-level tool error. It does not claim complete 2025 conformance,
+session state, GET SSE, other content kinds, prompts, resources, authorization,
+OAuth recovery, or release-candidate qualification. Those remain separate
+evidence obligations.
+
 Core scenarios retain the explicit `--spec-version 2026-07-28` selector. In
 alpha.11 that selector excludes extension scenarios, so the ten exact pinned
 Tasks names use the reviewed extension command template without a version

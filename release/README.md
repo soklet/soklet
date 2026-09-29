@@ -33,6 +33,46 @@ pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish
 that.
 
+## Private website source for the candidate gate
+
+`soklet-website` is `PRIVATE_READ_ONLY`: its canonical repository URL and full
+commit SHA stay in the candidate manifest, but an anonymous Git fetch cannot
+read `revetware/soklet.com`. The `validate` job fetches that exact SHA into a
+bare mirror under the runner's temporary directory before running the
+four-hour candidate validator. The validator accepts the mirror only for this
+gate and checks its path, bare layout, canonical origin, credential-free
+configuration, and pinned commit before making an isolated checkout. Missing,
+incorrect, or symlinked mirrors fail the gate; no branch fallback is used.
+
+The owner must create a GitHub App installed on **only**
+`revetware/soklet.com` with repository **Contents: read-only**. In the
+`soklet/soklet` repository, create the `release-candidate-private-source`
+Actions environment with variable `SOKLET_WEBSITE_SOURCE_APP_CLIENT_ID` and
+secret `SOKLET_WEBSITE_SOURCE_APP_PRIVATE_KEY`. Restrict that environment to
+the intended protected release branch and trusted reviewers before dispatch.
+The token action requests only `revetware/soklet.com` and `contents: read`.
+Its installation token lasts one hour and is used only for the immediate
+prefetch; the subsequent long validation runs without that credential. The
+token is never placed in a Git remote URL, local Git configuration, candidate
+manifest, or release evidence. No owner credential is checked into the repo.
+
+The website `dist` remains on the runner only long enough for the gate to
+compute its typed directory digest and record its candidate receipt. The
+validator then removes its website checkout, source mirror, and copied `dist`.
+The public core workflow artifact also excludes
+`raw/soklet-website/dist/**` so prepublication built pages are not distributed
+through that artifact. The typed directory digest and website build log remain
+in the uploaded evidence. This permits verification of the candidate receipt
+and its exact site-output identity, but post-run reviewers cannot inspect the
+page bytes from the public artifact. The build log may expose route names; the
+owner should review that output before accepting the candidate.
+
+All validation gates run in one trusted runner. Exact pinned candidate and
+downstream code that executes before the website gate can read the temporary
+mirror, and code executing during the website gate can read its checkout. The
+private-source boundary here protects the credential and the public artifact;
+it does not isolate the source from code executing in that runner.
+
 After the owner-approved Roots/Sampling removal, current development fixtures
 use elicitation. Production tests verify error-mapping manifest SHA-256
 `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`

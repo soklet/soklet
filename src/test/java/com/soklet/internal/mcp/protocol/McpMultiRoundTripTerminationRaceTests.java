@@ -305,7 +305,8 @@ public class McpMultiRoundTripTerminationRaceTests {
 					snapshot -> snapshot.activeHandlerSlots() == 1
 							&& snapshot.activeIdentifiedRequestExchanges() == 0
 							&& snapshot.retainedExchanges() == 1
-							&& snapshot.retainedTransportLeases() == 0);
+							&& snapshot.retainedTransportLeases() == 0
+							&& snapshot.responseCleanups() == 1);
 			Assertions.assertEquals(1, retained.responseCleanups());
 			Assertions.assertEquals(termination == SealTermination.DEADLINE ? 1 : 0,
 					retained.terminalResponses());

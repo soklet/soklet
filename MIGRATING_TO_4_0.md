@@ -875,7 +875,9 @@ failure into a client error.
 - Standalone and embedded lifecycle ownership are not mixed.
 - Deployment termination grace is larger than the complete documented sum.
 - Simulator configurations use only scope-vended transports.
-- MCP clients use Streamable HTTP and the exact `2026-07-28` profile.
+- MCP clients use Streamable HTTP and an exact revision declared by the endpoint
+  and operation. Use `2026-07-28` for the full 4.0 feature set; the explicitly
+  selected `2025-06-18`/`2025-11-25` adapter covers synchronous tools only.
 - Authentication and authorization failures reveal no token or protected
   resource value.
 - A real localhost listener passes discovery, list, call/read/get as applicable,

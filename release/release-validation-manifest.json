@@ -442,7 +442,7 @@
       "versionProperty": "soklet.version"
     },
     {
-      "access": "PUBLIC_READ_ONLY",
+      "access": "PRIVATE_READ_ONLY",
       "artifactChecksum": null,
       "artifactIdentity": "revetware/soklet.com-source",
       "commit": "7717cea81776a1f6567f428cb0518702159fd5bc",

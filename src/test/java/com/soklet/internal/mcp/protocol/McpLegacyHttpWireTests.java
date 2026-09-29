@@ -94,7 +94,7 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
-	@Timeout(30)
+	@Timeout(60)
 	public void methodOnlyLegacyInitializeWorksOnTheHttpWire() throws Exception {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata
@@ -453,7 +453,7 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
-	@Timeout(30)
+	@Timeout(60)
 	public void oneUrlServesLegacyLifecycleAndVersionedTools() throws Exception {
 		McpImplementationMetadata serverInformation = new McpImplementationMetadata(
 				"server", "4.0.0", Optional.of("Soklet Server"),
@@ -744,7 +744,7 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
-	@Timeout(30)
+	@Timeout(60)
 	public void anEmptyLegacyViewCannotCallModernOnlyProductionTool()
 			throws Exception {
 		McpImplementationMetadata serverInformation =

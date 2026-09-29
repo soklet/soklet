@@ -23,12 +23,12 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Advanced programmatic MCP tool handler.
  *
- * <p>This handler returns the open {@link McpOperationResult} spine directly
- * and is the path for explicit tool content and future multi-round-trip
- * results. The open interface is a compatibility seam, not an application
- * result-extension registry: Soklet accepts only result implementations it
- * recognizes. Prefer {@link McpCompleteToolHandler} when a tool always
- * returns a supported structured Java value.
+ * <p>This handler returns the sealed {@link McpOperationResult} family directly
+ * and is the path for explicit tool content and multi-round-trip results.
+ * Applications choose a framework-provided result that is valid for a tool
+ * invocation; they cannot add result implementations. Prefer
+ * {@link McpCompleteToolHandler} when a tool always returns a supported
+ * structured Java value.
  *
  * <p>Implementations must be safe for concurrent invocation.
  *
