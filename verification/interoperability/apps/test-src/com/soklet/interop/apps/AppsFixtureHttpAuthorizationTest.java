@@ -92,6 +92,12 @@ public final class AppsFixtureHttpAuthorizationTest {
 	}
 
 	private void run(AppsFixture fixture) throws Exception {
+		Capture deniedSubscription = send("subscriptions/listen",
+				",\"notifications\":{\"toolsListChanged\":true}", token);
+		check(deniedSubscription.status() == 403, "The supported subscription must reach policy denial.");
+		error(deniedSubscription);
+		check(!deniedSubscription.authenticationChallengePresent(),
+				"Permanent subscription denial must not request OAuth recovery.");
 		Capture firstCall = call(AppsFixture.REFRESH, token);
 		success(firstCall);
 		contains(firstCall.body(), "\"tenant\":\"alpha\"", "Initial caller tenant missing.");
@@ -140,7 +146,7 @@ public final class AppsFixtureHttpAuthorizationTest {
 		error(revokedRead);
 		absent(revokedCall.body(), "\"structuredContent\":", "Revoked call exposed data.");
 		absent(revokedRead.body(), "\"contents\":", "Revoked read exposed content.");
-		check(requests == 12, "The fixed authorization matrix did not complete.");
+		check(requests == 13, "The fixed authorization matrix did not complete.");
 	}
 
 	private Capture call(String name, String credential) throws Exception {
@@ -172,7 +178,8 @@ public final class AppsFixtureHttpAuthorizationTest {
 				"A response could be shared across callers.");
 		check(response.body().length() < 1024 * 1024, "The response exceeded the fixture bound.");
 		absent(response.body(), AppsFixture.RAW_CANARY, "The raw private marker leaked.");
-		return new Capture(response.statusCode(), response.body());
+		return new Capture(response.statusCode(), response.body(),
+				response.headers().firstValue("WWW-Authenticate").isPresent());
 	}
 
 	private static void success(Capture result) {
@@ -199,6 +206,6 @@ public final class AppsFixtureHttpAuthorizationTest {
 			throw new AssertionError(failure);
 	}
 
-	private record Capture(int status, String body) {
+	private record Capture(int status, String body, boolean authenticationChallengePresent) {
 	}
 }

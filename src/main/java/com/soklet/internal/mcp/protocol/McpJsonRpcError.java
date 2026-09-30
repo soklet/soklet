@@ -39,6 +39,7 @@ record McpJsonRpcError(int code, @NonNull String message,
 	static final int METHOD_NOT_FOUND = -32601;
 	static final int INVALID_PARAMS = -32602;
 	static final int INTERNAL_ERROR = -32603;
+	static final int LEGACY_RESOURCE_NOT_FOUND = -32002;
 	static final int HEADER_MISMATCH = -32020;
 	static final int MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
 	static final int UNSUPPORTED_PROTOCOL_VERSION = -32022;
@@ -55,7 +56,7 @@ record McpJsonRpcError(int code, @NonNull String message,
 		return switch (code) {
 			case PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS,
 					INTERNAL_ERROR, HEADER_MISMATCH, MISSING_REQUIRED_CLIENT_CAPABILITY,
-					UNSUPPORTED_PROTOCOL_VERSION -> true;
+					UNSUPPORTED_PROTOCOL_VERSION, LEGACY_RESOURCE_NOT_FOUND -> true;
 			default -> false;
 		};
 	}

@@ -1,0 +1,10 @@
+Exception in thread "main" java.lang.AssertionError: Subscription policy must deny the supported operation.
+	at com.soklet.interop.apps.AppsFixtureContractTest.check(AppsFixtureContractTest.java:462)
+	at com.soklet.interop.apps.AppsFixtureContractTest.equal(AppsFixtureContractTest.java:457)
+	at com.soklet.interop.apps.AppsFixtureContractTest.subscriptionPolicyDenialDoesNotChallenge(AppsFixtureContractTest.java:104)
+	at com.soklet.interop.apps.AppsFixtureContractTest.run(AppsFixtureContractTest.java:86)
+	at com.soklet.SokletSimulator$Scope.run(SokletSimulator.java:266)
+	at com.soklet.SokletSimulator.run(SokletSimulator.java:154)
+	at com.soklet.SokletSimulator.run(SokletSimulator.java:136)
+	at com.soklet.SokletSimulator.run(SokletSimulator.java:125)
+	at com.soklet.interop.apps.AppsFixtureContractTest.main(AppsFixtureContractTest.java:79)

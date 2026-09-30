@@ -28,7 +28,7 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Exact 2025 Streamable HTTP profiles for the first synchronous-tool slice.
+ * Exact 2025 Streamable HTTP profiles for synchronous tools, prompts and resources.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -50,6 +50,18 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 	@NonNull
 	private static final Set<@NonNull String> LEGACY_TOOL_RESULT_FIELDS = Set.of(
 			"content", "structuredContent", "isError");
+	@NonNull
+	private static final Set<@NonNull String> LEGACY_PROMPT_FIELDS = Set.of(
+			"name", "title", "description", "arguments", "_meta");
+	@NonNull
+	private static final Set<@NonNull String> LEGACY_PROMPT_RESULT_FIELDS = Set.of(
+			"description", "messages");
+	@NonNull
+	private static final Set<@NonNull String> LEGACY_RESOURCE_FIELDS = Set.of(
+			"name", "title", "description", "uri", "mimeType", "size", "annotations", "_meta");
+	@NonNull
+	private static final Set<@NonNull String> LEGACY_RESOURCE_TEMPLATE_FIELDS = Set.of(
+			"name", "title", "description", "uriTemplate", "mimeType", "annotations", "_meta");
 	@NonNull
 	private final String revision;
 
@@ -95,15 +107,75 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 			@NonNull McpWireResult canonicalResult) {
 		requireNonNull(kind);
 		requireNonNull(canonicalResult);
-		if (kind != McpProfileFrameworkResultKind.TOOLS_LIST)
+		if (kind != McpProfileFrameworkResultKind.TOOLS_LIST
+				&& kind != McpProfileFrameworkResultKind.PROMPTS_LIST
+				&& kind != McpProfileFrameworkResultKind.RESOURCES_LIST
+				&& kind != McpProfileFrameworkResultKind.RESOURCE_TEMPLATES_LIST)
 			return canonicalResult;
-		McpJsonValue rawTools = canonicalResult.fields().members().get("tools");
-		if (!(rawTools instanceof McpJsonArray tools))
-			throw new IllegalArgumentException("The tool catalog is not an array.");
-		List<McpJsonValue> projectedTools = tools.values().stream()
-				.map(this::projectToolDescriptor).toList();
-		return McpWireResult.complete(new McpJsonObject(Map.of(
-				"tools", new McpJsonArray(projectedTools))));
+		String catalogName = switch (kind) {
+			case TOOLS_LIST -> "tools";
+			case PROMPTS_LIST -> "prompts";
+			case RESOURCES_LIST -> "resources";
+			case RESOURCE_TEMPLATES_LIST -> "resourceTemplates";
+			default -> throw new IllegalArgumentException("Unsupported catalog kind.");
+		};
+		McpJsonValue rawCatalog = canonicalResult.fields().members().get(catalogName);
+		if (!(rawCatalog instanceof McpJsonArray catalog))
+			throw new IllegalArgumentException("The " + catalogName + " catalog is not an array.");
+		List<McpJsonValue> projectedCatalog = catalog.values().stream()
+				.map(value -> switch (kind) {
+					case TOOLS_LIST -> projectToolDescriptor(value);
+					case PROMPTS_LIST -> projectPromptDescriptor(value);
+					case RESOURCES_LIST -> projectResourceDescriptor(value, false);
+					case RESOURCE_TEMPLATES_LIST -> projectResourceDescriptor(value, true);
+					default -> throw new IllegalArgumentException("Unsupported catalog kind.");
+				}).toList();
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put(catalogName, new McpJsonArray(projectedCatalog));
+		McpJsonValue cursor = canonicalResult.fields().members().get("nextCursor");
+		if (cursor != null) {
+			if (!(cursor instanceof McpJsonString))
+				throw new IllegalArgumentException("A catalog cursor must be a string.");
+			fields.put("nextCursor", cursor);
+		}
+		return McpWireResult.complete(new McpJsonObject(fields), canonicalResult.metadata());
+	}
+
+	private @NonNull McpJsonValue projectResourceDescriptor(
+			@NonNull McpJsonValue rawResource, boolean template) {
+		if (!(requireNonNull(rawResource) instanceof McpJsonObject resource))
+			throw new IllegalArgumentException("A resource descriptor is not an object.");
+		requireOrdinaryResource(resource);
+		Set<String> allowed = template ? LEGACY_RESOURCE_TEMPLATE_FIELDS : LEGACY_RESOURCE_FIELDS;
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		for (Map.Entry<String, McpJsonValue> entry : resource.members().entrySet())
+			if (allowed.contains(entry.getKey())
+					|| "2025-11-25".equals(revision) && "icons".equals(entry.getKey()))
+				fields.put(entry.getKey(), entry.getValue());
+		return new McpJsonObject(fields);
+	}
+
+	private void requireOrdinaryResource(@NonNull McpJsonObject resource) {
+		McpJsonValue mimeType = resource.members().get("mimeType");
+		if (mimeType instanceof McpJsonString string && McpAppMimeType.isAppsProfile(string.value()))
+			throw new IllegalArgumentException("The 2025 resource adapter cannot serve Apps resources.");
+		McpJsonValue metadata = resource.members().get("_meta");
+		if (metadata != null && (!(metadata instanceof McpJsonObject object)
+				|| object.members().containsKey("ui")))
+			throw new IllegalArgumentException("The 2025 resource adapter cannot serve Apps metadata.");
+	}
+
+	private @NonNull McpJsonValue projectPromptDescriptor(
+			@NonNull McpJsonValue rawPrompt) {
+		if (!(requireNonNull(rawPrompt) instanceof McpJsonObject prompt))
+			throw new IllegalArgumentException("A prompt descriptor is not an object.");
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		for (Map.Entry<String, McpJsonValue> entry : prompt.members().entrySet())
+			if (LEGACY_PROMPT_FIELDS.contains(entry.getKey())
+					|| "2025-11-25".equals(revision)
+					&& "icons".equals(entry.getKey()))
+				fields.put(entry.getKey(), entry.getValue());
+		return new McpJsonObject(fields);
 	}
 
 	private @NonNull McpJsonValue projectToolDescriptor(
@@ -154,7 +226,46 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 		requireNonNull(canonicalResult);
 		if (!McpResultType.COMPLETE.equals(canonicalResult.resultType()))
 			throw new IllegalArgumentException(
-					"The 2025 tool adapter requires a complete result.");
+					"The 2025 adapter requires a complete result.");
+		if (kind == McpProfileApplicationResultKind.RESOURCE_LIST)
+			return renderFrameworkResult(McpProfileFrameworkResultKind.RESOURCES_LIST, canonicalResult);
+		if (kind == McpProfileApplicationResultKind.RESOURCE_READ) {
+			if (!Set.of("contents", "cacheScope", "ttlMs").containsAll(canonicalResult.fields().members().keySet()))
+				throw new IllegalArgumentException("The resource result contains unsupported 2025 fields.");
+			McpJsonValue rawContents = canonicalResult.fields().members().get("contents");
+			if (!(rawContents instanceof McpJsonArray contents))
+				throw new IllegalArgumentException("A resource result requires contents.");
+			for (McpJsonValue value : contents.values()) {
+				if (!(value instanceof McpJsonObject content)
+						|| !Set.of("uri", "mimeType", "text", "blob", "_meta").containsAll(content.members().keySet())
+						|| !(content.members().get("uri") instanceof McpJsonString)
+						|| content.members().get("text") instanceof McpJsonString
+								== content.members().get("blob") instanceof McpJsonString)
+					throw new IllegalArgumentException("The resource result contains unsupported 2025 contents.");
+				requireOrdinaryResource(content);
+			}
+			return McpWireResult.complete(new McpJsonObject(Map.of("contents", contents)), canonicalResult.metadata());
+		}
+		if (kind == McpProfileApplicationResultKind.PROMPT) {
+			if (!LEGACY_PROMPT_RESULT_FIELDS.containsAll(
+						canonicalResult.fields().members().keySet()))
+				throw new IllegalArgumentException(
+						"The prompt result contains unsupported 2025 fields.");
+			McpJsonValue description = canonicalResult.fields().members().get("description");
+			if (description != null && !(description instanceof McpJsonString))
+				throw new IllegalArgumentException("A prompt description must be a string.");
+			McpJsonValue rawMessages = canonicalResult.fields().members().get("messages");
+			if (!(rawMessages instanceof McpJsonArray messages))
+				throw new IllegalArgumentException("A prompt result requires messages.");
+			for (McpJsonValue message : messages.values()) {
+				if (!(message instanceof McpJsonObject object)
+						|| !(object.members().get("role") instanceof McpJsonString role)
+						|| !Set.of("user", "assistant").contains(role.value()))
+					throw new IllegalArgumentException("A prompt message requires a user or assistant role.");
+				validateContent(object.members().get("content"));
+			}
+			return canonicalResult;
+		}
 		if (kind != McpProfileApplicationResultKind.TOOL)
 			return canonicalResult;
 		if (!LEGACY_TOOL_RESULT_FIELDS.containsAll(
@@ -174,19 +285,20 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 		if (isError != null && !(isError instanceof McpJsonBoolean))
 			throw new IllegalArgumentException(
 					"A 2025 tool result requires boolean isError.");
-		for (McpJsonValue item : content.values()) {
-			if (!(item instanceof McpJsonObject object)
-					|| !(object.members().get("type") instanceof McpJsonString type)
-					|| !LEGACY_CONTENT_TYPES.contains(type.value()))
-				throw new IllegalArgumentException(
-						"The tool result contains unsupported 2025 content.");
-			if ("2025-06-18".equals(revision)
-					&& "resource_link".equals(type.value())
-					&& object.members().containsKey("icons"))
-				throw new IllegalArgumentException(
-						"A 2025-06-18 resource link cannot include icons.");
-		}
+		for (McpJsonValue item : content.values())
+			validateContent(item);
 		return canonicalResult;
+	}
+
+	private void validateContent(McpJsonValue content) {
+		if (!(content instanceof McpJsonObject object)
+				|| !(object.members().get("type") instanceof McpJsonString type)
+				|| !LEGACY_CONTENT_TYPES.contains(type.value()))
+			throw new IllegalArgumentException("The result contains unsupported 2025 content.");
+		if ("2025-06-18".equals(revision)
+				&& "resource_link".equals(type.value())
+				&& object.members().containsKey("icons"))
+			throw new IllegalArgumentException("A 2025-06-18 resource link cannot include icons.");
 	}
 
 	@Override
@@ -202,6 +314,9 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 			@NonNull McpProfileErrorKind kind,
 			@NonNull McpJsonRpcError canonicalError) {
 		requireNonNull(kind);
-		return requireNonNull(canonicalError);
+		requireNonNull(canonicalError);
+		return kind == McpProfileErrorKind.RESOURCE_NOT_FOUND
+				? new McpJsonRpcError(McpJsonRpcError.LEGACY_RESOURCE_NOT_FOUND,
+						"Resource not found", canonicalError.data()) : canonicalError;
 	}
 }

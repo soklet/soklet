@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
@@ -956,6 +957,277 @@ public class McpResourcePublicRuntimeTests {
 				() -> serverBuilder(endpoint).build());
 		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				server.getDiagnostics().getStatus());
+	}
+
+	@Test
+	public void legacyCatalogsAndReadsRespectRevisionViewsAndWireSchemas() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		AtomicInteger reads = new AtomicInteger();
+		AtomicInteger modernOnlyReads = new AtomicInteger();
+		List<String> stages = Collections.synchronizedList(new ArrayList<>());
+		McpResourceRegistration text = McpResourceRegistration.withUriAndName(TEXT_URI, "Text", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) -> {
+					reads.incrementAndGet();
+					stages.add("handler");
+					return completeText(resourceReadContext.getUri(), "resource-value", "text/plain");
+				}).title("A title").description("A description").mimeType("text/plain")
+				.icons(List.of(McpIcon.withSource(URI.create("https://example.com/icon.png")).build()))
+				.metadata(McpJsonObject.builder().put("example/kind", "ordinary").build())
+				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(Duration.ofSeconds(1))).build();
+		McpResourceRegistration binary = McpResourceRegistration.withUriAndName(BINARY_URI, "Binary", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContent(McpBlobResourceContents
+								.withUriAndData(resourceReadContext.getUri(), new byte[] {1, 2, 3}).build()))).build();
+		McpResourceRegistration template = McpResourceRegistration.withUriTemplateAndName(TEMPLATE_URI, "Template", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						completeText(resourceReadContext.getUri(), resourceReadContext.getUriTemplateVariables().get("id"), "text/plain"))
+				.icons(List.of(McpIcon.withSource(URI.create("https://example.com/template.png")).build())).build();
+		McpResourceRegistration modernOnly = McpResourceRegistration.withUriAndName(SPECIAL_URI, "Modern only",
+				Set.of(McpProtocolVersion.V2026_07_28)).handler((requestContext, resourceReadContext, invocationFeatures) -> {
+			modernOnlyReads.incrementAndGet();
+			return completeText(resourceReadContext.getUri(), "modern", "text/plain");
+		}).build();
+		McpResourceRegistration modernTemplate = McpResourceRegistration.withUriTemplateAndName("test://modern/{id}", "Modern template",
+				Set.of(McpProtocolVersion.V2026_07_28)).handler((requestContext, resourceReadContext, invocationFeatures) -> {
+			modernOnlyReads.incrementAndGet();
+			return completeText(resourceReadContext.getUri(), "modern", "text/plain");
+		}).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion("resources", "1").build(), versions)
+				.resourceRegistrations(List.of(text, binary, template, modernOnly, modernTemplate)).build();
+		McpServer server = serverBuilder(endpoint).admissionController(admissionContext -> {
+			stages.add("admission");
+			return McpAdmissionDecision.accepted();
+		}).requestRateLimiter(rateLimitContext -> {
+			stages.add("limiter");
+			return McpRateLimitDecision.allowed();
+		}).localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH, localizationRequest ->
+				McpLocalizationContext.withLocale(Locale.FRENCH, textValue ->
+						McpLocalizationResult.localized("FR:" + textValue.getDefaultText())).build()).build())
+				.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+					stages.add("interceptor-before");
+					McpOperationResult result = continuation.proceed();
+					stages.add("interceptor-after");
+					return result;
+				}).build();
+		Soklet soklet = managedSoklet(server);
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize",
+						"\"protocolVersion\":\"" + revision + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}", null);
+				assertContains(initialize.body(), "\"resources\":{}");
+				HttpResponse<String> catalog = sendLegacy(port, revision, "resources/list", "", null);
+				assertSuccess(catalog, "legacy");
+				assertContains(catalog.body(), "\"title\":\"FR:A title\"");
+				assertContains(catalog.body(), "\"example/kind\":\"ordinary\"");
+				Assertions.assertFalse(catalog.body().contains("Modern only"), catalog.body());
+				Assertions.assertEquals(revision.equals("2025-11-25"), catalog.body().contains("\"icons\""));
+				HttpResponse<String> templates = sendLegacy(port, revision, "resources/templates/list", "", null);
+				assertSuccess(templates, "legacy");
+				assertContains(templates.body(), TEMPLATE_URI);
+				Assertions.assertFalse(templates.body().contains("test://modern"), templates.body());
+				Assertions.assertEquals(revision.equals("2025-11-25"), templates.body().contains("\"icons\""));
+				stages.clear();
+				HttpResponse<String> exact = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + TEXT_URI + "\"", null);
+				assertSuccess(exact, "legacy");
+				assertContains(exact.body(), "resource-value");
+				Assertions.assertEquals(List.of("admission", "limiter", "interceptor-before", "handler", "interceptor-after"), stages);
+				HttpResponse<String> blob = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + BINARY_URI + "\"", null);
+				assertContains(blob.body(), "\"blob\":\"AQID\"");
+				HttpResponse<String> unicode = sendLegacy(port, revision, "resources/read", "\"uri\":\"test://template/caf%C3%A9/data\"", null);
+				assertContains(unicode.body(), "\"text\":\"café\"");
+				HttpResponse<String> slash = sendLegacy(port, revision, "resources/read", "\"uri\":\"test://template/a%2Fb/data\"", null);
+				assertContains(slash.body(), "\"text\":\"a/b\"");
+				// An exact route assigned only to 2026 cannot shadow a legacy template.
+				HttpResponse<String> shadow = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + SPECIAL_URI + "\"", null);
+				assertContains(shadow.body(), "\"text\":\"special\"");
+				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://modern/item\"", null), 400, -32002, "legacy");
+				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://missing\"", null), 400, -32002, "legacy");
+				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"\"", null), 400, -32602, "legacy");
+				assertError(sendLegacy(port, revision, "resources/templates/list", "\"cursor\":\"next\"", null), 400, -32602, "legacy");
+				for (HttpResponse<String> response : List.of(catalog, templates, exact, blob, unicode)) {
+					Assertions.assertFalse(response.body().contains("resultType"), response.body());
+					Assertions.assertFalse(response.body().contains("cacheScope"), response.body());
+					Assertions.assertFalse(response.body().contains("ttlMs"), response.body());
+				}
+			}
+			Assertions.assertEquals(2, reads.get());
+			Assertions.assertEquals(0, modernOnlyReads.get());
+			assertContains(read(port, "modern", SPECIAL_URI.toString()).body(), "\"text\":\"modern\"");
+			Assertions.assertEquals(1, modernOnlyReads.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void legacyDynamicPagesPreserveOpaqueCursorsAndValidateSelectedRoutes() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger pages = new AtomicInteger();
+		McpResourceRegistration shared = McpResourceRegistration.withUriAndName(TEXT_URI, "Shared", versions).handler(resourceHandler()).build();
+		McpResourceRegistration modern = McpResourceRegistration.withUriAndName(BINARY_URI, "Modern", Set.of(McpProtocolVersion.V2026_07_28)).handler(resourceHandler()).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion("pages", "1").build(), versions)
+				.resourceRegistrations(List.of(shared, modern)).resourceListHandler((requestContext, resourceListContext, invocationFeatures) -> {
+					pages.incrementAndGet();
+					Assertions.assertEquals("reader", requestContext.getAdmissionIdentity().getPrincipal().orElseThrow());
+					McpResourcePage.Builder page = McpResourcePage.builder().metadata(McpJsonObject.builder().put("example/page", true).build());
+					if (resourceListContext.getCursor().isEmpty())
+						return page.resourceDescriptors(resourceListContext.getRegisteredResourceDescriptors()).nextCursor("世界").build();
+					return switch (resourceListContext.getCursor().orElseThrow()) {
+						case "世界" -> page.nextCursor("").build();
+						case "" -> page.build();
+						case "bad" -> page.resourceDescriptors(List.of(McpResourceDescriptor.withUriAndName(BINARY_URI, "Modern").build())).build();
+						case "big" -> page.nextCursor("世界語").build();
+						default -> throw new IllegalStateException("private canary");
+					};
+				}, versions).build();
+		McpServer server = serverBuilder(endpoint).maximumCursorSizeInBytes(6).admissionController(admissionContext -> {
+			admissions.incrementAndGet();
+			if (!admissionContext.getRequest().getHeader("Authorization").orElse("").equals("Bearer reader"))
+				return McpAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(403, McpJsonRpcError.fromApplication(-31903, "Denied")).build());
+			return McpAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("reader").authorizationPartitionKey("reader").principal("reader").build());
+		}).build();
+		Soklet soklet = managedSoklet(server);
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> first = sendLegacy(port, revision, "resources/list", "", "Bearer reader");
+				assertSuccess(first, "legacy");
+				assertContains(first.body(), "\"nextCursor\":\"世界\"");
+				assertContains(first.body(), "\"example/page\":true");
+				Assertions.assertFalse(first.body().contains(BINARY_URI.toString()), first.body());
+				assertContains(sendLegacy(port, revision, "resources/list", "\"cursor\":\"世界\"", "Bearer reader").body(), "\"nextCursor\":\"\"");
+				HttpResponse<String> last = sendLegacy(port, revision, "resources/list", "\"cursor\":\"\"", "Bearer reader");
+				assertSuccess(last, "legacy");
+				Assertions.assertFalse(last.body().contains("nextCursor"), last.body());
+				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"世界語\"", "Bearer reader"), 400, -32602, "legacy");
+				for (String cursor : List.of("bad", "big", "throw")) {
+					HttpResponse<String> failure = sendLegacy(port, revision, "resources/list", "\"cursor\":\"" + cursor + "\"", "Bearer reader");
+					assertError(failure, 500, -32603, "legacy");
+					Assertions.assertFalse(failure.body().contains(BINARY_URI.toString()), failure.body());
+					Assertions.assertFalse(failure.body().contains("private canary"), failure.body());
+				}
+				int before = pages.get();
+				Assertions.assertEquals(403, sendLegacy(port, revision, "resources/list", "\"cursor\":\"世界\"", null).statusCode());
+				Assertions.assertEquals(403, sendLegacy(port, revision, "resources/read", "\"uri\":\"" + TEXT_URI + "\"", null).statusCode());
+				Assertions.assertEquals(before, pages.get());
+			}
+			Assertions.assertEquals(12, pages.get());
+			Assertions.assertEquals(16, admissions.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void legacyReadsRejectAppsOutputAndHonorResponseByteBounds() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
+		McpResourceRegistration apps = McpResourceRegistration.withUriAndName(TEXT_URI, "Ordinary declaration", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						completeText(resourceReadContext.getUri(), "private Apps canary", "text/html;profile=mcp-app")).build();
+		McpResourceRegistration oversized = McpResourceRegistration.withUriAndName(BINARY_URI, "Oversized", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						completeText(resourceReadContext.getUri(), "\0".repeat(750_000), "text/plain")).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion("bounds", "1").build(), versions)
+				.resourceRegistrations(List.of(apps, oversized)).build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server);
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25"))
+				for (URI uri : List.of(TEXT_URI, BINARY_URI)) {
+					HttpResponse<String> failure = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + uri + "\"", null);
+					assertError(failure, 500, -32603, "legacy");
+					Assertions.assertFalse(failure.body().contains("private Apps canary"), failure.body());
+					Assertions.assertTrue(failure.body().getBytes(StandardCharsets.UTF_8).length <= 4_194_304);
+				}
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void modernOnlyResourceEndpointsExposeNoLegacyResourceSurface() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		AtomicInteger invocations = new AtomicInteger();
+		McpResourceRegistration resource = McpResourceRegistration.withUriAndName(TEXT_URI, "Modern",
+				Set.of(McpProtocolVersion.V2026_07_28)).handler((requestContext, resourceReadContext, invocationFeatures) -> {
+			invocations.incrementAndGet();
+			return completeText(resourceReadContext.getUri(), "modern", "text/plain");
+		}).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("modern-resources", "1").build(), versions)
+				.resourceRegistrations(List.of(resource)).build();
+		McpServer server = serverBuilder(endpoint).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize",
+						"\"protocolVersion\":\"" + revision + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}", null);
+				assertSuccess(initialize, "legacy");
+				Assertions.assertFalse(initialize.body().contains("\"resources\""), initialize.body());
+				for (String method : List.of("resources/list", "resources/templates/list", "resources/read"))
+					assertError(sendLegacy(port, revision, method,
+							method.equals("resources/read") ? "\"uri\":\"" + TEXT_URI + "\"" : "", null),
+							404, -32601, "legacy");
+			}
+			Assertions.assertEquals(0, invocations.get());
+			assertContains(read(port, "modern", TEXT_URI.toString()).body(), "\"text\":\"modern\"");
+			Assertions.assertEquals(1, invocations.get());
+		}
+	}
+
+	@Test
+	public void legacyEmptyCustomListCannotReachModernSkillsReadFallback() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		URI skillUri = URI.create("skill://example/test-skill/SKILL.md");
+		String document = "---\nname: test-skill\ndescription: Test skill\n---\nprivate skill canary\n";
+		McpSkillRegistration skill = McpSkillRegistration.withUriAndSkillBundle(skillUri,
+				McpSkillBundle.fromFiles(Map.of("SKILL.md", document.getBytes(StandardCharsets.UTF_8))),
+				Set.of(McpProtocolVersion.V2026_07_28)).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("skill-isolation", "1").build(), versions)
+				.skillRegistrations(List.of(skill))
+				.resourceListHandler((requestContext, resourceListContext, invocationFeatures) -> {
+					Assertions.assertTrue(resourceListContext.getRegisteredResourceDescriptors().isEmpty());
+					return McpResourcePage.builder().build();
+				}, versions).build();
+		McpServer server = serverBuilder(endpoint).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> list = sendLegacy(port, revision, "resources/list", "", null);
+				assertSuccess(list, "legacy");
+				assertContains(list.body(), "\"resources\":[]");
+				HttpResponse<String> unavailable = sendLegacy(port, revision, "resources/read",
+						"\"uri\":\"" + skillUri + "\"", null);
+				assertError(unavailable, 400, -32002, "legacy");
+				Assertions.assertFalse(unavailable.body().contains("private skill canary"), unavailable.body());
+			}
+			HttpResponse<String> modern = read(port, "modern-skill", skillUri.toString());
+			assertSuccess(modern, "modern-skill");
+			assertContains(modern.body(), "private skill canary");
+		}
+	}
+
+	private static HttpResponse<String> sendLegacy(int port, String revision, String method,
+			String parameters, String authorization) throws Exception {
+		HttpRequest.Builder request = HttpRequest.newBuilder().uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5)).header("Content-Type", JSON_MEDIA_TYPE)
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream").header("MCP-Protocol-Version", revision);
+		if (authorization != null) request.header("Authorization", authorization);
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"legacy\",\"method\":\"" + method + "\",\"params\":{" + parameters + "}}";
+		return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build().send(request
+				.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {

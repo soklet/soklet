@@ -157,7 +157,7 @@ test('candidate, shell and auth-patched dependencies remain pinned to the prior 
     sha256: '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'},
   patchedFileSha256: '405da5e71b887403bb53ff2e3984cec631a1138f50662ad199dfb8e536dcd47a',
   experimental: true, releasedHostQualification: false};
-  const candidate = {jarSha256: 'e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f'};
+  const candidate = {jarSha256: '64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727'};
   const shell = {sha256: '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
   assert.doesNotThrow(() => validateExperimentPins(provenance, candidate, shell));
   for (const [p, c, s] of [[null, candidate, shell], [{}, candidate, shell],

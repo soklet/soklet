@@ -120,6 +120,7 @@ public final class AppsFixture {
 		this.endpoint = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion("soklet-apps-fixture", "fixture-v1").build(),
 				PROTOCOL_VERSIONS)
+				.subscriptionProtocolVersions(PROTOCOL_VERSIONS)
 				.toolRegistrations(java.util.List.of(tool(TOOL, false), tool(REFRESH, true)))
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(UI_URI,
 						"catalog_view", PROTOCOL_VERSIONS)

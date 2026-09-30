@@ -347,6 +347,27 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							handlerInterceptorInvocations.get());
 					Assertions.assertEquals(admissionsBeforeMismatch + 2,
 							admissionInvocations.get());
+					for (String revision : List.of("2025-06-18", "2025-11-25")) {
+						HttpRequest legacyRequest = HttpRequest.newBuilder()
+								.uri(URI.create("http://" + LOOPBACK + ":" + port + "/catalog/mcp"))
+								.timeout(Duration.ofSeconds(5))
+								.header("Content-Type", "application/json")
+								.header("Accept", "application/json, text/event-stream")
+								.header("MCP-Protocol-Version", revision)
+								.POST(HttpRequest.BodyPublishers.ofString("""
+										{"jsonrpc":"2.0","id":"annotated-legacy-prompt","method":"prompts/get",
+										"params":{"name":"catalog.compose","arguments":{"subject":"legacy"}}}
+										""")).build();
+						HttpResponse<String> legacyResponse = HttpClient.newBuilder()
+								.connectTimeout(Duration.ofSeconds(5)).build()
+								.send(legacyRequest, HttpResponse.BodyHandlers.ofString());
+						Assertions.assertEquals(200, legacyResponse.statusCode(), legacyResponse.body());
+						Assertions.assertTrue(legacyResponse.body().contains(
+								"\"text\":\"legacy|default|true\""), legacyResponse.body());
+						Assertions.assertFalse(legacyResponse.body().contains("resultType"), legacyResponse.body());
+					}
+					Assertions.assertEquals(4, providedInstances.get());
+					Assertions.assertEquals(4, handlerInterceptorInvocations.get());
 				} finally {
 					soklet.close();
 				}
@@ -534,7 +555,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				import java.util.List;
 				import java.util.Optional;
 
-				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				@McpServerEndpoint(protocolVersions = {com.soklet.McpProtocolVersion.V2026_07_28,
+				    com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25},
 				    path = "/catalog/mcp",
 				    name = "catalog",
 				    version = "4.0.0",
@@ -580,7 +602,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					            features.find(McpProgressReporter.class)));
 				  }
 
-				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				  @McpPrompt(protocolVersions = {com.soklet.McpProtocolVersion.V2026_07_28,
+				      com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25},
 				      name = "catalog.compose",
 				      title = "Catalog composer",
 				      description = "Builds a catalog prompt")

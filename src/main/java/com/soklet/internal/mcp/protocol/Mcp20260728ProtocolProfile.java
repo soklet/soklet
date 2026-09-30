@@ -108,6 +108,9 @@ final class Mcp20260728ProtocolProfile implements McpProtocolProfile {
 			@NonNull McpProfileErrorKind kind,
 			@NonNull McpJsonRpcError canonicalError) {
 		requireNonNull(kind);
-		return requireNonNull(canonicalError);
+		requireNonNull(canonicalError);
+		if (canonicalError.code() == McpJsonRpcError.LEGACY_RESOURCE_NOT_FOUND)
+			throw new IllegalArgumentException("A 2025 resource error cannot be rendered by the 2026 profile.");
+		return canonicalError;
 	}
 }

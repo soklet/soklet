@@ -5,7 +5,7 @@ import {BATCH_COUNT, REQUEST_COUNT, MIME_FAILURES} from './matrix.mjs';
 import {PROFILE, SUCCESS, adjudicateReceipt, boundedJson, collectMatrix, completedChecks,
   failureCode, fixtureAuthentication, fixtureControl, parseArguments, validatePins} from './run.mjs';
 
-const candidate = {jarSha256: '1782dcaa2270cb543c49abc80c942a2ff0f1ab72f9abb88a5d2556d200bd8d74'};
+const candidate = {jarSha256: '64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727'};
 const shell = {sha256: '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
 
 test('five explicit unique arguments exclude browser, host and dependency inputs', () => {

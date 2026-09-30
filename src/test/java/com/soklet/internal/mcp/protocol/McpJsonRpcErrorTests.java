@@ -31,10 +31,11 @@ public class McpJsonRpcErrorTests {
 			McpJsonRpcError.INTERNAL_ERROR,
 			McpJsonRpcError.HEADER_MISMATCH,
 			McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
-			McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION);
+			McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION,
+			McpJsonRpcError.LEGACY_RESOURCE_NOT_FOUND);
 
 	@Test
-	public void rejectsLegacyAndWithdrawnCodes() {
+	public void rejectsUndefinedAndWithdrawnCodes() {
 		for (int code = -32768; code <= -32000; ++code) {
 			if (DEFINED_RESERVED_CODES.contains(code))
 				continue;
@@ -42,8 +43,20 @@ public class McpJsonRpcErrorTests {
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> error(rejectedCode), Integer.toString(rejectedCode));
 		}
-		Assertions.assertThrows(IllegalArgumentException.class, () -> error(-32002));
 		Assertions.assertThrows(IllegalArgumentException.class, () -> error(-32042));
+	}
+
+	@Test
+	public void resourceNotFoundCodeBelongsOnlyToTheSelectedLegacyProfile() {
+		McpJsonRpcError canonical = error(McpJsonRpcError.INVALID_PARAMS);
+		McpJsonRpcError legacy = Mcp2025ProtocolProfile.JUNE_18.renderFrameworkError(
+				McpProfileErrorKind.RESOURCE_NOT_FOUND, canonical);
+		Assertions.assertEquals(-32002, legacy.code());
+		Assertions.assertEquals("Resource not found", legacy.message());
+		Assertions.assertEquals(canonical, Mcp20260728ProtocolProfile.INSTANCE.renderFrameworkError(
+				McpProfileErrorKind.RESOURCE_NOT_FOUND, canonical));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Mcp20260728ProtocolProfile.INSTANCE.renderFrameworkError(McpProfileErrorKind.OPERATION, legacy));
 	}
 
 	@Test

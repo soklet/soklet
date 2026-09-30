@@ -55,7 +55,8 @@ public interface McpResourceListContext {
 	 * registrations.
 	 *
 	 * <p>The immutable list is in deterministic registration order and excludes
-	 * URI-template registrations. It is convenience registration data, not an
+	 * URI-template registrations and resources not enabled for the request's
+	 * selected protocol revision. It is convenience registration data, not an
 	 * authorization-filtered result. A custom handler remains the sole authority
 	 * for the returned page.
 	 *

@@ -247,6 +247,11 @@ public class McpSelectedProfileBindingTests {
 					productionOperationError);
 			Assertions.assertTrue(operationError.contains("[OPERATION]"), operationError);
 
+			String missingResource = request(port, FAKE, "resources/read",
+					",\"uri\":\"test://missing\"", List.of(new McpChunkedHttpClient.RequestHeader(
+							"Mcp-Name", "test://missing")), "");
+			Assertions.assertTrue(missingResource.contains("[RESOURCE_NOT_FOUND]"), missingResource);
+
 			int controlRenders = fake.errorRenderCount(McpProfileErrorKind.CONTROL);
 			String controlError = request(port, FAKE, "server/discover", "",
 					List.of(new McpChunkedHttpClient.RequestHeader(

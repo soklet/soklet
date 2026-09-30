@@ -29,10 +29,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -47,6 +49,250 @@ public class McpPromptPublicRuntimeTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String PROMPT_NAME = "catalog.compose";
+	private static final Set<McpProtocolVersion> ALL_VERSIONS = Set.of(
+			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
+			McpProtocolVersion.V2026_07_28);
+
+	@Test
+	public void legacyPromptsUseExactCatalogsAndThePublicHandler() throws Exception {
+		AtomicReference<McpRequestContext> observedRequest = new AtomicReference<>();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpPromptRegistration shared = McpPromptRegistration.withName(PROMPT_NAME, ALL_VERSIONS)
+				.handler((requestContext, promptGetContext, invocationFeatures) -> {
+					observedRequest.set(requestContext);
+					handlerInvocations.incrementAndGet();
+					Assertions.assertTrue(invocationFeatures.getProgressReporter().isEmpty());
+					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
+							.description("Rendered")
+							.messages(List.of(McpPromptMessage.fromUserText("subject="
+									+ promptGetContext.findArgument("subject").orElseThrow()
+									+ ";tone=" + promptGetContext.findArgument("tone").orElse("<absent>")),
+									McpPromptMessage.fromAssistantContent(McpImageContent
+											.withDataAndMimeType(new byte[] { 1, 2, 3 }, "image/png").build()),
+									McpPromptMessage.fromAssistantContent(McpAudioContent
+											.withDataAndMimeType(new byte[] { 4, 5 }, "audio/wav").build()),
+									McpPromptMessage.fromUserContent(McpEmbeddedResource.withResource(
+											McpTextResourceContents.withUriAndText(
+													URI.create("test://catalog/embedded"), "embedded").build()).build())))
+							.build()).toBuilder()
+							.metadata(McpJsonObject.builder().put("renderedBy", "test").build()).build();
+				})
+				.title("Compose")
+				.description("Compose a prompt")
+				.icons(List.of(McpIcon.withSource(URI.create("https://example.com/icon.png")).build()))
+				.metadata(McpJsonObject.builder().put("owner", "catalog").build())
+				.arguments(List.of(McpPromptArgumentDeclaration.withName("subject")
+						.title("Subject").description("Subject to discuss").required(true).build(),
+						McpPromptArgumentDeclaration.withName("tone").build())).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("legacy-prompts", "4.0.0").build(), ALL_VERSIONS)
+				.promptRegistrations(List.of(shared,
+						simplePrompt("june-only", Set.of(McpProtocolVersion.V2025_06_18)),
+						simplePrompt("modern-only", Set.of(McpProtocolVersion.V2026_07_28))))
+				.build();
+		McpServer server = legacyServerBuilder(endpoint).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
+					McpProtocolVersion.V2025_11_25)) {
+				String revision = version.getWireValue();
+				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize", "init",
+						"\"protocolVersion\":\"" + revision + "\",\"capabilities\":{\"sampling\":{}},"
+								+ "\"clientInfo\":{\"name\":\"test-client\",\"version\":\"1\"}", Map.of());
+				assertSuccess(initialize, "init");
+				assertContains(initialize.body(), "\"protocolVersion\":\"" + revision + "\"");
+				assertContains(initialize.body(), "\"capabilities\":{\"prompts\":{}}");
+				Assertions.assertFalse(initialize.body().contains("listChanged"), initialize.body());
+				Assertions.assertTrue(initialize.headers().firstValue("Mcp-Session-Id").isEmpty());
+				HttpResponse<String> list = sendLegacy(port, revision, "prompts/list", "list", "", Map.of());
+				assertSuccess(list, "list");
+				assertContains(list.body(), "\"title\":\"Compose\"");
+				assertContains(list.body(), "\"name\":\"subject\"");
+				assertContains(list.body(), "\"required\":true");
+				assertContains(list.body(), "\"owner\":\"catalog\"");
+				Assertions.assertEquals(version == McpProtocolVersion.V2025_11_25,
+						list.body().contains("\"icons\""), list.body());
+				Assertions.assertEquals(version == McpProtocolVersion.V2025_06_18,
+						list.body().contains("june-only"), list.body());
+				Assertions.assertFalse(list.body().contains("modern-only"), list.body());
+				assertLegacyResult(list);
+				HttpResponse<String> get = sendLegacy(port, revision, "prompts/get", "get",
+						"\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{\"subject\":\" exact \"}",
+						Map.of("Mcp-Method", "prompts/get", "Mcp-Name", PROMPT_NAME));
+				assertSuccess(get, "get");
+				assertContains(get.body(), "\"text\":\"subject= exact ;tone=<absent>\"");
+				assertContains(get.body(), "\"type\":\"image\"");
+				assertContains(get.body(), "\"data\":\"AQID\"");
+				assertContains(get.body(), "\"type\":\"audio\"");
+				assertContains(get.body(), "\"type\":\"resource\"");
+				assertContains(get.body(), "\"renderedBy\":\"test\"");
+				assertLegacyResult(get);
+				Assertions.assertSame(endpoint, observedRequest.get().getEndpoint());
+				Assertions.assertEquals(version, observedRequest.get().getProtocolVersion());
+				Assertions.assertTrue(observedRequest.get().getClientInfo().isEmpty());
+				Assertions.assertEquals(McpJsonObject.emptyInstance(), observedRequest.get().getClientCapabilities().toJson());
+				for (String parameters : List.of(
+						"\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{}",
+						"\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{\"subject\":42}",
+						"\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{\"subject\":\"x\",\"typo\":\"y\"}",
+						"\"name\":\"modern-only\"", "\"name\":\"absent\""))
+					assertError(sendLegacy(port, revision, "prompts/get", "invalid", parameters, Map.of()),
+							400, -32602, "invalid");
+				assertError(sendLegacy(port, revision, "prompts/list", "cursor", "\"cursor\":\"x\"", Map.of()),
+						400, -32602, "cursor");
+				assertError(sendLegacy(port, revision, "completion/complete", "completion", "", Map.of()),
+						404, -32601, "completion");
+			}
+			Assertions.assertEquals(2, handlerInvocations.get());
+			HttpResponse<String> modern = send(port, request("modern", "prompts/get",
+					",\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{\"subject\":\"modern\"}"),
+					"prompts/get", PROMPT_NAME);
+			assertSuccess(modern, "modern");
+			assertContains(modern.body(), "\"resultType\":\"complete\"");
+			Assertions.assertEquals(McpProtocolVersion.V2026_07_28, observedRequest.get().getProtocolVersion());
+		}
+	}
+
+	@Test
+	public void legacyPromptPolicyIsRecheckedBeforeEveryGetAndUsesTheSharedPipeline() throws Exception {
+		List<String> stages = Collections.synchronizedList(new ArrayList<>());
+		AtomicBoolean allowed = new AtomicBoolean(true);
+		AtomicBoolean admitted = new AtomicBoolean(true);
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpPromptRegistration prompt = McpPromptRegistration.withName(PROMPT_NAME, ALL_VERSIONS)
+				.handler((requestContext, promptGetContext, invocationFeatures) -> {
+					stages.add("handler");
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages(
+							McpPromptMessage.fromUserText("private prompt")));
+				}).title("Canonical title").build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("prompt-policy", "4.0.0").build(), ALL_VERSIONS)
+				.promptRegistrations(List.of(prompt)).build();
+		McpServer server = legacyServerBuilder(endpoint)
+				.admissionController(admissionContext -> {
+					stages.add("admission");
+					return admitted.get() ? McpAdmissionDecision.accepted() : McpAdmissionDecision.rejected(
+							McpAdmissionRejection.withStatusCodeAndError(403,
+									McpJsonRpcError.fromApplication(-31903, "Denied")).build());
+				})
+				.requestRateLimiter(rateLimitContext -> {
+					stages.add("request-limiter");
+					return McpRateLimitDecision.allowed();
+				})
+				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+						(requestContext, registration, invocationFeatures) -> true,
+						(requestContext, registration, invocationFeatures) -> {
+							Assertions.assertSame(prompt, registration);
+							stages.add("policy");
+							return allowed.get();
+						}))
+				.localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH, localizationRequest ->
+						McpLocalizationContext.withLocale(Locale.FRENCH, text ->
+								McpLocalizationResult.localized("FR:" + text.getDefaultText())).build()).build())
+				.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+					stages.add("interceptor-before");
+					McpOperationResult result = continuation.proceed();
+					stages.add("interceptor-after");
+					return result;
+				}).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				allowed.set(true);
+				admitted.set(true);
+				stages.clear();
+				HttpResponse<String> list = sendLegacy(port, revision, "prompts/list", "list", "", Map.of());
+				assertSuccess(list, "list");
+				assertContains(list.body(), "\"title\":\"FR:Canonical title\"");
+				Assertions.assertEquals(List.of("admission", "request-limiter", "policy"), stages);
+				String parameters = "\"name\":\"" + PROMPT_NAME + "\"";
+				stages.clear();
+				assertSuccess(sendLegacy(port, revision, "prompts/get", "get", parameters, Map.of()), "get");
+				Assertions.assertEquals(List.of("admission", "request-limiter", "policy",
+						"interceptor-before", "handler", "interceptor-after"), stages);
+				allowed.set(false);
+				stages.clear();
+				HttpResponse<String> hidden = sendLegacy(port, revision, "prompts/get", "hidden", parameters, Map.of());
+				assertError(hidden, 400, -32602, "hidden");
+				Assertions.assertEquals(List.of("admission", "request-limiter", "policy"), stages);
+				HttpResponse<String> absent = sendLegacy(port, revision, "prompts/get", "hidden",
+						"\"name\":\"absent\"", Map.of());
+				Assertions.assertEquals(absent.body(), hidden.body());
+				HttpResponse<String> emptyList = sendLegacy(port, revision, "prompts/list", "empty", "", Map.of());
+				assertSuccess(emptyList, "empty");
+				assertContains(emptyList.body(), "\"prompts\":[]");
+				admitted.set(false);
+				stages.clear();
+				HttpResponse<String> denied = sendLegacy(port, revision, "prompts/get", "denied", parameters, Map.of());
+				assertError(denied, 403, -31903, "denied");
+				Assertions.assertEquals(List.of("admission"), stages);
+				Assertions.assertFalse(denied.body().contains("private prompt"));
+			}
+			Assertions.assertEquals(2, handlerInvocations.get());
+		}
+	}
+
+	@Test
+	public void modernOnlyPromptsDoNotAdvertiseALegacyCapability() throws Exception {
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("modern-prompts", "4.0.0").build(), ALL_VERSIONS)
+				.promptRegistrations(List.of(simplePrompt("modern-only", Set.of(McpProtocolVersion.V2026_07_28))))
+				.build();
+		McpServer server = legacyServerBuilder(endpoint).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize", "init",
+						"\"protocolVersion\":\"" + revision + "\",\"capabilities\":{},"
+								+ "\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}", Map.of());
+				assertSuccess(initialize, "init");
+				assertContains(initialize.body(), "\"capabilities\":{}");
+				assertError(sendLegacy(port, revision, "prompts/list", "list", "", Map.of()),
+						404, -32601, "list");
+			}
+		}
+	}
+
+	private static McpPromptRegistration simplePrompt(String name, Set<McpProtocolVersion> protocolVersions) {
+		return McpPromptRegistration.withName(name, protocolVersions)
+				.handler((requestContext, promptGetContext, invocationFeatures) ->
+						McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages()))
+				.build();
+	}
+
+	private static McpServer.Builder legacyServerBuilder(McpEndpoint endpoint) {
+		return McpServer.withPort(0).host(LOOPBACK)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static HttpResponse<String> sendLegacy(int port, String revision, String method,
+			String id, String parameters, Map<String, String> headers) throws Exception {
+		HttpRequest.Builder request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE)
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream");
+		if (!"initialize".equals(method))
+			request.header("MCP-Protocol-Version", revision);
+		headers.forEach(request::header);
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"method\":\"" + method
+				+ "\",\"params\":{" + parameters + "}}";
+		return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build().send(
+				request.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static void assertLegacyResult(HttpResponse<String> response) {
+		for (String modernField : List.of("resultType", "ttlMs", "cacheScope", "nextCursor"))
+			Assertions.assertFalse(response.body().contains("\"" + modernField + "\""), response.body());
+	}
 
 	@Test
 	public void promptCatalogAndGetUseThePublicPipeline() throws Exception {

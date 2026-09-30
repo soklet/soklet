@@ -25,10 +25,10 @@ test('candidate paths must be regular existing files', () => {
 });
 
 test('only the complete candidate contract set can pass', () => {
-  const good = {status: 'PASS', cases: 12, requests: 34, scope: 'candidate-public-api-simulator'};
+  const good = {status: 'PASS', cases: 13, requests: 35, scope: 'candidate-public-api-simulator'};
   assert.deepEqual(contractSummary(JSON.stringify(good), ''), good);
-  for (const changed of [{...good, status: 'SKIP'}, {...good, cases: 11},
-    {...good, requests: 0}, {...good, requests: 33}, {...good, scope: 'mock'},
+  for (const changed of [{...good, status: 'SKIP'}, {...good, cases: 12},
+    {...good, requests: 0}, {...good, requests: 34}, {...good, scope: 'mock'},
     {...good, extra: 'unreviewed'}])
     assert.throws(() => contractSummary(JSON.stringify(changed), ''), /APPS_UNEXPECTED_CONTRACT_OUTPUT/);
   assert.throws(() => contractSummary(JSON.stringify(good), 'unexpected warning'), /APPS_UNEXPECTED_CONTRACT_OUTPUT/);

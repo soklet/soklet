@@ -717,6 +717,31 @@ final class McpApplicationRequestRouter {
 		return Optional.ofNullable(exactResourceRoutesByUri.get(URI.create(wireUri)));
 	}
 
+	/** Selects executable resource routes using the same revision as the catalog. */
+	@NonNull
+	McpApplicationRequestRouter resourceView(@NonNull McpNormalizedEndpoint endpoint) {
+		requireNonNull(endpoint);
+		Set<URI> exactUris = endpoint.exactResources().stream()
+				.map(operation -> URI.create(operation.resourceDescriptor().orElseThrow().uri()))
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		Set<String> templates = endpoint.resourceTemplates().stream()
+				.map(operation -> operation.resourceTemplateDescriptor().orElseThrow().uriTemplate())
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		Map<URI, McpApplicationResourceReadRoute> exactRoutes = new LinkedHashMap<>();
+		exactResourceRoutesByUri.forEach((uri, route) -> {
+			if (exactUris.contains(uri))
+				exactRoutes.put(uri, route);
+		});
+		Map<String, McpApplicationRequestHandler> handlers = new LinkedHashMap<>(handlersByMethod);
+		if (endpoint.skillsPlan().isEmpty())
+			handlers.remove("resources/read");
+		return new McpApplicationRequestRouter(Collections.unmodifiableMap(handlers), toolRoutesByName,
+				promptRoutesByName, promptCompletionRoutes, resourceCompletionRoutes,
+				Collections.unmodifiableMap(exactRoutes), resourceTemplateRoutes.stream()
+						.filter(route -> templates.contains(route.uriTemplate())).toList(),
+				endpoint.customResourceListHandler() ? resourceListRoute : Optional.empty());
+	}
+
 	@NonNull
 	Optional<@NonNull McpApplicationResourceTemplateMatch> resolveResourceTemplate(
 			@NonNull String uri) {

@@ -76,7 +76,7 @@ ignoring OAuth or borrowing a previous host PASS.
 
 Add `--profile transitions` to the invocation above to select a separate
 profile on the same current candidate JAR SHA-256
-`e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f`.
+`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`.
 The original render/refresh behavior remains unchanged. After the English/alpha
 render and refresh, the fixture acknowledges
 two bounded caller changes over its private stdin control stream. The browser

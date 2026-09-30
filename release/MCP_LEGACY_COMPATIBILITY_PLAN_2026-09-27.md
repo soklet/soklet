@@ -1,7 +1,9 @@
 # MCP compatibility layer plan — 2026-09-27
 
 **Status:** API design approved on 2026-09-28. The first synchronous-tools
-increment is implemented in committed source. Local and cloud development
+increment is implemented in committed source. Ordinary prompts and resources are implemented
+in the current checkout; see the 2026-09-29 development checkpoints below.
+Local and cloud development
 host checks are recorded in the [client compatibility matrix](MCP_CLIENT_COMPATIBILITY.md).
 The bounded official 2025 tool subset passed a separate development run from
 the pushed commit; the broader layer and exact-candidate qualification remain
@@ -28,6 +30,69 @@ tested adapters may be advertised.
 - Prompts, resources, Skills, Apps UI, Tasks, subscriptions, and 2025-03-26
   batching remain outside the first 2025 adapter. Their version declarations
   fail preflight rather than exposing an incomplete operation.
+
+## Development implementation checkpoint — 2026-09-29
+
+- The next increment adds ordinary `prompts/list` and `prompts/get` to both
+  `2025-06-18` and `2025-11-25`, selected through the existing required exact
+  revision declarations. Annotation-generated and programmatic handlers use
+  the same admission, request-limit, catalog policy, localization, interceptor,
+  and handler path. A prompt excluded by revision or caller policy cannot be
+  retrieved by guessing its name; policy is rechecked for every retrieval.
+- Legacy prompt results retain description, user/assistant messages, supported
+  text/image/audio/resource-link/embedded-resource content, and application
+  metadata. Modern result and cache metadata are omitted. June catalog icons
+  are omitted; June result resource-link icons are rejected rather than lost.
+- Prompt input requests, request state, and completion remain 2026-only, with
+  construction and annotation validation. Catalogs are one page. Resources,
+  Apps, Skills, Tasks, subscriptions, server-initiated requests, persistent SSE,
+  and `2025-03-26` remain unimplemented on the compatibility path.
+- Validation passed on the local checkout: 67 focused prompt, registration,
+  header, and annotation tests on both Java 17 and Java 25; the wider Java 17
+  MCP suite ran 1,918 tests with zero failures/errors and one existing skip.
+  The API freeze gate passed without public signature changes. Header-policy
+  inventory and lifecycle/version checks retain their existing boundaries.
+- This is local development work on top of core commit
+  `ebc4aa720305f328d89e992086d8eeb30959966f`. No prompt host qualification or
+  official prompt conformance PASS is claimed. The existing named-client
+  evidence continues to cover tools. Final candidate pins and release gates
+  wait until the core implementation scope is complete.
+
+## Ordinary resources development checkpoint — 2026-09-29
+
+- Both exact 2025 revisions now serve `resources/list`,
+  `resources/templates/list`, and `resources/read` through the existing
+  annotated and programmatic resource APIs. Exact text/blob resources,
+  bounded Level 1 URI templates, and custom application pagination are included.
+- Catalogs, executable routes, and the custom handler's registration descriptors
+  use the same selected revision. Exact routes take precedence over templates
+  only when enabled for that revision. A custom page cannot advertise an
+  unreadable route from another revision. Skills-owned files remain excluded.
+- Admission and request limits apply on every page and read; localization,
+  handler interception, response limits, and safe errors remain on the shared
+  pipeline. Applications own resource authorization and cursor binding. The
+  tools/prompts catalog access policy does not filter resource catalogs.
+- Legacy resource results omit modern cache fields and result framing, retain
+  application metadata and opaque cursors, omit June catalog icons, retain
+  November icons, and use `-32002` for a missing resource. Optional operation
+  mirrors on `resources/read` must agree with `params.uri`, including decoded
+  encoded-word headers; duplicate or mixed framing still fails closed.
+- Resource input requests, request state, completion, Apps UI resources, Skills,
+  Tasks, subscriptions, server-initiated requests, persistent SSE, and
+  `2025-03-26` remain outside the implemented legacy surface. Construction and
+  annotation checks reject unsupported declarations; returned Apps content
+  also fails safely.
+- This checkpoint describes local changes on top of core commit
+  `ebc4aa720305f328d89e992086d8eeb30959966f`. It does not claim an official
+  resource conformance or named-client qualification PASS. Final candidate pins
+  and release gates remain deferred while core implementation continues.
+- Development validation passed: the Java 17 MCP suite ran 1,927 tests with
+  zero failures/errors and one existing skip; 106 focused resource, Skills, annotation,
+  registration, header, and profile tests passed on Java 25. The API freeze,
+  compatibility, public-evolution, transport-dependency, and roadmap gates
+  passed without public signature changes. Lifecycle and version inventories
+  were refreshed for these reviewed source changes; historical baselines and
+  the accepted legacy exclusion cohort remain unchanged.
 
 ## Goal
 
@@ -162,9 +227,9 @@ repeatability needs a separate design and implementation review.
 Programmatic `McpEndpoint`, tool, prompt, resource, custom resource-list, and
 completion registrations must have equivalent required, nonempty exact version
 sets and no implicit default. Review their builder signatures alongside the
-annotation API. The first adapter milestone still serves only tools for 2025
-revisions; reject a 2025 version declaration on a prompt, resource, list, or
-completion handler until that operation's adapter and tests exist. Do not
+annotation API. Tools, ordinary prompts, and ordinary resources now have 2025
+adapters, including custom resource listing. Reject a 2025 version declaration
+on a completion handler until that operation's adapter and tests exist. Do not
 silently broaden them to 2025 simply because the endpoint also serves 2025.
 Argument and schema objects inherit their owning operation's version
 eligibility; they do not need separate version fields. Apps tool metadata is

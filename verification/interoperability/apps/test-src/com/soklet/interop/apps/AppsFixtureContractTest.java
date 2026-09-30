@@ -46,7 +46,7 @@ public final class AppsFixtureContractTest {
 	private static final String WRONG_MIME = "{\"extensions\":{\"io.modelcontextprotocol/ui\":"
 			+ "{\"mimeTypes\":[\"text/html\"]}}}";
 	private static final Duration WAIT = Duration.ofSeconds(5);
-	private static final int EXPECTED_CASES = 12;
+	private static final int EXPECTED_CASES = 13;
 	private static final int MAXIMUM_REQUESTS = 60;
 	private static final String TOKEN_EN = "disposable-contract-en";
 	private static final String TOKEN_PT = "disposable-contract-pt";
@@ -83,6 +83,7 @@ public final class AppsFixtureContractTest {
 	}
 
 	private void run(Simulator simulator) {
+		subscriptionPolicyDenialDoesNotChallenge(simulator);
 		authorizedPrefetchBeforeAnyToolCall(simulator);
 		capabilityOnCatalog(simulator);
 		capabilityOffCatalogAndFallback(simulator);
@@ -95,6 +96,15 @@ public final class AppsFixtureContractTest {
 		invalidAndRevokedTokensAreRejected(simulator);
 		repeatedIdentityChangesDoNotReuseTenantOrLocale(simulator);
 		staticShellDoesNotVaryByCallerOrLocale(simulator);
+	}
+
+	private void subscriptionPolicyDenialDoesNotChallenge(Simulator simulator) {
+		Capture denied = execute(simulator, "subscriptions/listen",
+				",\"notifications\":{\"toolsListChanged\":true}", APPS, TOKEN_EN);
+		equal(403, denied.status(), "Subscription policy must deny the supported operation.");
+		contains(denied.body(), "\"error\":", "Policy denial must return a bounded JSON-RPC error.");
+		check(!denied.authenticationChallengePresent(), "Permanent policy denial must not request OAuth recovery.");
+		++cases;
 	}
 
 	private void authorizedPrefetchBeforeAnyToolCall(Simulator simulator) {
@@ -336,7 +346,9 @@ public final class AppsFixtureContractTest {
 					.flatMap(entry -> entry.getValue().stream()).anyMatch(value -> value.contains("no-store"));
 			check(noStore, "All fixture responses must prevent shared-cache reuse.");
 			absent(responseBody, AppsFixture.RAW_CANARY, "No HTTP response may expose the private fixture canary.");
-			return new Capture(response.getStatusCode(), responseBody);
+			boolean authenticationChallengePresent = response.getHeaders().keySet().stream()
+					.anyMatch(name -> name.equalsIgnoreCase("WWW-Authenticate"));
+			return new Capture(response.getStatusCode(), responseBody, authenticationChallengePresent);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError("Interrupted during the bounded fixture request.", exception);
@@ -450,5 +462,5 @@ public final class AppsFixtureContractTest {
 			throw new AssertionError(message);
 	}
 
-	private record Capture(int status, String body) { }
+	private record Capture(int status, String body, boolean authenticationChallengePresent) { }
 }

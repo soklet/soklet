@@ -93,6 +93,23 @@
       ]
     },
     {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "The finite 2025 resource adapter permits only representable text/blob contents and complete read-result fields; 2026 cache fields are removed at the selected-profile boundary. Unsupported output fields and Apps content fail safely. New result kinds require a reviewed exact-revision adapter and tests.",
+      "conformanceRows": [
+        "MCP-RESOURCE-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/Mcp2025ProtocolProfile.java",
+      "id": "OPEN-062",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/Mcp2025ProtocolProfile.java#com.soklet.internal.mcp.protocol.Mcp2025ProtocolProfile#renderApplicationResult",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "renderApplicationResult",
+      "owner": "com.soklet.internal.mcp.protocol.Mcp2025ProtocolProfile",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
       "closureAuthority": "MCP_2026_07_28",
       "compatibleOptionalMemberBehavior": "Unknown namespaced notification metadata remains preserved; a newly reserved 2026 member requires an explicit profile-owned validator update.",
       "conformanceRows": [
@@ -553,6 +570,24 @@
       "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
       "phase": "profile-2026-07-28",
       "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Optional legacy name mirrors are accepted only for explicitly selected 2025 tools/call, prompts/get, and resources/read requests with exact decoded agreement (params.name for tools/prompts, params.uri for resources). Names may be absent; a supplied name requires exactly one matching method/name pair. Duplicate, malformed, or mismatched mirrors cannot bypass modern header checks; additional operation mirrors require a reviewed adapter update.",
+      "conformanceRows": [
+        "MCP-HTTP-010",
+        "MCP-HTTP-012"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWire.java",
+      "id": "OPEN-061",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWire.java#com.soklet.internal.mcp.protocol.McpLegacyHttpWire#matchingOperationNameMirror",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "matchingOperationNameMirror",
+      "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpWire",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
     },
     {
       "closureAuthority": "MCP_2026_07_28",

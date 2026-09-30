@@ -861,6 +861,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						"An MCP endpoint declares an unimplemented protocol revision.");
 			Map<String, McpServerCapabilityRegistry> registries = new LinkedHashMap<>();
 			Map<String, ProfileFrameworkResponses> responses = new LinkedHashMap<>();
+			Map<String, McpApplicationRequestRouter> resourceRouters = new LinkedHashMap<>();
 			for (String revision : advertisedRevisions) {
 				McpNormalizedEndpoint revisionEndpoint = binding.revisionEndpoint(revision)
 						.orElseThrow();
@@ -873,19 +874,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 												::localizedResponseKinds)
 										.orElseGet(Set::of), advertisedRevisions);
 				// Caller-aware catalogs are rendered later, but every declared
-				// legacy tool descriptor must still satisfy that revision's schema.
+				// legacy descriptor must still satisfy that revision's schema.
 				if (profile instanceof Mcp2025ProtocolProfile
 						&& (revisionEndpoint.catalogAccessAdapter().isPresent()
-								|| registry.hasAppTools()))
+								|| registry.hasAppTools())) {
 					profile.renderFrameworkResult(
 							McpProfileFrameworkResultKind.TOOLS_LIST,
 							registry.toolsListResult());
+					profile.renderFrameworkResult(
+							McpProfileFrameworkResultKind.PROMPTS_LIST,
+							registry.promptsListResult());
+				}
+				resourceRouters.put(revision, revisionEndpoint == binding.endpoint()
+						? binding.applicationRouter()
+						: binding.applicationRouter().resourceView(revisionEndpoint));
 				registries.put(revision, registry);
 				responses.put(revision, profileFrameworkResponses(registry,
 							revisionEndpoint.catalogAccessAdapter().isPresent(), profile));
 			}
 			EndpointRuntime endpointRuntime = new EndpointRuntime(binding,
-					registries, responses);
+					registries, responses, resourceRouters);
 			if (endpointsByPath.putIfAbsent(endpointRuntime.path(), endpointRuntime)
 					!= null)
 				throw new IllegalArgumentException("Duplicate MCP HTTP endpoint path '"
@@ -4338,8 +4346,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return emptyResponse(404, "Not Found", List.of());
 		McpHttpEndpointBinding endpointBinding = endpointRuntime.binding();
 		McpHttpEndpointPolicy endpointPolicy = endpointBinding.endpointPolicy();
-		McpApplicationRequestRouter applicationRouter =
-				endpointBinding.applicationRouter();
 
 		if (!authorizedHost(effectiveAddress, request, endpointPolicy))
 			return emptyResponse(421, "Misdirected Request", List.of());
@@ -4527,6 +4533,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				selectedRevision).orElseThrow();
 		McpServerCapabilityRegistry capabilityRegistry =
 				endpointRuntime.capabilityRegistry(selectedRevision);
+		McpApplicationRequestRouter applicationRouter =
+				endpointRuntime.resourceRoutersByRevision().get(selectedRevision);
 
 		requestControl.bindProtocolProfile(protocolProfile);
 
@@ -4541,7 +4549,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		if (!selectedRevision.equals(mappedRequest.params().metadata().protocolVersion()))
 			return headerMismatch(endpointBinding, mappedRequest.id(), mappedRequest.method(), corsHeaders);
-		if (legacy && !Set.of("initialize", "ping", "tools/list", "tools/call")
+		if (legacy && !Set.of("initialize", "ping", "tools/list", "tools/call",
+				"prompts/list", "prompts/get", "resources/list",
+				"resources/templates/list", "resources/read")
 				.contains(mappedRequest.method()))
 			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 
@@ -4845,6 +4855,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		} else if ("resources/read".equals(mappedRequest.method())) {
 			Optional<McpApplicationRequestHandler> genericResourceHandler =
 					applicationRouter.resolve(mappedRequest.method());
+			if (legacy && capabilityRegistry.capabilities().resources().isEmpty())
+				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 			if (capabilityRegistry.capabilities().resources().isEmpty()
 					&& genericResourceHandler.isEmpty()
 					&& !applicationRouter.hasResourceReadRoutes())
@@ -5511,6 +5523,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Map<String, McpJsonValue> capabilities = new LinkedHashMap<>();
 			capabilityRegistry.capabilities().tools().ifPresent(value ->
 					capabilities.put("tools", value.toJsonObject()));
+			capabilityRegistry.capabilities().prompts().ifPresent(value ->
+					capabilities.put("prompts", value.toJsonObject()));
+			capabilityRegistry.capabilities().resources().ifPresent(value ->
+					capabilities.put("resources", value.toJsonObject()));
 			fields.put("capabilities", new McpJsonObject(capabilities));
 			fields.put("serverInfo", McpLegacyResponseWire
 					.projectServerInformation(selectedRevision,
@@ -7816,7 +7832,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull List<@NonNull Header> corsHeaders) {
 		McpJsonObject data = new McpJsonObject(
 				Map.of("uri", new McpJsonString(requireNonNull(uri))));
-		return profiledJsonRpcError(protocolProfile, McpProfileErrorKind.OPERATION,
+		return profiledJsonRpcError(protocolProfile, McpProfileErrorKind.RESOURCE_NOT_FOUND,
 				400, "Bad Request", Optional.of(request.id()),
 				new McpJsonRpcError(McpJsonRpcError.INVALID_PARAMS,
 						"Invalid params", Optional.of(data)), corsHeaders);
@@ -13847,13 +13863,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull Map<@NonNull String, @NonNull McpServerCapabilityRegistry>
 					capabilityRegistriesByRevision,
 			@NonNull Map<@NonNull String, @NonNull ProfileFrameworkResponses>
-					frameworkResponsesByRevision) {
+					frameworkResponsesByRevision,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestRouter>
+					resourceRoutersByRevision) {
 		private EndpointRuntime {
 			requireNonNull(binding);
 			capabilityRegistriesByRevision = Map.copyOf(
 					requireNonNull(capabilityRegistriesByRevision));
 			frameworkResponsesByRevision = Map.copyOf(
 					requireNonNull(frameworkResponsesByRevision));
+			resourceRoutersByRevision = Map.copyOf(requireNonNull(resourceRoutersByRevision));
 		}
 
 		@NonNull

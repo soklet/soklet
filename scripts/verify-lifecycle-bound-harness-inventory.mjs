@@ -590,7 +590,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["everyFrameworkAndApplicationCompleteAuthorityMatchesGoldens","5e5d728543e4b8c9ec64dee98b5c42bce7625b7bf205839f918b3de193e58a42",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1}}],
     ["requestScopedAndSubscriptionSseTerminalsMatchGoldens","e741d914496c6f9f1c361cf459271ef55bbcf2f1a5e611eb03b4057fe7f64061",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1},"controlJoinMillis":0,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSelectedProfileBindingTests.java", "163643123123e675c428fe8c345ff6f2fd901385f6027e400d8545290b62f6e4", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSelectedProfileBindingTests.java", "895d26969c6fc0fc4cc39929cd026db12b463e7379162ebd6933bce4e6813296", [
     ["subscriptionAndSimulationRetainTheSelectedProfileForTheirWholeLifetime","d1973555f04b5023222f6251df7ae83dc4cfd92d164cd14dfd03487778172914",{"generation":{"count":2,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":50000,"controlJoinMillis":15000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java", "5631c392ffe1a026e55205f316af31a68a8a96cd529280742d745160d4eec715", [
@@ -764,6 +764,12 @@ const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
 ], 'lifecycle phase policy');
 
 const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
+  // One simulator generation, three modern calls and six legacy calls.
+  // All nine response waits are sequential and bounded at five seconds each;
+  // the nested exact-revision/URI loops need an explicit multiplicity review.
+  ...reviewedScopeFile("src/test/java/com/soklet/McpAnnotatedResourceProcessorRuntimeTests.java", "41c6259752d8b684e63ceef0eae1f807933b3531458de086750d218d7caf966a", [
+    ["generatedProviderPreservesResourceContractsAndInvocationBindings", "101f7463f3b801366c30f6f2d773682a4eaae34c8ee9367dfb76254cc2643845", {"controlJoinMillis":45000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
   ...reviewedScopeFile("src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java", "861e68c75018767ad1a383b69957082d63e2d7726dfb1bfa9d3386582123f6d5", [
     ["failureRacingNormalShutdownIsRetainedWithoutReclassifyingRequestedProof","d5b8e568c287856debb44e45137ebaa592ca10ece32eb55ee6be5c748bcd9e15",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["requestedProofThenLateFailureBeforeFreezePreservesBothInSequence","0486a99df1c9b6163e90faa067fb5cc24f94f2aaa2a1d586bc815614211943bb",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],

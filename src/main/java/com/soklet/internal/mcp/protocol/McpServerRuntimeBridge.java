@@ -1612,51 +1612,58 @@ public final class McpServerRuntimeBridge {
 								operation.mirroredHeaderPlan()));
 				}
 
-			// The first 2025 adapter deliberately serves synchronous tools only.
-			// These other surfaces become selectable only with their own adapters.
+			List<com.soklet.McpPromptRegistration> prompts =
+					publicEndpoint.getPromptRegistrations();
+			Map<String, com.soklet.McpPromptRegistration> promptsByName =
+					new LinkedHashMap<>();
+			for (com.soklet.McpPromptRegistration prompt : prompts)
+				promptsByName.put(prompt.getName(), prompt);
+			for (McpNormalizedOperation prompt : complete.prompts()) {
+				com.soklet.McpPromptRegistration registration =
+						promptsByName.get(prompt.name());
+				if (registration == null && version != McpProtocolVersion.V2026_07_28)
+					continue;
+				if (registration == null
+						|| registration.getProtocolVersions().contains(version))
+					view.prompt(prompt);
+			}
+
+			List<com.soklet.McpResourceRegistration> resources =
+					publicEndpoint.getResourceRegistrations();
+			Map<String, com.soklet.McpResourceRegistration> resourcesByAddress =
+					new LinkedHashMap<>();
+			for (com.soklet.McpResourceRegistration resource : resources)
+				resourcesByAddress.put(resource.getAddressType()
+						== com.soklet.McpResourceAddressType.URI
+						? resource.getUri().orElseThrow().toString()
+						: resource.getUriTemplate().orElseThrow(), resource);
+			for (McpNormalizedOperation resource : complete.exactResources()) {
+				com.soklet.McpResourceRegistration registration = resourcesByAddress.get(resource.name());
+				if (registration == null && version != McpProtocolVersion.V2026_07_28)
+					continue;
+				if (registration == null || registration.getProtocolVersions().contains(version))
+					view.exactResource(resource.resourceDescriptor().orElseThrow(),
+							resource.inputRequestPlan());
+			}
+			for (McpNormalizedOperation resource : complete.resourceTemplates()) {
+				com.soklet.McpResourceRegistration registration = resourcesByAddress.get(resource.name());
+				if (registration == null && version != McpProtocolVersion.V2026_07_28)
+					continue;
+				if (registration == null || registration.getProtocolVersions().contains(version))
+					view.resourceTemplate(
+							resource.resourceTemplateDescriptor().orElseThrow(),
+							resource.inputRequestPlan());
+			}
+
+			if (complete.customResourceListHandler()
+					&& (publicEndpoint.getResourceListHandler().isEmpty()
+							&& version == McpProtocolVersion.V2026_07_28
+							|| publicEndpoint.getResourceListHandlerProtocolVersions()
+									.contains(version)))
+				view.customResourceListHandler();
+
+			// Completion and extensions retain their 2026-only adapters.
 			if (version == McpProtocolVersion.V2026_07_28) {
-				List<com.soklet.McpPromptRegistration> prompts =
-						publicEndpoint.getPromptRegistrations();
-				Map<String, com.soklet.McpPromptRegistration> promptsByName =
-						new LinkedHashMap<>();
-				for (com.soklet.McpPromptRegistration prompt : prompts)
-					promptsByName.put(prompt.getName(), prompt);
-				for (McpNormalizedOperation prompt : complete.prompts()) {
-					com.soklet.McpPromptRegistration registration =
-							promptsByName.get(prompt.name());
-					if (registration == null
-							|| registration.getProtocolVersions().contains(version))
-						view.prompt(prompt);
-				}
-
-				List<com.soklet.McpResourceRegistration> resources =
-						publicEndpoint.getResourceRegistrations();
-				Map<String, com.soklet.McpResourceRegistration> resourcesByAddress =
-						new LinkedHashMap<>();
-				for (com.soklet.McpResourceRegistration resource : resources)
-					resourcesByAddress.put(resource.getAddressType()
-							== com.soklet.McpResourceAddressType.URI
-							? resource.getUri().orElseThrow().toString()
-							: resource.getUriTemplate().orElseThrow(), resource);
-				for (McpNormalizedOperation resource : complete.exactResources())
-					if (resourcesByAddress.get(resource.name()) == null
-							|| resourcesByAddress.get(resource.name())
-									.getProtocolVersions().contains(version))
-						view.exactResource(resource.resourceDescriptor().orElseThrow(),
-								resource.inputRequestPlan());
-				for (McpNormalizedOperation resource : complete.resourceTemplates())
-					if (resourcesByAddress.get(resource.name()) == null
-							|| resourcesByAddress.get(resource.name())
-									.getProtocolVersions().contains(version))
-						view.resourceTemplate(
-								resource.resourceTemplateDescriptor().orElseThrow(),
-								resource.inputRequestPlan());
-
-				if (complete.customResourceListHandler()
-						&& (publicEndpoint.getResourceListHandler().isEmpty()
-								|| publicEndpoint.getResourceListHandlerProtocolVersions()
-										.contains(version)))
-					view.customResourceListHandler();
 				boolean completionSupported = prompts.stream().anyMatch(prompt ->
 						prompt.getCompletionProtocolVersions().contains(version))
 						|| resources.stream().anyMatch(resource ->

@@ -78,11 +78,11 @@ test('any OAuth fallback or failure fails the patched experiment despite narrow 
   }
 });
 
-test('candidate, shell and auth-patched runtime are exact prior-experiment identities',()=>{
+test('candidate, shell and auth-patched runtime are exact current-experiment identities',()=>{
   const provenance={patchedTree:{files:9391,sha256:'6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'},
     patchedFileSha256:'405da5e71b887403bb53ff2e3984cec631a1138f50662ad199dfb8e536dcd47a',
     experimental:true,releasedHostQualification:false};
-  const candidate={jarSha256:'1782dcaa2270cb543c49abc80c942a2ff0f1ab72f9abb88a5d2556d200bd8d74'};
+  const candidate={jarSha256:'64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727'};
   const shell={sha256:'3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
   assert.doesNotThrow(()=>validateExperimentPins(provenance,candidate,shell));
   for(const [p,c,s] of [[null,candidate,shell],[{...provenance,experimental:false},candidate,shell],

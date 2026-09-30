@@ -201,8 +201,26 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 						"\"nextCursor\":\"cursor-1-next\""), listBody);
 				Assertions.assertTrue(listBody.contains(
 						"\"uri\":\"test://catalog/static\""), listBody);
+				for (String revision : List.of("2025-06-18", "2025-11-25")) {
+					for (String uri : List.of("test://catalog/static", "test://catalog/item/42/summary")) {
+						McpSimulationResponse response = response(simulator, "legacy-read", "resources/read", null,
+								",\"uri\":\"" + uri + "\"", revision);
+						String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+						Assertions.assertEquals(200, response.getStatusCode(), body);
+						Assertions.assertTrue(body.contains(uri), body);
+						Assertions.assertTrue(body.contains(uri.endsWith("static") ? "exact|" : "42|summary|"), body);
+						Assertions.assertFalse(body.contains("resultType"), body);
+						Assertions.assertFalse(body.contains("ttlMs"), body);
+					}
+					McpSimulationResponse response = response(simulator, "legacy-list", "resources/list", null,
+							",\"cursor\":\"cursor-1\"", revision);
+					String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+					Assertions.assertEquals(200, response.getStatusCode(), body);
+					Assertions.assertTrue(body.contains("cursor-1-next"), body);
+					Assertions.assertTrue(body.contains("test://catalog/static"), body);
+				}
 			});
-			Assertions.assertEquals(3, providedInstances.get());
+			Assertions.assertEquals(9, providedInstances.get());
 		}
 	}
 
@@ -464,18 +482,24 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 	private static McpSimulationResponse response(@NonNull Simulator simulator,
 			@NonNull String requestId, @NonNull String method,
 			@Nullable String operationName, @NonNull String parameters) {
+		return response(simulator, requestId, method, operationName, parameters, "2026-07-28");
+	}
+
+	@NonNull
+	private static McpSimulationResponse response(@NonNull Simulator simulator,
+			@NonNull String requestId, @NonNull String method,
+			@Nullable String operationName, @NonNull String parameters, @NonNull String revision) {
+		String metadata = "2026-07-28".equals(revision)
+				? "\"io.modelcontextprotocol/protocolVersion\":\"" + revision + "\","
+						+ "\"io.modelcontextprotocol/clientCapabilities\":{}," : "";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
-				+ "\",\"method\":\"" + method + "\",\"params\":{"
-				+ "\"_meta\":{"
-				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{},"
-				+ "\"progressToken\":\"" + requestId + "-progress\"}"
-				+ parameters + "}}";
+				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{" + metadata
+				+ "\"progressToken\":\"" + requestId + "-progress\"}" + parameters + "}}";
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 		headers.put("Host", Set.of("127.0.0.1:0"));
 		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
 		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of("2026-07-28"));
+		headers.put("MCP-Protocol-Version", Set.of(revision));
 		headers.put("Mcp-Method", Set.of(method));
 		if (operationName != null)
 			headers.put("Mcp-Name", Set.of(operationName));
@@ -518,7 +542,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				import com.soklet.annotation.McpServerEndpoint;
 				import java.time.Duration;
 
-				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				@McpServerEndpoint(protocolVersions = {com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25, com.soklet.McpProtocolVersion.V2026_07_28},
 				    path = "/resources/mcp",
 				    name = "resource-catalog",
 				    version = "4.0.0",
@@ -528,7 +552,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				public final class ResourceEndpoint {
 				  public ResourceEndpoint() {}
 
-				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				  @McpResource(protocolVersions = {com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25, com.soklet.McpProtocolVersion.V2026_07_28},
 				      uri = "test://catalog/static",
 				      name = "static-catalog",
 				      title = "Static catalog",
@@ -548,13 +572,12 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				                + (features != null
 				                    && cancelationToken
 				                        == features.require(CancelationToken.class)
-				                    && progressReporter.orElseThrow()
-				                        == features.require(McpProgressReporter.class)))
+				                    && progressReporter.equals(features.getProgressReporter())))
 				                .build())
 				        .build();
 				  }
 
-				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+				  @McpResource(protocolVersions = {com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25, com.soklet.McpProtocolVersion.V2026_07_28},
 				      uri = "test://catalog/item/{identifier}/{section}",
 				      name = "catalog-item",
 				      cacheTimeToLiveInMilliseconds = 250)
@@ -573,14 +596,13 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				                + (features != null
 				                    && cancelationToken
 				                        == features.require(CancelationToken.class)
-				                    && progressReporter.orElseThrow()
-				                        == features.require(McpProgressReporter.class)))
+				                    && progressReporter.equals(features.getProgressReporter())))
 				                .build())
 				        .build();
 				    return McpCompleteResult.fromResourceOutput(output);
 				  }
 
-				  @McpResourceList(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28)
+				  @McpResourceList(protocolVersions = {com.soklet.McpProtocolVersion.V2025_06_18, com.soklet.McpProtocolVersion.V2025_11_25, com.soklet.McpProtocolVersion.V2026_07_28})
 				  public McpResourcePage resources(
 				      McpInvocationFeatures features,
 				      CancelationToken cancelationToken,
@@ -589,8 +611,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				      McpRequestContext request) {
 				    if (features == null || request == null
 				        || cancelationToken != features.require(CancelationToken.class)
-				        || progressReporter.orElseThrow()
-				            != features.require(McpProgressReporter.class))
+				        || !progressReporter.equals(features.getProgressReporter()))
 				      throw new IllegalStateException("Missing injected context");
 				    return McpResourcePage.builder()
 				        .resourceDescriptors(list.getRegisteredResourceDescriptors())

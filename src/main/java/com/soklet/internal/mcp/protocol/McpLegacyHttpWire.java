@@ -72,7 +72,7 @@ final class McpLegacyHttpWire {
 				&& nameHeaders.isEmpty() && !argumentMirrorsPresent
 				&& !modernMetadata && legacyInitializationVersion(envelope))
 			return Era.LEGACY;
-		// A 2025 client may keep mirroring its method and tool name after
+		// A 2025 client may keep mirroring its method and operation name after
 		// initialize. This is legacy only when its explicit version selector is
 		// a supported 2025 revision and every mirror agrees with the JSON body.
 		// The initialize exception above stays separate: an initialize carrying
@@ -81,7 +81,7 @@ final class McpLegacyHttpWire {
 				&& !argumentMirrorsPresent
 				&& matchingMethodMirror(envelope, methodHeaders,
 						mirroredHeaderCodec)
-				&& matchingToolNameMirror(envelope, nameHeaders,
+				&& matchingOperationNameMirror(envelope, nameHeaders,
 						mirroredHeaderCodec))
 			return Era.LEGACY;
 
@@ -134,7 +134,7 @@ final class McpLegacyHttpWire {
 						&& method.equals(notification.method()));
 	}
 
-	private static boolean matchingToolNameMirror(
+	private static boolean matchingOperationNameMirror(
 			@NonNull McpJsonRpcEnvelope envelope,
 			@NonNull List<@NonNull String> nameHeaders,
 			@NonNull McpMirroredHeaderCodec mirroredHeaderCodec) {
@@ -142,9 +142,13 @@ final class McpLegacyHttpWire {
 			return true;
 		if (nameHeaders.size() != 1
 				|| !(envelope instanceof McpJsonRpcEnvelope.Request request)
-				|| !"tools/call".equals(request.method())
-				|| !(request.params().orElse(null) instanceof McpJsonObject params)
-				|| !(params.members().get("name") instanceof McpJsonString name))
+				|| !("tools/call".equals(request.method())
+						|| "prompts/get".equals(request.method())
+						|| "resources/read".equals(request.method()))
+				|| !(request.params().orElse(null) instanceof McpJsonObject params))
+			return false;
+		String nameField = "resources/read".equals(request.method()) ? "uri" : "name";
+		if (!(params.members().get(nameField) instanceof McpJsonString name))
 			return false;
 		try {
 			return mirroredHeaderCodec.decodeString(nameHeaders.get(0))

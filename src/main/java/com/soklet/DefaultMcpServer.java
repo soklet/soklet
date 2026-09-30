@@ -666,18 +666,19 @@ final class DefaultMcpServer implements McpServer {
 					resource.getUriTemplate().orElseThrow(),
 					resourceTemplateVariableNames(resource.getUriTemplate().orElseThrow()),
 					invocation -> invokeCompletion(resource, invocation)));
-		List<McpResourceDescriptor> registeredResourceDescriptors = endpoint
-				.getResourceRegistrations().stream()
-				.filter(resource -> resource.getAddressType()
-						== McpResourceAddressType.URI)
-				.map(DefaultMcpServer::toResourceDescriptor)
-				.toList();
+		Map<McpProtocolVersion, List<McpResourceDescriptor>> registeredResourceDescriptorsByVersion = new LinkedHashMap<>();
+		for (McpProtocolVersion protocolVersion : endpoint.getProtocolVersions())
+			registeredResourceDescriptorsByVersion.put(protocolVersion, endpoint.getResourceRegistrations().stream()
+					.filter(resource -> resource.getAddressType() == McpResourceAddressType.URI
+							&& resource.getProtocolVersions().contains(protocolVersion))
+					.map(DefaultMcpServer::toResourceDescriptor).toList());
 		ResourceListPlan resourceListPlan = new ResourceListPlan(
 				effectiveCachePlan(endpoint.getResourceListCachePolicy()),
 				effectiveCachePlan(endpoint.getResourceTemplateListCachePolicy()),
 				this.maximumCursorSizeInBytes,
 				endpoint.getResourceListHandler().map(handler -> invocation ->
-						invokeResourceList(handler, registeredResourceDescriptors,
+						invokeResourceList(handler, registeredResourceDescriptorsByVersion.get(
+								requireProtocolVersion(invocation.protocolVersion())),
 								invocation)));
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
 				resourceListPlan, catalogLocalizer(endpoint),

@@ -35,7 +35,7 @@ export function regularFile(file) {
 export function contractSummary(stdout, stderr) {
   let result;
   try { result = JSON.parse(stdout); } catch { throw new Error('APPS_UNEXPECTED_CONTRACT_OUTPUT'); }
-  if (stderr !== '' || result.status !== 'PASS' || result.cases !== 12 || result.requests !== 34
+  if (stderr !== '' || result.status !== 'PASS' || result.cases !== 13 || result.requests !== 35
       || result.scope !== 'candidate-public-api-simulator'
       || Object.keys(result).sort().join(',') !== 'cases,requests,scope,status')
     throw new Error('APPS_UNEXPECTED_CONTRACT_OUTPUT');

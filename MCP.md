@@ -2,7 +2,8 @@
 
 Soklet's qualified 4.0.0 server target is MCP `2026-07-28`. The development
 source implements explicitly selected `2025-06-18` and `2025-11-25` revisions
-on the same endpoint URL for synchronous tools. Those adapters still need
+on the same endpoint URL for synchronous tools, ordinary prompts, and ordinary
+resources. Those adapters still need
 exact-candidate release qualification. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
@@ -108,9 +109,11 @@ On `2026-07-28`, clients may send a direct versioned request or call
 start with `initialize`, may send `notifications/initialized`, and can call
 `ping`. Later POST requests use their selected `MCP-Protocol-Version` header;
 Soklet does not issue a session ID in this first adapter. GET and DELETE do
-not open an SSE channel. The first compatibility slice covers synchronous
-`tools/list` and `tools/call` only. The `2025-03-26` revision has additional
-wire differences and is not part of that slice. A declared enum constant
+not open an SSE channel. The implemented compatibility surface covers synchronous
+`tools/list`/`tools/call`, ordinary `prompts/list`/`prompts/get`, and ordinary
+`resources/list`, `resources/templates/list`, and `resources/read`. The
+`2025-03-26` revision has additional wire differences and is not implemented.
+A declared enum constant
 does not by itself mean that the runtime supports or has qualified its wire
 revision; unsupported endpoint/operation combinations fail construction.
 
@@ -119,11 +122,43 @@ Tasks and `subscriptions/listen` are separate endpoint opt-ins through
 disabled. For 4.0, these facilities select only `V2026_07_28`; installing a
 server-wide task manager or subscription event publisher alone does not
 advertise them on an endpoint. Skills and Apps metadata also select exact
-revisions. The 2025 tools slice does not include prompts, resources, Skills,
-Apps UI, Tasks, subscriptions, multi-round input, or server-initiated
+revisions. The 2025 adapter does not include Skills,
+Apps UI, Tasks, subscriptions, completion, multi-round input, or server-initiated
 requests. In a stateless 2025 call after `initialize`, the request context
 cannot attribute the earlier client's capabilities or information to that
 call; application policy must treat those values as unknown.
+
+An ordinary prompt selects its revisions through `@McpPrompt(protocolVersions = ...)`
+or `McpPromptRegistration.withName(name, protocolVersions)`, using a subset of
+the endpoint's exact revisions. String arguments, user/assistant messages and
+application metadata use the same public handler on each selected revision.
+Prompt catalogs remain one page; cursors are rejected. Caller catalog policy
+is checked again before `prompts/get`, including when the caller already
+listed the prompt. Icons are advertised for `2025-11-25` and omitted for
+`2025-06-18`; a returned resource link with icons cannot be represented on
+`2025-06-18` and fails safely. A prompt that declares input requests or
+request state cannot select a 2025 revision. Completion remains explicitly
+restricted to `V2026_07_28`.
+
+Ordinary resources select revisions through `@McpResource(protocolVersions = ...)`
+or the exact-URI and URI-template registration factories. Custom listing uses
+`@McpResourceList(protocolVersions = ...)` or `resourceListHandler(handler, protocolVersions)`.
+Each selection must be a subset of the endpoint's revisions. Exact and RFC 6570
+Level 1 template reads use the same admission, request limiter, interceptor,
+and handler pipeline. A custom list receives exact registrations enabled for
+the selected revision; its returned URIs must have readable routes in that
+revision. Application handlers remain responsible for resource permissions and
+for binding opaque cursors to the intended caller, snapshot, and expiry.
+Resource catalogs do not use the tools/prompts catalog access policy.
+
+Static resource and template catalogs are one page and reject cursors. Custom
+resource lists retain application pagination, result metadata, and bounded
+opaque cursors, including an empty string. Text and base64 blob reads retain
+their content metadata. The adapter omits 2026 cache fields and result framing,
+omits June catalog icons, and retains November icons. Missing resources use the
+legacy `-32002` error. Resource input requests, request state, and completion
+remain 2026-only. Apps resource declarations and returned Apps content are
+rejected on the legacy adapter.
 
 The client is configured with the endpoint URL. Soklet does not discover or
 choose a sibling URL on the client's behalf. Only completed adapter tests and

@@ -877,7 +877,10 @@ failure into a client error.
 - Simulator configurations use only scope-vended transports.
 - MCP clients use Streamable HTTP and an exact revision declared by the endpoint
   and operation. Use `2026-07-28` for the full 4.0 feature set; the explicitly
-  selected `2025-06-18`/`2025-11-25` adapter covers synchronous tools only.
+  selected `2025-06-18`/`2025-11-25` adapter covers synchronous tools and
+  ordinary prompt listing/retrieval and resource listing/reading, including
+  Level 1 templates and custom pagination. Completion and extensions
+  still require `2026-07-28`.
 - Authentication and authorization failures reveal no token or protected
   resource value.
 - A real localhost listener passes discovery, list, call/read/get as applicable,

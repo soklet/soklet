@@ -109,7 +109,7 @@ node verification/interoperability/apps-csp-host/run.mjs \
 Add `--profile allowlist` to run the declared-origin case in a new work
 directory. The adjacent shell build receipt is required. The default denial
 profile pins the current core JAR SHA-256
-`e59c107e33187209e504b6e37141d410c0bffedf26e5dd14e2abf28c2d62227f`;
+`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`;
 the allowlist profile records and rechecks its supplied candidate JAR and POM.
 The shell and original/patched Inspector installations are pinned. Browser and all
 source/class/config identities are recorded and rechecked. Public fixture

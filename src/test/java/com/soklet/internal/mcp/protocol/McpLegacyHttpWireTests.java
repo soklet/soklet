@@ -406,6 +406,85 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
+	public void legacyPromptMirrorsRequireTheExactMethodAndDecodedName() {
+		McpJsonRpcEnvelope promptGet = ENVELOPES.decode("""
+				{"jsonrpc":"2.0","id":1,"method":"prompts/get",
+				"params":{"name":"shared","arguments":{"subject":"x"}}}
+				""");
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			for (String name : List.of("shared", "=?base64?c2hhcmVk?="))
+				Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+						classify(promptGet, List.of(revision), List.of("prompts/get"), List.of(name), false));
+			for (List<String> names : List.of(List.of("other"), List.of("shared", "shared")))
+				Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+						classify(promptGet, List.of(revision), List.of("prompts/get"), names, false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(promptGet, List.of(revision), List.of("tools/call"), List.of("shared"), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(promptGet, List.of(revision), List.of(), List.of("shared"), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(promptGet, List.of(revision), List.of("prompts/get"), List.of("shared"), true));
+		}
+	}
+
+	@Test
+	public void legacyResourceMirrorsUseTheUriAndRejectMixedFraming() {
+		McpJsonRpcEnvelope read = ENVELOPES.decode("""
+				{"jsonrpc":"2.0","id":1,"method":"resources/read",
+				"params":{"uri":"test://item","name":"not-the-uri"}}
+				""");
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			for (String name : List.of("test://item", "=?base64?dGVzdDovL2l0ZW0=?="))
+				Assertions.assertEquals(McpLegacyHttpWire.Era.LEGACY,
+						classify(read, List.of(revision), List.of("resources/read"), List.of(name), false));
+			for (List<String> names : List.of(List.of("not-the-uri"), List.of("test://item", "test://item")))
+				Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+						classify(read, List.of(revision), List.of("resources/read"), names, false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(read, List.of(revision), List.of("tools/call"), List.of("test://item"), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(read, List.of(revision), List.of(), List.of("test://item"), false));
+			Assertions.assertEquals(McpLegacyHttpWire.Era.MODERN,
+					classify(read, List.of(revision), List.of("resources/read"), List.of("test://item"), true));
+		}
+	}
+
+	@Test
+	public void legacyPromptResultsValidateRolesContentAndRevisionSpecificIcons() {
+		McpJsonObject text = new McpJsonObject(Map.of("type", new McpJsonString("text"),
+				"text", new McpJsonString("ok")));
+		McpWireResult valid = promptResult(new McpJsonString("user"), text);
+		for (Mcp2025ProtocolProfile profile : List.of(Mcp2025ProtocolProfile.JUNE_18,
+				Mcp2025ProtocolProfile.NOVEMBER_25)) {
+			Assertions.assertSame(valid, profile.renderApplicationResult(McpProfileApplicationResultKind.PROMPT, valid));
+			for (McpWireResult invalid : List.of(
+					promptResult(new McpJsonString("system"), text),
+					promptResult(new McpJsonString("user"), McpJsonObject.empty()),
+					promptResult(new McpJsonString("user"), new McpJsonObject(Map.of(
+							"type", new McpJsonString("future-content")))),
+					McpWireResult.complete(McpJsonObject.empty()),
+					McpWireResult.complete(new McpJsonObject(Map.of("messages", new McpJsonArray(List.of()),
+							"requestState", new McpJsonString("state")))),
+					McpWireResult.complete(new McpJsonObject(Map.of("messages", new McpJsonArray(List.of()),
+							"description", McpJsonBoolean.TRUE)))))
+				Assertions.assertThrows(IllegalArgumentException.class, () -> profile.renderApplicationResult(
+						McpProfileApplicationResultKind.PROMPT, invalid));
+		}
+		McpWireResult icons = promptResult(new McpJsonString("assistant"), new McpJsonObject(Map.of(
+				"type", new McpJsonString("resource_link"), "name", new McpJsonString("report"),
+				"uri", new McpJsonString("test://report"), "icons", new McpJsonArray(List.of()))));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> Mcp2025ProtocolProfile.JUNE_18
+				.renderApplicationResult(McpProfileApplicationResultKind.PROMPT, icons));
+		Assertions.assertSame(icons, Mcp2025ProtocolProfile.NOVEMBER_25
+				.renderApplicationResult(McpProfileApplicationResultKind.PROMPT, icons));
+	}
+
+	private static McpWireResult promptResult(McpJsonValue role, McpJsonValue content) {
+		return McpWireResult.complete(new McpJsonObject(Map.of("messages", new McpJsonArray(List.of(
+				new McpJsonObject(Map.of("role", role, "content", content)))))));
+	}
+
+	@Test
 	public void legacyToolResultsRequireStructuredContentObjectAndBooleanError() {
 		McpJsonArray content = new McpJsonArray(List.of());
 		for (Mcp2025ProtocolProfile profile : List.of(

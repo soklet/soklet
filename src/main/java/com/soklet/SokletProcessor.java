@@ -1857,13 +1857,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		String description = annotationString(annotation, "description");
 		List<String> protocolVersions = validateMcpProtocolVersions(method,
 				annotation, "@McpPrompt", "protocolVersions", true);
-		validateMcpModernOnlyVersions(method, "@McpPrompt", protocolVersions);
+		validateMcpReleasedAdapterVersions(method, "@McpPrompt", protocolVersions);
 		List<McpInputRequestModel> inputRequestDeclarations =
 				validateMcpInputRequestDeclarations(method, annotation);
 		String requestStateMode = annotationEnumConstantName(annotation,
 				"requestStateMode");
 		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
 				|| !"NONE".equals(requestStateMode);
+		if (multiRoundTripMetadata && protocolVersions.stream()
+				.anyMatch(version -> !"V2026_07_28".equals(version)))
+			mcpError(method,
+					"Soklet: A 2025 @McpPrompt must not declare input requests or request state.");
 		if (multiRoundTripMetadata && !operationResultReturn)
 			mcpError(method,
 					"Soklet: An @McpPrompt method that declares input requests or request state must return McpOperationResult or a subtype.");
@@ -2011,7 +2015,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		String mimeType = annotationString(annotation, "mimeType");
 		List<String> protocolVersions = validateMcpProtocolVersions(method,
 				annotation, "@McpResource", "protocolVersions", true);
-		validateMcpModernOnlyVersions(method, "@McpResource", protocolVersions);
+		validateMcpReleasedAdapterVersions(method, "@McpResource", protocolVersions);
 		long sizeInBytes = annotationLong(annotation, "sizeInBytes");
 		long cacheTimeToLiveInMilliseconds = annotationLong(annotation, "cacheTimeToLiveInMilliseconds");
 		String cacheScope = annotationEnumConstantName(annotation, "cacheScope");
@@ -2021,6 +2025,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				"requestStateMode");
 		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
 				|| !"NONE".equals(requestStateMode);
+		if (protocolVersions.stream().anyMatch(version -> !"V2026_07_28".equals(version))) {
+			if (multiRoundTripMetadata)
+				mcpError(method,
+						"Soklet: A 2025 @McpResource must not declare input requests or request state.");
+			if (isAppsMimeProfile(mimeType))
+				mcpError(method,
+						"Soklet: MCP Apps resources are not implemented by the 2025 adapter.");
+		}
 		if (multiRoundTripMetadata && !operationResultReturn)
 			mcpError(method,
 					"Soklet: An @McpResource method that declares input requests or request state must return McpOperationResult or a subtype.");
@@ -2223,7 +2235,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				McpResourceList.class.getCanonicalName());
 		List<String> protocolVersions = validateMcpProtocolVersions(method,
 				annotation, "@McpResourceList", "protocolVersions", true);
-		validateMcpModernOnlyVersions(method, "@McpResourceList",
+		validateMcpReleasedAdapterVersions(method, "@McpResourceList",
 				protocolVersions);
 		validateConcreteMcpHandlerMethod(method, "@McpResourceList");
 		if (mcpResourcePageType == null || !types.isSameType(

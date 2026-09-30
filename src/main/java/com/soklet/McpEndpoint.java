@@ -194,7 +194,12 @@ public final class McpEndpoint {
 		for (McpPromptRegistration prompt : this.promptRegistrations) {
 			requireSubset(prompt.getProtocolVersions(), this.protocolVersions,
 					"prompt " + prompt.getName());
-			requireModernOnly(prompt.getProtocolVersions(), "prompts");
+			if (containsLegacyVersion(prompt.getProtocolVersions())
+					&& (!prompt.getInputRequestDeclarations().isEmpty()
+						|| prompt.getRequestStateMode() != McpRequestStateMode.NONE))
+				throw new IllegalStateException(
+						"The 2025 prompt adapter cannot serve input requests or request state for prompt "
+								+ prompt.getName() + ".");
 			requireModernOnly(prompt.getCompletionProtocolVersions(), "prompt completion");
 			if (!promptNames.add(prompt.getName()))
 				throw new IllegalStateException(
@@ -205,7 +210,17 @@ public final class McpEndpoint {
 		for (McpResourceRegistration resource : this.resourceRegistrations) {
 			requireSubset(resource.getProtocolVersions(), this.protocolVersions,
 					"resource " + resource.getName());
-			requireModernOnly(resource.getProtocolVersions(), "resources");
+			if (containsLegacyVersion(resource.getProtocolVersions())) {
+				if (!resource.getInputRequestDeclarations().isEmpty()
+						|| resource.getRequestStateMode() != McpRequestStateMode.NONE)
+					throw new IllegalStateException(
+							"The 2025 resource adapter cannot serve input requests or request state for resource "
+									+ resource.getName() + ".");
+				if (hasAppsMimeType(resource)
+						|| resource.getMetadata().getMembers().containsKey("ui"))
+					throw new IllegalStateException(
+							"MCP Apps resources are not implemented by the 2025 adapter.");
+			}
 			requireModernOnly(resource.getCompletionProtocolVersions(), "resource completion");
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
@@ -224,8 +239,6 @@ public final class McpEndpoint {
 		for (McpSkillGroup group : this.skillGroups)
 			for (McpSkillRegistration skill : group.getSkillRegistrations())
 				requireSkillVersions(skill);
-		requireModernOnly(this.resourceListHandlerProtocolVersions,
-				"resource-list handlers");
 		requireModernOnly(this.skillListHandlerProtocolVersions,
 				"Skills-list handlers");
 		for (McpToolRegistration<?> tool : this.toolRegistrations) {

@@ -107,6 +107,7 @@ enum McpProfileFrameworkNotificationKind {
 enum McpProfileErrorKind {
 	REQUEST_MAPPER,
 	OPERATION,
+	RESOURCE_NOT_FOUND,
 	CONTROL
 }
 

@@ -55,7 +55,7 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
 @ThreadSafe
 public class McpAnnotationProcessorValidationTests {
 	@Test
-	void generatesEndpointWithExplicitDualEraToolAndModernFeatureGates() {
+	void generatesEndpointWithExplicitDualEraToolAndPromptAndModernFeatureGates() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.VersionedEndpoint", """
 						package example;
@@ -75,7 +75,8 @@ public class McpAnnotationProcessorValidationTests {
 						          McpProtocolVersion.V2026_07_28})
 						  public Result search() { return new Result("ok"); }
 						  @McpPrompt(name = "suggest",
-						      protocolVersions = McpProtocolVersion.V2026_07_28)
+						      protocolVersions = {McpProtocolVersion.V2025_11_25,
+						          McpProtocolVersion.V2026_07_28})
 						  public McpPromptOutput suggest() { return null; }
 						  public record Result(String value) {}
 						}
@@ -83,6 +84,56 @@ public class McpAnnotationProcessorValidationTests {
 		Compilation compilation = Compiler.javac()
 				.withProcessors(new SokletProcessor()).compile(source);
 		assertThat(compilation).succeeded();
+	}
+
+	@Test
+	void rejectsModernOnlyFacilitiesOnLegacyAnnotatedPrompts() {
+		for (String facility : List.of(
+				"mayRequestInput = @McpMayRequestInput(type = McpInputRequestType.ELICITATION_URL, requirement = McpInputRequirement.CONDITIONAL)",
+				"requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED")) {
+			JavaFileObject source = JavaFileObjects.forSourceString("example.LegacyPrompt", """
+					package example;
+					import com.soklet.*;
+					import com.soklet.annotation.*;
+					@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+					    protocolVersions = McpProtocolVersion.V2025_11_25)
+					public final class LegacyPrompt {
+					  @McpPrompt(name = "suggest", protocolVersions = McpProtocolVersion.V2025_11_25,
+					      %s)
+					  public McpOperationResult suggest() { return null; }
+					}
+					""".formatted(facility));
+			Compilation compilation = Compiler.javac().withProcessors(new SokletProcessor()).compile(source);
+			assertThat(compilation).failed();
+			assertThat(compilation).hadErrorContaining(
+					"A 2025 @McpPrompt must not declare input requests or request state").inFile(source);
+		}
+	}
+
+	@Test
+	void rejectsModernOnlyFacilitiesOnLegacyAnnotatedResources() {
+		for (String facility : List.of(
+				"mayRequestInput = @McpMayRequestInput(type = McpInputRequestType.ELICITATION_URL, requirement = McpInputRequirement.CONDITIONAL)",
+				"requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED",
+				"mimeType = \"text/html;profile=mcp-app\"")) {
+			JavaFileObject source = JavaFileObjects.forSourceString("example.LegacyResource", """
+					package example;
+					import com.soklet.*;
+					import com.soklet.annotation.*;
+					@McpServerEndpoint(path = "/mcp", name = "test", version = "1",
+					    protocolVersions = McpProtocolVersion.V2025_11_25)
+					public final class LegacyResource {
+					  @McpResource(name = "item", uri = "test://item",
+					      protocolVersions = McpProtocolVersion.V2025_11_25, %s)
+					  public McpOperationResult item() { return null; }
+					}
+					""".formatted(facility));
+			Compilation compilation = Compiler.javac().withProcessors(new SokletProcessor()).compile(source);
+			assertThat(compilation).failed();
+			assertThat(compilation).hadErrorContaining(facility.startsWith("mimeType")
+					? "MCP Apps resources are not implemented by the 2025 adapter"
+					: "A 2025 @McpResource must not declare input requests or request state").inFile(source);
+		}
 	}
 
 	@Test
@@ -153,7 +204,7 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
-	void rejectsToolRevisionOutsideEndpointAndUnimplementedResourceAdapter() {
+	void rejectsToolAndResourceRevisionsOutsideEndpoint() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.VersionSubsetEndpoint", """
 						package example;
@@ -181,7 +232,7 @@ public class McpAnnotationProcessorValidationTests {
 				"@McpTool protocolVersions must be a subset of @McpServerEndpoint protocolVersions")
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"@McpResource currently supports only MCP protocol revision 2026-07-28")
+				"@McpResource protocolVersions must be a subset of @McpServerEndpoint protocolVersions")
 				.inFile(source);
 	}
 

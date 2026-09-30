@@ -99,8 +99,9 @@ node verification/interoperability/apps/run.mjs \
 ```
 
 Compilation uses only the candidate JAR and `--release 17 -proc:none -Xlint:all
--Werror`. `jdeps` rejects internal or missing class dependencies. Twelve fixed
-scenarios execute 34 requests, including actual localized catalog titles,
+-Werror`. `jdeps` rejects internal or missing class dependencies. Thirteen fixed
+scenarios execute 35 requests, including the supported subscription's unchallenged
+policy denial, actual localized catalog titles,
 capability ON/OFF/wrong MIME, independently authorized prefetch/read, sanitizer
 privacy, useful fallback, and repeated tenant/locale/authorization changes.
 The harness requires the exact complete summary, not a generic success string.
@@ -134,9 +135,10 @@ mkdir -p /absolute/path/to/new-classes
   com.soklet.interop.apps.AppsFixtureHttpAuthorizationTest /absolute/path/to/catalog.html
 ```
 
-This starts a real Soklet listener on an ephemeral loopback port and checks 12
+This starts a real Soklet listener on an ephemeral loopback port and checks 13
 requests across authorized, denied, changed-tenant/locale, and revoked states
-for the same credential. It checks that hidden tool errors match unknown-tool
+for the same credential, including an explicit subscription-policy 403 without
+`WWW-Authenticate`. It checks that hidden tool errors match unknown-tool
 errors, while denied and unknown resource reads both expose no content; the
 fixture does not promise identical resource errors. This is server authorization
 evidence, not a browser-session or released-host authorization claim.
