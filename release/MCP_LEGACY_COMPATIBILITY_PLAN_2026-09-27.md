@@ -1,14 +1,22 @@
 # MCP compatibility layer plan — 2026-09-27
 
-**Status:** API design approved on 2026-09-28. The first synchronous-tools
-increment is implemented in committed source. Ordinary prompts and resources are implemented
-in the current checkout; see the 2026-09-29 development checkpoints below.
-Local and cloud development
-host checks are recorded in the [client compatibility matrix](MCP_CLIENT_COMPATIBILITY.md).
-The bounded official 2025 tool subset passed a separate development run from
-the pushed commit; the broader layer and exact-candidate qualification remain
-open. This file does not record a release-candidate PASS; only completed and
-tested adapters may be advertised.
+**Status:** API design approved on 2026-09-28. Synchronous tools and ordinary
+prompts/resources are implemented in pushed source. The expanded official
+2025 subset and Inspector CLI checks passed from clean core commit
+`3fe09465fd1241ffb785493fdff4a2074f8b0e0a`; see the
+[qualification review](mcp-legacy-qualification-2026-09-29/REVIEW.md).
+Local/cloud tool checks retain their separate source identities in the
+[client matrix](MCP_CLIENT_COMPATIBILITY.md). Claude Code's authenticated retry
+passed model-driven prompt and resource retrievals for both 2025 revisions.
+Claude Desktop's cloud connector separately passed a bounded November text
+prompt/resource check against the same clean core bytes. Broader cloud host
+scope and exact-candidate gates remain open. This file does not record a
+release-candidate PASS.
+
+The separate [modern Apps cloud check](mcp-apps-cloud-qualification-2026-09-29/REVIEW.md)
+also passed in Claude Desktop 2.16120.0: `2026-07-28` discovery, server-provided
+App rendering, and an actual App-button refresh. This qualifies that narrow
+modern host path; it does not enable Apps on the stateless 2025 adapter.
 
 ## Development implementation checkpoint — 2026-09-28
 
@@ -93,6 +101,34 @@ tested adapters may be advertised.
   passed without public signature changes. Lifecycle and version inventories
   were refreshed for these reviewed source changes; historical baselines and
   the accepted legacy exclusion cohort remain unchanged.
+
+## Prompt/resource qualification checkpoint — 2026-09-29
+
+- The exact pushed core JAR passed 28 official scenario/revision runs: all
+  14 selected initialization/tool/prompt/resource scenarios at both released
+  revisions. There were 57 successful checks and two optional-session INFO
+  notices, with no failures, warnings, or skips; all 136 wire messages passed
+  the selected schema checks. Every fixture stopped cleanly.
+- Inspector CLI 2.3.0 passed 26 bounded cases across both revisions, including
+  prompt image/embedded-resource output, Unicode arguments and template values,
+  template listing, binary reads, and expected unknown-resource errors.
+- The existing CI runner now includes these nine additional prompt/resource
+  scenarios and checks that the fixture catalogs are nonempty and complete.
+  Core runtime code and public signatures did not change in this slice.
+- Claude Code 2.1.274 passed four bounded model sessions across both revisions:
+  four static/template resource reads and two prompt-command retrievals with
+  Unicode arguments. The earlier isolated run could not access client
+  authentication and remains recorded as failed.
+- Claude Desktop 2.16120.0 and its cloud backend passed a bounded November
+  check using the same exact core JAR and compiled fixture. The connector
+  picker fetched a Unicode parameterized prompt and static text resource;
+  Claude consumed and quoted both attachments correctly. A model-driven
+  control tool call passed. Actual cloud wire receipts record modern discovery
+  fallback, initialization, catalogs, prompt retrieval, and resource reads.
+  The temporary tunnel stopped and the connector was disconnected. June cloud
+  behavior, templates, binary/image consumption, OAuth/denial, GET/SSE, and
+  Apps remain outside this cloud smoke. These results do not widen the excluded
+  legacy operation set or supersede the historical implementation checkpoints.
 
 ## Goal
 

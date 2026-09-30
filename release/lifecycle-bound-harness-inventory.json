@@ -995,7 +995,7 @@
         "conformance/official/legacy/build-fixture.sh",
         "conformance/official/legacy/run.mjs"
       ],
-      "rationale": "The opt-in 2025 conformance probe is preparatory development evidence, separate from the immutable 2026 candidate conformance gate. It executes ten fixed revision/scenario pairs sequentially using the reviewed official ChildSupervisor and bounded output: each fixture has a ten-second readiness wait and a ten-second graceful shutdown deadline with forced cleanup fallback, each official CLI scenario has a sixty-second deadline, and npm and scenario-list checks have ten- and thirty-second deadlines. The public-API fixture builder compiles and checks dependencies under the CI job’s sixty-minute outer limit; its shell commands have no independent per-command deadline. The probe does not acquire a synthetic JUnit guard or claim a settled V4 release harness. Its source remains visible to the broad lifecycle discovery census.",
+      "rationale": "The opt-in 2025 conformance probe is preparatory development evidence, separate from the immutable 2026 candidate conformance gate. It executes twenty-eight fixed revision/scenario pairs sequentially using the reviewed official ChildSupervisor and bounded output: each fixture has a ten-second readiness wait and a ten-second graceful shutdown deadline with forced cleanup fallback, each official CLI scenario has a sixty-second deadline, and npm and scenario-list checks have ten- and thirty-second deadlines. The public-API fixture builder compiles and checks dependencies under the CI job’s sixty-minute outer limit; its shell commands have no independent per-command deadline. The probe does not acquire a synthetic JUnit guard or claim a settled V4 release harness. Its source remains visible to the broad lifecycle discovery census.",
       "requiredAction": "NONE"
     },
     {
@@ -1458,7 +1458,7 @@
   ],
   "discoveryCensus": {
     "candidateCount": 8413,
-    "candidateSha256": "84a14a327458bb32be8019f968805be128b2af0cc50382ea1a3f921cd3260ccb",
+    "candidateSha256": "4aa6cc64a165c172712823986c4181c12097194b39545ecab597e50c9f936f96",
     "candidates": [
       {
         "kinds": [
@@ -3191,7 +3191,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 228,
+        "line": 255,
         "lineSha256": "a7c188c14b61af15c12e783c55d6f5bd40f71fde4dde3f675dba6cc6e83ec310",
         "path": "conformance/official/README.md"
       },
@@ -3199,7 +3199,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 250,
+        "line": 277,
         "lineSha256": "b2cc0d56f10ca0f9ede9f13b4770230530e8d4aca865dd99522df866ff338834",
         "path": "conformance/official/README.md"
       },
@@ -3207,7 +3207,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 363,
+        "line": 390,
         "lineSha256": "ff3463b24452c7a3b2180cc95d13e288168c33b8316672a4f8cb81dd3f5395da",
         "path": "conformance/official/README.md"
       },
@@ -3215,7 +3215,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 466,
+        "line": 493,
         "lineSha256": "7df20e558672c51de292b30429c4e42c06d9c8df8824c6f833a11b4aacd7f83a",
         "path": "conformance/official/README.md"
       },
@@ -3223,7 +3223,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 482,
+        "line": 509,
         "lineSha256": "7b58423768ccc6fad163a1a2e581da1cffc2186edfbd38afe5f43d1f40e181ce",
         "path": "conformance/official/README.md"
       },
@@ -3231,7 +3231,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 516,
+        "line": 543,
         "lineSha256": "ef9d269d2295a76ef22d2fd3f228d4a0681fc81a1333d2508064e6b9bf733137",
         "path": "conformance/official/README.md"
       },
@@ -3239,7 +3239,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 654,
+        "line": 681,
         "lineSha256": "3700d19606197a580012070f4402e040b444c3f5c7ffdd9612469fe7f45145e1",
         "path": "conformance/official/README.md"
       },
@@ -3247,7 +3247,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 791,
+        "line": 818,
         "lineSha256": "5d974d8b65f2c50bb9188d6ff71e999ffd09ff66f39d8adefb805c605cfc7a0f",
         "path": "conformance/official/README.md"
       },
@@ -3319,7 +3319,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 29,
+        "line": 39,
         "lineSha256": "53a9b6e05028d5e4ad1449c1f37e19570a999ddf171d083364e46bb19088a923",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3327,7 +3327,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 32,
+        "line": 44,
         "lineSha256": "1c56d45e3fe85d78dc817c6267985900e98a69e24b23d977a9e7a349be92294c",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3335,7 +3335,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 33,
+        "line": 45,
         "lineSha256": "c51ad3a687e0b49f74d4e97cd0fbccfdfe856d4547e9705636fbc20faa969106",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3343,7 +3343,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 89,
+        "line": 107,
         "lineSha256": "f8cf43b2363895744d4e3e60f049e98ab7ed846e132d2094c39314fcc7b689a2",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3351,7 +3351,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 99,
+        "line": 117,
         "lineSha256": "78aa8c9f75f7f46dc9c319e96ead71ec91be8f7233e18316c3bb5d3326424b95",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3359,7 +3359,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 103,
+        "line": 121,
         "lineSha256": "f9262f8f469027c407e02f0b9e3b9dfea0816128fd1758de2b8f7b1f955be0fd",
         "path": "conformance/official/legacy/McpLegacyConformanceFixture.java"
       },
@@ -3384,7 +3384,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 27,
+        "line": 31,
         "lineSha256": "40f5cf052cd7c4789cb90ce054dcf7b70f00503169e801b6c113c542844d6517",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3393,7 +3393,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 28,
+        "line": 32,
         "lineSha256": "4d368c64e5fa782f78f834a8acf1f0ced15eebe6ec6111f10f1e34bb427f09c9",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3402,7 +3402,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 29,
+        "line": 33,
         "lineSha256": "75da97b17b69a749cb12bded000a61d18756cc54231e7434b46789c46b5b80ee",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3410,7 +3410,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 152,
+        "line": 162,
         "lineSha256": "d34c0b453f1b90f636e6703a154b0f44ed48293e09bf4d007941f62e48f502a5",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3418,7 +3418,7 @@
         "kinds": [
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 163,
+        "line": 173,
         "lineSha256": "a8546c0f39ef5a7414757b667c70aea1b23f7accc140dc97dffa6ea720815a57",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3427,7 +3427,7 @@
           "NAMED_TIMEOUT_CANDIDATE",
           "PROCESS_OUTER_GUARD"
         ],
-        "line": 176,
+        "line": 186,
         "lineSha256": "14cd39f51d48da83f182fb1a897d06a6575e0d7ffaa1df793694f6e48d8900f7",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3435,7 +3435,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 213,
+        "line": 224,
         "lineSha256": "e6330e4283d18d874a4e5363b4ad009da2636d717b85f362c1ef31248547b912",
         "path": "conformance/official/legacy/run.mjs"
       },
@@ -3443,7 +3443,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 219,
+        "line": 230,
         "lineSha256": "89c3b9d0cb8155a16d419cee2df42c68d3f4959793e3f7c646827f1eb4898d8b",
         "path": "conformance/official/legacy/run.mjs"
       },

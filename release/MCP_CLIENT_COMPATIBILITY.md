@@ -4,6 +4,77 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
+## September 30 Apps server security recheck
+
+The same pushed core artifact as the Claude Apps check below passed **13
+simulator scenarios / 35 requests**, **13 live HTTP authorization requests**,
+and **27 shell/runner tests**. These checked independent UI resource
+authorization, denied/changed/revoked callers, current caller language and
+tenant, sanitizer privacy, capability gating, and plain subscription-policy
+403 without an OAuth challenge. The live listener stopped cleanly. See the
+[server security review and retained receipts](mcp-apps-security-qualification-2026-09-30/REVIEW.md).
+
+This is server and mocked-shell evidence. Claude's tenant-transition and
+denial/revocation UI checks were **NOT RUN** because native UI automation timed
+out before any host fixture service started. Full host security, CSP/permission
+enforcement, and production OAuth remain unqualified. The September 29
+render/refresh result retains its original scope.
+
+## September 29 modern Apps cloud check
+
+The existing public-API Apps fixture ran against clean pushed core commit
+`3fe09465fd1241ffb785493fdff4a2074f8b0e0a`, using the same exact JAR as the
+prompt/resource check below. Its temporary HTTPS endpoint served only
+`2026-07-28`. See the [Apps cloud review and retained wire/UI evidence](mcp-apps-cloud-qualification-2026-09-29/REVIEW.md).
+
+| Client or host | Exact version | Observed operations | Status |
+| --- | --- | --- | --- |
+| Claude Desktop custom connector and Claude cloud backend | Desktop `2.16120.0`; backend version not exposed; unchanged host | Selected modern `2026-07-28` through discovery; current Apps capabilities accompanied later requests. Catalogs and one UI resource read succeeded. A model-driven `show_catalog` rendered the server-provided App; clicking its own Refresh catalog button sent a successful app-only `refresh_catalog` and rendered the view again. | **PASS (bounded modern cloud Apps render/refresh smoke)** |
+
+This is direct evidence of modern MCP and Apps working in this named cloud
+host. The fixture retained its authorization and sanitizer policy. The temporary
+tunnel stopped and the connector was disconnected. This smoke does not qualify
+production OAuth, host denial/revocation, CSP or permission enforcement,
+localization transitions, subscriptions, legacy Apps, or full host compatibility.
+The earlier Inspector failure and candidate gate requirements remain unchanged.
+
+## September 29 prompt and resource development check
+
+The expanded public-API fixture used a clean export of pushed core commit
+`3fe09465fd1241ffb785493fdff4a2074f8b0e0a`. Its JAR SHA-256 was
+`c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f`.
+Each fixture served one exact 2025 revision. See the
+[qualification review and raw receipts](mcp-legacy-qualification-2026-09-29/REVIEW.md).
+
+| Client or host | Exact version | Observed operations | Status |
+| --- | --- | --- | --- |
+| MCP Inspector CLI | `2.3.0`, unmodified cached build | Both `2025-06-18` and `2025-11-25`: tools list/call; prompt list/simple/arguments/embedded-resource/image; resource and template lists; text/blob/template reads; expected unknown-resource error. Unicode arguments and template values passed. | **PASS (26 bounded development client cases; no model session)** |
+| Claude Code | `2.1.274` | Both exact 2025 revisions: actual model-driven static/template resource reads and a prompt command with Unicode arguments returned the expected content. Four model sessions and six retrievals completed; fixtures stopped cleanly. | **PASS (bounded local development prompt/resource smoke)** |
+| Claude Desktop custom connector and Claude cloud backend | Desktop `2.16120.0`; backend version not exposed | `2025-11-25`: cloud picker fetched a parameterized prompt with Unicode arguments and read the static text resource; Claude quoted both returned attachments exactly. A model-driven control tool call also passed. Modern discovery fell back to November initialization. | **PASS (bounded cloud development text prompt/resource smoke)** |
+
+The pinned official alpha.11 suite separately passed 14 selected scenarios per
+revision: 57 `SUCCESS`, two optional-session `INFO`, and zero failure, warning,
+or skipped checks across 136 schema-validated messages. This is a bounded
+protocol subset, not full 2025 conformance or a host PASS. Unknown-resource
+reads returned HTTP 400 with JSON-RPC `-32002`; Inspector reported the HTTP
+error and did not attempt OAuth. The earlier tool rows below retain their
+original source identities and do not imply prompt/resource host coverage.
+
+The first isolated Claude Code attempt failed model authentication; its raw
+failed receipt remains preserved. Retrying with the normal authenticated
+client environment passed. The isolated failure did not establish that the
+user's account was logged out. Prompt wire captures confirm fallback from
+modern discovery to the exact 2025 initialization, expected GET 405, and
+successful `prompts/get`. These local MCP sessions remain separate from the
+cloud connector row. The cloud run used the same exact core and fixture bytes
+through a temporary HTTPS tunnel. Its 17 captured exchanges include one
+`prompts/get`, two reads of the same static text resource, and one control
+`tools/call`. Prompt and resource selection was user-driven; Claude consumed
+the retrieved attachments. The fixture and tunnel stopped and the temporary
+connector was disconnected. June cloud behavior, cloud templates, binary/image
+consumption, OAuth/denial, GET/SSE, and Apps were not exercised. No full host
+compatibility or candidate release PASS is claimed.
+
 ## September 28 real-host development check
 
 On **2026-09-28**, a disposable, loopback-bound fixture built with Soklet from
@@ -254,7 +325,7 @@ and record its exact version, use its HTTP/Streamable HTTP server form, and
 point it at the application's configured endpoint URL. A client that uses
 `initialize` may connect only if the endpoint explicitly declares a supported
 2025 revision; the 2026-only configuration used for the September 1 Inspector
-smoke does not accept that wire protocol. The implemented 2025 tool adapter is
+smoke does not accept that wire protocol. The implemented 2025 adapter for synchronous tools and ordinary prompts/resources is
 stateless: it does not provide Soklet 3.5.1 sessions, GET SSE, or the removed
 standalone HTTP+SSE transport. Do not select an stdio command or a deprecated
 transport when testing the HTTP endpoint.

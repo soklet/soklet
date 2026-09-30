@@ -21,6 +21,10 @@ export const revisions = Object.freeze(['2025-06-18', '2025-11-25']);
 export const scenarios = Object.freeze([
   'server-initialize', 'ping', 'tools-list',
   'tools-call-simple-text', 'tools-call-error',
+  'prompts-list', 'prompts-get-simple', 'prompts-get-with-args',
+  'prompts-get-embedded-resource', 'prompts-get-with-image',
+  'resources-list', 'resources-read-text', 'resources-read-binary',
+  'resources-templates-read',
 ]);
 const fixtureMain = 'com.soklet.conformance.legacy.McpLegacyConformanceFixture';
 const fixtureSource = resolve(fileURLToPath(new URL('./McpLegacyConformanceFixture.java', import.meta.url)));
@@ -49,6 +53,12 @@ export function assertRawChecks(revision, scenario, checks) {
       && checks[1].details?.message
         !== 'Server did not provide an MCP-Session-Id header (session ID is optional)')
     throw new Error(`${revision}/${scenario} optional-session INFO meaning changed`);
+  const catalogCountField = scenario === 'prompts-list' ? 'promptCount'
+    : scenario === 'resources-list' ? 'resourceCount' : null;
+  if (catalogCountField !== null
+      && checks[0].details?.[catalogCountField]
+        !== (scenario === 'prompts-list' ? 4 : 2))
+    throw new Error(`${revision}/${scenario} fixture catalog count changed`);
   const expectedMessageCount = scenario === 'server-initialize' ? 3 : 5;
   if (checks.at(-1).details?.messagesValidated !== expectedMessageCount
       || !Array.isArray(checks.at(-1).details?.violations)
@@ -193,7 +203,8 @@ async function runOne(options, revision, scenario, ordinal, entryPoint, supervis
   const resultDirectory = resolve(directory, 'official-results');
   mkdirSync(resultDirectory, { recursive: true });
   const child = supervisor.spawn(options.javaExecutable,
-    ['-cp', options.classpath, fixtureMain, '--version', revision], {
+    ['-Xmx256m', '-XX:ActiveProcessorCount=2', '-cp', options.classpath,
+      fixtureMain, '--version', revision], {
       cwd: options.workDirectory,
       env: boundedEnvironment(),
       shell: false,

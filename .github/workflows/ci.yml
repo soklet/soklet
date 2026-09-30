@@ -465,7 +465,7 @@ jobs:
             --phase 5 \
             --p0c-policy accepted-2026-09-22
 
-      - name: Run bounded 2025 tool compatibility scenarios
+      - name: Run bounded 2025 tool, prompt, and resource compatibility scenarios
         shell: bash
         run: |
           set -euo pipefail

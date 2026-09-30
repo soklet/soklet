@@ -137,6 +137,33 @@ session state, GET SSE, other content kinds, prompts, resources, authorization,
 OAuth recovery, or release-candidate qualification. Those remain separate
 evidence obligations.
 
+## September 29 expanded 2025 prompt/resource check
+
+The legacy preparatory runner now includes nine additional applicable scenarios:
+`prompts-list`, `prompts-get-simple`, `prompts-get-with-args`,
+`prompts-get-embedded-resource`, `prompts-get-with-image`, `resources-list`,
+`resources-read-text`, `resources-read-binary`, and `resources-templates-read`.
+Together with the five existing scenarios, it runs 28 fixed revision/scenario
+pairs sequentially. The fixture uses public APIs only, exposes four ordinary
+prompts and three exact/template resource registrations, and omits completion,
+subscriptions, and every other excluded legacy feature. The runner also
+requires the exact prompt/resource catalog counts and bounds each JVM to
+256 MiB and two processors.
+
+The final local run used clean pushed commit
+`3fe09465fd1241ffb785493fdff4a2074f8b0e0a`, JAR SHA-256
+`c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f`.
+All 28 commands passed: June produced 28 SUCCESS/one optional-session INFO;
+November produced 29 SUCCESS/one optional-session INFO. No check failed,
+warned, or skipped. The suite validated 136 selected-revision wire messages,
+and all fixture shutdowns were clean. The unchanged official source/CLI pins
+were verified after the reviewed dependency overlay install/build.
+
+See the [qualification review and raw receipts](../../release/mcp-legacy-qualification-2026-09-29/REVIEW.md)
+for exact provenance and the separate Inspector/Claude observations. This
+extends the development subset only; it does not alter the modern release
+manifest, claim full legacy conformance, or qualify an immutable candidate.
+
 Core scenarios retain the explicit `--spec-version 2026-07-28` selector. In
 alpha.11 that selector excludes extension scenarios, so the ten exact pinned
 Tasks names use the reviewed extension command template without a version

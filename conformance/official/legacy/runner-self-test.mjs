@@ -24,6 +24,12 @@ for (const revision of revisions) {
       [...raw.slice(0, -1), { ...raw.at(-1),
         details: { ...raw.at(-1).details, messagesValidated: 0 } }]),
     /wire-schema validation changed/);
+    if (scenario === 'prompts-list' || scenario === 'resources-list') {
+      const field = scenario === 'prompts-list' ? 'promptCount' : 'resourceCount';
+      assert.throws(() => assertRawChecks(revision, scenario,
+        [{ ...raw[0], details: { [field]: 0 } }, raw[1]]),
+      /fixture catalog count changed/);
+    }
     if (scenario === 'server-initialize') {
       assert.throws(() => assertRawChecks(revision, scenario,
         [raw[0], { ...raw[1], details: { message: 'Different INFO' } }, raw[2]]),
@@ -60,6 +66,8 @@ function sample(revision, scenario) {
         ? [check('tools-list'), check('tools-name-format')]
         : [check('tools-list')]
       : [check(scenario)];
+  if (scenario === 'prompts-list') checks[0].details = { promptCount: 4 };
+  if (scenario === 'resources-list') checks[0].details = { resourceCount: 2 };
   checks.push({ id: 'wire-schema-valid', status: 'SUCCESS',
     details: { messagesValidated: scenario === 'server-initialize' ? 3 : 5,
       violations: [] } });

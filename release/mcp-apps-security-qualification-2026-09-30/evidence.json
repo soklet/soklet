@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "observedOn": "2026-09-30",
+  "status": "PASSED_SERVER_APPS_SECURITY",
+  "fullHostQualification": false,
+  "releaseCandidateEvidence": false,
+  "coreCommit": "3fe09465fd1241ffb785493fdff4a2074f8b0e0a",
+  "coreJarSha256": "c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f",
+  "revision": "2026-07-28",
+  "simulatorCases": 13,
+  "simulatorRequests": 35,
+  "liveHttpRequests": 13,
+  "shellAndRunnerTests": 27,
+  "fixtureStoppedCleanly": true,
+  "inputsRechecked": true,
+  "claudeUiStatus": "NOT_RUN_UI_UNAVAILABLE",
+  "receipts": {
+    "server-security-receipt.json.gz": {
+      "sha256": "b2469fc18a067cc5e70fa6e1dae3e562651a81bbc40aaa9cd8e1cbf28d4ad089",
+      "decodedSha256": "c8fde63725081814dccbd226563741b2130d5c7b73a8dbd2f6e64f26bebac0b2",
+      "bytes": 6101
+    }
+  }
+}

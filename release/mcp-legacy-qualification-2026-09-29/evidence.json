@@ -1,0 +1,104 @@
+{
+  "formatVersion": 1,
+  "observedOn": "2026-09-29",
+  "evidenceClass": "LEGACY_PROMPT_RESOURCE_DEVELOPMENT_QUALIFICATION",
+  "releaseCandidateEvidence": false,
+  "core": {
+    "commit": "3fe09465fd1241ffb785493fdff4a2074f8b0e0a",
+    "tree": "9a2f4962b35079fe40f72c0ce9845e0b2c101470",
+    "source": "clean git archive of exact commit",
+    "jarSha256": "c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f",
+    "sourcesJarSha256": "7045c81271b0e6ce902b0e1fbaa68fe2ed60469c1162faa16c662de272404c59",
+    "pomSha256": "90a0e38702ed10392a1d77ccc556995575d9eef7b601537b3d7a4a68790c7324"
+  },
+  "toolchain": {
+    "os": "macOS 27.0.1 (26A434), arm64",
+    "java": "Amazon Corretto 17.0.20.1+10-LTS",
+    "maven": "3.9.16",
+    "node": "26.5.0",
+    "npm": "11.17.0"
+  },
+  "official": {
+    "status": "PASSED",
+    "suiteCommit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
+    "suiteCliSha256": "b8355fba248c019b667a9c16289748ebfd85ca2668890812054b7997b8df8f3b",
+    "dependencyOverlaySha256": "4bbf44df937f30f99f56dcb359ec5ca67c8200241b279f49f25d4b646e38fa1f",
+    "fixtureSourceSha256": "cef66a24b16a148307fbe7a1bd30c6cd2a1fad4bacebc9707b25b0e76641a470",
+    "fixtureClassSha256": "29f8e32bde9dc850a4633a79c925cc2155940eaeb7febdfc740a2e3f25925709",
+    "runnerSha256": "397fe8f27eacbc5c77377dc3604c525a8a92d7e033976e9aafcf1fca6a2a4080",
+    "scenarioRuns": 28,
+    "wireMessagesValidated": 136,
+    "countsByRevision": {
+      "2025-06-18": {
+        "SUCCESS": 28,
+        "INFO": 1,
+        "FAILURE": 0,
+        "WARNING": 0,
+        "SKIPPED": 0
+      },
+      "2025-11-25": {
+        "SUCCESS": 29,
+        "INFO": 1,
+        "FAILURE": 0,
+        "WARNING": 0,
+        "SKIPPED": 0
+      }
+    },
+    "cleanFixtureStops": 28
+  },
+  "clients": {
+    "inspector": {
+      "version": "2.3.0",
+      "entryPointSha256": "6647a2072089aeb9f86c0203e77db84507f17e2a4c4ed4531ec7ce85d54d39b2",
+      "status": "PASSED_BOUNDED_CLIENT_CASES",
+      "cases": 26,
+      "expectedUnknownResourceErrors": 2,
+      "modelDriven": false
+    },
+    "claudeCode": {
+      "version": "2.1.274",
+      "status": "PASSED_BOUNDED_MODEL_PROMPT_RESOURCE_CHECKS",
+      "revisions": [
+        "2025-06-18",
+        "2025-11-25"
+      ],
+      "modelSessions": 4,
+      "resourceReads": 4,
+      "promptRetrievals": 2,
+      "cleanFixtureStops": 4,
+      "modelDrivenInvocationPassed": true,
+      "earlierIsolatedAttempt": {
+        "version": "2.1.274",
+        "status": "BLOCKED_MODEL_AUTHENTICATION",
+        "connected": true,
+        "promptsExposed": 4,
+        "modelDrivenInvocationPassed": false
+      },
+      "earlierAttemptInterpretation": "The isolated command environment could not access authentication. The earlier claim that the user account was logged out was not established by that run."
+    },
+    "cloudPromptResourceStatus": "PASSED_BOUNDED_NOVEMBER_CLOUD_CHECK",
+    "claudeDesktopCloud": {
+      "desktopVersion": "2.16120.0",
+      "cloudBackendVersion": "not exposed",
+      "status": "PASSED_BOUNDED_CLOUD_PROMPT_RESOURCE_CHECK",
+      "revision": "2025-11-25",
+      "modelSessions": 1,
+      "promptRetrievals": 1,
+      "resourceReads": 2,
+      "distinctResourcesRead": 1,
+      "modelDrivenToolCalls": 1,
+      "promptAndResourceSelection": "user-selected through connector picker; returned attachments consumed by model",
+      "modernDiscoveryFallbacks": 2,
+      "hostExchangeCount": 17,
+      "cleanFixtureStops": 1,
+      "temporaryTunnelStopped": true,
+      "connectorDisconnected": true
+    }
+  },
+  "receipts": {
+    "client-results.json.gz": "99febd1bdd06ad2afca00d0e464a7e5f5b85b18901449a9208e7cc78cafbdf18",
+    "official-checks.json.gz": "22a3af9c404555743d8997ee6f6799fa5e5898b481ab4dec9d175ddbc89eb733",
+    "claude-model-results.json.gz": "dc4e014d81fc26de30079037666d2a361544564feb7b8b29746382e4f220a1ac",
+    "claude-cloud-results.json.gz": "68d4f0cc357e3290fe72c9826bbd409a8a74590d0d9ed5a11968ba3284a778d6"
+  }
+}
