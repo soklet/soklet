@@ -7,5 +7,16 @@
 /fuzz/src/test/resources/**/crash-*
 /soak/target/
 /soak/reports/
+# Per-run qualification output belongs in local or CI artifact storage.
+/verification/skills/results/
+/conformance/official/proposals/**/evidence/
+/release/**/evidence/
+/release/**/evidence.json
+/release/**/*.json.gz
+/release/**/*.log
+/release/**/*.log.gz
+/release/**/*.jpg
+/release/**/*.jpeg
+/release/**/*.png
 .idea
 soklet.iml

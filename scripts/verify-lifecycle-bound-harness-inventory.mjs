@@ -1048,7 +1048,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["delegatedRuntimeSerializesForcedUpgradeDuringStartupCatchUp","83ce2088246f1dcb4f1f5a01c268683832d59f3ebe7ed36ef17385b5a0e24da0",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["delegatedRuntimePreservesStartupFailureWhenCatchUpShutdownAlsoFails","8a63bce72eb61c1b38c94ce3449a8838e6e9760417979b79dbf55a70500d12af",{"controlJoinMillis":3000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpTaskCancelationLifecycleTests.java", "eb76b31b7b566b7b8a7c5147c789f42b2c9ab1dd2523de44dbd1deee84dfc588", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpTaskCancelationLifecycleTests.java", "15c32d399c0fe3257494e3f744d1f6dc309f9291e8f9108dc929945d54f39f0e", [
     ["requestCancelationNotificationIsAcceptedAndIgnored","70e7bad65a3911d791f508adf066a9a7c86ab57b2903d90536ef840c4ee86091",{"controlJoinMillis":25000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpTasksPublicRuntimeTests.java", "87aab538a3a10d0e91d7d4aafe71296b5cda261df71b6b00151ffd34e89aa703", [

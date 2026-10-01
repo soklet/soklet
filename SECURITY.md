@@ -152,9 +152,11 @@ so one caller can exhaust their common bucket.
 
 Soklet validates response-header safety and transports application-owned
 authentication decisions and challenges, including Bearer challenges with an
-absolute `resource_metadata` URI and operation scopes. It treats the challenge
-syntax as opaque and does not publish OAuth protected-resource metadata or
-choose an authorization server. A deployment claiming MCP Authorization owns
+absolute `resource_metadata` URI and operation scopes. The typed
+`BearerAuthenticationChallenge` validates and renders Bearer challenge syntax;
+manually supplied header values receive response-header safety checks. Soklet
+does not publish OAuth protected-resource metadata or choose an authorization
+server. A deployment claiming MCP Authorization owns
 the referenced metadata, authorization-server selection, scope semantics, and
 RFC compliance, including RFC 9728 protected-resource metadata with at least
 one authorization server; it must not require `offline_access` as a protected-

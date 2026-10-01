@@ -1,5 +1,9 @@
 # Official MCP conformance manifests
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 This directory owns Soklet's executable integration with the official MCP
 server conformance suite. It is test infrastructure inside the core Soklet
 repository, not a separate product or published `soklet-mcp` artifact.

@@ -1,5 +1,9 @@
 # Legacy prompt and resource qualification — September 29
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 The expanded compatibility path passed the bounded official scenarios and
 Inspector CLI checks below. No core implementation fix was needed in this
 slice. The CI fixture and runner now retain this prompt/resource coverage.
@@ -11,7 +15,7 @@ The server used a freshly built, clean export of pushed core commit
 `9a2f4962b35079fe40f72c0ce9845e0b2c101470`.
 JAR SHA-256:
 `c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f`.
-The [evidence manifest](evidence.json) records the sources JAR, POM, fixture,
+The [evidence manifest](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-legacy-qualification-2026-09-29/evidence.json) records the sources JAR, POM, fixture,
 runner, client, and toolchain identities. This is development qualification,
 not an immutable release-candidate gate.
 
@@ -38,7 +42,7 @@ runner rejects changed check IDs/statuses, message counts, empty prompt/resource
 catalogs, unexpected stderr, and timeouts. Each scenario has a fresh loopback
 JVM, a 60-second command bound, bounded output, and supervised cleanup.
 
-The [raw official receipts](official-checks.json.gz) preserve every check and
+The [raw official receipts](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-legacy-qualification-2026-09-29/official-checks.json.gz) preserve every check and
 CLI/fixture log. The separate modern conformance selection and its reviewed
 exceptions are unchanged. This is not full 2025 conformance: subscriptions,
 completion, sessions, SSE, and other excluded features were not selected.
@@ -60,7 +64,7 @@ claim that Inspector exposes that response as a typed JSON-RPC exception.
 The first isolated Claude Code **2.1.274** run connected to the November-only
 endpoint, but its model step exited 1 with `Not logged in · Please run /login`
 before any resource invocation. That failed run remains in the
-[original client receipts](client-results.json.gz). The command environment
+[original client receipts](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-legacy-qualification-2026-09-29/client-results.json.gz). The command environment
 could not access the client's authentication; the earlier statement that the
 user's account was logged out was not established by this isolated probe.
 
@@ -79,7 +83,7 @@ notification receiving 202, GET receiving the expected 405, and subsequent
 catalogs and `prompts/get` receiving 200. Its loopback proxy forwarded MCP
 headers and payloads unchanged, rewriting only HTTP Host for the fixture
 listener. Resource runs connected directly. The
-[model-session receipts](claude-model-results.json.gz) preserve the successful
+[model-session receipts](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-legacy-qualification-2026-09-29/claude-model-results.json.gz) preserve the successful
 tool exchanges, prompt wire captures, model results, and raw stdout hashes.
 Account paths, session IDs, and authentication environment values are omitted.
 No credential was given to the fixture, and no runtime fix was needed.
@@ -108,7 +112,7 @@ The retained 17 cloud exchanges include two modern discovery probes receiving
 the expected unsupported HTTP 400, successful fallback initialization selecting
 November, initialized notifications receiving 202, and successful tool, prompt,
 and resource catalogs. One separate preflight is excluded from host counts.
-The [cloud receipt](claude-cloud-results.json.gz) preserves captured headers
+The [cloud receipt](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-legacy-qualification-2026-09-29/claude-cloud-results.json.gz) preserves captured headers
 and bodies with trace IDs redacted, plus the qualification UI observations and
 cleanup evidence. Temporary URLs, access tokens, account identifiers, and
 unrelated UI content are omitted.

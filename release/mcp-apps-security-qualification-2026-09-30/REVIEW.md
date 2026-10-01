@@ -1,5 +1,9 @@
 # Apps server security recheck — September 30
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 **PASS for the bounded server authorization and shell regression checks.**
 No production code or public API fix was needed. The Claude host's tenant-change
 and denial/revocation UI checks did not run because native UI automation was
@@ -52,7 +56,11 @@ setting; it did not change global Git configuration.
   late results. These use mocked DOM/SDK bridges and do not prove actual host
   behavior or browser enforcement.
 
-## Remaining host checks
+## Host checks pending at the time of this run
+
+Later Claude checks completed the caller/denial/revocation, CSP, permission-policy,
+RTL and real-locale portions below. Their current scope and remaining limitations
+are recorded in the [compatibility matrix](../MCP_CLIENT_COMPATIBILITY.md).
 
 Two native automation entry points timed out: selecting Claude and reading the
 surface inventory. No test listener, tunnel, or connector was started for the
@@ -63,6 +71,6 @@ verify that another real refresh clears the view. Credential revocation, host
 CSP and permission enforcement, RTL rendering, host context invalidation, and
 production OAuth remain separate outstanding qualification work.
 
-The [evidence manifest](evidence.json) binds the retained simulator, live-HTTP,
+The [evidence manifest](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-apps-security-qualification-2026-09-30/evidence.json) binds the retained simulator, live-HTTP,
 shell, and initial setup receipts by compressed and decoded SHA-256. Temporary
 run files remain in `/private/tmp/soklet-apps-security-20260930`.

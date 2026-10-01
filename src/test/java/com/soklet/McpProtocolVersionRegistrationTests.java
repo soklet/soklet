@@ -20,8 +20,10 @@ import com.soklet.annotation.McpHeader;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.soklet.McpProtocolVersion.V2025_06_18;
@@ -85,6 +87,28 @@ class McpProtocolVersionRegistrationTests {
 		assertEquals(List.of(resource), McpEndpoint.withPath("/mcp", implementation(),
 				Set.of(V2025_06_18, V2026_07_28))
 				.resourceRegistrations(List.of(resource)).build().getResourceRegistrations());
+	}
+
+	@Test
+	void skillRegistrationsGroupsAndListHandlersRejectLegacyRevisions() {
+		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md",
+				"---\nname: guide\ndescription: Guide\n---\nInstructions.\n"
+						.getBytes(StandardCharsets.UTF_8)));
+		for (McpProtocolVersion legacyVersion : List.of(V2025_06_18, McpProtocolVersion.V2025_11_25)) {
+			Set<McpProtocolVersion> endpointVersions = Set.of(legacyVersion, V2026_07_28);
+			for (Set<McpProtocolVersion> skillVersions : List.of(Set.of(legacyVersion), endpointVersions)) {
+				McpSkillRegistration skill = McpSkillRegistration.withUriAndSkillBundle(
+						URI.create("skill://versions/guide/SKILL.md"), bundle, skillVersions).build();
+				assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath("/mcp", implementation(),
+						endpointVersions).skillRegistrations(List.of(skill)).build());
+				assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath("/mcp", implementation(),
+						endpointVersions).skillGroups(List.of(McpSkillGroup.fromKeyAndSkillRegistrations(
+								"guide", List.of(skill)))).build());
+				assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath("/mcp", implementation(),
+						endpointVersions).skillListHandler((requestContext, skillListContext, invocationFeatures) ->
+								McpSkillPage.builder().build(), skillVersions).build());
+			}
+		}
 	}
 
 	@Test

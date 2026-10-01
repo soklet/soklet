@@ -1,5 +1,9 @@
 # MCP Apps, Skills, and API freeze review — 2026-09-25
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 **Disposition: HOLD.** The scoped server-side Skills qualification supports a
 bounded Skills signature freeze. The remaining API signature differences are
 the previously classified Apps surface. This review does not accept the Apps

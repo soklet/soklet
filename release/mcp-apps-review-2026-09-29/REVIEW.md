@@ -1,5 +1,9 @@
 # MCP Apps preparation review — September 29, 2026
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 **Disposition: the server checks and scoped corrected-host browser checks pass.**
 The unchanged released Inspector still fails on its plain-403 recovery path.
 The owner's direction in this chat permits that upstream defect to remain a
@@ -94,6 +98,11 @@ not a claim that an upstream Inspector fix has shipped.
 
 ## Release scope and remaining work
 
+This is the September 29 checkpoint. The [current compatibility matrix](
+../MCP_CLIENT_COMPATIBILITY.md) records the later Claude checks and current
+framework/application/host boundaries. The outstanding list below describes
+the state at this checkpoint.
+
 The approved plain-403 exception permits release preparation to continue while
 the upstream issue is open. Fresh evidence also distinguishes two separate
 limitations: this host does not delegate the requested geolocation feature, and
@@ -113,7 +122,7 @@ gates.
 
 ## Retained evidence
 
-[`evidence/index.json`](evidence/index.json) binds byte-identical copies of each
+[`evidence/index.json`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-apps-review-2026-09-29/evidence/index.json) binds byte-identical copies of each
 sanitized receipt, trace and bounded regression output by SHA-256. The index
 explicitly records preparation scope. Original failures and blocked outcomes
 are retained alongside experimental passes. The complete temporary run directory

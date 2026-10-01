@@ -4,6 +4,66 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
+## September 30 Claude Apps security and localization check
+
+Claude's unchanged web custom connector and cloud backend passed these scoped
+real-App checks using exact revision `2026-07-28`:
+
+- Current-caller tenant/language refresh, and clearing protected content after
+  permission denial or credential revocation.
+- Empty CSP origin exclusions; declared fetch/image/script allowance;
+  undeclared-origin blocking; effective browser permission-policy delegation.
+- Arabic RTL rendering, same-credential English/LTR refresh, and clearing the
+  view after an actual host locale change. Unchanged full context and a
+  dimensions-only notification preserved the ready view.
+- An actual English-to-Portuguese host locale change while refresh was pending
+  invalidated the App and cleared all seven protected fields. A completed
+  server HTTP 200 reply was held by the transport proxy, then released late;
+  the view remained invalidated and empty. This verifies cancellation and
+  suppression of stale content in this host.
+
+**Host restrictions:** declared nested frames and cross-origin base URLs were
+blocked. Those positive capabilities remain unqualified. Permission checks did
+not invoke device APIs or request browser grants. Revocation challenged discovery
+with 401; no production OAuth recovery was exercised.
+
+The JAR was built from pushed core commit
+`3fe09465fd1241ffb785493fdff4a2074f8b0e0a`, with unchanged production sources
+and POM in reviewed checkout `4c57cbae55fe306dde57dc2f6564e2f8f3c06241`.
+Web/backend build versions were not exposed. The first locale-check attempt
+expired and failed cleanup; the repeat completed cleanly. English was restored,
+connectors disconnected, and owned processes/listeners confirmed stopped.
+Raw development-run evidence is stored outside source control.
+
+The pending-refresh check retained the existing 10-second bridge deadline.
+Its late HTTP reply was released after 20 seconds, following cancellation;
+no successful post-invalidation App bridge delivery is claimed. An earlier
+attempt changed the language in another tab and reached the bridge timeout
+without notifying the App. A same-tab attempt canceled before a request reached
+the server. Those attempts do not establish the delayed-reply result above.
+
+### Release-scope review
+
+| Remaining item | Owner and disposition |
+| --- | --- |
+| Time-zone change | The example shell handles host notifications; its mock test passes. Claude's settings search exposed no time-zone control. The owner elected to leave the real-host change untested. |
+| Already displayed content | Applications own expiry and idle-view invalidation. Admission rechecks the next request; it cannot retract results already delivered or automatically revoke an in-flight admission. |
+| OAuth | Soklet validates Bearer challenge construction and carries safe admission responses. Applications own token verification, protected-resource metadata and the provider; this fixture does not qualify a production OAuth flow. |
+| Frames, base URLs and device permissions | Soklet validates declarations; hosts enforce browser policy and may restrict valid requests. Claude blocked the named frame/base capabilities; no device grant or device API was exercised. |
+
+No runtime or Java API change was required by this review. The public guide and
+website now state these ownership boundaries and make example invalidation
+conditional on an actual host notification. The aggregate API-freeze gate and
+260 focused Java regressions passed across Apps, challenge/notification transport,
+subscription admission and complete-result sanitization. All 27 existing
+shell/runner tests passed.
+Run output remains outside Git.
+
+These dispositions close the framework-boundary review. They do not create a
+full-host or immutable-candidate PASS. Production OAuth, real host time-zone
+changes, subscriptions, legacy Apps and other host builds remain unqualified.
+Earlier reports retain their original scopes.
+
 ## September 30 Apps server security recheck
 
 The same pushed core artifact as the Claude Apps check below passed **13
@@ -14,11 +74,12 @@ tenant, sanitizer privacy, capability gating, and plain subscription-policy
 403 without an OAuth challenge. The live listener stopped cleanly. See the
 [server security review and retained receipts](mcp-apps-security-qualification-2026-09-30/REVIEW.md).
 
-This is server and mocked-shell evidence. Claude's tenant-transition and
-denial/revocation UI checks were **NOT RUN** because native UI automation timed
-out before any host fixture service started. Full host security, CSP/permission
-enforcement, and production OAuth remain unqualified. The September 29
-render/refresh result retains its original scope.
+This is server and mocked-shell evidence. In that execution, Claude's UI checks
+were **NOT RUN** because native UI automation timed out before any host fixture
+service started. The later web-host checks above supply separate tenant-change
+and denial/revocation evidence. Full host security, CSP/permission enforcement,
+and production OAuth remain unqualified. The September 29 render/refresh result
+retains its original scope.
 
 ## September 29 modern Apps cloud check
 

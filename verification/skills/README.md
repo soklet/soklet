@@ -1,9 +1,38 @@
 # Skills verification
 
-The latest application/client checkpoint is the
-[standalone Skills example through Inspector](#2026-09-21-runnable-example-and-inspector-retrieval).
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
+The current review is the
+[September 30 protocol-boundary check](#2026-09-30-protocol-boundary-review).
 The sections below also retain the earlier private YAML corpus procedure and
 implementation history; their scope statements apply to their dated checkpoints.
+
+## 2026-09-30 protocol-boundary review
+
+The Skills server contract was reviewed after the HTTP compatibility adapter
+was added. No runtime or public signature change was needed. Two regressions
+now cover rejected legacy declarations for standalone registrations, groups,
+and list handlers, plus live HTTP isolation on a URL serving both supported
+legacy revisions and the modern revision. Ordinary legacy resources remain
+usable, while Skills list/get and every generated file read fail without
+invoking Skills callbacks. Modern discovery, custom listing, exact lookup,
+and standalone/grouped file reads still succeed on the same listener.
+
+The bounded Java 17 selection passed **472 tests** with no failures, errors,
+or skips, including the existing authorization/revocation, localization,
+pagination/cursor, shared-file, canonical-byte, parser, collision, API-reflection,
+and legacy-wire regressions. The existing Skills runner/proxy checks passed
+**14 tests** after allowing their disposable loopback listeners. New raw output
+stays outside Git; no local fuzz campaign was run.
+
+The [September 25 review](../../release/mcp-qualification-2026-09-25/REVIEW.md#skills)
+retains the named Inspector retrieval/operational-matrix and pinned corpus
+observations. This review supplies current server regression evidence; it
+does not repeat that host run or claim agent consent, activation, execution,
+general YAML compatibility, or immutable release-candidate qualification.
+Long fuzzing remains the owner's nightly CI choice.
 
 **Current scope decision — 2026-09-20:** complex lifetime-wide shared memory
 accounting is deferred by the owner. Keep `fromFiles(files)`, ordinary immutable
@@ -489,8 +518,8 @@ against only the packaged candidate's public API. The unmodified Inspector
 **2.7.0** CLI passes all nine client probes on Java **17.0.20.1** and **26.0.1**,
 using Node **26.5.0** and explicit modern HTTP. Retained receipts:
 
-- [Java 17](results/2026-09-21-example-jdk17/receipt.json)
-- [Java 26](results/2026-09-21-example-jdk26/receipt.json)
+- [Java 17](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/verification/skills/results/2026-09-21-example-jdk17/receipt.json)
+- [Java 26](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/verification/skills/results/2026-09-21-example-jdk26/receipt.json)
 
 Each run records 27 checked exchanges: discovery, Skill listing/get, ordinary
 resource-list isolation, exact text/binary reads, and both list/get verification.

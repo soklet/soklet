@@ -1,5 +1,9 @@
 # Claude cloud Apps render and refresh — September 29
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 **PASS for the bounded modern Apps render/refresh check.** Claude Desktop
 **2.16120.0** and its unchanged cloud backend used `2026-07-28`, rendered
 Soklet's server-provided catalog, and refreshed it through the App's own button.
@@ -29,7 +33,7 @@ Only HTTP Host and the proxy URL path were rewritten. The fixture was a single
 loopback JVM with a 256-MiB heap and two processors; the independent tunnel lease
 was 20 minutes. Inputs were rechecked after execution. The cloud backend's
 product version was not exposed; its self-reported identities are retained in
-the [receipt](cloud-apps-receipt.json.gz).
+the [receipt](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-apps-cloud-qualification-2026-09-29/cloud-apps-receipt.json.gz).
 
 ## Observed result
 
@@ -70,6 +74,6 @@ RTL rendering, idle-view invalidation, subscriptions, or other host versions.
 It does not add Apps support to the stateless 2025 adapter. The earlier Inspector
 plain-403 failure and its approved limitation retain their original disposition.
 
-The [evidence manifest](evidence.json) binds the compressed receipt by both file
+The [evidence manifest](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/release/mcp-apps-cloud-qualification-2026-09-29/evidence.json) binds the compressed receipt by both file
 and decoded-payload SHA-256. Temporary run files are in
 `/private/tmp/soklet-legacy-qualification-20260929/apps-cloud`.

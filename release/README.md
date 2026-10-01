@@ -1,5 +1,9 @@
 # Release-candidate validation
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 The release validator is an explicit-dispatch, fail-closed skeleton for the
 Soklet 4.0.0 candidate. It is deliberately separate from ordinary CI: its input
 is a full candidate commit SHA, the workflow checks out that exact commit, and

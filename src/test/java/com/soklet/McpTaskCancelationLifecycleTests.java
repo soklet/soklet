@@ -35,6 +35,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -228,6 +230,9 @@ public class McpTaskCancelationLifecycleTests {
 		};
 		McpServer server = server(taskManager, handler, Duration.ofSeconds(5));
 		Soklet soklet = managedSoklet(server);
+		// Both racers must reach the barrier even when the common pool has only
+		// one worker (for example, on a two-CPU JDK 25 runner).
+		ExecutorService raceExecutor = Executors.newFixedThreadPool(2);
 
 		try {
 			soklet.start();
@@ -246,7 +251,7 @@ public class McpTaskCancelationLifecycleTests {
 						} catch (Exception exception) {
 							throw new CompletionException(exception);
 						}
-					});
+					}, raceExecutor);
 			CompletableFuture<Void> completion = CompletableFuture.runAsync(() -> {
 				awaitRaceStart(raceStart);
 				try {
@@ -255,7 +260,7 @@ public class McpTaskCancelationLifecycleTests {
 				} catch (McpTaskNotFoundException exception) {
 					throw new CompletionException(exception);
 				}
-			});
+			}, raceExecutor);
 
 			assertCompleteAcknowledgement(cancelation.get(5, TimeUnit.SECONDS),
 					"race-cancel");
@@ -292,7 +297,13 @@ public class McpTaskCancelationLifecycleTests {
 			assertTerminalCompletionIsImmutable(taskManager,
 					completionFirstTerminal);
 		} finally {
-			soklet.close();
+			raceExecutor.shutdownNow();
+			try {
+				Assertions.assertTrue(raceExecutor.awaitTermination(5,
+						TimeUnit.SECONDS), "The task race executor did not terminate.");
+			} finally {
+				soklet.close();
+			}
 		}
 	}
 

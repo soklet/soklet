@@ -1,5 +1,9 @@
 # Exact alpha.11 dependency repin proposal — 2026-09-23
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 Status: **prepared review retained; the later candidate-use recommendation is
 in [the September 27 disposition](../../DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).**
 This directory preserves the original proposal and its development evidence.
@@ -76,12 +80,12 @@ local command outputs:
 
 | File | SHA-256 |
 | --- | --- |
-| [`evidence/baseline-audit.json`](evidence/baseline-audit.json) | `39c56e971802ced3d2754432be981d2decd68e1fb93405de7c2aec981abf7797` |
-| [`evidence/repin-audit.json`](evidence/repin-audit.json) | `8e574228e423119cc1c7e8fdf4cc97ddf17198a32d22ac56210d4248966d1dfc` |
-| [`evidence/runtime-audit.json`](evidence/runtime-audit.json) | `acf01fa25924e4778d3248d318627d8b26534b8c429dc29ce8ce0eaf79b584ed` |
-| [`evidence/linux-build.log.gz`](evidence/linux-build.log.gz) | `3180aea08451061a53595a970f9b7f26ba210b03454d02a5ece950a2530de097` (deterministic gzip; uncompressed log `e3caa1dac0ffb2eb86175db662e12248f6d35b1cd58c6eb8fd68979546a01093`) |
-| [`evidence/overlay-simulation-build.log.gz`](evidence/overlay-simulation-build.log.gz) | `3e5b0a31523a79e6e57d8839e83c28f8daa785732b526db0a1a14eddf9ca23de` (deterministic gzip; uncompressed log `0fb5462095354de4640a6cb7324e0ed33d10fa006e144cf076256c7fca06323b`) |
-| [`evidence/server-list.txt`](evidence/server-list.txt) | `8e5868988d76ba5b1d806b395943d22ecdd746ce5140e99154aabff76b1a8f03` |
+| [`evidence/baseline-audit.json`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/baseline-audit.json) | `39c56e971802ced3d2754432be981d2decd68e1fb93405de7c2aec981abf7797` |
+| [`evidence/repin-audit.json`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/repin-audit.json) | `8e574228e423119cc1c7e8fdf4cc97ddf17198a32d22ac56210d4248966d1dfc` |
+| [`evidence/runtime-audit.json`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/runtime-audit.json) | `acf01fa25924e4778d3248d318627d8b26534b8c429dc29ce8ce0eaf79b584ed` |
+| [`evidence/linux-build.log.gz`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/linux-build.log.gz) | `3180aea08451061a53595a970f9b7f26ba210b03454d02a5ece950a2530de097` (deterministic gzip; uncompressed log `e3caa1dac0ffb2eb86175db662e12248f6d35b1cd58c6eb8fd68979546a01093`) |
+| [`evidence/overlay-simulation-build.log.gz`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/overlay-simulation-build.log.gz) | `3e5b0a31523a79e6e57d8839e83c28f8daa785732b526db0a1a14eddf9ca23de` (deterministic gzip; uncompressed log `0fb5462095354de4640a6cb7324e0ed33d10fa006e144cf076256c7fca06323b`) |
+| [`evidence/server-list.txt`](https://github.com/soklet/soklet/blob/4c57cbae55fe306dde57dc2f6564e2f8f3c06241/conformance/official/proposals/alpha11-dependency-repin-2026-09-23/evidence/server-list.txt) | `8e5868988d76ba5b1d806b395943d22ecdd746ce5140e99154aabff76b1a8f03` |
 
 ## Staged integration and acceptance work
 

@@ -218,12 +218,18 @@ locale groups programmatically; annotation-based Skills authoring is not provide
 A Skills-only endpoint advertises the base Resources surface, but its files are
 not automatically added to `resources/list` or `resources/templates/list`.
 Empty groups alone do not enable Skills or Resources capabilities.
-Broader parser compatibility/fuzz and real-host qualification remain in progress.
+Skills registrations and custom list handlers must declare exactly the modern
+revision. A dual-era endpoint can also serve ordinary legacy tools, prompts,
+and resources, but its legacy view omits generated Skills manifests and files.
+Knowing a file URI does not make it available through that legacy view.
 
 The [runnable Skills example](examples/skills/README.md) publishes authored
 Markdown, a UTF-8 CSV reference and a binary asset using only the public API.
 Its separate Inspector CLI check exercises real-client retrieval and digest/
-frontmatter verification; it does not activate or execute a Skill.
+frontmatter verification; it does not activate or execute a Skill. The scoped
+authorization, localization, pagination, parser, and client checks are recorded
+in [Skills verification](verification/skills/README.md). Agent activation and
+general YAML compatibility are separate from Soklet's server-side Skills claim.
 
 Supply complete file bytes under logical bundle-relative paths, including
 `SKILL.md`. The application loads or generates those bytes; Soklet does not open
@@ -1455,9 +1461,12 @@ identity.
 
 An admission rejection may carry an application-authored
 `WWW-Authenticate` Bearer challenge, including an absolute
-`resource_metadata` URI and operation scopes. Soklet safely transports that
-header but treats its syntax as opaque: the application owns authentication,
-authorization-server selection, scope semantics, and RFC compliance. Unsafe
+`resource_metadata` URI and operation scopes. `BearerAuthenticationChallenge`
+validates and renders a Bearer field value through `getHeaderValue()`;
+`McpAdmissionRejection.withBearerAuthenticationChallengeAndError(...)` attaches
+it with the recommended status. Manually supplied challenge values receive
+response-header safety checks. The application owns token verification,
+protected-resource metadata, authorization-server selection, and scope policy. Unsafe
 or reserved response headers fail closed, and notifications retain the HTTP
 status and safe headers without acquiring a JSON-RPC body.
 
@@ -1638,6 +1647,33 @@ content can be model-visible. Soklet never copies UI-directed result metadata
 into text/structured content for non-Apps clients; author a meaningful model
 response separately. Authorization, redaction, tenant policy, and translation
 of application JSON remain application responsibilities.
+
+### Apps authorization and browser lifecycle
+
+`McpAppToolMetadata` associates a tool with a UI resource and selects its
+audiences. `McpAppResourceMetadata` supplies CSP, browser-permission requests,
+and presentation hints. These values do not authenticate the caller. A host
+may impose stricter browser restrictions than the resource requests, including
+blocking declared nested frames or base URLs. Test the host used by the
+application before depending on those features.
+
+Every UI resource read must be authorized independently, including a host
+prefetch before a tool call. A resource descriptor's visibility is separate
+from permission to read its contents. Keep shared HTML free of credentials and
+personalized data; return caller-specific data through authorized tool results.
+
+Each App refresh through the host makes a new MCP request and passes admission
+again. Application policy changes govern that request. They do not erase
+content already delivered to a host, model, or browser, or automatically revoke
+an in-flight admission. An application requiring an expiry or idle-view
+invalidation must implement that policy in its UI and supported host bridge.
+
+The example shell clears protected content before refresh and on error,
+timeout, cancelation, or teardown. When the host delivers a changed locale or
+time zone, it invalidates the view, aborts pending work, and requires a new
+authorized instance. Host preferences do not override the admitted caller's
+tenant or language. Soklet's Java server does not supply a browser lifecycle;
+applications own their HTML and bridge handlers.
 
 ## Progress and cooperative cancelation
 

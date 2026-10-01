@@ -50,6 +50,94 @@ public class McpSkillPublicRuntimeTests {
 			.build();
 
 	@Test
+	public void dualEraEndpointKeepsSkillManifestsFilesAndCallbacksModernOnly() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		McpSkillRegistration standalone = registration("skill://versions/standalone/SKILL.md",
+				Map.of("SKILL.md", skillDocument("standalone", "Standalone instructions"),
+						"private.txt", "skill-private-marker".getBytes(StandardCharsets.UTF_8)));
+		McpSkillRegistration grouped = registration("skill://versions/grouped/SKILL.md",
+				Map.of("SKILL.md", skillDocument("grouped", "Grouped instructions")));
+		URI ordinaryUri = URI.create("test://ordinary");
+		McpResourceRegistration ordinary = McpResourceRegistration.withUriAndName(
+				ordinaryUri, "ordinary", versions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						textResourceResult(ordinaryUri, "ordinary-resource-marker")).build();
+		AtomicInteger skillCallbacks = new AtomicInteger();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("skill-version-test", "1").build(), versions)
+				.resourceRegistrations(List.of(ordinary))
+				.skillRegistrations(List.of(standalone))
+				.skillGroups(List.of(McpSkillGroup.fromKeyAndSkillRegistrations("group", List.of(grouped))))
+				.skillListHandler((requestContext, skillListContext, invocationFeatures) -> {
+					skillCallbacks.incrementAndGet();
+					return McpSkillPage.builder().skillRegistrations(
+							skillListContext.getInitialSkillRegistrations().orElseThrow()).build();
+				}, Set.of(McpProtocolVersion.V2026_07_28)).build();
+		McpServer server = serverBuilder(endpoint).skillAccessPolicy(McpSkillAccessPolicy.fromEvaluators(
+				(requestContext, skillRegistration, invocationFeatures) -> {
+					skillCallbacks.incrementAndGet();
+					return true;
+				}, (requestContext, skillRegistration, invocationFeatures) -> {
+					skillCallbacks.incrementAndGet();
+					return true;
+				})).build();
+		Soklet owner = managedSoklet(server);
+		try {
+			owner.start();
+			int port = port(server);
+			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
+					McpProtocolVersion.V2025_11_25)) {
+				String revision = version.getWireValue();
+				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize", "initialize",
+						"\"protocolVersion\":\"" + revision + "\",\"capabilities\":{},"
+								+ "\"clientInfo\":{\"name\":\"skill-version-test\",\"version\":\"1\"}");
+				assertSuccess(initialize, "initialize");
+				assertContains(initialize.body(), "\"protocolVersion\":\"" + revision + "\"");
+				Assertions.assertFalse(initialize.body().contains("io.modelcontextprotocol/skills"), initialize.body());
+				HttpResponse<String> list = sendLegacy(port, revision, "ordinary", "resources/list", "");
+				assertSuccess(list, "ordinary");
+				assertContains(list.body(), ordinaryUri.toString());
+				Assertions.assertFalse(list.body().contains("skill://"), list.body());
+				HttpResponse<String> read = sendLegacy(port, revision, "ordinary-read", "resources/read",
+						"\"uri\":\"" + ordinaryUri + "\"");
+				assertSuccess(read, "ordinary-read");
+				assertContains(read.body(), "ordinary-resource-marker");
+				for (McpSkillRegistration registration : List.of(standalone, grouped)) {
+					HttpResponse<String> get = sendLegacy(port, revision, "skill-get", "skills/get",
+							"\"uri\":\"" + registration.getUri() + "\"");
+					assertError(get, 404, -32601, "skill-get");
+					for (McpSkillRegistration.Resource resource : registration.getResources()) {
+						HttpResponse<String> file = sendLegacy(port, revision, "skill-read", "resources/read",
+								"\"uri\":\"" + resource.getUri() + "\"");
+						assertError(file, 400, -32002, "skill-read");
+						Assertions.assertFalse(file.body().contains("skill-private-marker"), file.body());
+					}
+				}
+				assertError(sendLegacy(port, revision, "skill-list", "skills/list", ""),
+						404, -32601, "skill-list");
+			}
+			Assertions.assertEquals(0, skillCallbacks.get(), "Legacy requests must not invoke Skills callbacks.");
+
+			HttpResponse<String> modernDiscovery = send(port, "modern-discovery", "server/discover", "", null, null);
+			assertSuccess(modernDiscovery, "modern-discovery");
+			assertContains(modernDiscovery.body(), "\"io.modelcontextprotocol/skills\":{");
+			HttpResponse<String> modernList = send(port, "modern-list", "skills/list", "", null, null);
+			assertSuccess(modernList, "modern-list");
+			assertContains(modernList.body(), standalone.getUri().toString());
+			assertContains(modernList.body(), grouped.getUri().toString());
+			for (McpSkillRegistration registration : List.of(standalone, grouped)) {
+				assertSuccess(skillGet(port, "modern-get", registration.getUri()), "modern-get");
+				for (McpSkillRegistration.Resource resource : registration.getResources())
+					assertSuccess(resourceRead(port, "modern-read", resource.getUri()), "modern-read");
+			}
+			Assertions.assertTrue(skillCallbacks.get() > 0);
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
 	public void automaticListExactGetAndSkillsOnlyResourceReadsPreserveManifestBytes() throws Exception {
 		byte[] root = skillDocument("test-skill", "Original description");
 		byte[] binary = {0, 1, (byte) 0xff, 3};
@@ -666,6 +754,20 @@ public class McpSkillPublicRuntimeTests {
 		if (language != null) request.header("Accept-Language", language);
 		return HTTP_CLIENT.send(request.POST(HttpRequest.BodyPublishers.ofString(body,
 				StandardCharsets.UTF_8)).build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static HttpResponse<String> sendLegacy(int port, String revision, String id,
+			String method, String parameters) throws Exception {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"method\":\"" + method
+				+ "\",\"params\":{" + parameters + "}}";
+		return HTTP_CLIENT.send(HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE)
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", revision)
+				.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
 				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 

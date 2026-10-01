@@ -433,7 +433,7 @@ public final class McpEndpoint {
 	/**
 	 * Returns only standalone Skills registrations in supplied order. Group members
 	 * remain in {@link #getSkillGroups()}; this getter does not flatten them.
-	 * Skills configuration is currently construction-only, pending runtime routing.
+	 * Skills manifests and files are served only on their declared protocol revisions.
 	 *
 	 * @return immutable standalone Skills registrations
 	 */

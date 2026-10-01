@@ -9,10 +9,23 @@ import { verifyDependencyRepinAudit } from './verify-dependency-repin-audit.mjs'
 const proposal = resolve(dirname(fileURLToPath(import.meta.url)),
   'proposals/alpha11-dependency-repin-2026-09-23');
 const lock = readFileSync(resolve(proposal, 'package-lock.json'));
-const runtime = JSON.parse(readFileSync(resolve(proposal,
-  'evidence/runtime-audit.json'), 'utf8'));
-const full = JSON.parse(readFileSync(resolve(proposal,
-  'evidence/repin-audit.json'), 'utf8'));
+// Synthetic policy fixtures; real npm audit reports are per-run artifacts.
+const runtime = {
+  auditReportVersion: 2,
+  metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+  vulnerabilities: {},
+};
+const full = {
+  auditReportVersion: 2,
+  metadata: { vulnerabilities: { info: 0, low: 1, moderate: 0, high: 0, critical: 0, total: 1 } },
+  vulnerabilities: {
+    esbuild: {
+      name: 'esbuild', severity: 'low', isDirect: false,
+      nodes: ['node_modules/esbuild'],
+      via: [{ url: 'https://github.com/advisories/GHSA-g7r4-m6w7-qqqr', severity: 'low' }],
+    },
+  },
+};
 const clone = (value) => structuredClone(value);
 
 assert.equal(verifyDependencyRepinAudit(lock, runtime, full).lockSha256,

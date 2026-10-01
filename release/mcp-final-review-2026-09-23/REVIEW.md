@@ -1,5 +1,9 @@
 # MCP final review checkpoint — 2026-09-23
 
+Recorded run output was removed from the checkout on September 30. Historical
+results below describe the original runs; artifact links refer to that earlier
+commit. New run output belongs outside source control.
+
 **Disposition: HOLD.** This review ran the available checks against owner commit
 `47eeff6a907a0579b025b6b526b6ade1edbb1344` and its reproducible main JAR
 `ea81b1293a8c02827db92b1dfbb6d175d82cc0588f1782a42545f8f8bd6b713f`.
