@@ -448,6 +448,41 @@
     },
     {
       "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Only the four static legacy list operations rearm the corresponding coalesced catalog family after fresh admission. A new method needs an explicit reviewed family mapping; this internal selector does not grant URI permission or widen modern operations.",
+      "conformanceRows": [
+        "MCP-PAGE-005",
+        "SOK-NA-008"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-065",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#legacyCatalogFamily",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "legacyCatalogFamily",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-15"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Legacy GET delivery maps only the four configured resource/tool/prompt notification families to their exact 2025 method names. URI updates contain only the URI, catalogs are coarse hints, and no Tasks or arbitrary extension notification is implied. A new family requires explicit profile, capability, admission, and write-boundary review.",
+      "conformanceRows": [
+        "MCP-BASE-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-066",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#legacyNotification",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "legacyNotification",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-15"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
       "compatibleOptionalMemberBehavior": "Accepted notification names remain explicit; legacy initialization and cancellation follow revision-specific validation and shared admission. A new notification kind requires a reviewed profile and transport-policy update; unknown names remain rejected.",
       "conformanceRows": [
         "MCP-BASE-002",
@@ -481,7 +516,8 @@
       "phase": "common-bootstrap",
       "roadmapNegativeInventoryKeys": [
         "NI-03",
-        "NI-11"
+        "NI-11",
+        "NI-15"
       ]
     },
     {
@@ -524,6 +560,24 @@
       "phase": "deferred-r2c",
       "roadmapNegativeInventoryKeys": [
         "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Modern framework static catalogs retain empty parameters. Only the selected 2025 pager accepts its bounded cursor field; widening that exact vocabulary requires a reviewed profile/routing change and never enables application-supplied catalog keys implicitly.",
+      "conformanceRows": [
+        "MCP-PAGE-005",
+        "SOK-NA-008"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-063",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#validFrameworkCatalogParams",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validFrameworkCatalogParams",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-15"
       ]
     },
     {
@@ -570,6 +624,24 @@
       "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
       "phase": "profile-2026-07-28",
       "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "Framework pagination is limited to the four selected 2025 static catalog methods. New paged methods require an explicit selected-profile routing, cursor-kind, and authorization review; custom lists and modern static catalogs retain their existing contracts.",
+      "conformanceRows": [
+        "MCP-PAGE-005",
+        "SOK-NA-008"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPager.java",
+      "id": "OPEN-064",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPager.java#com.soklet.internal.mcp.protocol.McpLegacyCatalogPager.Kind#forMethod",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "forMethod",
+      "owner": "com.soklet.internal.mcp.protocol.McpLegacyCatalogPager.Kind",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-15"
+      ]
     },
     {
       "closureAuthority": "SOKLET_POLICY",

@@ -36,6 +36,13 @@ import static java.util.Objects.requireNonNull;
  * cancellation token; they do not expose task creation, progress reporting, or
  * a localization context computed before authorization completes.
  *
+ * <p>For exact 2025-era delivery, the authorizer establishes and renews one
+ * session-owned resource URI grant through a real {@code resources/subscribe}
+ * context. That grant is independent of an individual GET connection and
+ * survives its disconnect within configured bounds. GET notification-family
+ * admission is controlled separately by {@link McpSessionTransportAdmissionController}.
+ * Unsubscribe does not invoke this authorizer.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

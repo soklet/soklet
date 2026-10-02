@@ -234,6 +234,13 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 				retained.getRequestStreamDurations().keySet().stream()
 						.map(McpMetricsSnapshot.RequestStreamTerminationKey::getReason)
 						.collect(java.util.stream.Collectors.toUnmodifiableSet()));
+		for (McpStreamTerminationReason reason : List.of(
+				McpStreamTerminationReason.SESSION_EXPIRED, McpStreamTerminationReason.SESSION_CLOSED)) {
+			MetricsCollector.HistogramSnapshot sessionHistogram = retained.getRequestStreamDurations().get(key(reason));
+			Assertions.assertNotNull(sessionHistogram);
+			Assertions.assertEquals(1L, sessionHistogram.getCount());
+			Assertions.assertEquals(Duration.ofSeconds(reason.ordinal() + 1L).toNanos(), sessionHistogram.getSum());
+		}
 		MetricsCollector.HistogramSnapshot completedHistogram = retained
 				.getRequestStreamDurations().get(
 						key(McpStreamTerminationReason.COMPLETED));
@@ -274,7 +281,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 			expectedSamples.add(new SampleProjection(
 					STREAM_DURATIONS_METRIC_NAME + "_sum", labels));
 		}
-		Assertions.assertEquals(29, expectedSamples.size());
+		Assertions.assertEquals(33, expectedSamples.size());
 		Assertions.assertEquals(expectedSamples, observedSamples);
 		assertMetricType(selected, ACTIVE_STREAMS_METRIC_NAME,
 				ACTIVE_STREAMS_HELP, "gauge");
@@ -287,6 +294,12 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 				completedLabels, 3L);
 		assertSample(selected, STREAM_DURATIONS_METRIC_NAME + "_sum",
 				completedLabels, 18_001_500_000_000L);
+		for (McpStreamTerminationReason reason : List.of(
+				McpStreamTerminationReason.SESSION_EXPIRED, McpStreamTerminationReason.SESSION_CLOSED)) {
+			assertSample(selected, STREAM_DURATIONS_METRIC_NAME + "_count", encodedLabels(reason), 1L);
+			assertSample(selected, STREAM_DURATIONS_METRIC_NAME + "_sum", encodedLabels(reason),
+					Duration.ofSeconds(reason.ordinal() + 1L).toNanos());
+		}
 		for (String metricName : List.of(ACTIVE_STREAMS_METRIC_NAME,
 				STREAM_DURATIONS_METRIC_NAME)) {
 			Assertions.assertEquals(1, occurrences(selected,

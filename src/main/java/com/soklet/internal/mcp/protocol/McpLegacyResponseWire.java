@@ -36,13 +36,17 @@ final class McpLegacyResponseWire {
 
 	static byte @NonNull [] encode(@NonNull McpJsonCodec jsonCodec,
 			McpJsonRpcMessage.@NonNull ResultResponse response) {
-		requireNonNull(jsonCodec);
+		return requireNonNull(jsonCodec).toUtf8Bytes(projectEnvelope(response));
+	}
+
+	static @NonNull McpJsonObject projectEnvelope(
+			McpJsonRpcMessage.@NonNull ResultResponse response) {
 		requireNonNull(response);
 		Map<String, McpJsonValue> envelope = new LinkedHashMap<>();
 		envelope.put("jsonrpc", new McpJsonString(McpJsonRpcMessage.JSON_RPC_VERSION));
 		envelope.put("id", response.id().toJsonValue());
 		envelope.put("result", projectResult(response.result()));
-		return jsonCodec.toUtf8Bytes(new McpJsonObject(envelope));
+		return new McpJsonObject(envelope);
 	}
 
 	static @NonNull McpJsonObject projectResult(@NonNull McpWireResult result) {

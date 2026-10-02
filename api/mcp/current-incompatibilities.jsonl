@@ -421,6 +421,7 @@
 {"id":"M:com/soklet/McpServer#getRequestInterceptor()Lcom/soklet/McpRequestInterceptor;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getRequestRateLimiter()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getResponseMarshaler()Lcom/soklet/McpResponseMarshaler;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpServer#getSessionConfig()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getSessionStore()Lcom/soklet/McpSessionStore;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getSkillAccessPolicy()Lcom/soklet/McpSkillAccessPolicy;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getSkillVariantSelector()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
@@ -704,6 +705,7 @@
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourceListCacheTimeToLiveInMilliseconds()J","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourceTemplateListCacheScope()Lcom/soklet/McpCacheScope;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourceTemplateListCacheTimeToLiveInMilliseconds()J","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpServerEndpoint#sessionProtocolVersions()[Lcom/soklet/McpProtocolVersion;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#subscriptionProtocolVersions()[Lcom/soklet/McpProtocolVersion;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#taskProtocolVersions()[Lcom/soklet/McpProtocolVersion;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#toolRateLimiterName()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}

@@ -18,11 +18,13 @@ const LEDGERS = [
   'api/mcp/phase-4.signatures.jsonl',
   'api/mcp/phase-5.signatures.jsonl',
   'api/mcp/phase-6.signatures.jsonl',
+  'api/mcp/provisional.signatures.jsonl',
 ];
 const INCLUDE_FILES = [
   'api/mcp/phase-4.includes',
   'api/mcp/phase-5.includes',
   'api/mcp/phase-6.includes',
+  'api/mcp/provisional.includes',
 ];
 const ALLOWED_PARTITIONS = new Set(['candidate', 'externalSketch']);
 const ALLOWED_MCP_STATES = new Set(['Active', 'Deprecated', 'Removed']);
@@ -955,7 +957,7 @@ function ledgerRows(root) {
   return rows;
 }
 
-function verifyStructuralOwners(root, inventory, includes, ledgers) {
+export function verifyStructuralOwners(root, inventory, includes, ledgers) {
   const actualEnums = ledgers
     .filter(({ id, kind, api }) => kind === 'class'
       && api.classType === 'ENUM'
@@ -1156,7 +1158,7 @@ export function verifyRoot(root, { externalSketchRoot } = {}) {
     'public evolution inventory');
   if (inventory.formatVersion !== 1) fail('Public evolution inventory formatVersion must be 1.');
   if (JSON.stringify(inventory.reviewedIncludeFiles) !== JSON.stringify(INCLUDE_FILES))
-    fail('Inventory reviewedIncludeFiles must name Phase 4, 5, and 6 exactly.');
+    fail('Inventory reviewedIncludeFiles must name Phase 4, 5, 6, and provisional exactly.');
   const includes = loadIncludes(root);
   const ledgers = ledgerRows(root);
   verifyStructuralOwners(root, inventory, includes, ledgers);

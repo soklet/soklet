@@ -72,7 +72,9 @@ final class McpLocalizationRenderer {
 		/** Localization failed; publish canonical source text. */
 		DEFAULT_TEXT,
 		/** Localization failed; return the fixed sanitized internal error. */
-		FAIL_REQUEST
+		FAIL_REQUEST,
+		/** A legacy page must shrink; no application localization failure occurred. */
+		TOO_LARGE
 	}
 
 	/**
@@ -113,6 +115,40 @@ final class McpLocalizationRenderer {
 			@NonNull McpLocalizationFailurePolicy failurePolicy,
 			@NonNull TerminalBoundary terminalBoundary,
 			@NonNull EncodedLength encodedLength) {
+		return render(canonicalDocument, canonicalEncodedBytes, envelopeBytes,
+				maximumResponseBytes, maximumReplacementCharacters, slots, context,
+				failurePolicy, terminalBoundary, encodedLength, false);
+	}
+
+	/**
+	 * Renders a legacy page, separating aggregate overflow from provider failure.
+	 * The page owner may retry a smaller prefix using the same cached context.
+	 * The encoder may report {@link Long#MAX_VALUE} for aggregate byte or node
+	 * overflow after individual replacement values have been validated.
+	 */
+	@NonNull
+	static Outcome renderPage(@NonNull McpJsonObject canonicalDocument,
+			long canonicalEncodedBytes, long envelopeBytes,
+			long maximumResponseBytes, long maximumReplacementCharacters,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
+			@NonNull McpLocalizationContext context,
+			@NonNull McpLocalizationFailurePolicy failurePolicy,
+			@NonNull TerminalBoundary terminalBoundary,
+			@NonNull EncodedLength encodedLength) {
+		return render(canonicalDocument, canonicalEncodedBytes, envelopeBytes,
+				maximumResponseBytes, maximumReplacementCharacters, slots, context,
+				failurePolicy, terminalBoundary, encodedLength, true);
+	}
+
+	@NonNull
+	private static Outcome render(@NonNull McpJsonObject canonicalDocument,
+			long canonicalEncodedBytes, long envelopeBytes,
+			long maximumResponseBytes, long maximumReplacementCharacters,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
+			@NonNull McpLocalizationContext context,
+			@NonNull McpLocalizationFailurePolicy failurePolicy,
+			@NonNull TerminalBoundary terminalBoundary,
+			@NonNull EncodedLength encodedLength, boolean resizePageOnOverflow) {
 		requireNonNull(canonicalDocument, "canonicalDocument");
 		requireNonNull(slots, "slots");
 		requireNonNull(context, "context");
@@ -120,11 +156,16 @@ final class McpLocalizationRenderer {
 		requireNonNull(terminalBoundary, "terminalBoundary");
 		requireNonNull(encodedLength, "encodedLength");
 
-		long projectedBytes = canonicalEncodedBytes + envelopeBytes;
+		long projectedBytes;
+		try {
+			projectedBytes = Math.addExact(canonicalEncodedBytes, envelopeBytes);
+		} catch (ArithmeticException exception) {
+			return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
+		}
 
 		// Fail before the first callback if even the untouched response cannot fit.
 		if (projectedBytes > maximumResponseBytes)
-			return failed(canonicalDocument, failurePolicy);
+			return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
 
 		if (terminalBoundary.isTerminal())
 			return failed(canonicalDocument, failurePolicy);
@@ -193,7 +234,7 @@ final class McpLocalizationRenderer {
 			} else if (result instanceof McpLocalizationResult.UseDefaultText) {
 				if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
 						> maximumResponseBytes)
-					return failed(canonicalDocument, failurePolicy);
+					return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
 				continue;
 			} else {
 				// A Failure result, or a null the contract forbids.
@@ -218,7 +259,7 @@ final class McpLocalizationRenderer {
 			if (replacementText.equals(defaultText)) {
 				if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
 						> maximumResponseBytes)
-					return failed(canonicalDocument, failurePolicy);
+					return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
 				continue;
 			}
 
@@ -237,7 +278,7 @@ final class McpLocalizationRenderer {
 			// for every remaining slot cannot make the aggregate candidate fit.
 			if (projectedBytes - maximumSuffixSavings[slotIndex + 1]
 					> maximumResponseBytes)
-				return failed(canonicalDocument, failurePolicy);
+				return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
 
 			replacements.add(new McpLocalizationOverlay.Replacement(
 					slot.targetPointer(), replacementText));
@@ -260,13 +301,24 @@ final class McpLocalizationRenderer {
 
 		// The production encoder is the authoritative aggregate check.
 		try {
-			if (encodedLength.of(candidate) + envelopeBytes > maximumResponseBytes)
-				return failed(canonicalDocument, failurePolicy);
+			long candidateBytes = encodedLength.of(candidate);
+			if (candidateBytes == Long.MAX_VALUE
+					|| candidateBytes > maximumResponseBytes - envelopeBytes)
+				return oversized(canonicalDocument, failurePolicy, resizePageOnOverflow);
 		} catch (RuntimeException exception) {
 			return failed(canonicalDocument, failurePolicy);
 		}
 
 		return new Outcome(Disposition.LOCALIZED, candidate, selectedLocale);
+	}
+
+	@NonNull
+	private static Outcome oversized(@NonNull McpJsonObject canonicalDocument,
+			@NonNull McpLocalizationFailurePolicy failurePolicy,
+			boolean resizePageOnOverflow) {
+		return resizePageOnOverflow
+				? new Outcome(Disposition.TOO_LARGE, canonicalDocument, null)
+				: failed(canonicalDocument, failurePolicy);
 	}
 
 	@NonNull

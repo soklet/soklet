@@ -173,24 +173,17 @@ class McpProtocolVersionRegistrationTests {
 						McpInputRequirement.CONDITIONAL))).build();
 		McpPromptRegistration requestState = legacyPromptBuilder()
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED).build();
-		McpPromptRegistration completion = legacyPromptBuilder()
-				.completionHandler((requestContext, completionContext, invocationFeatures) ->
-						McpArgumentCompletionResult.fromValues(List.of()), Set.of(V2025_06_18)).build();
-		for (McpPromptRegistration prompt : List.of(inputRequest, requestState, completion))
+		for (McpPromptRegistration prompt : List.of(inputRequest, requestState))
 			assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath("/mcp", implementation(),
 					Set.of(V2025_06_18)).promptRegistrations(List.of(prompt)).build());
 	}
 
 	@Test
-	void legacyResourcesRejectInputStateCompletionAndAppsAtConstruction() {
+	void legacyResourcesRejectInputStateAndAppsAtConstruction() {
 		List<McpResourceRegistration> resources = List.of(
 				legacyResourceBuilder().inputRequestDeclarations(List.of(
 						McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL))).build(),
 				legacyResourceBuilder().requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED).build(),
-				McpResourceRegistration.withUriTemplateAndName("test://ordinary/{id}", "ordinary", Set.of(V2025_06_18))
-						.handler((requestContext, resourceReadContext, invocationFeatures) -> McpCompleteResult.fromToolText("unused"))
-						.completionHandler((requestContext, completionContext, invocationFeatures) ->
-						McpArgumentCompletionResult.fromValues(List.of()), Set.of(V2025_06_18)).build(),
 				legacyResourceBuilder().mimeType("text/html;profile=mcp-app").build(),
 				legacyResourceBuilder().metadata(McpJsonObject.builder()
 						.put("ui", McpJsonObject.emptyInstance()).build()).build());

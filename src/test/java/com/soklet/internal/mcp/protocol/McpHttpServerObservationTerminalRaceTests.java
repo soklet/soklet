@@ -765,6 +765,94 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	void legacy_sse_handoff_failure_detaches_delivery_without_refunding_running_work()
+			throws Exception {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			RecordingObservation observation = new RecordingObservation();
+			IllegalStateException handoffFailure =
+					new IllegalStateException("simulated legacy SSE response handoff failure");
+			AtomicInteger callbacks = new AtomicInteger();
+			AtomicReference<McpApplicationInvocation> invocationReference = new AtomicReference<>();
+			AtomicReference<Boolean> notificationAccepted = new AtomicReference<>();
+			CountDownLatch detachedHandlerEntered = new CountDownLatch(1);
+			CountDownLatch releaseHandler = new CountDownLatch(1);
+			CountDownLatch handlerFinished = new CountDownLatch(1);
+			McpApplicationRequestHandler handler = invocation -> {
+				invocationReference.set(invocation);
+				try {
+					notificationAccepted.set(invocation.sendNotification(progress("handoff-failure")));
+					detachedHandlerEntered.countDown();
+					Assertions.assertTrue(releaseHandler.await(10, TimeUnit.SECONDS),
+							"The detached legacy handler was not released.");
+					return McpWireResult.complete(new McpJsonObject(Map.of(
+							"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
+									"type", new McpJsonString("text"),
+									"text", new McpJsonString("must-not-be-delivered"))))))));
+				} finally {
+					handlerFinished.countDown();
+				}
+			};
+			McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+					McpImplementationMetadata.withNameAndVersion("legacy-handoff-failure", "4.0.0"))
+					.tool(McpNormalizedOperation.named("progress"))
+					.build();
+			McpHttpEndpointBinding binding = new McpHttpEndpointBinding(acceptingPolicy(), endpoint,
+					McpApplicationRequestRouter.fromHandlers(Map.of("tools/call", handler)),
+					observation, List.of(), Optional.empty(), Map.of(revision, endpoint));
+			McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+					McpHttpTransportConfiguration.productionDefaults(0), List.of(binding));
+			try {
+				InetSocketAddress address = runtime.start();
+				byte[] body = ("{\"jsonrpc\":\"2.0\",\"id\":\"handoff-failure\","
+						+ "\"method\":\"tools/call\",\"params\":{\"name\":\"progress\","
+						+ "\"arguments\":{},\"_meta\":{\"progressToken\":\"handoff-failure\"}}}")
+						.getBytes(StandardCharsets.UTF_8);
+				MicrohttpRequest request = new MicrohttpRequest("POST", "/mcp", "HTTP/1.1", List.of(
+						new Header("Host", LOOPBACK + ':' + address.getPort()),
+						new Header("Content-Type", "application/json; charset=UTF-8"),
+						new Header("Accept", "application/json, text/event-stream"),
+						new Header("MCP-Protocol-Version", revision)), body, false,
+						new InetSocketAddress(LOOPBACK, 12_345));
+				submit(runtime, address, request, response -> {
+					callbacks.incrementAndGet();
+					throw handoffFailure;
+				});
+
+				Assertions.assertTrue(detachedHandlerEntered.await(5, TimeUnit.SECONDS));
+				observation.awaitFinished();
+				Assertions.assertEquals(Boolean.FALSE, notificationAccepted.get());
+				Assertions.assertEquals(1, callbacks.get());
+				Assertions.assertTrue(invocationReference.get().isActive());
+				Assertions.assertFalse(invocationReference.get().isCancellationRequested());
+				Assertions.assertEquals(Optional.empty(), invocationReference.get().cancellationReason());
+				Assertions.assertFalse(invocationReference.get().isNotificationDeliveryActive());
+				Assertions.assertFalse(invocationReference.get().sendNotification(progress("inert")));
+				McpApplicationExecutionSnapshot running = runtime.applicationExecutionSnapshot().orElseThrow();
+				Assertions.assertEquals(1, running.activeHandlerSlots());
+				Assertions.assertEquals(1, running.retainedExchanges());
+				Assertions.assertEquals(1, running.activeIdentifiedRequestExchanges());
+				Assertions.assertEquals(1L, handlerFinished.getCount());
+				observation.assertExactlyOne(McpRequestOutcome.WRITE_FAILED);
+				Assertions.assertEquals(1, observation.streamOpens.get());
+				Assertions.assertEquals(1, observation.streamCloses.get());
+				Assertions.assertEquals(StreamTerminationReason.WRITE_FAILED, observation.streamCloseReason.get());
+				Assertions.assertNull(observation.error.get());
+				Assertions.assertEquals(List.of(handoffFailure), observation.throwables.get());
+
+				releaseHandler.countDown();
+				Assertions.assertTrue(handlerFinished.await(5, TimeUnit.SECONDS));
+				awaitClean(runtime);
+				Assertions.assertFalse(invocationReference.get().isCancellationRequested());
+				Assertions.assertEquals(1, callbacks.get());
+				observation.assertExactlyOne(McpRequestOutcome.WRITE_FAILED);
+			} finally {
+				releaseHandler.countDown();
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	void application_encoding_fallback_reports_actual_internal_error()
 			throws Exception {

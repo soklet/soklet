@@ -25,10 +25,13 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketOption;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -36,6 +39,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -122,6 +127,156 @@ public class McpTransportPrimitiveTests {
 			executor.shutdownNow();
 			Assertions.assertTrue(executor.awaitTermination(3, TimeUnit.SECONDS));
 		}
+	}
+
+	@Test
+	public void no_payload_completion_can_discard_only_uncommitted_frames() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 8, 1, System::nanoTime, listener);
+		Assertions.assertTrue(channel.enqueue(ascii("progress")));
+		Assertions.assertTrue(channel.completeWithoutPayload(true));
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		WritableSource source = channel.newWritableSource();
+		source.start();
+		PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1);
+		while (source.hasRemaining()) Assertions.assertTrue(source.writeTo(socket, 1L) > 0L);
+		Assertions.assertEquals("0\r\n\r\n", ascii(socket.writtenBytes()));
+		Assertions.assertEquals(1, listener.terminationCount.get());
+		McpOutboundChannel committed = new McpOutboundChannel(1, 8, 1, System::nanoTime, new RecordingChannelListener());
+		WritableSource committedSource = committed.newWritableSource();
+		committedSource.start();
+		Assertions.assertThrows(IllegalStateException.class, () -> committed.completeWithoutPayload(true));
+		Assertions.assertFalse(committed.snapshot().terminalReserved());
+		Assertions.assertTrue(committed.completeWithoutPayload());
+		committedSource.close();
+	}
+
+	@Test
+	public void no_payload_completion_writes_one_terminal_chunk_with_partial_writes() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 1, 1, System::nanoTime, listener);
+		WritableSource source = channel.newWritableSource();
+		AtomicInteger wakes = new AtomicInteger();
+		source.writeReadyCallback(wakes::incrementAndGet);
+		source.start();
+		Assertions.assertTrue(channel.completeWithoutPayload());
+		Assertions.assertEquals(1, wakes.get());
+		Assertions.assertEquals(0, channel.snapshot().terminalBytes());
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		Assertions.assertFalse(channel.completeWithoutPayload());
+		Assertions.assertFalse(channel.complete(ascii("late")));
+		PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1);
+		for (int index = 0; index < 5; index++) {
+			Assertions.assertEquals(1L, source.writeTo(socket, 1L));
+			Assertions.assertEquals(index == 4, channel.isTerminalWritten());
+			Assertions.assertEquals(index == 4 ? 1 : 0, listener.terminationCount.get());
+		}
+		Assertions.assertEquals("0\r\n\r\n", ascii(socket.writtenBytes()));
+		Assertions.assertFalse(source.hasRemaining());
+		Assertions.assertFalse(source.isReadyToWrite());
+		Assertions.assertEquals(0L, source.writeTo(socket, 1L));
+		source.close();
+		Assertions.assertEquals(1, listener.terminationCount.get());
+		Assertions.assertEquals(StreamTerminationReason.COMPLETED, listener.terminationReason.get());
+	}
+
+	@Test
+	public void no_payload_completion_drains_existing_data_and_preserves_the_nonempty_api() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 8, 1, System::nanoTime, listener);
+		WritableSource source = channel.newWritableSource();
+		Assertions.assertThrows(IllegalArgumentException.class, () -> channel.complete(new byte[0]));
+		Assertions.assertFalse(channel.snapshot().terminalReserved());
+		Assertions.assertTrue(channel.enqueue(ascii("progress")));
+		PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1);
+		source.start();
+		Assertions.assertEquals(1L, source.writeTo(socket, 1L));
+		Assertions.assertTrue(channel.completeWithoutPayload());
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.CLOSED, channel.offer(ascii("later")));
+		while (source.hasRemaining())
+			Assertions.assertTrue(source.writeTo(socket, 2L) > 0L);
+		Assertions.assertEquals("8\r\nprogress\r\n0\r\n\r\n", ascii(socket.writtenBytes()));
+		Assertions.assertEquals(0, channel.snapshot().bufferedBytes());
+		Assertions.assertEquals(1, listener.terminationCount.get());
+	}
+
+	@Test
+	public void no_payload_completion_wakes_a_producer_even_without_a_socket_drain() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 1, 1, System::nanoTime, listener);
+		Assertions.assertTrue(channel.enqueue(ascii("a")));
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			Future<Boolean> blocked = executor.submit(() -> channel.enqueue(ascii("b")));
+			Assertions.assertTrue(listener.backpressure.await(3, TimeUnit.SECONDS));
+			Assertions.assertTrue(channel.completeWithoutPayload());
+			Assertions.assertFalse(blocked.get(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+			Assertions.assertEquals(0, listener.terminationCount.get(), "Completion follows actual socket delivery.");
+		} finally {
+			channel.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(3, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void no_payload_and_result_completion_share_one_terminal_reservation() throws Exception {
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int iteration = 0; iteration < 16; iteration++) {
+				RecordingChannelListener listener = new RecordingChannelListener();
+				McpOutboundChannel channel = new McpOutboundChannel(1, 1, 6, System::nanoTime, listener);
+				CountDownLatch start = new CountDownLatch(1);
+				Future<Boolean> noPayload = executor.submit(() -> {
+					start.await();
+					return channel.completeWithoutPayload();
+				});
+				Future<Boolean> result = executor.submit(() -> {
+					start.await();
+					return channel.complete(ascii("result"));
+				});
+				start.countDown();
+				boolean emptyWon = noPayload.get(3, TimeUnit.SECONDS);
+				boolean resultWon = result.get(3, TimeUnit.SECONDS);
+				Assertions.assertNotEquals(emptyWon, resultWon);
+				WritableSource source = channel.newWritableSource();
+				source.start();
+				PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1);
+				while (source.hasRemaining())
+					Assertions.assertTrue(source.writeTo(socket, 1L) > 0L);
+				Assertions.assertEquals(emptyWon ? "0\r\n\r\n" : "6\r\nresult\r\n0\r\n\r\n", ascii(socket.writtenBytes()));
+				source.close();
+				Assertions.assertEquals(1, listener.terminationCount.get());
+			}
+		} finally {
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(3, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void no_payload_completion_reaches_a_real_socket_as_clean_zero_event_body() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 1, 1, System::nanoTime, listener);
+		Assertions.assertTrue(channel.completeWithoutPayload());
+		WritableSource source = channel.newWritableSource();
+		source.start();
+		try (ServerSocketChannel server = ServerSocketChannel.open()) {
+			server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+			try (SocketChannel client = SocketChannel.open((InetSocketAddress) server.getLocalAddress());
+					SocketChannel writer = server.accept()) {
+				client.socket().setSoTimeout(3000);
+				while (source.hasRemaining())
+					Assertions.assertTrue(source.writeTo(writer, 1L) > 0L);
+				writer.shutdownOutput();
+				Assertions.assertEquals("0\r\n\r\n", ascii(client.socket().getInputStream().readAllBytes()));
+				Assertions.assertEquals(1, listener.terminationCount.get());
+				Assertions.assertTrue(channel.isTerminalWritten());
+			}
+		}
+		source.close();
+		Assertions.assertEquals(1, listener.terminationCount.get());
 	}
 
 	@Test

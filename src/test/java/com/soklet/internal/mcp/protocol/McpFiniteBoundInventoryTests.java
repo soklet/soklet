@@ -22,6 +22,7 @@ import com.soklet.McpEndpointRegistry;
 import com.soklet.McpInMemoryTaskManager;
 import com.soklet.McpImplementation;
 import com.soklet.McpServer;
+import com.soklet.McpSessionConfig;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpTaskManager;
 import org.junit.jupiter.api.Assertions;
@@ -559,6 +560,64 @@ public class McpFiniteBoundInventoryTests {
 						"MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE"),
 				staticNumber("com.soklet.DefaultMcpLocalizationCatalogExtractor",
 						"MAXIMUM_SUPPORTED_CALLBACK_COUNT"));
+		McpSessionConfig sessionConfig = McpSessionConfig
+				.withOwnerKeyResolver(identity -> "bounded-owner").build();
+		put(values, "session.header.maximum-bytes", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_SESSION_ID_HEADER_BYTES"));
+		put(values, "session.owner-correlation.maximum-bytes", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_CORRELATION_BYTES"));
+		put(values, "session.metadata.maximum-bytes.default",
+				sessionConfig.getMaximumClientMetadataSizeInBytes());
+		put(values, "session.metadata.maximum-nodes", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_METADATA_NODES"));
+		put(values, "session.acknowledgement-wait-nanos", staticNumber(
+				McpLegacySessionStore.class.getName(), "ACKNOWLEDGEMENT_WAIT_NANOS"));
+		put(values, "session.maximum-duration-nanos.default",
+				sessionConfig.getMaximumSessionDuration().toNanos());
+		put(values, "session.maximum-idle-duration-nanos.default",
+				sessionConfig.getMaximumSessionIdleDuration().toNanos());
+		put(values, "session.minimum-eviction-idle-nanos", staticNumber(
+				McpLegacySessionStore.class.getName(), "MINIMUM_EVICTION_IDLE_NANOS"));
+		put(values, "session.maximum-active-calls", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_ACTIVE_CALLS_PER_SESSION"));
+		put(values, "session.maximum-anonymous-sessions", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_ANONYMOUS_SESSIONS"));
+		put(values, "session.maximum-logical-gets", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_LOGICAL_GETS_PER_SESSION"));
+		put(values, "session.maximum-uri-grants", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_URI_GRANTS_PER_SESSION"));
+		put(values, "session.maximum-uri-grants-per-owner", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_URI_GRANTS_PER_OWNER"));
+		put(values, "session.maximum-uri-grants-global", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_URI_GRANTS_GLOBAL"));
+		put(values, "session.maximum-retained-uri-bytes", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_RETAINED_URI_BYTES_PER_SESSION"));
+		put(values, "session.notification.maximum-queued-bytes-per-owner", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_NOTIFICATION_BYTES_PER_OWNER"));
+		put(values, "session.notification.maximum-queued-bytes-global", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_NOTIFICATION_BYTES_GLOBAL"));
+		put(values, "session.http-control.maximum-retained-partitions", staticNumber(
+				McpLegacyHttpControlBudget.class.getName(), "MAXIMUM_RETAINED_PARTITIONS"));
+		put(values, "session.http-control.maximum-simultaneous-per-partition", staticNumber(
+				McpLegacyHttpControlBudget.class.getName(), "MAXIMUM_SIMULTANEOUS_PER_PARTITION"));
+		put(values, "session.http-control.maximum-attempts-per-second", staticNumber(
+				McpLegacyHttpControlBudget.class.getName(), "MAXIMUM_ATTEMPTS_PER_SECOND"));
+		put(values, "session.http-maintenance.maximum-jobs", staticNumber(
+				McpHttpServerRuntime.class.getName(), "MAXIMUM_LEGACY_MAINTENANCE_JOBS"));
+		put(values, "session.http-maintenance.maximum-dispatches-per-second", staticNumber(
+				McpHttpServerRuntime.class.getName(), "MAXIMUM_LEGACY_MAINTENANCE_DISPATCHES_PER_SECOND"));
+		put(values, "session.http-maintenance.maximum-demand-units", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_MAINTENANCE_DEMAND_UNITS"));
+		put(values, "session.http-maintenance.retry-nanos", staticNumber(
+				McpHttpServerRuntime.class.getName(), "LEGACY_MAINTENANCE_RETRY_NANOS"));
+		put(values, "session.maximum-sessions.default", sessionConfig.getMaximumSessions());
+		put(values, "session.maximum-sessions-per-owner.default",
+				sessionConfig.getMaximumSessionsPerOwner());
+		put(values, "session.owner-policy.maximum-concurrency", staticNumber(
+				McpApplicationExecution.class.getName(),
+				"MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY"));
+		put(values, "framework-catalog-cursor.maximum-bytes.hard", staticNumber(
+				McpLegacyCatalogPager.class.getName(), "MAXIMUM_CURSOR_BYTES"));
 		return Map.copyOf(values);
 	}
 

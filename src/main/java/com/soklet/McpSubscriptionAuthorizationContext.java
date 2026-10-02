@@ -32,16 +32,24 @@ import java.util.Set;
  * admission for the first check and the latest successful authorization result
  * thereafter. Candidate notification families and targets describe the initial
  * request before acknowledgement; renewal checks describe the acknowledged
- * subscription and cannot expand it.
+ * subscription and cannot expand it. Exact 2025-era resource grants use the
+ * real {@code resources/subscribe} admission context and one selected URI;
+ * their catalog-family flags are false and task-ID set is empty. A later
+ * successful subscribe replaces historical evidence for subsequent checks
+ * without extending the original total grant lifetime. GET admission remains
+ * independent and does not manufacture an RPC request context.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public interface McpSubscriptionAuthorizationContext {
 	/**
-	 * Returns the immutable request context from original subscription admission.
+	 * Returns the immutable request context from original subscription admission,
+	 * or the latest successful exact 2025-era subscribe for a resource grant.
+	 * It is historical evidence, including the original immutable HTTP request
+	 * and identity; the authorizer must check current application authority.
 	 *
-	 * @return original admission request context
+	 * @return retained subscription admission request context
 	 */
 	@NonNull
 	McpRequestContext getInitialRequestContext();

@@ -170,6 +170,89 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	public void reset_before_http_offer_cancels_an_allocated_stream_in_every_revision()
+			throws Exception {
+		for (String revision : List.of("2025-06-18", "2025-11-25", "2026-07-28")) {
+			PreOfferDisconnectObservation observation =
+					new PreOfferDisconnectObservation();
+			AtomicReference<McpApplicationInvocation> invocationReference =
+					new AtomicReference<>();
+			AtomicReference<Boolean> notificationAccepted = new AtomicReference<>();
+			CountDownLatch handlerFinished = new CountDownLatch(1);
+			McpApplicationRequestHandler handler = invocation -> {
+				invocationReference.set(invocation);
+				try {
+					notificationAccepted.set(invocation.sendNotification(
+							progress("unoffered", 1)));
+					return McpWireResult.complete(new McpJsonObject(Map.of(
+							"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
+									"type", new McpJsonString("text"),
+									"text", new McpJsonString("must-not-be-written"))))))));
+				} finally {
+					handlerFinished.countDown();
+				}
+			};
+			McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+					McpImplementationMetadata.withNameAndVersion("pre-offer", "4.0.0"))
+					.serverInformationIncluded(false)
+					.tool(McpNormalizedOperation.named("progress"))
+					.build();
+			McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+					McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+							request -> McpRequestAdmissionDecision.ACCEPT),
+					endpoint, McpApplicationRequestRouter.fromHandlers(Map.of("tools/call", handler)),
+					observation, List.of(), Optional.empty(), Map.of(revision, endpoint));
+			McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+					McpHttpTransportConfiguration.productionDefaults(0), List.of(binding));
+			try {
+				int port = runtime.start().getPort();
+				boolean modern = "2026-07-28".equals(revision);
+				String metadata = modern
+						? "\"io.modelcontextprotocol/protocolVersion\":\"" + revision
+								+ "\",\"io.modelcontextprotocol/clientCapabilities\":{},"
+						: "";
+				String body = "{\"jsonrpc\":\"2.0\",\"id\":\"unoffered\","
+						+ "\"method\":\"tools/call\",\"params\":{\"name\":\"progress\","
+						+ "\"arguments\":{},\"_meta\":{" + metadata
+						+ "\"progressToken\":\"unoffered\"}}}";
+				List<McpChunkedHttpClient.RequestHeader> headers = new ArrayList<>();
+				headers.add(new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", revision));
+				if (modern) {
+					headers.add(new McpChunkedHttpClient.RequestHeader("Mcp-Method", "tools/call"));
+					headers.add(new McpChunkedHttpClient.RequestHeader("Mcp-Name", "progress"));
+				}
+				try (McpChunkedHttpClient client =
+						McpChunkedHttpClient.postMcpMessage(port, body, headers)) {
+					Assertions.assertTrue(observation.openEntered.await(5, TimeUnit.SECONDS),
+							"The " + revision + " stream was not allocated before its HTTP offer.");
+					Assertions.assertNull(notificationAccepted.get());
+					client.closeWithReset();
+					Assertions.assertTrue(observation.workerInterrupted.await(5, TimeUnit.SECONDS),
+							"Disconnecting the unoffered " + revision + " stream did not cancel its worker.");
+					Assertions.assertEquals(Optional.of(StreamTerminationReason.CLIENT_DISCONNECTED),
+							invocationReference.get().cancellationReason());
+					Assertions.assertFalse(invocationReference.get().isActive());
+					Assertions.assertEquals(1L, handlerFinished.getCount(),
+							"The observation must still hold the first notification before HTTP delivery.");
+					observation.releaseOpen.countDown();
+					Assertions.assertTrue(handlerFinished.await(5, TimeUnit.SECONDS));
+					Assertions.assertEquals(Boolean.FALSE, notificationAccepted.get());
+					Assertions.assertTrue(observation.finished.await(5, TimeUnit.SECONDS));
+					Assertions.assertEquals(McpRequestOutcome.CLIENT_DISCONNECTED, observation.outcome.get());
+					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
+							observation.closeReason.get());
+					Assertions.assertEquals(1L, observation.closeCount.get());
+					Assertions.assertEquals(1L, observation.finishCount.get());
+					awaitClean(runtime);
+				}
+			} finally {
+				observation.releaseOpen.countDown();
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	public void keep_alive_write_does_not_extend_or_hide_the_active_deadline()
 			throws Exception {
@@ -861,6 +944,65 @@ public class McpHttpServerRequestScopedSseTests {
 			Thread.sleep(5);
 		} while (System.nanoTime() - deadline < 0L);
 		throw new AssertionError("Timed out waiting for application cleanup: " + latest);
+	}
+
+	private static final class PreOfferDisconnectObservation
+			implements McpRuntimeObservationSink, McpRuntimeRequestObservation {
+		private final CountDownLatch openEntered = new CountDownLatch(1);
+		private final CountDownLatch releaseOpen = new CountDownLatch(1);
+		private final CountDownLatch workerInterrupted = new CountDownLatch(1);
+		private final CountDownLatch finished = new CountDownLatch(1);
+		private final AtomicReference<McpRequestOutcome> outcome = new AtomicReference<>();
+		private final AtomicReference<StreamTerminationReason> closeReason = new AtomicReference<>();
+		private final AtomicLong closeCount = new AtomicLong();
+		private final AtomicLong finishCount = new AtomicLong();
+
+		@Override
+		public McpRuntimeRequestObservation didStartRequest(McpRuntimeRequestInput input) {
+			return this;
+		}
+
+		@Override
+		public Optional<McpRequestContext> publicContext() {
+			return Optional.empty();
+		}
+
+		@Override
+		public void didOpenRequestStream() {
+			boolean interrupted = false;
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+			openEntered.countDown();
+			try {
+				while (releaseOpen.getCount() != 0) {
+					long remaining = deadline - System.nanoTime();
+					if (remaining <= 0)
+						throw new AssertionError("The pre-offer observation was not released.");
+					try {
+						releaseOpen.await(remaining, TimeUnit.NANOSECONDS);
+					} catch (InterruptedException exception) {
+						interrupted = true;
+						workerInterrupted.countDown();
+					}
+				}
+			} finally {
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			}
+		}
+
+		@Override
+		public void didCloseRequestStream(StreamTerminationReason reason, Duration duration) {
+			closeReason.set(reason);
+			closeCount.incrementAndGet();
+		}
+
+		@Override
+		public void didFinish(McpRequestOutcome outcome, McpJsonRpcError error,
+				Duration duration, List<Throwable> throwables) {
+			this.outcome.set(outcome);
+			finishCount.incrementAndGet();
+			finished.countDown();
+		}
 	}
 
 	private static final class WriteTimeoutObservation

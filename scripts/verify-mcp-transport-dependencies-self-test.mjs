@@ -36,16 +36,28 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 82;
+const EXPECTED_CASE_COUNT = 112;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
   'src/main/java/com/soklet/DefaultMcpServer.java',
   'src/main/java/com/soklet/McpServer.java',
+  'src/main/java/com/soklet/McpEndpoint.java',
+  'src/main/java/com/soklet/McpSessionConfig.java',
+  'src/main/java/com/soklet/McpSessionOwnerKeyResolver.java',
+  'src/main/java/com/soklet/McpSessionTransportAdmissionContext.java',
+  'src/main/java/com/soklet/McpSessionTransportAdmissionController.java',
+  'src/main/java/com/soklet/McpSessionTransportAdmissionDecision.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionTransportAdmission.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java',
   'src/main/java/com/soklet/Soklet.java',
   'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
   'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
   'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyResponseWire.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWire.java',
+  'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java',
   'src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java',
   'src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java',
   'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java',
@@ -58,6 +70,10 @@ const RUNTIME =
   'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java';
 const REQUEST_STREAM =
   'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java';
+const LEGACY_WIRE =
+  'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyResponseWire.java';
+const SIMULATION =
+  'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java';
 const ROUTER =
   'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java';
 const BRIDGE =
@@ -210,7 +226,7 @@ try {
     assert.deepEqual(result.directSocketEventLoop,
       baseline.summary.directSocketEventLoop);
     assert.deepEqual(result.directMicrohttp,
-      { fileCount: 8, pairCount: 26, typeCount: 13 });
+      { fileCount: 9, pairCount: 27, typeCount: 13 });
     assert.deepEqual(result.directSocketEventLoop,
       { fileCount: 6, pairCount: 7, typeCount: 3 });
     assert.equal(result.characterizationCount, 5);
@@ -489,6 +505,113 @@ try {
       ].join('\n')));
     });
 
+  expectRejected('session configuration cannot admit arbitrary revisions',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'allMatch(McpLegacyHttpWire::isLegacyRevision)', 'allMatch(ignored -> true)'));
+    }, /session configuration must reject every revision/u);
+
+  expectRejected('session selection cannot omit exact revision membership',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'return legacySessionRevisions.getOrDefault(path, Set.of()).contains(revision);',
+        'return legacySessionRevisions.containsKey(path);'));
+    }, /exact opted-in path and revision membership/u);
+
+  expectRejected('GET and DELETE cannot bypass their explicit controller',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'if (legacyTransportAdmission == null) return Set.copyOf(methods);',
+        'if (false) return Set.copyOf(methods);'));
+    }, /facilities require the explicit HTTP admission controller/u);
+
+  expectRejected('GET and DELETE cannot select a modern or unconfigured session view',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        ': sessionsEnabled(endpoint.path(), revision) ? Set.of(revision) : Set.of();',
+        ': Set.of(revision);'));
+    }, /selected path and revision session membership/u);
+
+  expectRejected('DELETE cannot be added without a selected session revision',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'if (!revisions.isEmpty()) methods.add(HttpMethod.DELETE);',
+        'methods.add(HttpMethod.DELETE);'));
+    }, /DELETE availability requires at least one selected session revision/u);
+
+  expectRejected('GET cannot be added without effective notification families',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'if (revisions.stream().anyMatch(value -> !legacyTransportFamilies',
+        'if (revisions.stream().anyMatch(value -> legacyTransportFamilies'));
+    }, /nonempty effective selected-revision notification families/u);
+
+  expectRejected('GET and DELETE cannot ignore a missing explicit version',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private @Nullable MicrohttpResponse processLegacySessionHttp(',
+        'if (versions.size() != 1 || versions.get(0).isBlank())',
+        'if (false)'));
+    }, /one explicit nonblank protocol revision/u);
+
+  expectRejected('Last-Event-ID preflight input cannot be enabled unconditionally',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'if (legacyHttpMethods(endpointRuntime, null).contains(HttpMethod.GET))',
+        'if (true)'));
+    }, /Last-Event-ID preflight input requires a configured legacy GET facility/u);
+
+  expectRejected('Last-Event-ID cannot gain an additional transport use',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'private Map<String, Map<String, Set<McpResourceNotificationType>>> legacyTransportFamilies = Map.of();',
+        'private Map<String, Map<String, Set<McpResourceNotificationType>>> legacyTransportFamilies = Map.of();\n'
+          + '\tprivate final String unreviewedHeaderUse = "Last-Event-ID";'));
+    }, /may occur only in the policy-output denylist and ignored GET preflight input/u);
+
+  expectRejected('stateless initialization must not publish a session header',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'if (initialization == null) return response;', 'if (false) return response;'));
+    }, /session-disabled initialization must publish no session ID/u);
+
+  expectRejected('exact legacy session family cannot silently include modern',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWire.java',
+        (source) => source.replace('"2025-11-25".equals(revision)', '"2026-07-28".equals(revision)'));
+    }, /eligibility must remain exactly June and November 2025/u);
+
+  expectRejected('reviewed session configuration field cannot silently disappear',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/McpSessionConfig.java',
+        (source) => source.replaceAll('maximumSessionDuration', 'maximumDuration'));
+    }, /Reviewed existing transport-domain fields did not resolve exactly/u);
+
+  expectRejected('approved session store cannot rename its exact owner',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+        (source) => source.replaceAll('McpLegacySessionStore', 'McpUnreviewedSessionStore'));
+    }, /Required transport characterization owner is missing: com\.soklet\.internal\.mcp\.protocol\.McpLegacySessionStore/u);
+
+  expectRejected('approved session store file does not allow an extra session field',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+        (source) => source.replace('final class McpLegacySessionStore {',
+          'final class McpLegacySessionStore { private Object extraSessions;'));
+    }, /state\/storage field declaration/u);
+
+  expectRejected('approved session store file does not allow another session record',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+        (source) => appendType(source, 'record UnreviewedSession(String id) {}'));
+    }, /Data-bearing future-domain record declaration/u);
+
+  expectRejected('approved session store file still excludes replay state',
+    (root) => {
+      mutateSource(root, 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+        (source) => appendType(source, 'final class ReplayStore {}'));
+    }, /state\/storage type declaration/u);
+
   expectRejected('SessionStore type declaration is future storage state',
     (root) => {
       mutateSource(root, BRIDGE,
@@ -580,6 +703,98 @@ try {
         'requireNonNull(message);'));
     }, /enqueueMessage must use its installed channel/u);
 
+  expectRejected('production request stream cannot discard selected profile',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private McpRequestSseStream newResponseStream(',
+        '\t\t\t\t\tprotocolProfile(),\n',
+        '\t\t\t\t\tMcp20260728ProtocolProfile.INSTANCE,\n'));
+    }, /production response-stream factory must retain/u);
+
+  expectRejected('simulation request stream cannot discard selected profile',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'new McpRequestSseStream(envelopeCodec, jsonCodec, protocolProfile(),',
+        'new McpRequestSseStream(envelopeCodec, jsonCodec, Mcp20260728ProtocolProfile.INSTANCE,'));
+    }, /simulation response-stream factory must retain/u);
+
+  expectRejected('default request stream cannot change modern profile',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'Mcp20260728ProtocolProfile.INSTANCE, clock, listener);',
+        'protocolProfile, clock, listener);'));
+    }, /default request stream must preserve the modern profile/u);
+
+  expectRejected('message frames cannot bypass selected-profile encoding',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'byte[] json = encodeMessage(envelopeCodec, legacyJsonCodec, message);',
+        'byte[] json = envelopeCodec.encode(message);'));
+    }, /message frames must use the retained selected-profile encoder/u);
+
+  expectRejected('legacy terminal frames cannot use modern envelope projection',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        '? McpLegacyResponseWire.encode(legacyJsonCodec, response)',
+        '? envelopeCodec.encode(response)'));
+    }, /must preserve selected legacy terminal projection/u);
+
+  expectRejected('legacy frame JSON snapshot cannot use modern projection',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        '? McpLegacyResponseWire.projectEnvelope(response) : message.toJsonObject()',
+        '? response.toJsonObject() : message.toJsonObject()'));
+    }, /message frames must retain the selected-profile JSON snapshot/u);
+
+  expectRejected('message frame cannot discard the projected JSON snapshot',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'return new Frame(FrameType.JSON_MESSAGE, message, jsonMessage, frame);',
+        'return new Frame(FrameType.JSON_MESSAGE, message, frame);'));
+    }, /message frames must carry the projected JSON snapshot/u);
+
+  expectRejected('modern-default frame constructor cannot drop its JSON snapshot',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'this(type, message, message == null ? null : message.toJsonObject(), encodedBytes);',
+        'this(type, message, null, encodedBytes);'));
+    }, /default frame constructor must preserve the modern JSON snapshot/u);
+
+  expectRejected('finite legacy encoding cannot bypass the shared projection',
+    (root) => {
+      mutateSource(root, LEGACY_WIRE, (source) => source.replace(
+        'toUtf8Bytes(projectEnvelope(response))',
+        'toUtf8Bytes(response.toJsonObject())'));
+    }, /finite legacy encoding must share the projected JSON envelope/u);
+
+  expectRejected('simulation item cannot expose its canonical message',
+    (root) => {
+      mutateSource(root, SIMULATION, (source) => source.replace(
+        'requireNonNull(frame.jsonMessage())',
+        'requireNonNull(frame.message()).toJsonObject()'));
+    }, /simulation stream items must expose the projected frame JSON snapshot/u);
+
+  expectRejected('simulation terminal duplicate cannot expose its canonical message',
+    (root) => {
+      mutateSource(root, SIMULATION, (source) => source.replace(
+        'requireNonNull(terminalFrame.jsonMessage())',
+        'requireNonNull(terminalFrame.message()).toJsonObject()'));
+    }, /simulation terminal duplicates must expose the projected frame JSON snapshot/u);
+
+  expectRejected('message framing cannot introduce legacy event IDs',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        '"data: ".getBytes(StandardCharsets.US_ASCII)',
+        '"id: 1\\ndata: ".getBytes(StandardCharsets.US_ASCII)'));
+    }, /data-only SSE without event IDs or priming fields/u);
+
+  expectRejected('selected encoder cannot accept server requests',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'McpProtocolSupport.requireServerOutboundMessage(message)',
+        'requireNonNull(message)'));
+    }, /message encoder must validate server outbound message kinds/u);
+
   expectRejected('request-stream subscription offer cannot bypass its channel',
     (root) => {
       mutateSource(root, REQUEST_STREAM, (source) => source.replace(
@@ -616,9 +831,17 @@ try {
     (root) => {
       mutateSource(root, ROUTER, (source) => replaceAfter(source,
         'new McpApplicationInvocation(',
-        'this::writeNotification, this::requirePublicHandlerEntry,',
-        'ignored -> false, this::requirePublicHandlerEntry,'));
-    }, /application invocation notification slot must bind/u);
+        'return Exchange.this.writeNotification(notification);',
+        'return writeNotification(notification);'));
+    }, /notification writer must route explicitly through Exchange/u);
+
+  expectRejected('detached delivery activity must follow the retained lease',
+    (root) => {
+      mutateSource(root, ROUTER, (source) => replaceAfter(source,
+        'new McpApplicationNotificationWriter() {',
+        'return lease != null && lease.responseWriter()',
+        'return lease == null && lease.responseWriter()'));
+    }, /notification activity must follow its retained transport lease/u);
 
   expectRejected('live MCP streaming-monitor opt-in cannot be a comment decoy',
     (root) => {
@@ -734,7 +957,7 @@ try {
       mutateSource(root, RUNTIME, (source) => replaceAfter(source,
         'private RequestControl submitRequest(',
         'MicrohttpResponse response = processRequest(requiredAddress, request,\n'
-        + '\t\t\t\t\trequestControl, application);',
+        + '\t\t\t\t\t\trequestControl, application);',
         'MicrohttpResponse response = emptyResponse(200, "OK", List.of());'));
     }, /contextual request-control task must invoke/u);
 

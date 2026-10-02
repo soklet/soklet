@@ -51,6 +51,8 @@ public final class McpEndpoint {
 	@NonNull
 	private final Set<@NonNull McpProtocolVersion> taskProtocolVersions;
 	@NonNull
+	private final Set<@NonNull McpProtocolVersion> sessionProtocolVersions;
+	@NonNull
 	private final Set<@NonNull McpProtocolVersion> subscriptionProtocolVersions;
 	@NonNull
 	private final McpImplementation serverInformation;
@@ -118,6 +120,7 @@ public final class McpEndpoint {
 		this.path = builder.path;
 		this.protocolVersions = builder.protocolVersions;
 		this.taskProtocolVersions = builder.taskProtocolVersions;
+		this.sessionProtocolVersions = builder.sessionProtocolVersions;
 		this.subscriptionProtocolVersions = builder.subscriptionProtocolVersions;
 		this.serverInformation = builder.serverInformation;
 		this.serverInformationIncluded = builder.serverInformationIncluded;
@@ -145,6 +148,11 @@ public final class McpEndpoint {
 					"MCP 2025-03-26 is not implemented by this adapter.");
 
 		requireSubset(this.taskProtocolVersions, this.protocolVersions, "Tasks");
+		requireSubset(this.sessionProtocolVersions, this.protocolVersions, "sessions");
+		if (!Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25).containsAll(this.sessionProtocolVersions))
+			throw new IllegalStateException(
+					"Sessions currently require MCP 2025-06-18 or 2025-11-25.");
 		requireSubset(this.subscriptionProtocolVersions, this.protocolVersions,
 				"subscriptions");
 		requireSubset(this.skillListHandlerProtocolVersions, this.protocolVersions,
@@ -155,10 +163,16 @@ public final class McpEndpoint {
 				this.taskProtocolVersions))
 			throw new IllegalStateException(
 					"Tasks currently require MCP 2026-07-28.");
-		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
+		if (!Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
+				McpProtocolVersion.V2026_07_28).containsAll(
 				this.subscriptionProtocolVersions))
 			throw new IllegalStateException(
-					"Subscriptions currently require MCP 2026-07-28.");
+					"Subscriptions currently require MCP 2025-06-18, 2025-11-25, or 2026-07-28.");
+		for (McpProtocolVersion subscriptionProtocolVersion : this.subscriptionProtocolVersions)
+			if (subscriptionProtocolVersion != McpProtocolVersion.V2026_07_28
+					&& !this.sessionProtocolVersions.contains(subscriptionProtocolVersion))
+				throw new IllegalStateException(
+						"Legacy subscription revisions must also enable sessions.");
 		if (this.subscriptionConfig != null && this.subscriptionProtocolVersions.isEmpty())
 			throw new IllegalStateException(
 					"MCP subscription configuration requires an enabled protocol revision.");
@@ -200,7 +214,6 @@ public final class McpEndpoint {
 				throw new IllegalStateException(
 						"The 2025 prompt adapter cannot serve input requests or request state for prompt "
 								+ prompt.getName() + ".");
-			requireModernOnly(prompt.getCompletionProtocolVersions(), "prompt completion");
 			if (!promptNames.add(prompt.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP prompt name: " + prompt.getName());
@@ -221,7 +234,6 @@ public final class McpEndpoint {
 					throw new IllegalStateException(
 							"MCP Apps resources are not implemented by the 2025 adapter.");
 			}
-			requireModernOnly(resource.getCompletionProtocolVersions(), "resource completion");
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
 				if (exactResources.putIfAbsent(uri, resource) != null)
@@ -312,6 +324,7 @@ public final class McpEndpoint {
 		this.path = endpoint.path;
 		this.protocolVersions = endpoint.protocolVersions;
 		this.taskProtocolVersions = endpoint.taskProtocolVersions;
+		this.sessionProtocolVersions = endpoint.sessionProtocolVersions;
 		this.subscriptionProtocolVersions = endpoint.subscriptionProtocolVersions;
 		this.serverInformation = endpoint.serverInformation;
 		this.serverInformationIncluded = endpoint.serverInformationIncluded;
@@ -357,7 +370,27 @@ public final class McpEndpoint {
 		return this.taskProtocolVersions;
 	}
 
-	/** @return exact revisions that enable subscriptions on this endpoint */
+	/**
+	 * Returns the exact session-enabled subset of this endpoint's revisions.
+	 * Only MCP {@code 2025-06-18} and {@code 2025-11-25} are eligible;
+	 * Soklet's {@code 2026-07-28} implementation does not use sessions.
+	 *
+	 * @return immutable session revisions, or an empty set when disabled
+	 */
+	@NonNull
+	public Set<@NonNull McpProtocolVersion> getSessionProtocolVersions() {
+		return this.sessionProtocolVersions;
+	}
+
+	/**
+	 * Returns exact subscription-enabled revisions. Modern {@code 2026-07-28}
+	 * uses {@code subscriptions/listen}; {@code 2025-06-18} and
+	 * {@code 2025-11-25} use session GET delivery and must also enable sessions.
+	 * Legacy delivery additionally requires the server's HTTP admission
+	 * controller and an effective event-source family set.
+	 *
+	 * @return immutable exact subscription-enabled revisions
+	 */
 	@NonNull
 	public Set<@NonNull McpProtocolVersion> getSubscriptionProtocolVersions() {
 		return this.subscriptionProtocolVersions;
@@ -481,9 +514,11 @@ public final class McpEndpoint {
 	/**
 	 * Returns the optional sole custom {@code resources/list} handler.
 	 * <p>
-	 * When present, the returned handler is authoritative; Soklet does not merge
-	 * exact registrations into its pages. When absent, the endpoint uses the
-	 * single-page static fallback.
+	 * When enabled for the selected revision, the returned handler is
+	 * authoritative; Soklet does not merge exact registrations into its pages.
+	 * Otherwise the endpoint uses the static fallback: a single page on
+	 * {@code 2026-07-28}, or bounded framework pages on {@code 2025-06-18} and
+	 * {@code 2025-11-25}.
 	 *
 	 * @return custom resource-list handler, or empty for the static fallback
 	 */
@@ -628,6 +663,8 @@ public final class McpEndpoint {
 		@NonNull
 		private Set<@NonNull McpProtocolVersion> taskProtocolVersions = Set.of();
 		@NonNull
+		private Set<@NonNull McpProtocolVersion> sessionProtocolVersions = Set.of();
+		@NonNull
 		private Set<@NonNull McpProtocolVersion> subscriptionProtocolVersions = Set.of();
 		@NonNull
 		private McpImplementation serverInformation;
@@ -699,8 +736,31 @@ public final class McpEndpoint {
 		}
 
 		/**
-		 * Enables subscription listening for an explicit subset of endpoint
-		 * revisions. An empty set disables subscription listening.
+		 * Enables sessions for an explicit subset of served endpoint revisions.
+		 * Only {@code 2025-06-18} and {@code 2025-11-25} are eligible; an empty
+		 * set disables sessions. {@code 2026-07-28} does not use sessions.
+		 * The server must configure {@link McpSessionConfig}. A session-enabled
+		 * revision requires a session ID after initialization; it never silently
+		 * falls back to stateless operation. The supplied set is copied.
+		 *
+		 * @param protocolVersions exact session-enabled revisions
+		 * @return this builder
+		 * @throws NullPointerException if the set or an item is null
+		 */
+		@NonNull
+		public Builder sessionProtocolVersions(
+				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
+			this.sessionProtocolVersions = McpProtocolVersion.optionalSet(protocolVersions);
+			return this;
+		}
+
+		/**
+		 * Enables subscriptions for an explicit subset of endpoint revisions.
+		 * Modern {@code 2026-07-28} uses {@code subscriptions/listen}; the two
+		 * supported 2025 revisions require matching session revisions, server HTTP
+		 * admission and effective event sources for GET delivery. An empty set
+		 * disables subscriptions. URI updates require an explicit URI authorizer;
+		 * legacy catalog-only delivery does not.
 		 *
 		 * @param protocolVersions exact subscription-enabled revisions
 		 * @return this builder
@@ -893,7 +953,9 @@ public final class McpEndpoint {
 		 * or a matching URI-template registration on this endpoint. Soklet validates
 		 * the complete page after the handler returns; a violation rejects the request
 		 * with JSON-RPC error {@code -32603} and HTTP
-		 * status {@code 500}. Null selects the static single-page fallback.
+		 * status {@code 500}. Null selects the static fallback: a single page on
+		 * {@code 2026-07-28}, or bounded framework pages on {@code 2025-06-18} and
+		 * {@code 2025-11-25}.
 		 * Sequential calls are last-call-wins.
 		 *
 		 * @param resourceListHandler custom list handler, or null for the static

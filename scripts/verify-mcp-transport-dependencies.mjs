@@ -97,6 +97,325 @@ const REVIEWED_EXISTING_DOMAIN_TYPES = Object.freeze([
   },
 ]);
 
+const REVIEWED_2025_SESSION_DOMAIN_FIELDS = Object.freeze([
+  {
+    "field": "MAXIMUM_URI_GRANTS_PER_SESSION",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Exact 64 logical URI grants per enabled 2025 session; no historical payload or replay."
+  },
+  {
+    "field": "MAXIMUM_RETAINED_URI_BYTES_PER_SESSION",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Exact 65536 retained URI bytes per enabled 2025 session through residual callback exit."
+  },
+  {
+    "field": "session",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Delivery",
+    "rationale": "Bounded one-session dirty-state delivery view; no historical event payload."
+  },
+  {
+    "field": "session",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.EvidenceReservation",
+    "rationale": "Shared bounded subscribe evidence stays charged until its final logical/physical reference exits."
+  },
+  {
+    "field": "session",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.GrantEntry",
+    "rationale": "Bounded node-local URI grant tied to the exact 2025 session and authorization generation."
+  },
+  {
+    field: 'MAXIMUM_LOGICAL_GETS_PER_SESSION',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpLegacySessionStore',
+    rationale: 'Exact two-logical-GET cap for explicitly enabled 2025 sessions; no replay or modern session state.',
+  },
+  {
+    field: 'session',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpLegacySessionStore.Get',
+    rationale: 'Bounded GET handle retains its exact node-local session through physical completion; no event history.',
+  },
+  {
+    "field": "maximumSessions",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+  },
+  {
+    "field": "maximumSessionsPerOwner",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+  },
+  {
+    "field": "maximumSessionIdleDuration",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+  },
+  {
+    "field": "maximumSessionDuration",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+  },
+  {
+    "field": "anonymousSessionsAllowed",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+  },
+  {
+    "field": "DEFAULT_MAXIMUM_SESSIONS",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "DEFAULT_MAXIMUM_SESSIONS_PER_OWNER",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "DEFAULT_MAXIMUM_SESSION_IDLE_DURATION",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "DEFAULT_MAXIMUM_SESSION_DURATION",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "maximumSessions",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "maximumSessionsPerOwner",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "maximumSessionIdleDuration",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "maximumSessionDuration",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "anonymousSessionsAllowed",
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig.Builder",
+    "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+  },
+  {
+    "field": "sessionConfig",
+    "file": "src/main/java/com/soklet/McpServer.java",
+    "owner": "com.soklet.McpServer.Builder",
+    "rationale": "Optional server ownership/bounds configuration requiring a corresponding explicitly enabled 2025 endpoint."
+  },
+  {
+    "field": "sessionConfig",
+    "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+    "owner": "com.soklet.DefaultMcpServer",
+    "rationale": "Immutable server session configuration forwarded to the exact legacy runtime; modern remains stateless."
+  },
+  {
+    "field": "sessionProtocolVersions",
+    "file": "src/main/java/com/soklet/McpEndpoint.java",
+    "owner": "com.soklet.McpEndpoint",
+    "rationale": "Explicit endpoint subset restricted to served June/November 2025 revisions; empty disables sessions."
+  },
+  {
+    "field": "sessionProtocolVersions",
+    "file": "src/main/java/com/soklet/McpEndpoint.java",
+    "owner": "com.soklet.McpEndpoint.Builder",
+    "rationale": "Explicit endpoint subset restricted to served June/November 2025 revisions; empty disables sessions."
+  },
+  {
+    "field": "MAXIMUM_ACTIVE_CALLS_PER_SESSION",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+  },
+  {
+    "field": "MAXIMUM_ANONYMOUS_SESSIONS",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+  },
+  {
+    "field": "MAXIMUM_SESSION_ID_HEADER_BYTES",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+  },
+  {
+    "field": "sessions",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+  },
+  {
+    "field": "anonymousSessions",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+  },
+  {
+    "field": "session",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Initialization",
+    "rationale": "Bounded initialization delivery and physical-exit handle for the selected 2025 record."
+  },
+  {
+    "field": "session",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Call",
+    "rationale": "Bounded admitted-use handle retaining evidence until actual physical exit."
+  },
+  {
+    "field": "liveSessions",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.OwnerUsage",
+    "rationale": "Per-owner logical session accounting, separate from retained physical evidence."
+  },
+  {
+    "field": "MCP_SESSION_ID",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacySessionRevisions",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacySessionStore",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacySessionOwnerResolver",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacySessionsConfigured",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacyAnonymousSessionsAllowed",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+    "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+  },
+  {
+    "field": "legacySessionSelected",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+    "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+  },
+  {
+    "field": "legacySessionTerminationCause",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+    "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+  },
+  {
+    "field": "legacySessionStreamTerminationObserved",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+    "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+  },
+  {
+    field: 'legacySessionTransportCompletionDeadlineNanos',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    rationale: 'Existing response-write timeout bounds physical terminal delivery after session cancellation; no deadline extension or replay.',
+  },
+  {
+    field: 'sessionCancellationCallbacksFinished',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
+    rationale: 'Exact bounded cancellation sidecar completion fence; the handler retains its slot until public callbacks physically exit.',
+  },
+  {
+    field: 'sessionCancellationEffectsReady',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
+    rationale: 'Exact sidecar publication fence ensuring cancellation callbacks wait until HTTP effects are offered.',
+  },
+  {
+    field: 'sessionCancellationCallbacksOutstanding',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
+    rationale: 'Physical callback ownership flag bounded by the existing handler concurrency; not a session registry.',
+  },
+  {
+    field: 'MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution',
+    rationale: 'Exact four-worker ceiling for fresh legacy owner resolution; additionally bounded by configured handler concurrency.',
+  },
+  {
+    field: 'sessionOwnerPolicyExecutor',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution',
+    rationale: 'Dedicated bounded owner-resolution execution, included in physical shutdown accounting without public handler metrics.',
+  },
+  {
+    field: 'sessionOwnerPolicyDispatcher',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution',
+    rationale: 'Configured bounded owner-resolution queue/worker dispatcher; cancellation has no application-hook sidecar.',
+  },
+]);
+const REVIEWED_2025_SESSION_DOMAIN_TYPES = Object.freeze([
+  {
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DefaultSessionTransportAdmissionContext',
+    rationale: 'Immutable exact-request context for explicit 2025 GET/DELETE admission and renewal; it carries no JSON-RPC context or replay position.',
+  },
+  {
+    "file": "src/main/java/com/soklet/McpSessionConfig.java",
+    "owner": "com.soklet.McpSessionConfig",
+    "rationale": "Approved immutable provisional minimum session configuration, not a wire history or modern lifecycle."
+  },
+  {
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Approved bounded node-local store for explicitly enabled June/November 2025 sessions only."
+  },
+  {
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Session",
+    "rationale": "Bounded owner/path/revision/generation record, retained metadata and active correlation; no replay or lifetime ID history."
+  }
+]);
+
 const DERIVATION = Object.freeze({
   dependencyLexing: {
     fullyQualifiedUses: 'comment/string/text-block-free fully-qualified type uses are included',
@@ -118,14 +437,16 @@ const DERIVATION = Object.freeze({
   productionScope: PRODUCTION_SCOPE,
   stateStorageDeclarationPolicy: {
     crossDomainRule: 'An identifier combining two or more future-transport domain terms is state-bearing even without a separate storage-role term.',
-    dataBearingClassRule: 'A class whose name contains a future-transport domain term and that declares direct fields is state-bearing unless it is one exact reviewed preexisting simulation-lifecycle type.',
+    dataBearingClassRule: 'A class whose name contains a future-transport domain term and that declares direct fields is state-bearing unless it is one exact reviewed preexisting simulation-lifecycle type or approved bounded 2025 session type.',
     dataBearingRecordRule: 'A nonempty record whose name contains a future-transport domain term is state-bearing.',
-    directFieldRule: 'A direct field name containing any future-transport domain term is state-bearing unless it is one exact reviewed preexisting non-roadmap field.',
+    directFieldRule: 'A direct field name containing any future-transport domain term is state-bearing unless it is one exact reviewed preexisting non-roadmap field or approved 2025 session field.',
     domainTerms: STATE_DOMAIN_TERMS,
+    reviewed2025SessionDomainFields: REVIEWED_2025_SESSION_DOMAIN_FIELDS,
+    reviewed2025SessionDomainTypes: REVIEWED_2025_SESSION_DOMAIN_TYPES,
     reviewedExistingDomainFields: REVIEWED_EXISTING_DOMAIN_FIELDS,
     reviewedExistingDomainTypes: REVIEWED_EXISTING_DOMAIN_TYPES,
     roleTerms: STATE_STORAGE_ROLE_TERMS,
-    scope: 'Named type declarations in the production scope fail when one identifier combines a future-transport domain term with a state/storage role term or combines multiple domain terms; every unreviewed direct field name containing a future-transport domain term, nonempty domain-named record, and field-bearing domain-named class also fail, while the exact reviewed preexisting fields and simulation-lifecycle types plus fieldless single-domain capability/control declarations remain allowed.',
+    scope: 'Named type declarations in the production scope fail when one identifier combines a future-transport domain term with a state/storage role term or combines multiple domain terms; every unreviewed direct field name containing a future-transport domain term, nonempty domain-named record, and field-bearing domain-named class also fail, while exact reviewed preexisting declarations, approved bounded 2025 session declarations, and fieldless single-domain capability/control declarations remain allowed. These exact session allowances grant neither modern lifecycle nor replay/stdio state.',
   },
 });
 
@@ -137,13 +458,20 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#offerSubscriptionEvent', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#runHandler::<anonymous McpApplicationNotificationWriter>#isActive', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationInvocation#sendNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream#enqueueMessage', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream#encodeMessage', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream#frame', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream.Frame#Frame', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpLegacyResponseWire#projectEnvelope', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyResponseWire.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpSimulationRuntime#captureFrameWhileLocked', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpSimulationRuntime#complete', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream#offerCoalescingMessage', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
     ],
     id: 'MCP-TRANSPORT-001',
-    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate.',
+    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
   },
   {
     evidence: [
@@ -179,10 +507,17 @@ const CHARACTERIZATIONS = Object.freeze([
     evidence: [
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#FORBIDDEN_LEGACY_MCP_POLICY_HEADERS', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#validatedPolicyHeaders', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#configureLegacySessions', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#sessionsEnabled', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#legacyHttpMethods', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processLegacySessionHttp', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#mcpPreflightRequestHeaders', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#withInitializationResponse', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpLegacySessionStore#requireLegacy', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java' },
       { owner: 'MCP production-scope named type and direct-field declarations', path: 'src/main/java/com/soklet/internal/mcp' },
     ],
     id: 'MCP-TRANSPORT-005',
-    statement: 'Reviewed production declarations contain no future transport state under the documented exact-field, domain/role, cross-domain, and data-bearing-record rules; legacy session/replay headers remain forbidden.',
+    statement: 'Production declarations allow only exact reviewed preexisting handles and approved bounded 2025 session/leased GET/URI grant state under the domain/role, cross-domain, and data-bearing-declaration rules. GET/DELETE require their selected legacy session facilities; Last-Event-ID is ignored input allowed in preflight only where GET is configured. Modern sessions, replay, and stdio state remain excluded, and application-authored session/replay headers remain forbidden.',
   },
 ]);
 
@@ -832,22 +1167,28 @@ function reviewedDomainTypeKey(file, owner) {
   return `${file}\u0000${owner}`;
 }
 function verifyStateStorageDeclarations(sourceFiles) {
-  const reviewedFields = new Map(REVIEWED_EXISTING_DOMAIN_FIELDS.map((row) => [
+  const fieldRows = [...REVIEWED_EXISTING_DOMAIN_FIELDS, ...REVIEWED_2025_SESSION_DOMAIN_FIELDS];
+  const typeRows = [...REVIEWED_EXISTING_DOMAIN_TYPES, ...REVIEWED_2025_SESSION_DOMAIN_TYPES];
+  const reviewedFields = new Map(fieldRows.map((row) => [
     reviewedDomainFieldKey(row.file, row.owner, row.field), row,
   ]));
-  const reviewedTypes = new Map(REVIEWED_EXISTING_DOMAIN_TYPES.map((row) => [
+  const reviewedTypes = new Map(typeRows.map((row) => [
     reviewedDomainTypeKey(row.file, row.owner), row,
   ]));
+  if (reviewedFields.size !== fieldRows.length || reviewedTypes.size !== typeRows.length)
+    fail('Reviewed transport-domain declaration allowances must have unique exact keys.');
   const resolvedReviewedFields = new Set();
   const resolvedReviewedTypes = new Set();
   for (const sourceFile of sourceFiles) {
     const types = namedTypes(sourceFile.lexed, sourceFile.file);
     for (const type of types) {
-      if (suspiciousStateStorageIdentifier(type.name)) fail(`Future transport state/storage type declaration is outside the 4.0 baseline: ${sourceFile.file}: ${type.owner}`);
-      if (dataBearingDomainRecord(type)) fail(`Data-bearing future-domain record declaration is outside the 4.0 baseline: ${sourceFile.file}: ${type.owner}`);
+      const reviewedTypeKey = reviewedDomainTypeKey(sourceFile.file, type.owner);
+      if (suspiciousStateStorageIdentifier(type.name) && !reviewedTypes.has(reviewedTypeKey)) fail(`Future transport state/storage type declaration is outside the 4.0 baseline: ${sourceFile.file}: ${type.owner}`);
+      if (dataBearingDomainRecord(type) && !reviewedTypes.has(reviewedTypeKey)) fail(`Data-bearing future-domain record declaration is outside the 4.0 baseline: ${sourceFile.file}: ${type.owner}`);
       const directFields = directFieldNames(sourceFile.lexed, sourceFile.file,
         type);
-      if (dataBearingDomainClass(type, directFields)) {
+      if (suspiciousStateStorageIdentifier(type.name) || dataBearingDomainRecord(type)
+        || dataBearingDomainClass(type, directFields)) {
         const key = reviewedDomainTypeKey(sourceFile.file, type.owner);
         if (!reviewedTypes.has(key)) fail(`Data-bearing future-domain class declaration is outside the 4.0 baseline: ${sourceFile.file}: ${type.owner}`);
         if (resolvedReviewedTypes.has(key)) fail(`Reviewed existing transport-domain type resolved more than once: ${sourceFile.file}: ${type.owner}`);
@@ -888,6 +1229,10 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const requestPath = 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java';
   const runtimePath = 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java';
   const bridgePath = 'src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java';
+  const legacyWirePath = 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyResponseWire.java';
+  const simulationPath = 'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java';
+  const sessionStorePath = 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java';
+  const legacyHttpPath = 'src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWire.java';
   const routerPath = 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java';
   const outboundPath = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
   const writablePath = 'src/main/java/com/soklet/internal/microhttp/WritableSource.java';
@@ -897,6 +1242,10 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const request = sourceBundle(root, requestPath, cache);
   const runtime = sourceBundle(root, runtimePath, cache);
   const bridge = sourceBundle(root, bridgePath, cache);
+  const legacyWire = sourceBundle(root, legacyWirePath, cache);
+  const simulation = sourceBundle(root, simulationPath, cache);
+  const sessionStore = sourceBundle(root, sessionStorePath, cache);
+  const legacyHttp = sourceBundle(root, legacyHttpPath, cache);
   const router = sourceBundle(root, routerPath, cache);
   const outbound = sourceBundle(root, outboundPath, cache);
   const writable = sourceBundle(root, writablePath, cache);
@@ -940,8 +1289,18 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
     'runHandler');
   requireStructural(exchangeRun,
-    /new\s+McpApplicationInvocation\s*\([\s\S]*?this\s*::\s*writeNotification\s*,\s*this\s*::\s*requirePublicHandlerEntry/u,
-    'the application invocation notification slot must bind Exchange.writeNotification');
+    /new\s+McpApplicationInvocation\s*\([\s\S]*?new\s+McpApplicationNotificationWriter\s*\(\s*\)\s*\{[\s\S]*?\}\s*,\s*this\s*::\s*requirePublicHandlerEntry/u,
+    'the application invocation notification slot must bind its checked notification writer');
+  const invocationNotificationWriter = oneAnonymousMethod(exchangeRun,
+    'McpApplicationNotificationWriter', 'write');
+  requireStructural(invocationNotificationWriter,
+    /^\s*return\s+Exchange\s*\.\s*this\s*\.\s*writeNotification\s*\(\s*notification\s*\)\s*;\s*$/u,
+    'the application invocation notification writer must route explicitly through Exchange.writeNotification');
+  const invocationNotificationActive = oneAnonymousMethod(exchangeRun,
+    'McpApplicationNotificationWriter', 'isActive');
+  requireStructural(invocationNotificationActive,
+    /^\s*TransportLease\s+lease\s*=\s*transportLease\s*\.\s*get\s*\(\s*\)\s*;\s*return\s+lease\s*!=\s*null\s*&&\s*lease\s*\.\s*responseWriter\s*\(\s*\)\s*\.\s*isNotificationDeliveryActive\s*\(\s*\)\s*;\s*$/u,
+    'the application invocation notification activity must follow its retained transport lease');
   const exchangeWriteNotification = oneMethod(router.lexed, routerPath,
     'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
     'writeNotification');
@@ -983,11 +1342,79 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const productionStreamConstructor = oneMethodMatching(request.lexed,
     requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'McpRequestSseStream', (candidate) =>
-      /\bint\s+frameCapacity\b/u.test(candidate.signatureCode),
-    'production constructor');
+      /\bint\s+frameCapacity\b/u.test(candidate.signatureCode)
+      && /\bMcpProtocolProfile\s+protocolProfile\b/u.test(candidate.signatureCode),
+    'selected-profile production constructor');
+  requireStructural(productionStreamConstructor,
+    /this\s*\.\s*legacyJsonCodec\s*=\s*legacyJsonCodec\s*\(\s*jsonCodec\s*,\s*protocolProfile\s*\)\s*;/u,
+    'the selected-profile request stream must retain its exact legacy codec selection');
   requireStructural(productionStreamConstructor,
     /this\s*\.\s*channel\s*=\s*new\s+TransportChannel\s*\(\s*frameCapacity\s*,\s*maximumFrameBytes\s*,\s*requireNonNull\s*\(\s*clock\s*\)\s*,\s*requireNonNull\s*\(\s*listener\s*\)\s*\)\s*;/u,
     'the production request stream must install one TransportChannel');
+  const defaultStreamConstructor = oneMethodMatching(request.lexed,
+    requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream',
+    'McpRequestSseStream', (candidate) =>
+      /\bint\s+frameCapacity\b/u.test(candidate.signatureCode)
+      && !/\bMcpProtocolProfile\s+protocolProfile\b/u.test(candidate.signatureCode),
+    'default modern production constructor');
+  requireStructural(defaultStreamConstructor,
+    /^\s*this\s*\(\s*frameCapacity\s*,\s*jsonLimits\s*,\s*envelopeCodec\s*,\s*null\s*,\s*Mcp20260728ProtocolProfile\s*\.\s*INSTANCE\s*,\s*clock\s*,\s*listener\s*\)\s*;\s*$/u,
+    'the default request stream must preserve the modern profile');
+  const selectedEncoder = oneMethodMatching(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'encodeMessage',
+    (candidate) => /\bMcpProtocolProfile\s+protocolProfile\b/u.test(candidate.signatureCode),
+    'selected-profile message encoder');
+  requireStructural(selectedEncoder,
+    /^\s*return\s+encodeMessage\s*\(\s*requireNonNull\s*\(\s*envelopeCodec\s*\)\s*,\s*legacyJsonCodec\s*\(\s*jsonCodec\s*,\s*protocolProfile\s*\)\s*,\s*message\s*\)\s*;\s*$/u,
+    'the selected-profile message encoder must share the stream legacy codec selection');
+  const messageEncoder = oneMethodMatching(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'encodeMessage',
+    (candidate) => !/\bMcpProtocolProfile\s+protocolProfile\b/u.test(candidate.signatureCode),
+    'retained-codec message encoder');
+  requireStructural(messageEncoder,
+    /McpJsonRpcMessage\s+outbound\s*=\s*McpProtocolSupport\s*\.\s*requireServerOutboundMessage\s*\(\s*message\s*\)\s*;/u,
+    'the message encoder must validate server outbound message kinds');
+  requireStructural(messageEncoder,
+    /return\s+legacyJsonCodec\s*!=\s*null\s*&&\s*outbound\s+instanceof\s+McpJsonRpcMessage\s*\.\s*ResultResponse\s+response\s*\?\s*McpLegacyResponseWire\s*\.\s*encode\s*\(\s*legacyJsonCodec\s*,\s*response\s*\)\s*:\s*envelopeCodec\s*\.\s*encode\s*\(\s*outbound\s*\)\s*;/u,
+    'the retained-codec message encoder must preserve selected legacy terminal projection and common envelopes');
+  const messageFrame = oneMethod(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'frame');
+  requireStructural(messageFrame,
+    /byte\s*\[\s*\]\s+json\s*=\s*encodeMessage\s*\(\s*envelopeCodec\s*,\s*legacyJsonCodec\s*,\s*message\s*\)\s*;/u,
+    'message frames must use the retained selected-profile encoder');
+  requireStructural(messageFrame,
+    /McpJsonObject\s+jsonMessage\s*=\s*legacyJsonCodec\s*!=\s*null\s*&&\s*message\s+instanceof\s+McpJsonRpcMessage\s*\.\s*ResultResponse\s+response\s*\?\s*McpLegacyResponseWire\s*\.\s*projectEnvelope\s*\(\s*response\s*\)\s*:\s*message\s*\.\s*toJsonObject\s*\(\s*\)\s*;/u,
+    'message frames must retain the selected-profile JSON snapshot');
+  requireStructural(messageFrame,
+    /return\s+new\s+Frame\s*\(\s*FrameType\s*\.\s*JSON_MESSAGE\s*,\s*message\s*,\s*jsonMessage\s*,\s*frame\s*\)\s*;/u,
+    'message frames must carry the projected JSON snapshot');
+  const defaultFrameConstructor = oneMethodMatching(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream.Frame', 'Frame',
+    (candidate) => /\bFrameType\s+type\b/u.test(candidate.signatureCode)
+      && !/\bMcpJsonObject\b/u.test(candidate.signatureCode),
+    'modern-default frame constructor');
+  requireStructural(defaultFrameConstructor,
+    /^\s*this\s*\(\s*type\s*,\s*message\s*,\s*message\s*==\s*null\s*\?\s*null\s*:\s*message\s*\.\s*toJsonObject\s*\(\s*\)\s*,\s*encodedBytes\s*\)\s*;\s*$/u,
+    'the default frame constructor must preserve the modern JSON snapshot');
+  const finiteLegacyEncoder = oneMethod(legacyWire.lexed, legacyWirePath,
+    'com.soklet.internal.mcp.protocol.McpLegacyResponseWire', 'encode');
+  requireStructural(finiteLegacyEncoder,
+    /^\s*return\s+requireNonNull\s*\(\s*jsonCodec\s*\)\s*\.\s*toUtf8Bytes\s*\(\s*projectEnvelope\s*\(\s*response\s*\)\s*\)\s*;\s*$/u,
+    'finite legacy encoding must share the projected JSON envelope');
+  const simulationCapture = oneMethod(simulation.lexed, simulationPath,
+    'com.soklet.internal.mcp.protocol.McpSimulationRuntime', 'captureFrameWhileLocked');
+  requireStructural(simulationCapture,
+    /McpJsonValue\s+message\s*=\s*McpServerRuntimeBridge\s*\.\s*toPublic\s*\(\s*requireNonNull\s*\(\s*frame\s*\.\s*jsonMessage\s*\(\s*\)\s*\)\s*\)\s*;/u,
+    'simulation stream items must expose the projected frame JSON snapshot');
+  const simulationCompletion = oneMethod(simulation.lexed, simulationPath,
+    'com.soklet.internal.mcp.protocol.McpSimulationRuntime', 'complete');
+  requireStructural(simulationCompletion,
+    /this\s*\.\s*terminalMessage\s*=\s*McpServerRuntimeBridge\s*\.\s*toPublic\s*\(\s*requireNonNull\s*\(\s*terminalFrame\s*\.\s*jsonMessage\s*\(\s*\)\s*\)\s*\)\s*;/u,
+    'simulation terminal duplicates must expose the projected frame JSON snapshot');
+  if (!/MESSAGE_PREFIX\s*=\s*"data: "\s*\.\s*getBytes\s*\(\s*StandardCharsets\s*\.\s*US_ASCII\s*\)/u.test(request.lexed.commentFree)
+    || !/MESSAGE_SUFFIX\s*=\s*"\\n\\n"\s*\.\s*getBytes\s*\(\s*StandardCharsets\s*\.\s*US_ASCII\s*\)/u.test(request.lexed.commentFree)) {
+    fail('Transport characterization live-literal assertion failed: request message framing must retain data-only SSE without event IDs or priming fields');
+  }
   const requestResponse = oneMethod(request.lexed, requestPath,
     'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'response');
   requireStructural(requestResponse,
@@ -1182,12 +1609,90 @@ function verifyCharacterizationSources(root, sourceFiles) {
   requireStructural(validatedPolicyHeaders,
     /FORBIDDEN_LEGACY_MCP_POLICY_HEADERS\s*\.\s*contains\s*\(\s*lowerName\s*\)/u,
     'validated admission-policy headers must reject the legacy MCP session/replay names');
+  const legacyRevision = oneMethod(legacyHttp.lexed, legacyHttpPath,
+    'com.soklet.internal.mcp.protocol.McpLegacyHttpWire', 'isLegacyRevision');
+  if (!/^\s*return\s+"2025-06-18"\s*\.\s*equals\s*\(\s*requireNonNull\s*\(\s*revision\s*\)\s*\)\s*\|\|\s*"2025-11-25"\s*\.\s*equals\s*\(\s*revision\s*\)\s*;\s*$/u
+    .test(legacyRevision.bodyCommentFree))
+    fail('Transport characterization live-literal assertion failed: legacy session eligibility must remain exactly June and November 2025');
+  const requireLegacy = oneMethod(sessionStore.lexed, sessionStorePath,
+    'com.soklet.internal.mcp.protocol.McpLegacySessionStore', 'requireLegacy');
+  requireStructural(requireLegacy,
+    /if\s*\(\s*!\s*McpLegacyHttpWire\s*\.\s*isLegacyRevision\s*\(\s*requireNonNull\s*\(\s*revision\s*\)\s*\)\s*\)\s*throw\s+new\s+IllegalArgumentException/u,
+    'the bounded store must reject modern and unsupported session revisions');
+  for (const methodName of ['publish', 'acquire']) {
+    const storeEntry = oneMethodMatching(sessionStore.lexed, sessionStorePath,
+      'com.soklet.internal.mcp.protocol.McpLegacySessionStore', methodName,
+      (candidate) => /\blong\s+retainedRequestEvidenceBytes\b/u.test(candidate.signatureCode),
+      `bounded session ${methodName}`);
+    requireStructural(storeEntry, /\brequireLegacy\s*\(\s*revision\s*\)\s*;/u,
+      `every bounded store ${methodName} must validate its exact legacy revision`);
+  }
+  requireStructural(process,
+    /boolean\s+sessionEnabled\s*=\s*legacy\s*&&\s*sessionsEnabled\s*\(\s*endpointRuntime\s*\.\s*path\s*\(\s*\)\s*,\s*selectedRevision\s*\)\s*;/u,
+    'modern requests must never enter the opted-in legacy session path');
+  const processNotification = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'processNotification');
+  requireStructural(processNotification,
+    /boolean\s+sessionEnabled\s*=\s*wireEra\s*==\s*McpLegacyHttpWire\s*\.\s*Era\s*\.\s*LEGACY\s*&&\s*sessionsEnabled\s*\(\s*endpointRuntime\s*\.\s*path\s*\(\s*\)\s*,\s*protocolVersion\s*\)\s*;/u,
+    'modern notifications must never enter the opted-in legacy session path');
+  const configureSessions = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'configureLegacySessions');
+  requireStructural(configureSessions,
+    /!\s*entry\s*\.\s*getValue\s*\(\s*\)\s*\.\s*stream\s*\(\s*\)\s*\.\s*allMatch\s*\(\s*McpLegacyHttpWire\s*::\s*isLegacyRevision\s*\)/u,
+    'session configuration must reject every revision outside the exact 2025 adapter');
+  const sessionsEnabled = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'sessionsEnabled');
+  requireStructural(sessionsEnabled,
+    /^\s*return\s+legacySessionRevisions\s*\.\s*getOrDefault\s*\(\s*path\s*,\s*Set\s*\.\s*of\s*\(\s*\)\s*\)\s*\.\s*contains\s*\(\s*revision\s*\)\s*;\s*$/u,
+    'sessions require the exact opted-in path and revision membership');
+  const legacyHttpMethods = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'legacyHttpMethods');
+  requireStructural(legacyHttpMethods,
+    /if\s*\(\s*legacyTransportAdmission\s*==\s*null\s*\)\s*return\s+Set\s*\.\s*copyOf\s*\(\s*methods\s*\)\s*;/u,
+    'legacy GET/DELETE facilities require the explicit HTTP admission controller');
+  requireStructural(legacyHttpMethods,
+    /sessionsEnabled\s*\(\s*endpoint\s*\.\s*path\s*\(\s*\)\s*,\s*revision\s*\)\s*\?\s*Set\s*\.\s*of\s*\(\s*revision\s*\)\s*:\s*Set\s*\.\s*of\s*\(\s*\)/u,
+    'actual GET/DELETE facilities require the selected path and revision session membership');
+  requireStructural(legacyHttpMethods,
+    /if\s*\(\s*!\s*revisions\s*\.\s*isEmpty\s*\(\s*\)\s*\)\s*methods\s*\.\s*add\s*\(\s*HttpMethod\s*\.\s*DELETE\s*\)\s*;/u,
+    'DELETE availability requires at least one selected session revision');
+  requireStructural(legacyHttpMethods,
+    /if\s*\(\s*revisions\s*\.\s*stream\s*\(\s*\)\s*\.\s*anyMatch\s*\(\s*value\s*->\s*!\s*legacyTransportFamilies[\s\S]*?getOrDefault\s*\(\s*value\s*,\s*Set\s*\.\s*of\s*\(\s*\)\s*\)\s*\.\s*isEmpty\s*\(\s*\)\s*\)\s*\)\s*methods\s*\.\s*add\s*\(\s*HttpMethod\s*\.\s*GET\s*\)\s*;/u,
+    'GET availability requires nonempty effective selected-revision notification families');
+  const legacySessionHttp = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'processLegacySessionHttp');
+  requireStructural(legacySessionHttp,
+    /if\s*\(\s*versions\s*\.\s*size\s*\(\s*\)\s*!=\s*1\s*\|\|\s*versions\s*\.\s*get\s*\(\s*0\s*\)\s*\.\s*isBlank\s*\(\s*\)\s*\)/u,
+    'GET/DELETE require one explicit nonblank protocol revision');
+  requireStructural(legacySessionHttp,
+    /if\s*\(\s*!\s*legacyHttpMethods\s*\(\s*endpoint\s*,\s*revision\s*\)\s*\.\s*contains\s*\(\s*method\s*\)\s*\)\s*return\s+methodNotAllowed\s*\(\s*headers\s*,\s*legacyHttpMethods\s*\(\s*endpoint\s*,\s*revision\s*\)\s*\)\s*;/u,
+    'actual GET/DELETE dispatch and Allow must use the exact selected revision');
+  const preflightHeaders = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime', 'mcpPreflightRequestHeaders');
+  if (!/if\s*\(\s*legacyHttpMethods\s*\(\s*endpointRuntime\s*,\s*null\s*\)\s*\.\s*contains\s*\(\s*HttpMethod\s*\.\s*GET\s*\)\s*\)\s*headers\s*\.\s*add\s*\(\s*"Last-Event-ID"\s*\)\s*;/u
+    .test(preflightHeaders.bodyCommentFree))
+    fail('Transport characterization live-literal assertion failed: Last-Event-ID preflight input requires a configured legacy GET facility');
+  if ([...runtimeCommentFree.matchAll(/"last-event-id"/giu)].length !== 2)
+    fail('Transport characterization live-literal assertion failed: Last-Event-ID may occur only in the policy-output denylist and ignored GET preflight input');
+  const initializationResponse = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl', 'withInitializationResponse');
+  requireStructural(initializationResponse,
+    /if\s*\(\s*initialization\s*==\s*null\s*\)\s*return\s+response\s*;/u,
+    'a session-disabled initialization must publish no session ID');
+  requireStructural(initializationResponse,
+    /headers\s*\.\s*add\s*\(\s*new\s+Header\s*\(\s*MCP_SESSION_ID\s*,\s*initialization\s*\.\s*sessionId\s*\(\s*\)\s*\)\s*\)\s*;/u,
+    'only the stored framework initialization handle may supply the response session ID');
+  if ([...runtime.lexed.code.matchAll(/new\s+Header\s*\(\s*MCP_SESSION_ID\b/gu)].length !== 1)
+    fail('Transport characterization structural assertion failed: session ID publication must have exactly one framework-owned response-header construction');
   const newResponseStream = oneMethod(runtime.lexed, runtimePath,
     'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
     'newResponseStream');
   requireStructural(newResponseStream,
-    /return\s+new\s+McpRequestSseStream\s*\(\s*transportConfiguration\s*\.\s*streamQueueCapacity\s*\(\s*\)\s*,\s*jsonLimits\s*,\s*envelopeCodec\s*,\s*applicationClock\s*,\s*new\s+McpOutboundChannel\s*\.\s*Listener\s*\(\s*\)\s*\{/u,
+    /return\s+new\s+McpRequestSseStream\s*\(\s*transportConfiguration\s*\.\s*streamQueueCapacity\s*\(\s*\)\s*,\s*jsonLimits\s*,\s*envelopeCodec\s*,\s*jsonCodec\s*,\s*protocolProfile\s*\(\s*\)\s*,\s*applicationClock\s*,\s*new\s+McpOutboundChannel\s*\.\s*Listener\s*\(\s*\)\s*\{/u,
     'the production response-stream factory must retain the configured bounded outbound-channel constructor');
+  requireStructural(newResponseStream,
+    /return\s+new\s+McpRequestSseStream\s*\(\s*envelopeCodec\s*,\s*jsonCodec\s*,\s*protocolProfile\s*\(\s*\)\s*,\s*simulation\s*\.\s*openChannel\s*\(\s*listener\s*\)\s*\)\s*;/u,
+    'the simulation response-stream factory must retain the selected protocol profile');
   verifyStateStorageDeclarations(sourceFiles);
 }
 

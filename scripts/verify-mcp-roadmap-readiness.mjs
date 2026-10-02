@@ -38,6 +38,15 @@ const EXPECTED_APPROVAL = Object.freeze({
   path: 'SOKLET_4_0_U0_APPROVAL.json',
   sha256: '451c2be76e76c4803c6b25c1cebbf6fd1468e3df474a1edb1c6eaad2bde4234f',
 });
+// This owner-approved scope supplement supersedes only the legacy exclusions
+// named in the plan. Original approval, authority and core identities remain
+// historical pins; scope approval is not implementation or release evidence.
+const EXPECTED_SCOPE_AMENDMENTS = Object.freeze([
+  Object.freeze({
+    path: 'release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md',
+    sha256: 'a2287f8db3a01c9c890c6f5f21f31fde9c20a7ed2489f9f9dea37ef7c6ff46a0',
+  }),
+]);
 const EXPECTED_AUTHORITIES = Object.freeze([
   Object.freeze({
     path: 'SOKLET_4_0_COMPLETION_PLAN.md',
@@ -108,7 +117,7 @@ const EXPECTED_DECISION_IDS = Object.freeze([
   'MCP-0-16',
 ]);
 const EXPECTED_NI_IDS = Object.freeze(
-  Array.from({ length: 14 }, (_, index) =>
+  Array.from({ length: 15 }, (_, index) =>
     `NI-${String(index + 1).padStart(2, '0')}`));
 const EXPECTED_DF_IDS = Object.freeze(
   Array.from({ length: 16 }, (_, index) =>
@@ -276,6 +285,7 @@ function verifyPlanningAuthority(root) {
     'baselineCore',
     'postD2Core',
     'approvedDecisionIds',
+    'scopeAmendments',
   ], 'planning-authority snapshot');
   if (value.formatVersion !== 1 || value.releaseTarget !== '4.0.0'
       || value.productionProfile !== '2026-07-28')
@@ -288,6 +298,14 @@ function verifyPlanningAuthority(root) {
   exactValue(value.postD2Core, EXPECTED_POST_D2_CORE, 'Post-D2 core identity');
   exactValue(value.approvedDecisionIds, EXPECTED_DECISION_IDS,
     'Approved decision IDs');
+  exactValue(value.scopeAmendments, EXPECTED_SCOPE_AMENDMENTS,
+    'Approved scope amendments');
+  for (const amendment of value.scopeAmendments) {
+    const amendmentBytes = readCandidateUtf8(root, amendment.path,
+      'approved scope amendment');
+    if (sha256(Buffer.from(amendmentBytes, 'utf8')) !== amendment.sha256)
+      fail(`Approved scope amendment bytes drifted: ${amendment.path}.`);
+  }
   for (const [label, core] of [
     ['baselineCore', value.baselineCore],
     ['postD2Core', value.postD2Core],
@@ -349,8 +367,10 @@ function verifyRoadmap(root, planning) {
       `negativeInventory[${index}]`);
     nonblank(row.statement, `${row.id}.statement`);
     nonblank(row.rationale, `${row.id}.rationale`);
-    if (row.status !== 'ABSENT_IN_4_0_0')
-      fail(`${row.id}.status must be ABSENT_IN_4_0_0.`);
+    const expectedStatus = row.id === 'NI-15'
+      ? 'PLANNED_IN_4_0_0' : 'ABSENT_IN_4_0_0';
+    if (row.status !== expectedStatus)
+      fail(`${row.id}.status must be ${expectedStatus}.`);
   }
 
   uniqueExactIds(value.deferredFeatures, EXPECTED_DF_IDS, DF_ID,
@@ -419,6 +439,12 @@ export function renderRoadmapPolicy(roadmap) {
     `Planning source: \`${roadmap.planningSource.path}\` (\`${roadmap.planningSource.sha256}\`)`,
     '',
     `Planning-authority snapshot SHA-256: \`${roadmap.planningAuthoritySnapshotSha256}\``,
+    '',
+    ...EXPECTED_SCOPE_AMENDMENTS.flatMap((amendment) => [
+      `Approved scope supplement: [${amendment.path}](../${amendment.path}) (\`${amendment.sha256}\`).`,
+      '',
+    ]),
+    'The supplement selects the complete 2025 expansion for 4.0.0. Planned scope does not establish implementation, client qualification, or a candidate release pass. Original authority and approval pins remain historical.',
     '',
     '## Negative inventory',
     '',
@@ -666,6 +692,7 @@ function matcherIds(body) {
       || /\b(?:[A-Za-z_$][\w$]*\.)*(?:members\s*\(\s*\)\.)?keySet\s*\(\s*\)\.equals\s*\(\s*[A-Z][A-Z0-9_]*FIELDS\s*\)/u.test(body))
     ids.push('OPEN-MATCH-002');
   if (/\bswitch\s*\(\s*(?:(?:[\w$]+\.)*method\s*\(\s*\)|(?:method|type|inputRequestType|wireValue|capability|coreCapability))\s*\)/u.test(body)
+      || /\bconfiguredMethods\s*=\s*legacyHttpMethods\s*\([\s\S]{0,120}?\)\s*;[\s\S]*?\bconfiguredMethods\s*\.\s*contains\s*\(\s*requestedMethod\s*\.\s*orElseThrow\s*\(\s*\)\s*\)[\s\S]*?\bconfiguredMethods\s*\.\s*containsAll\s*\(\s*allowedMethods\s*\)/u.test(body)
       || /\bswitch\s*\(\s*requireNonNull\s*\(\s*(?:method|type|inputRequestType|wireValue|capability|coreCapability)\s*\)\s*\)/u.test(body)
       || /\b[A-Z][A-Z0-9_]*(?:KEYWORDS|METHODS|CAPABILITIES|CAPABILITY_NAMES|ROLES)\.contains(?:All)?\s*\(\s*(?:method|name|capability|wireValue|type|keyword|allowedMethods)\s*\)/u.test(body)
       || /\b[A-Z][A-Z0-9_]*(?:KEYWORDS|METHODS|CAPABILITIES|CAPABILITY_NAMES|ROLES)\.contains(?:All)?\s*\(\s*requireNonNull\s*\(\s*(?:method|clientRequestMethod|name|capability|wireValue|type|keyword|allowedMethods)\s*\)\s*\)/u.test(body)

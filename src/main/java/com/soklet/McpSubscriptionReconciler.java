@@ -34,8 +34,9 @@ import javax.annotation.concurrent.ThreadSafe;
 public interface McpSubscriptionReconciler {
 	/**
 	 * Invalidates local authorization generations and schedules fresh checks for
-	 * establishing and active subscriptions. With no subscriptions this is a
-	 * harmless no-op.
+	 * establishing and active subscriptions, including exact 2025-era GET
+	 * streams and resource grants with no connected GET. With no subscriptions
+	 * this is a harmless no-op.
 	 * <p>
 	 * Returning confirms local delivery fencing and scheduling acceptance, not
 	 * completion of authorization callbacks, replica catch-up, client delivery,

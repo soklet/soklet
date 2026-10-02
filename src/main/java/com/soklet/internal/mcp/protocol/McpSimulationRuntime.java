@@ -90,6 +90,9 @@ final class McpSimulationRuntime implements McpSimulation,
 	private boolean completionCallbackDelivered;
 	private boolean cancelInFlight;
 	private boolean cancelWon;
+	private boolean clientCancellationReserved;
+	private boolean noMessageCompletionReserved;
+	private @Nullable MicrohttpResponse clientCancellationResponse;
 
 	McpSimulationRuntime(@NonNull McpSimulationOptions options,
 			@NonNull Runnable completionCallback) {
@@ -132,9 +135,14 @@ final class McpSimulationRuntime implements McpSimulation,
 		McpRequestSseStream.Listener listener = null;
 		Termination termination = null;
 		synchronized (this.lock) {
-			if (this.responsePublished || this.requestFinished || this.cancelWon)
+			boolean clientCancellationHead = this.clientCancellationReserved
+					&& this.noMessageCompletionReserved
+					&& requiredResponse == this.clientCancellationResponse;
+			if (this.responsePublished || this.requestFinished
+					|| (this.cancelWon && !clientCancellationHead))
 				return;
 			this.responsePublished = true;
+			this.clientCancellationResponse = null;
 			if (this.sseResponse) {
 				this.response = new DefaultResponse(requiredResponse.status(),
 						headers(requiredResponse.headers()),
@@ -202,6 +210,28 @@ final class McpSimulationRuntime implements McpSimulation,
 				return;
 			this.pendingReason = requireNonNull(reason);
 			this.cancelWon = true;
+		}
+	}
+
+	/**
+	 * Retains a winning client-cancellation outcome while permitting only its
+	 * associated no-message SSE head and clean channel completion.
+	 */
+	void reserveClientCancellation() {
+		synchronized (this.lock) {
+			if (this.completion != null || this.channelTerminal)
+				return;
+			this.pendingReason = McpStreamTerminationReason.REQUEST_CANCELED;
+			this.cancelWon = true;
+			this.clientCancellationReserved = true;
+		}
+	}
+
+	/** Retains a session retirement cause while its neutral error is delivered. */
+	void reserveLegacySessionReason(@NonNull McpStreamTerminationReason reason) {
+		synchronized (this.lock) {
+			if (this.completion == null)
+				this.pendingReason = requireNonNull(reason);
 		}
 	}
 
@@ -288,8 +318,16 @@ final class McpSimulationRuntime implements McpSimulation,
 	@Override
 	@NonNull
 	public MicrohttpResponse response(@NonNull List<@NonNull Header> headers) {
-		return new MicrohttpResponse(200, "OK", List.copyOf(requireNonNull(headers)),
-				new byte[0]);
+		List<Header> copiedHeaders = List.copyOf(requireNonNull(headers));
+		MicrohttpResponse response = new MicrohttpResponse(200, "OK", copiedHeaders, new byte[0]);
+		synchronized (this.lock) {
+			if (this.clientCancellationReserved && this.noMessageCompletionReserved
+					&& this.sseResponse && copiedHeaders.stream().anyMatch(header ->
+						header.name().equalsIgnoreCase("Content-Type")
+								&& header.value().equals("text/event-stream")))
+				this.clientCancellationResponse = response;
+		}
+		return response;
 	}
 
 	@Override
@@ -320,6 +358,29 @@ final class McpSimulationRuntime implements McpSimulation,
 			@NonNull BooleanSupplier offerAllowed) {
 		return offer(frame, requireNonNull(coalescingKey),
 				requireNonNull(offerAllowed));
+	}
+
+	@Override
+	@NonNull
+	public Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+			McpRequestSseStream.@NonNull Frame frame, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+		requireNonNull(payloadReleased);
+		try {
+			// Simulation captures delivery immediately under its capture lock. No
+			// opaque bytes remain queued behind this authorization boundary.
+			return offer(requireNonNull(frame), requireNonNull(coalescingKey),
+					requireNonNull(writeAllowed));
+		} finally {
+			payloadReleased.run();
+		}
+	}
+
+	@Override
+	public boolean recheckGuardedFrames() {
+		synchronized (this.lock) {
+			return !this.channelTerminal && !this.cancelWon;
+		}
 	}
 
 	@NonNull
@@ -380,16 +441,45 @@ final class McpSimulationRuntime implements McpSimulation,
 				if (this.pendingReason == null)
 					this.pendingReason = McpStreamTerminationReason.COMPLETED;
 				this.terminalMessage = McpServerRuntimeBridge.toPublic(
-						requireNonNull(terminalFrame.message()).toJsonObject());
+						requireNonNull(terminalFrame.jsonMessage()));
 				termination = new Termination(StreamTerminationReason.COMPLETED,
-						McpStreamTerminationReason.COMPLETED);
+						this.pendingReason);
 			}
 			listener = requireNonNull(this.streamListener);
 		}
 		listener.didTerminate(termination.cancellationReason(),
 				termination.observationReason(), null);
-		return termination.observationReason()
-				== McpStreamTerminationReason.COMPLETED;
+		return termination.cancellationReason() == StreamTerminationReason.COMPLETED;
+	}
+
+	@Override
+	public boolean completeWithoutMessage(boolean discardUncommittedMessages) {
+		McpRequestSseStream.Listener listener = null;
+		Termination termination;
+		synchronized (this.lock) {
+			if (this.channelTerminal || (this.cancelWon && !this.clientCancellationReserved))
+				return false;
+			if (discardUncommittedMessages) {
+				if (this.responsePublished)
+					throw new IllegalStateException("A published simulation response cannot discard its pending messages.");
+				this.items.clear();
+				this.preResponseItems.clear();
+				this.pendingCoalescingKeys.clear();
+			}
+			this.channelTerminal = true;
+			this.noMessageCompletionReserved = true;
+			if (this.pendingReason == null)
+				this.pendingReason = McpStreamTerminationReason.COMPLETED;
+			termination = new Termination(StreamTerminationReason.COMPLETED, this.pendingReason);
+			if (this.responsePublished)
+				listener = requireNonNull(this.streamListener);
+			else
+				this.pendingPreResponseTermination = termination;
+			this.lock.notifyAll();
+		}
+		if (listener != null)
+			listener.didTerminate(termination.cancellationReason(), termination.observationReason(), null);
+		return true;
 	}
 
 	@Override
@@ -444,7 +534,9 @@ final class McpSimulationRuntime implements McpSimulation,
 	public boolean isTerminalWritten() {
 		synchronized (this.lock) {
 			return this.channelTerminal
-					&& this.pendingReason == McpStreamTerminationReason.COMPLETED;
+					&& (this.pendingReason == McpStreamTerminationReason.COMPLETED
+							|| this.terminalMessage != null
+							|| (this.noMessageCompletionReserved && this.responsePublished));
 		}
 	}
 
@@ -475,7 +567,7 @@ final class McpSimulationRuntime implements McpSimulation,
 		McpSimulationStreamItem item;
 		if (frame.type() == McpRequestSseStream.FrameType.JSON_MESSAGE) {
 			McpJsonValue message = McpServerRuntimeBridge.toPublic(
-					requireNonNull(frame.message()).toJsonObject());
+					requireNonNull(frame.jsonMessage()));
 			item = new DefaultStreamItem(McpSimulationStreamItemType.JSON_MESSAGE,
 					message, null, encodedBytes);
 		} else {

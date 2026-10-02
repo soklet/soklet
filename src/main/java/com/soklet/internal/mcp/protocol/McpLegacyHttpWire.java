@@ -22,6 +22,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -102,6 +103,15 @@ final class McpLegacyHttpWire {
 				|| "2025-11-25".equals(revision);
 	}
 
+	/** Exact request vocabulary implemented by both supported 2025 profiles. */
+	static boolean supportsRequestMethod(@NonNull String method) {
+		return Set.of("initialize", "ping", "tools/list", "tools/call",
+				"prompts/list", "prompts/get", "resources/list",
+				"resources/templates/list", "resources/read", "completion/complete",
+				"resources/subscribe", "resources/unsubscribe")
+				.contains(requireNonNull(method));
+	}
+
 	private static boolean isMethod(@NonNull McpJsonRpcEnvelope envelope,
 			@NonNull String method) {
 		return envelope instanceof McpJsonRpcEnvelope.Request request
@@ -144,10 +154,12 @@ final class McpLegacyHttpWire {
 				|| !(envelope instanceof McpJsonRpcEnvelope.Request request)
 				|| !("tools/call".equals(request.method())
 						|| "prompts/get".equals(request.method())
-						|| "resources/read".equals(request.method()))
+						|| "resources/read".equals(request.method())
+						|| "resources/subscribe".equals(request.method())
+						|| "resources/unsubscribe".equals(request.method()))
 				|| !(request.params().orElse(null) instanceof McpJsonObject params))
 			return false;
-		String nameField = "resources/read".equals(request.method()) ? "uri" : "name";
+		String nameField = request.method().startsWith("resources/") ? "uri" : "name";
 		if (!(params.members().get(nameField) instanceof McpJsonString name))
 			return false;
 		try {

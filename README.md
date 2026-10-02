@@ -866,7 +866,12 @@ The development coordinate for this section is `4.0.0`.
 Soklet's qualified 4.0.0 MCP server target is `2026-07-28`. It uses a
 dedicated, stateless [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
 The development source implements explicitly selected `2025-06-18` and
-`2025-11-25` compatibility for synchronous tools; a release or host claim
+`2025-11-25` compatibility for synchronous tools, ordinary prompts/resources,
+argument completion, request-scoped POST progress, and framework static catalog
+pagination, plus explicitly enabled 2025 sessions with remembered public client
+metadata and active-request cancellation, leased GET opening, and verified DELETE
+retirement, session-owned URI grants, and resource/catalog invalidations over GET.
+A release or host claim
 requires qualification against the exact candidate artifact. Endpoints and
 operations name their exact `McpProtocolVersion` values, with no implicit
 "latest" default. See [the MCP guide](MCP.md#exact-protocol-revisions).
@@ -921,14 +926,26 @@ before exposing it remotely.
 
 MCP `completion/complete` suggests up to 100 values for a declared prompt
 argument or resource-template variable. Configure a completer on a prompt or
-URI-template registration to advertise `completions` for that endpoint; exact
-resources cannot have completers. A resource reference is the literal
+URI-template registration to advertise `completions` for that endpoint's
+selected revision; exact resources cannot have completers. A resource reference is the literal
 registered template (for example, `catalog://products/{sku}`), not an expanded
 resource URI. The handler receives the partial value and other supplied
 arguments in `McpCompletionContext`. Treat those values as untrusted input and
 authorize each suggestion, including any sensitive identifier, before
 returning it. Soklet does not match, translate, deduplicate, or cache returned
 suggestions.
+
+Completion supports explicitly selected `2025-06-18`, `2025-11-25`, and
+`2026-07-28` revisions through the same handlers. Select completer revisions
+within the owning prompt/template and endpoint revisions; a modern-only
+completer is not exposed to a 2025 request. On a Completion-enabled 2025
+endpoint/revision, a visible target and declared argument without an enabled
+completer return empty suggestions.
+Unknown or hidden targets and undeclared arguments fail with invalid params.
+The 2025 implementation defaults to stateless operation. Explicit session
+selection requires both endpoint revisions and server ownership/bounds; see
+[2025 sessions](MCP.md#explicitly-enabled-2025-sessions). Named legacy host checks
+and exact-candidate qualification remain pending.
 
 For a programmatic registration, attach the callback to the prompt or template
 builder and install a server-wide request limiter:
@@ -1065,10 +1082,20 @@ underlying cause is empty, including through
 [`StreamingResponseCanceledException`](https://javadoc.soklet.com/com/soklet/StreamingResponseCanceledException.html).
 On HTTP, an incoming
 `notifications/cancelled` message is accepted and ignored for compatibility;
-disconnect, deadline, forced shutdown after the graceful-drain budget, and
-response-stream failure are the signals that cancel work. Graceful shutdown
+deadline, forced shutdown after the graceful-drain budget, and
+response-stream failure are signals that cancel work, subject to the legacy
+writer-detachment rules below. Graceful shutdown
 fences new MCP work while preserving already-admitted finite unary and
 request-scoped progress responses; indefinite subscriptions complete promptly.
+On either selected 2025 revision, a valid progress token enables the same
+reporter: the first update commits POST SSE, while no update returns JSON.
+A committed legacy SSE disconnect or lost-writer write failure detaches delivery,
+wakes blocked reporters, and discards later output without itself canceling the handler. The deadline
+and physical worker reservation remain; finite/uncommitted or queued legacy
+requests and modern requests retain disconnect cancellation. Legacy streams
+have no event IDs, priming event, polling, replay, or lost-result recovery.
+Named-host and exact-candidate progress qualification remain pending. See
+[Progress and cooperative cancelation](MCP.md#progress-and-cooperative-cancelation).
 Soklet validates the open `inputResponses` wire union, but
 applications still own response-key correlation, action handling, accepted
 content policy, user binding, and side-effect authorization. See
@@ -2717,7 +2744,9 @@ not a protocol or transport failure.
 and scope exit publish
 [`McpRequestOutcome.CLIENT_DISCONNECTED`](https://javadoc.soklet.com/com/soklet/McpRequestOutcome.html#CLIENT_DISCONNECTED)
 only if they win
-the shared terminal reservation. Cleanup is bounded and idempotent; residual
+the shared terminal reservation. A committed legacy POST SSE simulated
+disconnect detaches delivery without itself canceling its handler; deadlines
+and physical work remain owned. Cleanup is bounded and idempotent; residual
 noncooperative work blocks new simulation and live start until release, while
 escaped handles stay readable. Waits reject null/negative values, support zero
 polling and overflow-safe large durations, and preserve interruption without

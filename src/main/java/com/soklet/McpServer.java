@@ -135,6 +135,17 @@ public sealed interface McpServer permits DefaultMcpServer {
 	Optional<@NonNull McpTaskManager> getTaskManager();
 
 	/**
+	 * Returns the optional server-wide session ownership and bounds. Only
+	 * endpoints explicitly selecting MCP {@code 2025-06-18} or
+	 * {@code 2025-11-25} session revisions use this configuration; Soklet's
+	 * {@code 2026-07-28} implementation does not use it.
+	 *
+	 * @return session configuration, or the empty optional when sessions are disabled
+	 */
+	@NonNull
+	Optional<@NonNull McpSessionConfig> getSessionConfig();
+
+	/**
 	 * Returns the optional limiter applied once to every admitted request or
 	 * notification.
 	 *
@@ -362,6 +373,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@Nullable
 		private McpTaskManager taskManager;
 		@Nullable
+		private McpSessionConfig sessionConfig;
+		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 		@Nullable
 		private McpRateLimiter requestRateLimiter;
@@ -498,6 +511,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.handlerInterceptor = exactSource.handlerInterceptor;
 			this.toolResultSanitizer = exactSource.toolResultSanitizer;
 			this.taskManager = exactSource.taskManager;
+			this.sessionConfig = exactSource.sessionConfig;
 			this.corsAuthorizer = exactSource.corsAuthorizer;
 			this.requestRateLimiter = exactSource.requestRateLimiter;
 			this.toolRateLimiter = exactSource.toolRateLimiter;
@@ -1229,6 +1243,24 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Configures server-wide ownership and bounds for explicitly selected
+		 * {@code 2025-06-18} and {@code 2025-11-25} endpoint sessions.
+		 * {@code 2026-07-28} does not use this configuration. It does not enable
+		 * sessions on an endpoint; use
+		 * {@link McpEndpoint.Builder#sessionProtocolVersions(Set)} as well.
+		 * A session-enabled endpoint requires this value, and an unused value
+		 * is rejected during construction. Null clears the configuration.
+		 *
+		 * @param sessionConfig session ownership and bounds, or null to disable
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder sessionConfig(@Nullable McpSessionConfig sessionConfig) {
+			this.sessionConfig = sessionConfig;
+			return this;
+		}
+
+		/**
 		 * Configures the optional limiter applied once to every admitted MCP
 		 * request or notification.
 		 * <p>
@@ -1482,6 +1514,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               task-required tool exists without a task manager;
 		 *                               subscription support is enabled without an
 		 *                               explicitly selected subscription authorizer;
+		 *                               sessions are enabled without session configuration,
+		 *                               or session configuration has no enabled endpoint;
 		 *                               a declared multivariant Skills group lacks
 		 *                               an explicit selector;
 		 *                               or a configured localization response exceeds its
@@ -1502,6 +1536,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 			McpEndpointRegistry endpointRegistry = this.endpointRegistry == null
 					? McpEndpointRegistry.fromClasspathIntrospection()
 					: this.endpointRegistry;
+			boolean sessionsEnabled = endpointRegistry.getEndpoints().stream()
+					.anyMatch(endpoint -> !endpoint.getSessionProtocolVersions().isEmpty());
+			if (sessionsEnabled && this.sessionConfig == null)
+				throw new IllegalStateException(
+						"An MCP session configuration must be supplied when endpoint sessions are enabled.");
+			if (!sessionsEnabled && this.sessionConfig != null)
+				throw new IllegalStateException(
+						"An MCP session configuration requires at least one session-enabled endpoint.");
 			if (this.skillVariantSelector == null && endpointRegistry.getEndpoints().stream()
 					.flatMap(endpoint -> endpoint.getSkillGroups().stream())
 					.anyMatch(group -> group.getSkillRegistrations().size() > 1))
@@ -1552,7 +1594,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.subscriptionAuthorizer,
 					this.subscriptionAuthorizerExplicitlyConfigured,
 					this.handlerInterceptor,
-					this.toolResultSanitizer, this.taskManager,
+					this.toolResultSanitizer, this.taskManager, this.sessionConfig,
 					this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
 					this.unknownMirroredHeaderNameDiagnostics,

@@ -24,8 +24,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Tests for the first, non-routable Completion public API slice. */
+/** Public contracts for prompt and resource-template argument completion. */
 @ThreadSafe
 class McpCompletionPublicApiTests {
 	@Test
@@ -181,6 +183,105 @@ class McpCompletionPublicApiTests {
 		assertFalse(Arrays.stream(McpResourceRegistration.ExactBuilder.class
 				.getMethods()).anyMatch(method ->
 				method.getName().equals("completionHandler")));
+	}
+
+	@Test
+	void completionRegistrationsAcceptBothExactLegacyRevisions() {
+		McpCompletionHandler completionHandler = (requestContext,
+				completionContext, invocationFeatures) ->
+				McpArgumentCompletionResult.fromValues(List.of());
+		for (McpProtocolVersion protocolVersion : List.of(
+				McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
+			Set<McpProtocolVersion> protocolVersions = Set.of(protocolVersion);
+			McpPromptRegistration prompt = completionPromptBuilder(protocolVersions)
+					.completionHandler(completionHandler, protocolVersions).build();
+			McpResourceRegistration resource = completionResourceBuilder(protocolVersions)
+					.completionHandler(completionHandler, protocolVersions).build();
+			McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+					McpImplementation.withNameAndVersion("test", "1").build(),
+					protocolVersions).promptRegistrations(List.of(prompt))
+					.resourceRegistrations(List.of(resource)).build();
+
+			assertSame(completionHandler, endpoint.getPromptRegistrations().get(0)
+					.getCompletionHandler().orElseThrow());
+			assertSame(completionHandler, endpoint.getResourceRegistrations().get(0)
+					.getCompletionHandler().orElseThrow());
+			assertEquals(protocolVersions, prompt.getCompletionProtocolVersions());
+			assertEquals(protocolVersions, resource.getCompletionProtocolVersions());
+		}
+	}
+
+	@Test
+	void completionRevisionSelectionIsSnapshottedAndMustRemainAnExactOwnerSubset() {
+		McpCompletionHandler completionHandler = (requestContext,
+				completionContext, invocationFeatures) ->
+				McpArgumentCompletionResult.fromValues(List.of());
+		Set<McpProtocolVersion> ownerVersions = Set.of(
+				McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
+				McpProtocolVersion.V2026_07_28);
+		Set<McpProtocolVersion> selectedVersions = EnumSet.of(
+				McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2026_07_28);
+		McpPromptRegistration.Builder promptBuilder = completionPromptBuilder(ownerVersions)
+				.completionHandler(completionHandler, selectedVersions);
+		McpResourceRegistration.TemplateBuilder resourceBuilder =
+				completionResourceBuilder(ownerVersions)
+						.completionHandler(completionHandler, selectedVersions);
+		selectedVersions.clear();
+		Set<McpProtocolVersion> expectedVersions = Set.of(
+				McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2026_07_28);
+		McpPromptRegistration prompt = promptBuilder.build();
+		McpResourceRegistration resource = resourceBuilder.build();
+		assertEquals(expectedVersions, prompt.getCompletionProtocolVersions());
+		assertEquals(expectedVersions, resource.getCompletionProtocolVersions());
+		assertThrows(UnsupportedOperationException.class,
+				() -> prompt.getCompletionProtocolVersions().clear());
+		assertThrows(UnsupportedOperationException.class,
+				() -> resource.getCompletionProtocolVersions().clear());
+		Set<McpProtocolVersion> replacementVersions = Set.of(McpProtocolVersion.V2025_11_25);
+		assertEquals(replacementVersions, promptBuilder
+				.completionHandler(completionHandler, replacementVersions).build()
+				.getCompletionProtocolVersions());
+		assertEquals(replacementVersions, resourceBuilder
+				.completionHandler(completionHandler, replacementVersions).build()
+				.getCompletionProtocolVersions());
+		assertEquals(expectedVersions, prompt.getCompletionProtocolVersions());
+		assertEquals(expectedVersions, resource.getCompletionProtocolVersions());
+
+		Set<McpProtocolVersion> juneOnly = Set.of(McpProtocolVersion.V2025_06_18);
+		for (Set<McpProtocolVersion> invalidSelection : List.of(
+				Set.<McpProtocolVersion>of(), replacementVersions)) {
+			assertThrows(IllegalArgumentException.class, () ->
+					completionPromptBuilder(juneOnly)
+							.completionHandler(completionHandler, invalidSelection));
+			assertThrows(IllegalArgumentException.class, () ->
+					completionResourceBuilder(juneOnly)
+							.completionHandler(completionHandler, invalidSelection));
+		}
+		McpPromptRegistration unsupportedPrompt = completionPromptBuilder(
+				Set.of(McpProtocolVersion.V2025_03_26))
+				.completionHandler(completionHandler,
+						Set.of(McpProtocolVersion.V2025_03_26)).build();
+		assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath("/mcp",
+				McpImplementation.withNameAndVersion("test", "1").build(),
+				Set.of(McpProtocolVersion.V2025_03_26))
+				.promptRegistrations(List.of(unsupportedPrompt)).build());
+	}
+
+	private static McpPromptRegistration.Builder completionPromptBuilder(
+			Set<McpProtocolVersion> protocolVersions) {
+		return McpPromptRegistration.withName("prompt", protocolVersions)
+				.handler((requestContext, promptGetContext, invocationFeatures) ->
+						McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages()));
+	}
+
+	private static McpResourceRegistration.TemplateBuilder completionResourceBuilder(
+			Set<McpProtocolVersion> protocolVersions) {
+		return McpResourceRegistration.withUriTemplateAndName(
+				"catalog://item/{id}", "item", protocolVersions)
+				.handler((requestContext, resourceReadContext, invocationFeatures) ->
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContent(
+								McpTextResourceContents.withUriAndText(
+										resourceReadContext.getUri(), "text").build())));
 	}
 
 	@Test

@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 
-/** Processor and public annotation contracts for P2 argument completion. */
+/** Processor and public annotation contracts for argument completion. */
 @ThreadSafe
 public class McpCompletionAnnotationProcessorTests {
 	@Test
@@ -137,6 +137,35 @@ public class McpCompletionAnnotationProcessorTests {
 	}
 
 	@Test
+	void generatesPromptAndResourceCompletionForEachExactLegacyRevision() {
+		for (McpProtocolVersion protocolVersion : List.of(
+				McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
+			Compilation compilation = compile("example.LegacyCompletionEndpoint", """
+					package example;
+					import com.soklet.*;
+					import com.soklet.annotation.*;
+					@McpServerEndpoint(protocolVersions = McpProtocolVersion.%1$s,
+					    path = "/mcp", name = "test", version = "1")
+					public final class LegacyCompletionEndpoint {
+					  @McpPrompt(protocolVersions = McpProtocolVersion.%1$s, name = "review")
+					  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
+					  @McpResource(protocolVersions = McpProtocolVersion.%1$s,
+					      uri = "catalog://products/{sku}", name = "product")
+					  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
+					  @McpPromptCompletion(protocolVersions = McpProtocolVersion.%1$s, name = "review")
+					  public McpArgumentCompletionResult promptCompletion(
+					      McpCompletionContext.Prompt completionContext) { return null; }
+					  @McpResourceCompletion(protocolVersions = McpProtocolVersion.%1$s,
+					      uri = "catalog://products/{sku}")
+					  public McpArgumentCompletionResult resourceCompletion(
+					      McpCompletionContext.Resource completionContext) { return null; }
+					}
+					""".formatted(protocolVersion.name()));
+			assertThat(compilation).succeeded();
+		}
+	}
+
+	@Test
 	void generatedCallbacksInvokeTypedPromptAndResourceHandlers(
 			@TempDir Path temporaryDirectory) throws Exception {
 		Path sourceFile = temporaryDirectory.resolve(
@@ -151,20 +180,25 @@ public class McpCompletionAnnotationProcessorTests {
 				import com.soklet.*;
 				import com.soklet.annotation.*;
 				import java.util.List;
-				@McpServerEndpoint(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, path = "/mcp", name = "test", version = "1")
+				@McpServerEndpoint(protocolVersions = {McpProtocolVersion.V2025_06_18,
+				    McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28},
+				    path = "/mcp", name = "test", version = "1")
 				public final class LiveCompletionEndpoint {
-				  @McpPrompt(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "review")
+				  @McpPrompt(protocolVersions = {McpProtocolVersion.V2025_06_18,
+				      McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28}, name = "review")
 				  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
-				  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}", name = "product")
+				  @McpResource(protocolVersions = {McpProtocolVersion.V2025_06_18,
+				      McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28},
+				      uri = "catalog://products/{sku}", name = "product")
 				  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
-				  @McpPromptCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, name = "review")
+				  @McpPromptCompletion(protocolVersions = McpProtocolVersion.V2025_06_18, name = "review")
 				  public McpArgumentCompletionResult promptCompletion(
 				      McpCompletionContext.Prompt completionContextPrompt) {
 				    return McpArgumentCompletionResult.fromValues(List.of(
 				        completionContextPrompt.getPromptRegistration().getName()
 				        + ":" + completionContextPrompt.getArgumentValue()));
 				  }
-				  @McpResourceCompletion(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "catalog://products/{sku}")
+				  @McpResourceCompletion(protocolVersions = McpProtocolVersion.V2025_11_25, uri = "catalog://products/{sku}")
 				  public McpArgumentCompletionResult resourceCompletion(
 				      McpCompletionContext.Resource completionContextResource) {
 				    return McpArgumentCompletionResult.fromValues(List.of(
@@ -199,6 +233,10 @@ public class McpCompletionAnnotationProcessorTests {
 					.getEndpoints().get(0);
 			McpPromptRegistration prompt = endpoint.getPromptRegistrations().get(0);
 			McpResourceRegistration resource = endpoint.getResourceRegistrations().get(0);
+			Assertions.assertEquals(Set.of(McpProtocolVersion.V2025_06_18),
+					prompt.getCompletionProtocolVersions());
+			Assertions.assertEquals(Set.of(McpProtocolVersion.V2025_11_25),
+					resource.getCompletionProtocolVersions());
 			McpRequestContext request = (McpRequestContext) Proxy.newProxyInstance(
 					classLoader, new Class<?>[] { McpRequestContext.class },
 					(proxy, method, arguments) -> null);
@@ -234,6 +272,77 @@ public class McpCompletionAnnotationProcessorTests {
 					resource.getCompletionHandler().orElseThrow()
 							.handle(request, resourceContext, features).getValues());
 		}
+	}
+
+	@Test
+	void rejectsEmptyDuplicateAndUnsupportedCompletionRevisions() {
+		Map<String, String> invalidSelections = Map.of(
+				"{}", "protocolVersions must name at least one MCP protocol revision",
+				"{McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_06_18}",
+				"protocolVersions must not contain duplicate revisions",
+				"McpProtocolVersion.V2025_03_26",
+				"protocol revision 2025-03-26 is not supported");
+		for (Map.Entry<String, String> invalidSelection : invalidSelections.entrySet()) {
+			Compilation compilation = compile("example.BadCompletionRevisions", """
+					package example;
+					import com.soklet.*;
+					import com.soklet.annotation.*;
+					@McpServerEndpoint(protocolVersions = {McpProtocolVersion.V2025_06_18,
+					    McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28},
+					    path = "/mcp", name = "test", version = "1")
+					public final class BadCompletionRevisions {
+					  @McpPrompt(protocolVersions = {McpProtocolVersion.V2025_06_18,
+					      McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28}, name = "review")
+					  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
+					  @McpResource(protocolVersions = {McpProtocolVersion.V2025_06_18,
+					      McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28},
+					      uri = "catalog://products/{sku}", name = "product")
+					  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
+					  @McpPromptCompletion(protocolVersions = %1$s, name = "review")
+					  public McpArgumentCompletionResult promptCompletion(
+					      McpCompletionContext.Prompt completionContext) { return null; }
+					  @McpResourceCompletion(protocolVersions = %1$s, uri = "catalog://products/{sku}")
+					  public McpArgumentCompletionResult resourceCompletion(
+					      McpCompletionContext.Resource completionContext) { return null; }
+					}
+					""".formatted(invalidSelection.getKey()));
+			assertThat(compilation).failed();
+			assertThat(compilation).hadErrorContaining(
+					"@McpPromptCompletion " + invalidSelection.getValue());
+			assertThat(compilation).hadErrorContaining(
+					"@McpResourceCompletion " + invalidSelection.getValue());
+		}
+	}
+
+	@Test
+	void completionRevisionsMustRemainWithinTheirPromptOrResourceDeclaration() {
+		Compilation compilation = compile("example.CompletionOutsideOwner", """
+				package example;
+				import com.soklet.*;
+				import com.soklet.annotation.*;
+				@McpServerEndpoint(protocolVersions = {McpProtocolVersion.V2025_06_18,
+				    McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28},
+				    path = "/mcp", name = "test", version = "1")
+				public final class CompletionOutsideOwner {
+				  @McpPrompt(protocolVersions = McpProtocolVersion.V2025_06_18, name = "review")
+				  public McpPromptOutput prompt(@McpPromptArgument String code) { return null; }
+				  @McpResource(protocolVersions = McpProtocolVersion.V2025_11_25,
+				      uri = "catalog://products/{sku}", name = "product")
+				  public McpResourceOutput resource(@McpResourceUriParameter String sku) { return null; }
+				  @McpPromptCompletion(protocolVersions = McpProtocolVersion.V2025_11_25, name = "review")
+				  public McpArgumentCompletionResult promptCompletion(
+				      McpCompletionContext.Prompt completionContext) { return null; }
+				  @McpResourceCompletion(protocolVersions = McpProtocolVersion.V2025_06_18,
+				      uri = "catalog://products/{sku}")
+				  public McpArgumentCompletionResult resourceCompletion(
+				      McpCompletionContext.Resource completionContext) { return null; }
+				}
+				""");
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpPromptCompletion protocolVersions must be a subset of @McpPrompt protocolVersions");
+		assertThat(compilation).hadErrorContaining(
+				"@McpResourceCompletion protocolVersions must be a subset of @McpResource protocolVersions");
 	}
 
 	@Test

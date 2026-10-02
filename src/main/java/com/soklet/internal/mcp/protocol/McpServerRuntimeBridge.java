@@ -37,6 +37,7 @@ import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpLocalizationContext;
+import com.soklet.McpInvocationFeatures;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
@@ -49,6 +50,10 @@ import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationOptions;
+import com.soklet.McpSessionConfig;
+import com.soklet.McpSessionTransportAdmissionContext;
+import com.soklet.McpSessionTransportAdmissionController;
+import com.soklet.McpSessionTransportAdmissionDecision;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionAuthorizer;
@@ -67,6 +72,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -1109,6 +1115,151 @@ public final class McpServerRuntimeBridge {
 				requireNonNull(lifecycleAdapter));
 	}
 
+	/** Configures the explicitly selected 2025 session views before this listener starts. */
+	public void configureLegacySessions(@NonNull Optional<com.soklet.McpSessionConfig> sessionConfig) {
+		requireNonNull(sessionConfig);
+		Map<String, Set<String>> revisionsByPath = new LinkedHashMap<>();
+		for (EndpointPlan endpointPlan : executableEndpointPlans) {
+			Set<String> revisions = endpointPlan.endpoint().getSessionProtocolVersions().stream()
+					.map(McpProtocolVersion::getWireValue).collect(java.util.stream.Collectors.toSet());
+			if (!revisions.isEmpty())
+				revisionsByPath.put(endpointPlan.endpoint().getPath(), Set.copyOf(revisions));
+		}
+		runtime.configureLegacySessions(sessionConfig, revisionsByPath,
+				identity -> sessionConfig.orElseThrow().getOwnerKeyResolver().resolve(toPublic(identity)));
+	}
+
+	/** Configures HTTP-only legacy admission and the exact offered families before startup. */
+	public void configureLegacySessionTransport(@NonNull Optional<@NonNull McpSessionConfig> sessionConfig) {
+		requireNonNull(sessionConfig);
+		Optional<McpSessionTransportAdmissionController> controller = sessionConfig
+				.flatMap(McpSessionConfig::getTransportAdmissionController);
+		Map<String, Map<String, Set<McpResourceNotificationType>>> familiesByPath = new LinkedHashMap<>();
+		Map<String, McpEndpoint> endpointsByPath = new LinkedHashMap<>();
+		for (EndpointPlan endpointPlan : this.executableEndpointPlans) {
+			McpEndpoint endpoint = endpointPlan.endpoint();
+			endpointsByPath.put(endpoint.getPath(), endpoint);
+			Map<String, Set<McpResourceNotificationType>> familiesByRevision = new LinkedHashMap<>();
+			for (McpProtocolVersion protocolVersion : endpoint.getSubscriptionProtocolVersions()) {
+				if (protocolVersion == McpProtocolVersion.V2026_07_28)
+					continue;
+				if (sessionConfig.isEmpty() || controller.isEmpty()
+						|| !endpoint.getSessionProtocolVersions().contains(protocolVersion))
+					throw new IllegalStateException(
+							"Legacy subscriptions require matching sessions and an HTTP admission controller.");
+				Set<McpResourceNotificationType> families = legacySubscriptionFamilies(endpointPlan, protocolVersion);
+				if (families.isEmpty())
+					throw new IllegalStateException(
+							"Legacy subscriptions require effective event-source notification families for each selected revision.");
+				familiesByRevision.put(protocolVersion.getWireValue(), families);
+			}
+			if (!familiesByRevision.isEmpty())
+				familiesByPath.put(endpoint.getPath(), Map.copyOf(familiesByRevision));
+		}
+		Optional<McpLegacySessionTransportAdmission> adapter = controller.map(configuredController ->
+				(request, endpointPath, revision, offeredTypes, reauthorization, deadline, cancellation) -> {
+					McpEndpoint endpoint = requireNonNull(endpointsByPath.get(endpointPath));
+					McpProtocolVersion protocolVersion = McpProtocolVersion.fromWireValue(revision)
+							.orElseThrow(() -> new IllegalArgumentException("Unsupported HTTP admission revision."));
+					Set<McpSubscriptionNotificationType> publicTypes = EnumSet.noneOf(McpSubscriptionNotificationType.class);
+					for (McpResourceNotificationType notificationType : offeredTypes)
+						publicTypes.add(toPublicNotificationType(notificationType));
+					McpSessionTransportAdmissionContext context = new DefaultSessionTransportAdmissionContext(
+							request, endpoint, protocolVersion, Set.copyOf(publicTypes), reauthorization, deadline);
+					McpInvocationFeatures features = McpInvocationFeatures.fromFeatures(Map.of(CancelationToken.class, cancellation));
+					McpSessionTransportAdmissionDecision decision = requireNonNull(configuredController.admit(context, features),
+							"The MCP HTTP admission controller returned null.");
+					if (decision instanceof McpSessionTransportAdmissionDecision.Accepted accepted) {
+						Set<McpResourceNotificationType> selectedTypes = EnumSet.noneOf(McpResourceNotificationType.class);
+						for (McpSubscriptionNotificationType notificationType : accepted.getNotificationTypes())
+							selectedTypes.add(toInternalNotificationType(notificationType));
+						return new McpLegacySessionTransportAdmission.Accepted(toInternal(accepted.getIdentity()),
+								accepted.getValidUntil(), selectedTypes);
+					}
+					McpAdmissionRejection rejection = ((McpSessionTransportAdmissionDecision.Rejected) decision).getRejection();
+					return this.runtime.validatedLegacySessionTransportRejection(rejection.getStatusCode(), rejection.getHeaders());
+				});
+		this.runtime.configureLegacySessionTransport(adapter, familiesByPath);
+	}
+
+	@NonNull
+	private static Set<@NonNull McpResourceNotificationType> legacySubscriptionFamilies(
+			@NonNull EndpointPlan endpointPlan, @NonNull McpProtocolVersion protocolVersion) {
+		McpEndpoint endpoint = endpointPlan.endpoint();
+		Set<McpResourceNotificationType> families = EnumSet.noneOf(McpResourceNotificationType.class);
+		endpoint.getSubscriptionConfig().ifPresent(config -> config.getNotificationTypes()
+				.forEach(type -> families.add(toInternalNotificationType(type))));
+		if ((families.contains(McpResourceNotificationType.RESOURCE_UPDATED)
+				|| families.contains(McpResourceNotificationType.RESOURCES_LIST_CHANGED))
+				&& !endpoint.getResourceListHandlerProtocolVersions().contains(protocolVersion)
+				&& endpoint.getResourceRegistrations().stream().noneMatch(resource ->
+						resource.getProtocolVersions().contains(protocolVersion)))
+			throw new IllegalStateException(
+					"Legacy resource notification families require a resource surface at each selected revision.");
+		endpointPlan.catalogLocalizer().ifPresent(localizer -> {
+			if (endpoint.getToolRegistrations().stream()
+					.anyMatch(tool -> tool.getProtocolVersions().contains(protocolVersion)
+							&& localizer.ownerSlotCount(McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST, tool.getName()) > 0))
+				families.add(McpResourceNotificationType.TOOLS_LIST_CHANGED);
+			if (endpoint.getPromptRegistrations().stream()
+					.anyMatch(prompt -> prompt.getProtocolVersions().contains(protocolVersion)
+							&& localizer.ownerSlotCount(McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST, prompt.getName()) > 0))
+				families.add(McpResourceNotificationType.PROMPTS_LIST_CHANGED);
+			if (endpoint.getResourceRegistrations().stream().anyMatch(resource -> {
+				if (!resource.getProtocolVersions().contains(protocolVersion))
+					return false;
+				if (resource.getAddressType() == com.soklet.McpResourceAddressType.URI)
+					return !endpoint.getResourceListHandlerProtocolVersions().contains(protocolVersion)
+							&& localizer.ownerSlotCount(McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST,
+									resource.getUri().orElseThrow().toString()) > 0;
+				return localizer.ownerSlotCount(McpRuntimeCatalogLocalizer.ResponseKind.RESOURCE_TEMPLATES_LIST,
+						resource.getUriTemplate().orElseThrow()) > 0;
+			}))
+				families.add(McpResourceNotificationType.RESOURCES_LIST_CHANGED);
+		});
+		return Set.copyOf(families);
+	}
+
+	private record DefaultSessionTransportAdmissionContext(Request request, McpEndpoint endpoint,
+			McpProtocolVersion protocolVersion, Set<McpSubscriptionNotificationType> notificationTypes,
+			boolean reauthorization, Instant deadline) implements McpSessionTransportAdmissionContext {
+		private DefaultSessionTransportAdmissionContext {
+			requireNonNull(request); requireNonNull(endpoint); requireNonNull(protocolVersion); requireNonNull(deadline);
+			notificationTypes = Set.copyOf(requireNonNull(notificationTypes));
+		}
+		@Override @NonNull public Request getRequest() { return this.request; }
+		@Override @NonNull public McpEndpoint getEndpoint() { return this.endpoint; }
+		@Override @NonNull public McpProtocolVersion getProtocolVersion() { return this.protocolVersion; }
+		@Override @NonNull public Set<@NonNull McpSubscriptionNotificationType> getNotificationTypes() { return this.notificationTypes; }
+		@Override @NonNull public Boolean isReauthorization() { return this.reauthorization; }
+		@Override @NonNull public Instant getDeadline() { return this.deadline; }
+		@Override public String toString() {
+			return "DefaultSessionTransportAdmissionContext[request=<redacted>, endpoint=<redacted>, protocolVersion="
+					+ protocolVersion.getWireValue() + ", notificationTypeCount=" + notificationTypes.size()
+					+ ", reauthorization=" + reauthorization + ", deadline=<redacted>]";
+		}
+	}
+
+	@NonNull
+	private static McpResourceNotificationType toInternalNotificationType(@NonNull McpSubscriptionNotificationType notificationType) {
+		return switch (notificationType) {
+			case RESOURCES_LIST_CHANGED -> McpResourceNotificationType.RESOURCES_LIST_CHANGED;
+			case RESOURCE_UPDATED -> McpResourceNotificationType.RESOURCE_UPDATED;
+			case TOOLS_LIST_CHANGED -> McpResourceNotificationType.TOOLS_LIST_CHANGED;
+			case PROMPTS_LIST_CHANGED -> McpResourceNotificationType.PROMPTS_LIST_CHANGED;
+		};
+	}
+
+	@NonNull
+	private static McpSubscriptionNotificationType toPublicNotificationType(@NonNull McpResourceNotificationType notificationType) {
+		return switch (notificationType) {
+			case RESOURCES_LIST_CHANGED -> McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED;
+			case RESOURCE_UPDATED -> McpSubscriptionNotificationType.RESOURCE_UPDATED;
+			case TOOLS_LIST_CHANGED -> McpSubscriptionNotificationType.TOOLS_LIST_CHANGED;
+			case PROMPTS_LIST_CHANGED -> McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED;
+		};
+	}
+
 	@NonNull
 	private static McpHttpEndpointBinding toEndpointBinding(
 			@NonNull EndpointPlan endpointPlan,
@@ -1126,22 +1277,6 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(endpointPlan);
 		requireNonNull(requestStateRuntime);
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
-		boolean appToolProjection = endpointPlan.toolPlans().stream().anyMatch(plan ->
-				plan.metadata().getMembers().get("ui") instanceof McpJsonObject ui
-						&& (ui.getMembers().containsKey("resourceUri")
-								|| ui.getMembers().containsKey("visibility")));
-		if (!appToolProjection)
-			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
-					endpointPlan.toolPlans().size(), 4, 8, "MCP tool catalog");
-		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
-				endpointPlan.promptPlans().size(), 2, 8, "MCP prompt catalog");
-		if (endpointPlan.resourceListPlan().invoker().isEmpty()) {
-			long exactResourceCount = endpointPlan.resourcePlans().stream()
-					.filter(plan -> plan.addressKind() == ResourceAddressKind.URI)
-					.count();
-			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
-					exactResourceCount, 3, 8, "MCP resource catalog");
-		}
 		McpImplementation publicInformation = publicEndpoint.getServerInfo();
 		McpImplementationMetadata implementation = new McpImplementationMetadata(
 				publicInformation.getName(), publicInformation.getVersion(),
@@ -1187,7 +1322,8 @@ public final class McpServerRuntimeBridge {
 					return toInternal(configuration);
 				});
 		Optional<McpSubscriptionEventSource> taskSubscriptionEventSource =
-				(subscriptionsEnabled ? endpointPlan.taskManagerAdapter()
+				(publicEndpoint.getSubscriptionProtocolVersions().contains(McpProtocolVersion.V2026_07_28)
+						? endpointPlan.taskManagerAdapter()
 						: Optional.<TaskManagerAdapter>empty())
 						.flatMap(TaskManagerAdapter::taskEventPublisher)
 						.map(McpServerRuntimeBridge::toInternal);
@@ -1374,7 +1510,10 @@ public final class McpServerRuntimeBridge {
 							invokeCompletion(completionPlan, invocation,
 									publicEndpoint, argumentName, argumentValue,
 									contextArguments),
-					Set.copyOf(completionPlan.argumentNames()));
+					Set.copyOf(completionPlan.argumentNames()),
+					completionPlan.protocolVersions().stream()
+							.map(McpProtocolVersion::getWireValue)
+							.collect(java.util.stream.Collectors.toUnmodifiableSet()));
 			Map<String, McpApplicationCompletionRoute> routes =
 					completionPlan.referenceType() == CompletionPlan.ReferenceType.PROMPT
 							? promptCompletionRoutes : resourceCompletionRoutes;
@@ -1384,7 +1523,11 @@ public final class McpServerRuntimeBridge {
 		}
 		McpNormalizedEndpoint endpoint = endpointBuilder.build();
 		Map<String, McpNormalizedEndpoint> revisionEndpoints =
-				revisionEndpoints(endpoint, publicEndpoint);
+				revisionEndpoints(endpoint, endpointPlan);
+		McpNormalizedEndpoint unpagedEndpoint = revisionEndpoints.get(
+				McpProtocolVersion.V2026_07_28.getWireValue());
+		if (unpagedEndpoint != null)
+			requireUnpagedCatalogCollectionsFitJsonNodeBudget(unpagedEndpoint);
 
 		McpProtocolAdmissionController protocolAdmissionController = context -> {
 			AdmissionInput input = new AdmissionInput(context.request(), publicEndpoint,
@@ -1559,6 +1702,28 @@ public final class McpServerRuntimeBridge {
 				endpointPlan.taskManagerAdapter(), revisionEndpoints);
 	}
 
+	/** Retains the existing minimum collection guard for an unpaged projection. */
+	private static void requireUnpagedCatalogCollectionsFitJsonNodeBudget(
+			@NonNull McpNormalizedEndpoint endpoint) {
+		// Counts belong to the selected unpaged projection. Paged-only owners on
+		// a mixed endpoint must not inflate the modern aggregate startup guards.
+		boolean appToolProjection = endpoint.tools().stream().anyMatch(operation ->
+				operation.toolDescriptor().map(descriptor ->
+						descriptor.metadata().members().get("ui")
+								instanceof com.soklet.internal.mcp.protocol.McpJsonObject ui
+								&& (ui.members().containsKey("resourceUri")
+										|| ui.members().containsKey("visibility")))
+						.orElse(false));
+		if (!appToolProjection)
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					endpoint.tools().size(), 4, 8, "MCP tool catalog");
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				endpoint.prompts().size(), 2, 8, "MCP prompt catalog");
+		if (!endpoint.customResourceListHandler())
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					endpoint.exactResources().size(), 3, 8, "MCP resource catalog");
+	}
+
 	/**
 	 * Builds immutable exact-revision catalog views from one shared application
 	 * router. The transport selects one view before admission or dispatch.
@@ -1566,7 +1731,8 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static Map<String, McpNormalizedEndpoint> revisionEndpoints(
 			@NonNull McpNormalizedEndpoint complete,
-			@NonNull McpEndpoint publicEndpoint) {
+			@NonNull EndpointPlan endpointPlan) {
+		McpEndpoint publicEndpoint = endpointPlan.endpoint();
 		Map<String, McpNormalizedEndpoint> views = new LinkedHashMap<>();
 		for (McpProtocolVersion version : publicEndpoint.getProtocolVersions()) {
 			if (version == McpProtocolVersion.V2025_03_26)
@@ -1662,15 +1828,22 @@ public final class McpServerRuntimeBridge {
 									.contains(version)))
 				view.customResourceListHandler();
 
-			// Completion and extensions retain their 2026-only adapters.
-			if (version == McpProtocolVersion.V2026_07_28) {
-				boolean completionSupported = prompts.stream().anyMatch(prompt ->
-						prompt.getCompletionProtocolVersions().contains(version))
-						|| resources.stream().anyMatch(resource ->
-								resource.getCompletionProtocolVersions().contains(version))
-						|| (complete.completionSupported()
+			boolean completionSupported = prompts.stream().anyMatch(prompt ->
+					prompt.getCompletionProtocolVersions().contains(version))
+					|| resources.stream().anyMatch(resource ->
+							resource.getCompletionProtocolVersions().contains(version))
+					|| (version == McpProtocolVersion.V2026_07_28
+							&& complete.completionSupported()
 							&& prompts.isEmpty() && resources.isEmpty());
-				view.completionSupported(completionSupported);
+			view.completionSupported(completionSupported);
+			if (version != McpProtocolVersion.V2026_07_28
+					&& publicEndpoint.getSubscriptionProtocolVersions().contains(version)) {
+				Set<McpResourceNotificationType> families = legacySubscriptionFamilies(endpointPlan, version);
+				if (!families.isEmpty())
+					view.subscriptionConfig(new McpNormalizedSubscriptionConfiguration(families));
+			}
+			// Extensions retain their 2026-only adapters.
+			if (version == McpProtocolVersion.V2026_07_28) {
 				if (publicEndpoint.getSubscriptionProtocolVersions().contains(version))
 					complete.subscriptionConfig().ifPresent(view::subscriptionConfig);
 				if (complete.skillsPlan().isPresent()) {
@@ -2177,13 +2350,26 @@ public final class McpServerRuntimeBridge {
 	public record CompletionPlan(@NonNull ReferenceType referenceType,
 			@NonNull String reference,
 			@NonNull List<@NonNull String> argumentNames,
+			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 			@NonNull CompletionInvoker invoker) {
 		public enum ReferenceType { PROMPT, RESOURCE }
+		public CompletionPlan(@NonNull ReferenceType referenceType,
+				@NonNull String reference,
+				@NonNull List<@NonNull String> argumentNames,
+				@NonNull CompletionInvoker invoker) {
+			this(referenceType, reference, argumentNames,
+					Set.of(McpProtocolVersion.V2026_07_28), invoker);
+		}
+
 		public CompletionPlan {
 			requireNonNull(referenceType);
 			reference = McpProtocolSupport.requireNonBlank(reference,
 					"Completion reference");
 			argumentNames = List.copyOf(requireNonNull(argumentNames));
+			protocolVersions = Set.copyOf(requireNonNull(protocolVersions));
+			if (protocolVersions.isEmpty())
+				throw new IllegalArgumentException(
+						"An MCP Completion plan must declare at least one protocol version.");
 			requireNonNull(invoker);
 		}
 
@@ -4097,11 +4283,6 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpInputRequestPlan inputRequestPlan) {
 		requireNonNull(invocation);
 		requireNonNull(inputRequestPlan);
-		// The 2025 compatibility path serves a single JSON response. A legacy
-		// progress token must not turn tools/call into an SSE response.
-		if (McpLegacyHttpWire.isLegacyRevision(
-				selectedProtocolRevision(invocation)))
-			return Optional.empty();
 		McpRequestMetadata requestMetadata = invocation.request().params().metadata();
 		Optional<McpProgressToken> progressToken = requestMetadata.progressToken();
 		if (progressToken.isEmpty()
@@ -4113,7 +4294,7 @@ public final class McpServerRuntimeBridge {
 		return Optional.of(new ProgressEmitter() {
 			@Override
 			public boolean isActive() {
-				return invocation.isActive();
+				return invocation.isActive() && invocation.isNotificationDeliveryActive();
 			}
 
 			@Override
@@ -4198,7 +4379,7 @@ public final class McpServerRuntimeBridge {
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				(McpJsonObject) toPublic(arguments),
 				invocation.cancelationToken(),
@@ -4626,7 +4807,7 @@ public final class McpServerRuntimeBridge {
 				selectedProtocolRevision(invocation), completionPlan.reference(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(requestMetadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				McpJsonObject.emptyInstance(), invocation.cancelationToken(),
 				progressEmitterFor(invocation, McpInputRequestPlan.empty()),
@@ -4689,7 +4870,7 @@ public final class McpServerRuntimeBridge {
 				uri.map(URI::toString).orElse(request.method()),
 				metadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(metadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(metadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				McpJsonObject.emptyInstance(), invocation.cancelationToken(),
 				progressEmitterFor(invocation, McpInputRequestPlan.empty()), invocation::requireHandlerEntry,
@@ -4730,7 +4911,7 @@ public final class McpServerRuntimeBridge {
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				(McpJsonObject) toPublic(arguments),
 				invocation.cancelationToken(),
@@ -4793,7 +4974,7 @@ public final class McpServerRuntimeBridge {
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				internalInvocation.uri(), internalInvocation.templateVariables(),
 				invocation.cancelationToken(),
@@ -4849,7 +5030,7 @@ public final class McpServerRuntimeBridge {
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
-				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
+				requirePublicRequestContext(invocation).getRequestMetadata(),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				internalInvocation.cursor(), registeredDescriptors,
 				invocation.cancelationToken(),
@@ -5127,7 +5308,7 @@ public final class McpServerRuntimeBridge {
 			case COMPLETED -> McpStreamTerminationReason.COMPLETED;
 			case CLIENT_DISCONNECTED ->
 					McpStreamTerminationReason.CLIENT_DISCONNECTED;
-			case APPLICATION_CANCELED ->
+			case APPLICATION_CANCELED, CLIENT_CANCELED ->
 					McpStreamTerminationReason.REQUEST_CANCELED;
 			case RESPONSE_TIMEOUT, RESPONSE_IDLE_TIMEOUT ->
 					McpStreamTerminationReason.DEADLINE_EXCEEDED;

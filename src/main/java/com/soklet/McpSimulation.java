@@ -91,6 +91,12 @@ public interface McpSimulation extends AutoCloseable {
 	 * Simulates a client disconnect if the request remains active. Closing is
 	 * idempotent, does not discard already captured values, and cannot replace an
 	 * earlier terminal winner.
+	 * <p>
+	 * For MCP 2025-06-18 and 2025-11-25, disconnecting after progress has committed
+	 * SSE detaches the response writer without canceling application work solely
+	 * for that disconnect. Finite and uncommitted requests retain disconnect
+	 * cancelation. Work retained after detachment remains subject to its request
+	 * deadline and server shutdown; later progress and results are discarded.
 	 */
 	@Override
 	void close();

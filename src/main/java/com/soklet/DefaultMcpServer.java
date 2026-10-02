@@ -186,6 +186,8 @@ final class DefaultMcpServer implements McpServer {
 	@Nullable
 	private final McpTaskManager taskManager;
 	@Nullable
+	private final McpSessionConfig sessionConfig;
+	@Nullable
 	private final McpTaskEventPublisher taskEventPublisher;
 	@Nullable
 	private final McpRateLimiter requestRateLimiter;
@@ -264,6 +266,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolResultSanitizer toolResultSanitizer,
 			@Nullable McpTaskManager taskManager,
+			@Nullable McpSessionConfig sessionConfig,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
@@ -316,6 +319,7 @@ final class DefaultMcpServer implements McpServer {
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolResultSanitizer = requireNonNull(toolResultSanitizer);
 		this.taskManager = taskManager;
+		this.sessionConfig = sessionConfig;
 		this.taskEventPublisher = taskManager == null ? null
 				: requireNonNull(taskManager.getTaskEventPublisher(),
 						"The MCP task manager returned a null task-event publisher optional.")
@@ -402,6 +406,8 @@ final class DefaultMcpServer implements McpServer {
 						this.maximumHeadersSizeInBytes,
 						this.maximumRequestTargetLengthInBytes,
 						this.concurrentConnectionLimit));
+		this.runtimeBridge.configureLegacySessions(Optional.ofNullable(this.sessionConfig));
+		this.runtimeBridge.configureLegacySessionTransport(Optional.ofNullable(this.sessionConfig));
 		this.subscriptionReconciler =
 				this.runtimeBridge::reconcileSubscriptions;
 		this.lifecycleAdapter.bindRuntime(this.runtimeBridge);
@@ -416,6 +422,68 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpApplicationExecutionObserver applicationExecutionObserver() {
 		return new McpApplicationExecutionObserver() {
+			@Override
+			@NonNull
+			public HttpRequestObservation didStartHttpRequest(@NonNull Request request) {
+				requireNonNull(request);
+				LifecycleObserver observer = lifecycleObserver;
+				MetricsCollector collector = metricsCollector;
+				List<Throwable> startThrowables = new ArrayList<>();
+				try {
+					observer.didStartRequestHandling(ServerType.HTTP, request, null);
+				} catch (Throwable throwable) {
+					startThrowables.add(throwable);
+					safelyLogRequestObservation(observer, LogEvent.with(
+							LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
+							"An exception occurred while invoking LifecycleObserver::didStartRequestHandling").build(), null);
+				}
+				try {
+					collector.didStartRequestHandling(ServerType.HTTP, request, null);
+				} catch (Throwable throwable) {
+					startThrowables.add(throwable);
+					safelyLogRequestObservation(observer, LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
+							"An exception occurred while invoking MetricsCollector::didStartRequestHandling").build(), null);
+				}
+				List<Throwable> immutableStartThrowables = List.copyOf(startThrowables);
+				AtomicBoolean finished = new AtomicBoolean();
+				return (statusCode, headers, duration, throwables) -> {
+					requireNonNull(headers); requireNonNull(duration); requireNonNull(throwables);
+					if (!finished.compareAndSet(false, true))
+						return;
+					Map<String, Set<String>> publicHeaders = new LinkedHashMap<>();
+					headers.forEach((name, values) -> publicHeaders.put(name, Set.copyOf(values)));
+					MarshaledResponse response = MarshaledResponse.withStatusCode(statusCode).headers(publicHeaders).build();
+					List<Throwable> allThrowables = new ArrayList<>(immutableStartThrowables);
+					allThrowables.addAll(throwables);
+					List<Throwable> immutableThrowables = List.copyOf(allThrowables);
+					try {
+						collector.didFinishRequestHandling(ServerType.HTTP, request, null, response, duration, immutableThrowables);
+					} catch (Throwable throwable) {
+						safelyLogRequestObservation(observer, LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
+								"An exception occurred while invoking MetricsCollector::didFinishRequestHandling").build(), null);
+					}
+					try {
+						observer.didFinishRequestHandling(ServerType.HTTP, request, null, response, duration, immutableThrowables);
+					} catch (Throwable throwable) {
+						safelyLogRequestObservation(observer, LogEvent.with(
+								LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
+								"An exception occurred while invoking LifecycleObserver::didFinishRequestHandling").build(), null);
+					}
+				};
+			}
+
+			@Override
+			public void recordSubscriptionOpened(@NonNull String endpointPath) {
+				mcpMetricEventDelivery.record(McpMetricsEvent.subscriptionOpened(requireNonNull(endpointPath)));
+			}
+
+			@Override
+			public void recordSubscriptionClosed(@NonNull String endpointPath,
+					@NonNull McpStreamTerminationReason reason, @NonNull Duration duration) {
+				mcpMetricEventDelivery.record(McpMetricsEvent.subscriptionClosed(
+						requireNonNull(endpointPath), requireNonNull(reason), requireNonNull(duration)));
+			}
+
 			@Override
 			public void beginDeferral() {
 				mcpMetricEventDelivery.beginDeferral();
@@ -629,11 +697,18 @@ final class DefaultMcpServer implements McpServer {
 		if (subscriptionAuthorizerExplicitlyConfigured)
 			return;
 		boolean endpointSubscriptions = requireNonNull(endpointPlans).stream()
-				.anyMatch(endpointPlan -> !endpointPlan.endpoint()
-						.getSubscriptionProtocolVersions().isEmpty()
-						&& (endpointPlan.endpoint().getSubscriptionConfig().isPresent()
-								|| endpointPlan.catalogLocalizer().isPresent()
-								|| taskEventPublisher != null));
+				.anyMatch(endpointPlan -> {
+					McpEndpoint endpoint = endpointPlan.endpoint();
+					boolean modernSubscriptions = endpoint.getSubscriptionProtocolVersions()
+							.contains(McpProtocolVersion.V2026_07_28);
+					if (modernSubscriptions && (endpoint.getSubscriptionConfig().isPresent()
+							|| endpointPlan.catalogLocalizer().isPresent() || taskEventPublisher != null))
+						return true;
+					return !endpoint.getSubscriptionProtocolVersions().isEmpty()
+							&& endpoint.getSubscriptionConfig()
+									.map(config -> config.getNotificationTypes().contains(
+											McpSubscriptionNotificationType.RESOURCE_UPDATED)).orElse(false);
+				});
 		if (endpointSubscriptions)
 			throw new IllegalStateException(
 					"An MCP subscription authorizer must be explicitly configured when subscription support is enabled.");
@@ -658,6 +733,7 @@ final class DefaultMcpServer implements McpServer {
 				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.PROMPT,
 					prompt.getName(), prompt.getArguments().stream()
 							.map(McpPromptArgumentDeclaration::getName).toList(),
+					prompt.getCompletionProtocolVersions(),
 					invocation -> invokeCompletion(prompt, invocation)));
 		for (McpResourceRegistration resource : endpoint.getResourceRegistrations())
 			if (resource.getAddressType() == McpResourceAddressType.URI_TEMPLATE
@@ -665,6 +741,7 @@ final class DefaultMcpServer implements McpServer {
 				completionPlans.add(new CompletionPlan(CompletionPlan.ReferenceType.RESOURCE,
 					resource.getUriTemplate().orElseThrow(),
 					resourceTemplateVariableNames(resource.getUriTemplate().orElseThrow()),
+					resource.getCompletionProtocolVersions(),
 					invocation -> invokeCompletion(resource, invocation)));
 		Map<McpProtocolVersion, List<McpResourceDescriptor>> registeredResourceDescriptorsByVersion = new LinkedHashMap<>();
 		for (McpProtocolVersion protocolVersion : endpoint.getProtocolVersions())
@@ -1093,6 +1170,26 @@ final class DefaultMcpServer implements McpServer {
 			}
 
 			@Override
+			public int maximumPageSlotCount() {
+				return configuredLocalizer.getMaximumLocalizableTextCountPerResponse();
+			}
+
+			@Override
+			public int ownerSlotCount(
+					McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind,
+					@NonNull String ownerId) {
+				return resolved.response(toPlanResponseKind(responseKind))
+						.map(response -> response.ownerSlotCount(ownerId)).orElse(0);
+			}
+
+			@Override
+			public McpRuntimeCatalogLocalizer.@NonNull PageSession openPage(
+					McpRuntimeCatalogLocalizer.@NonNull Input seed) {
+				return DefaultMcpServer.this.openCatalogPage(configuredLocalizer,
+						resolved, seed);
+			}
+
+			@Override
 			@NonNull
 			public Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
 					localizedResponseKinds() {
@@ -1231,6 +1328,163 @@ final class DefaultMcpServer implements McpServer {
 			case FAIL_REQUEST -> new McpRuntimeCatalogLocalizer.Outcome(
 					McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
 					input.canonicalDocument(), Optional.empty(), true);
+			// Only the paging renderer returns this disposition.
+			case TOO_LARGE -> new McpRuntimeCatalogLocalizer.Outcome(
+					McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
+					input.canonicalDocument(), Optional.empty(), true);
+		};
+	}
+
+	/**
+	 * Captures one context and a bounded result cache for all shrinking attempts
+	 * at this page. The transport validates the cursor against the selected
+	 * locale before rendering, and never asks the application to recreate that
+	 * context or repeat a lookup during a retry.
+	 */
+	private McpRuntimeCatalogLocalizer.@NonNull PageSession openCatalogPage(
+			@NonNull McpLocalizer configuredLocalizer,
+			McpCanonicalLocalizationPlan.@NonNull EndpointPlan endpointPlan,
+			McpRuntimeCatalogLocalizer.@NonNull Input seed) {
+		Optional<McpCanonicalLocalizationPlan.ResponsePlan> responsePlan =
+				endpointPlan.response(toPlanResponseKind(seed.responseKind()));
+		if (responsePlan.isEmpty() || seed.terminalBoundary().getAsBoolean()) {
+			return new McpRuntimeCatalogLocalizer.PageSession() {
+				@Override
+				public @NonNull Optional<@NonNull String> negotiatedLocale() {
+					return Optional.empty();
+				}
+
+				@Override
+				public McpRuntimeCatalogLocalizer.@NonNull Outcome localize(
+						McpRuntimeCatalogLocalizer.@NonNull Input input) {
+					return McpRuntimeCatalogLocalizer.Outcome.canonical(
+							input.canonicalDocument());
+				}
+			};
+		}
+
+		McpLocalizationContext context;
+		try {
+			if (seed.localizationContext().isPresent()) {
+				context = seed.localizationContext().orElseThrow();
+			} else {
+				context = requireNonNull(configuredLocalizer.getContextProvider().provideContext(
+							new DefaultMcpLocalizationRequest(seed.requestContext(),
+									McpLocaleSupport.boundedLanguageRanges(seed.acceptLanguageValues()),
+									null, seed.resourceListCursor().isEmpty() ? null
+											: seed.resourceListCursor().get(0),
+									configuredLocalizer.getFallbackLocale())),
+							"The MCP localization context provider returned null.");
+			}
+		} catch (Throwable exception) {
+			if (exception instanceof InterruptedException)
+				Thread.currentThread().interrupt();
+			return failedCatalogPage(configuredLocalizer);
+		}
+		if (seed.terminalBoundary().getAsBoolean())
+			return failedCatalogPage(configuredLocalizer);
+
+		Map<McpLocalizableText, McpLocalizationResult> cachedResults = new LinkedHashMap<>();
+		int maximumLookups = configuredLocalizer.getMaximumLocalizableTextCountPerResponse();
+		int[] distinctLookupCount = {0};
+		McpLocalizationContext cachedContext = McpLocalizationContext
+				.withLocale(context.getLocale(), text -> {
+					synchronized (cachedResults) {
+						McpLocalizationResult cached = cachedResults.get(text);
+						if (cached != null)
+							return cached;
+						if (distinctLookupCount[0] >= maximumLookups)
+							return McpLocalizationResult.failure();
+						++distinctLookupCount[0];
+						McpLocalizationResult result;
+						try {
+							result = context.localize(text);
+							if (result instanceof McpLocalizationResult.Localized localized) {
+								String replacement = localized.getText();
+								// Do not retain malformed or individually over-limit
+								// application strings in the response's retry cache.
+								if (replacement.length() > seed.maximumReplacementCharacters()
+										|| McpLocalizationByteAccounting.serializedTokenCharacters(replacement)
+												> seed.maximumReplacementCharacters())
+									result = McpLocalizationResult.failure();
+							}
+						} catch (Throwable exception) {
+							if (exception instanceof InterruptedException)
+								Thread.currentThread().interrupt();
+							result = McpLocalizationResult.failure();
+						}
+						cachedResults.put(text, result);
+						return result;
+					}
+				}).revision(context.getRevision().orElse(null)).build();
+		Optional<String> negotiatedLocale = contentLanguageTag(context.getLocale());
+		McpCanonicalLocalizationPlan.ResponsePlan resolvedPlan = responsePlan.orElseThrow();
+		return new McpRuntimeCatalogLocalizer.PageSession() {
+			@Override
+			public @NonNull Optional<@NonNull String> negotiatedLocale() {
+				return negotiatedLocale;
+			}
+
+			@Override
+			public McpRuntimeCatalogLocalizer.@NonNull Outcome localize(
+					McpRuntimeCatalogLocalizer.@NonNull Input input) {
+				List<McpCanonicalLocalizationPlan.Slot> slots;
+				try {
+					slots = resolvedPlan.resolveSlots(input.canonicalDocument());
+				} catch (RuntimeException exception) {
+					return localizationFailure(configuredLocalizer, input);
+				}
+				if (slots.size() > maximumLookups)
+					return new McpRuntimeCatalogLocalizer.Outcome(
+							McpRuntimeCatalogLocalizer.Disposition.RESIZE_PAGE,
+							input.canonicalDocument(), negotiatedLocale);
+				Set<McpLocalizableText> retainedTexts = slots.stream()
+						.map(McpCanonicalLocalizationPlan.Slot::text)
+						.collect(java.util.stream.Collectors.toSet());
+				synchronized (cachedResults) {
+					// Retries strictly shrink the selected canonical-key prefix.
+					// A dropped owner cannot return, so its translated payload is
+					// released without resetting the response-wide lookup count.
+					cachedResults.keySet().retainAll(retainedTexts);
+				}
+				if (slots.isEmpty())
+					return McpRuntimeCatalogLocalizer.Outcome.canonical(input.canonicalDocument());
+				McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.renderPage(
+						input.canonicalDocument(), input.canonicalEncodedBytes(), input.envelopeBytes(),
+						input.maximumResponseBytes(), input.maximumReplacementCharacters(), slots,
+						cachedContext, configuredLocalizer.getFailurePolicy(),
+						() -> input.terminalBoundary().getAsBoolean(),
+						document -> input.encodedLength().applyAsLong(document));
+				return switch (outcome.disposition()) {
+					case LOCALIZED -> new McpRuntimeCatalogLocalizer.Outcome(
+							McpRuntimeCatalogLocalizer.Disposition.LOCALIZED,
+							outcome.document(), contentLanguageTag(outcome.selectedLocale()));
+					case CANONICAL -> new McpRuntimeCatalogLocalizer.Outcome(
+							McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
+							input.canonicalDocument(), contentLanguageTag(outcome.selectedLocale()));
+					case DEFAULT_TEXT, FAIL_REQUEST -> localizationFailure(configuredLocalizer, input);
+					case TOO_LARGE -> new McpRuntimeCatalogLocalizer.Outcome(
+							McpRuntimeCatalogLocalizer.Disposition.RESIZE_PAGE,
+							input.canonicalDocument(), negotiatedLocale);
+				};
+			}
+		};
+	}
+
+	private static McpRuntimeCatalogLocalizer.@NonNull PageSession failedCatalogPage(
+			@NonNull McpLocalizer configuredLocalizer) {
+		return new McpRuntimeCatalogLocalizer.PageSession() {
+			@Override
+			public @NonNull Optional<@NonNull String> negotiatedLocale() {
+				return configuredLocalizer.getFailurePolicy() == McpLocalizationFailurePolicy.USE_DEFAULT_TEXT
+						? contentLanguageTag(configuredLocalizer.getFallbackLocale()) : Optional.empty();
+			}
+
+			@Override
+			public McpRuntimeCatalogLocalizer.@NonNull Outcome localize(
+					McpRuntimeCatalogLocalizer.@NonNull Input input) {
+				return localizationFailure(configuredLocalizer, input);
+			}
 		};
 	}
 
@@ -1393,7 +1647,11 @@ final class DefaultMcpServer implements McpServer {
 						DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
 			if (!this.admissionControllerExplicitlyConfigured)
 				safelyLogStartupDiagnostic(
-						OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC);
+						OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC
+								+ (this.sessionConfig == null ? "" :
+								this.sessionConfig.isAnonymousSessionsAllowed()
+										? " Anonymous legacy sessions share a bounded owner pool; configure admission and a stable owner key for production."
+										: " Legacy sessions require authenticated admission; configure an admission controller and a stable session owner key."));
 			provisionalServerStarted = this.mcpMetricEventDelivery.record(
 					McpMetricsEvent.serverStarted());
 			this.runtimeBridge.start(requireNonNull(lifecycleGeneration));
@@ -1505,6 +1763,12 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	public Optional<@NonNull McpTaskManager> getTaskManager() {
 		return Optional.ofNullable(this.taskManager);
+	}
+
+	@Override
+	@NonNull
+	public Optional<@NonNull McpSessionConfig> getSessionConfig() {
+		return Optional.ofNullable(this.sessionConfig);
 	}
 
 	@Override
@@ -3016,30 +3280,42 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpEndpoint endpoint,
 			boolean validateToolAndPromptCatalogs) {
 		requireNonNull(endpoint);
+		// Static catalogs for the two supported 2025 revisions are paged. The
+		// unpaged revision must still fail fast, using only its own descriptors
+		// rather than a union that includes registrations on paged revisions.
+		McpProtocolVersion unpagedVersion = McpProtocolVersion.V2026_07_28;
+		if (!endpoint.getProtocolVersions().contains(unpagedVersion))
+			return;
 		if (validateToolAndPromptCatalogs) {
 			// Apps visibility and fallback metadata depend on the current request;
 			// the runtime bounds that exact projection, not the configured superset.
-			boolean appsProjection = endpoint.getToolRegistrations().stream().anyMatch(tool ->
-					McpAppMetadataSupport.effectiveToolMetadata(tool.getMetadata(),
+			boolean appsProjection = endpoint.getToolRegistrations().stream()
+					.filter(tool -> tool.getProtocolVersions().contains(unpagedVersion))
+					.anyMatch(tool -> McpAppMetadataSupport.effectiveToolMetadata(tool.getMetadata(),
 							tool.getAppToolMetadata().orElse(null)).isPresent());
 			if (!appsProjection) {
 				JsonNodeBudget toolBudget = new JsonNodeBudget(
 						"MCP tool catalog", 8L);
 				for (McpToolRegistration<?> tool : endpoint.getToolRegistrations())
-					addToolCatalogNodes(toolBudget, tool);
+					if (tool.getProtocolVersions().contains(unpagedVersion))
+						addToolCatalogNodes(toolBudget, tool);
 			}
 
 			JsonNodeBudget promptBudget = new JsonNodeBudget(
 					"MCP prompt catalog", 8L);
 			for (McpPromptRegistration prompt : endpoint.getPromptRegistrations())
-				addPromptCatalogNodes(promptBudget, prompt);
+				if (prompt.getProtocolVersions().contains(unpagedVersion))
+					addPromptCatalogNodes(promptBudget, prompt);
 		}
 
 		JsonNodeBudget templateResourceBudget = new JsonNodeBudget(
 				"MCP resource-template catalog", 8L);
-		JsonNodeBudget exactResourceBudget = endpoint.getResourceListHandler()
-				.isEmpty() ? new JsonNodeBudget("MCP resource catalog", 8L) : null;
+		JsonNodeBudget exactResourceBudget = endpoint.getResourceListHandlerProtocolVersions()
+				.contains(unpagedVersion) ? null
+				: new JsonNodeBudget("MCP resource catalog", 8L);
 		for (McpResourceRegistration resource : endpoint.getResourceRegistrations()) {
+			if (!resource.getProtocolVersions().contains(unpagedVersion))
+				continue;
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				if (exactResourceBudget != null)
 					addResourceCatalogNodes(exactResourceBudget, resource);

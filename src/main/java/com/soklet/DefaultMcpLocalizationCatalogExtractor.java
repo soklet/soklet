@@ -22,6 +22,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static java.util.Objects.requireNonNull;
@@ -67,8 +69,8 @@ final class DefaultMcpLocalizationCatalogExtractor {
 
 	/**
 	 * Builds plans while optionally deferring the tool/prompt response bound to
-	 * the exact caller-visible projection. Other response kinds remain static
-	 * and are always validated during construction.
+	 * the exact caller-visible projection. Legacy catalogs use page-local bounds;
+	 * a modern catalog still validates its complete eligible response at startup.
 	 */
 	@NonNull
 	static McpCanonicalLocalizationPlan plan(
@@ -114,7 +116,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 					McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY,
 					discovery, maximumLocalizableTextCountPerResponse);
 
-			addResponse(responses,
+			addCatalogResponse(endpoint, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST,
 					toolSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
@@ -123,19 +125,19 @@ final class DefaultMcpLocalizationCatalogExtractor {
 									McpAppMetadataSupport.effectiveToolMetadata(
 											tool.getMetadata(), tool.getAppToolMetadata()
 													.orElse(null)).isPresent()));
-			addResponse(responses,
+			addCatalogResponse(endpoint, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST,
 					promptSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
 					deferCallerAwareCatalogResponseBounds);
-			addResponse(responses,
+			addCatalogResponse(endpoint, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST,
 					exactResourceSlots(endpoint, catalog),
-					maximumLocalizableTextCountPerResponse);
-			addResponse(responses,
+					maximumLocalizableTextCountPerResponse, false);
+			addCatalogResponse(endpoint, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.RESOURCE_TEMPLATES_LIST,
 					resourceTemplateSlots(endpoint, catalog),
-					maximumLocalizableTextCountPerResponse);
+					maximumLocalizableTextCountPerResponse, false);
 
 			if (endpoint.getSubscriptionConfig().isPresent()) {
 				List<McpCanonicalLocalizationPlan.Slot> terminal =
@@ -150,6 +152,57 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		}
 
 		return new McpCanonicalLocalizationPlan(catalog.texts(), endpointPlans);
+	}
+
+	/** Retains all slots, but applies the aggregate guard only to the modern view. */
+	private static void addCatalogResponse(@NonNull McpEndpoint endpoint,
+			@NonNull List<McpCanonicalLocalizationPlan.ResponsePlan> responses,
+			McpCanonicalLocalizationPlan.ResponseKind kind,
+			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			int maximumLocalizableTextCountPerResponse,
+			boolean deferCallerProjectionBound) {
+		if (slots.isEmpty())
+			return;
+		int modernSlotCount = 0;
+		if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2026_07_28)) {
+			Set<String> modernOwners = new HashSet<>();
+			switch (kind) {
+				case TOOLS_LIST -> endpoint.getToolRegistrations().stream()
+						.filter(tool -> tool.getProtocolVersions().contains(
+								McpProtocolVersion.V2026_07_28))
+						.forEach(tool -> modernOwners.add(tool.getName()));
+				case PROMPTS_LIST -> endpoint.getPromptRegistrations().stream()
+						.filter(prompt -> prompt.getProtocolVersions().contains(
+								McpProtocolVersion.V2026_07_28))
+						.forEach(prompt -> modernOwners.add(prompt.getName()));
+				case RESOURCES_LIST, RESOURCE_TEMPLATES_LIST ->
+						endpoint.getResourceRegistrations().stream()
+							.filter(resource -> resource.getProtocolVersions().contains(
+										McpProtocolVersion.V2026_07_28))
+							.filter(resource -> kind != McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST
+									|| !endpoint.getResourceListHandlerProtocolVersions().contains(
+											McpProtocolVersion.V2026_07_28))
+								.forEach(resource -> {
+									if (kind == McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST)
+										resource.getUri().ifPresent(uri -> modernOwners.add(uri.toString()));
+									else
+										resource.getUriTemplate().ifPresent(modernOwners::add);
+								});
+				default -> throw new IllegalArgumentException(
+						"Only MCP list catalogs have page-local localization bounds.");
+			}
+			for (McpCanonicalLocalizationPlan.Slot slot : slots)
+				if (modernOwners.contains(slot.ownerId()))
+					++modernSlotCount;
+		}
+		if (!deferCallerProjectionBound
+				&& modernSlotCount > maximumLocalizableTextCountPerResponse)
+			throw new IllegalStateException(
+					"A canonical MCP localization response plan exceeds the configured "
+							+ "callback limit (kind=" + kind + ", count="
+							+ modernSlotCount + ", limit="
+							+ maximumLocalizableTextCountPerResponse + ").");
+		responses.add(new McpCanonicalLocalizationPlan.ResponsePlan(kind, slots));
 	}
 
 	private static void addResponse(
@@ -298,14 +351,15 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	private static List<McpCanonicalLocalizationPlan.Slot>
 			exactResourceSlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
-		// A custom resources/list handler owns every descriptor in its page. Its
-		// registered exact-resource helper snapshot intentionally stays canonical.
-		if (endpoint.getResourceListHandler().isPresent())
-			return List.of();
+		// A custom resources/list handler owns its descriptors and cursors. Keep
+		// static slots only for resources published statically by another revision.
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		int exactIndex = 0;
 		for (McpResourceRegistration resource : endpoint.getResourceRegistrations()) {
 			if (resource.getAddressType() != McpResourceAddressType.URI)
+				continue;
+			if (resource.getProtocolVersions().stream().allMatch(version ->
+					endpoint.getResourceListHandlerProtocolVersions().contains(version)))
 				continue;
 			String subject = resource.getUri().orElseThrow().toString();
 			String target = McpLocalizationSchemaWalker.childPointer(

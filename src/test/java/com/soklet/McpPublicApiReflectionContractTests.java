@@ -86,14 +86,14 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PHASE_FOUR_TYPE_COUNT = 169;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
 	private static final int PHASE_SIX_TYPE_COUNT = 67;
-	private static final int PROVISIONAL_TYPE_COUNT = 14;
-	private static final int CURRENT_MCP_TYPE_COUNT = 295;
+	private static final int PROVISIONAL_TYPE_COUNT = 22;
+	private static final int CURRENT_MCP_TYPE_COUNT = 303;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"a6b33a86b5db5d0e5fe9bb66eccac7c1e0b88876ae64cac990f0454953d2a276";
+			"114850fa519f4147da79a5197d5f43ea841e5069b4ff468b8ff8358b4d5a4ce6";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"c5583ef492ffb4b8305bb7d6e590821b27361e0dbe0a7d11c9e39e74dbbdc29b";
+			"d01b32d03135ec2ac075723f6327fc7ebad0145cb71a24727cdb2fe82066b4dc";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -160,6 +160,7 @@ public class McpPublicApiReflectionContractTests {
 							"SERVER_DISCOVER", "TOOLS_LIST", "TOOLS_CALL",
 							"PROMPTS_LIST", "PROMPTS_GET", "RESOURCES_LIST",
 							"RESOURCES_TEMPLATES_LIST", "RESOURCES_READ",
+							"RESOURCES_SUBSCRIBE", "RESOURCES_UNSUBSCRIBE",
 							"SKILLS_LIST", "SKILLS_GET",
 							"COMPLETION_COMPLETE",
 							"SUBSCRIPTIONS_LISTEN", "TASKS_GET", "TASKS_UPDATE",
@@ -813,7 +814,7 @@ public class McpPublicApiReflectionContractTests {
 						"subscriptionCatalogProjectionTimeout",
 						"taskManager", "toolResultSanitizer", "toolRateLimiter",
 						"traceCorrelationKey", "unknownMirroredHeaderNameDiagnostics",
-						"unknownMirroredHeaderPolicy", "writeTimeout"),
+						"unknownMirroredHeaderPolicy", "writeTimeout", "sessionConfig"),
 				McpInMemoryTaskManager.Builder.class, Set.of(
 						"maximumRetainedTasks", "pollInterval", "taskTimeToLive"),
 				McpTask.Builder.class, Set.of(
@@ -847,6 +848,11 @@ public class McpPublicApiReflectionContractTests {
 				McpSubscriptionAuthorization.Allowed.Builder.class,
 				Set.of("applicationContext"));
 		expectedNullableBuilderMethods.put(McpIcon.Builder.class, Set.of("sizes"));
+		expectedNullableBuilderMethods.put(McpSessionConfig.Builder.class, Set.of(
+				"maximumSessions", "maximumSessionsPerOwner",
+				"maximumSessionIdleDuration", "maximumSessionDuration",
+				"maximumClientMetadataSizeInBytes", "anonymousSessionsAllowed",
+				"transportAdmissionController"));
 		expectedNullableBuilderMethods.put(McpToolOutput.Builder.class, Set.of("content"));
 		expectedNullableBuilderMethods.put(McpPromptOutput.Builder.class, Set.of("messages"));
 		expectedNullableBuilderMethods.put(McpResourcePage.Builder.class,

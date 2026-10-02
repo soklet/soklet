@@ -399,7 +399,9 @@ public final class McpPromptRegistration {
 
 		/**
 		 * Configures the handler for partial prompt-argument suggestions.
-		 * Repeated calls replace the previous handler.
+		 * Completion is supported for MCP 2025-06-18, 2025-11-25, and
+		 * 2026-07-28. Repeated calls replace the previous handler and revision
+		 * selection.
 		 *
 		 * @param completionHandler non-null argument completer
 		 * @param protocolVersions nonempty subset of this prompt's revisions

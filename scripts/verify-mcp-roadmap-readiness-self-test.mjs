@@ -27,6 +27,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = mkdtempSync(join(tmpdir(), 'soklet-roadmap-readiness-'));
 const fixture = join(temporary, 'candidate');
 const MUTABLE_PATHS = [
+  'release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md',
   'conformance/soklet-4.0-planning-authority.json',
   'conformance/roadmap-readiness-deferred-features.json',
   'conformance/MCP_ROADMAP_READINESS_POLICY.md',
@@ -179,9 +180,9 @@ try {
   const result = verifyCandidateRoot(fixture);
   assert.deepEqual(snapshotTree(fixture), initialSnapshot,
     'A clean roadmap verification must not mutate candidate or signature bytes/metadata.');
-  assert.equal(result.negativeInventoryCount, 14);
+  assert.equal(result.negativeInventoryCount, 15);
   assert.equal(result.deferredFeatureCount, 16);
-  assert.equal(result.opennessValidatorCount, 42);
+  assert.equal(result.opennessValidatorCount, 46);
   assert.equal(result.activeTextRuleCount, 22);
 
   expectRejected('planning-authority JSON must be canonical', () => {
@@ -201,6 +202,29 @@ try {
       value.approvedDecisionIds.reverse();
     });
   }, /Approved decision IDs/u);
+
+  expectRejected('approved scope amendment pin drift must fail', () => {
+    mutateJson('conformance/soklet-4.0-planning-authority.json', (value) => {
+      value.scopeAmendments[0].sha256 = '0'.repeat(64);
+    });
+  }, /Approved scope amendments/u);
+
+  expectRejected('approved scope amendment source drift must fail', () => {
+    writeFileSync(fixturePath('release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md'),
+      '\nunapproved scope change\n', { flag: 'a' });
+  }, /scope amendment bytes drifted/u);
+
+  expectRejected('an unrelated exclusion cannot become planned', () => {
+    mutateJson('conformance/roadmap-readiness-deferred-features.json', (value) => {
+      value.negativeInventory[2].status = 'PLANNED_IN_4_0_0';
+    });
+  }, /NI-03.status must be ABSENT_IN_4_0_0/u);
+
+  expectRejected('planned expansion cannot become implementation evidence', () => {
+    mutateJson('conformance/roadmap-readiness-deferred-features.json', (value) => {
+      value.negativeInventory[14].status = 'IMPLEMENTED_IN_4_0_0';
+    });
+  }, /NI-15.status must be PLANNED_IN_4_0_0/u);
 
   expectRejected('roadmap snapshot digest drift must fail', () => {
     mutateJson('conformance/roadmap-readiness-deferred-features.json', (value) => {
@@ -461,6 +485,19 @@ try {
             if (type.schemaName.equals(name)) return Optional.of(type);
           }
           return Optional.empty();
+        }
+      }
+    `, 'OPEN-MATCH-003'],
+    ['configured URL HTTP method allowlist', `
+      package com.soklet.internal.mcp.protocol;
+      import java.util.Optional;
+      import java.util.Set;
+      final class McpOpennessSelfTestFixture {
+        boolean validate(Object endpoint, Optional<Object> requestedMethod,
+            Set<Object> allowedMethods) {
+          Set<Object> configuredMethods = legacyHttpMethods(endpoint, null);
+          if (!configuredMethods.contains(requestedMethod.orElseThrow())) return false;
+          return configuredMethods.containsAll(allowedMethods);
         }
       }
     `, 'OPEN-MATCH-003'],

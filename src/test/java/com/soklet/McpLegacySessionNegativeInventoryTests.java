@@ -30,7 +30,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Negative source and frozen-API inventory for legacy MCP session semantics.
+ * Negative source and reviewed-API inventory preserving modern statelessness,
+ * replay absence, and the exact provisional minimum 2025 session surface.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -45,7 +46,13 @@ public class McpLegacySessionNegativeInventoryTests {
 	private static final List<Path> REVIEWED_API_SIGNATURES = List.of(
 			Path.of("api/mcp/phase-4.signatures.jsonl"),
 			Path.of("api/mcp/phase-5.signatures.jsonl"),
-			Path.of("api/mcp/phase-6.signatures.jsonl"));
+			Path.of("api/mcp/phase-6.signatures.jsonl"),
+			Path.of("api/mcp/provisional.signatures.jsonl"));
+	private static final Path MODERN_PROFILE_SOURCE = INTERNAL_MCP_SOURCE_ROOT
+			.resolve("protocol/Mcp20260728ProtocolProfile.java");
+	private static final Pattern REPLAY_STATE_IDENTIFIER = Pattern.compile(
+			"\\b[A-Za-z0-9_]*(?:last_?event_?id|replay)[A-Za-z0-9_]*\\b",
+			Pattern.CASE_INSENSITIVE);
 	private static final Pattern LEGACY_STATE_IDENTIFIER = Pattern.compile(
 			"\\b[A-Za-z0-9_]*(?:mcp_?session"
 					+ "|session_?(?:id|store|state|cache|registry|map|table|cursor"
@@ -61,7 +68,9 @@ public class McpLegacySessionNegativeInventoryTests {
 				"MCP production source inventory must not be empty.");
 		for (Path sourcePath : sourcePaths) {
 			String source = Files.readString(sourcePath, StandardCharsets.UTF_8);
-			assertNoLegacyStateIdentifier(sourcePath, source);
+			assertNoReplayStateIdentifier(sourcePath, source);
+			if (sourcePath.equals(MODERN_PROFILE_SOURCE))
+				assertNoLegacyStateIdentifier(sourcePath, source);
 			if (!sourcePath.equals(HTTP_RUNTIME_SOURCE)) {
 				String lowerSource = source.toLowerCase(Locale.ROOT);
 				Assertions.assertFalse(lowerSource.contains("mcp-session-id"),
@@ -75,7 +84,15 @@ public class McpLegacySessionNegativeInventoryTests {
 
 		for (Path signatures : REVIEWED_API_SIGNATURES) {
 			String api = Files.readString(signatures, StandardCharsets.UTF_8);
-			assertNoLegacyStateIdentifier(signatures, api);
+			// Only the exact configuration and HTTP admission identifiers are approved.
+			// "SessionIdle" otherwise matches the conservative session-ID spelling.
+			// Wire IDs, shared stores, replay contexts, and ID generators remain excluded.
+			assertNoLegacyStateIdentifier(signatures, api.replaceAll(
+					"\\b(?:McpSessionConfig|McpSessionOwnerKeyResolver"
+							+ "|McpSessionTransportAdmissionContext|McpSessionTransportAdmissionController"
+							+ "|McpSessionTransportAdmissionDecision"
+							+ "|getMaximumSessionIdleDuration|maximumSessionIdleDuration)\\b",
+					"Reviewed2025Configuration"));
 			String lowerApi = api.toLowerCase(Locale.ROOT);
 			Assertions.assertFalse(lowerApi.contains("mcp-session-id"),
 					() -> "Reviewed API exposes the legacy session header: " + signatures);
@@ -85,14 +102,24 @@ public class McpLegacySessionNegativeInventoryTests {
 	}
 
 	@Test
-	public void legacyHeaderNamesExistOnlyInTheSharedPolicyOutputDenylist()
+	public void legacyHeadersRemainPolicyForbiddenWithFrameworkOnlySessionPublication()
 			throws Exception {
 		String runtime = Files.readString(HTTP_RUNTIME_SOURCE, StandardCharsets.UTF_8);
 		String lowerRuntime = runtime.toLowerCase(Locale.ROOT);
-		Assertions.assertEquals(1, occurrences(lowerRuntime, "\"mcp-session-id\""),
-				"The legacy session header may exist only as a denylist literal.");
-		Assertions.assertEquals(1, occurrences(lowerRuntime, "\"last-event-id\""),
-				"The legacy replay header may exist only as a denylist literal.");
+		Assertions.assertEquals(2, occurrences(lowerRuntime, "\"mcp-session-id\""),
+				"Only the policy denylist and framework-owned session header constant are approved.");
+		Assertions.assertTrue(runtime.contains(
+				"private static final String MCP_SESSION_ID = \"Mcp-Session-Id\""),
+				"The session header must remain an internal framework constant.");
+		Assertions.assertEquals(2, occurrences(lowerRuntime, "\"last-event-id\""),
+				"Only the policy denylist and ignored configured-GET preflight input are approved.");
+		String preflightHeaders = slice(runtime,
+				"private Set<@NonNull String> mcpPreflightRequestHeaders(",
+				"private CorsAuthorization authorizeCors(");
+		Assertions.assertTrue(preflightHeaders.contains(
+				"if (legacyHttpMethods(endpointRuntime, null).contains(HttpMethod.GET))\n"
+						+ "\t\t\theaders.add(\"Last-Event-ID\");"),
+				"Ignored event-header input must remain restricted to a configured legacy GET facility.");
 
 		String denylist = slice(runtime,
 				"FORBIDDEN_LEGACY_MCP_POLICY_HEADERS", "MCP_HTTP_METHODS");
@@ -121,6 +148,12 @@ public class McpLegacySessionNegativeInventoryTests {
 					.sorted()
 					.toList();
 		}
+	}
+
+	private static void assertNoReplayStateIdentifier(Path path, String source) {
+		Matcher matcher = REPLAY_STATE_IDENTIFIER.matcher(source);
+		Assertions.assertFalse(matcher.find(), () -> "Replay state identifier '"
+				+ matcher.group() + "' found in " + path);
 	}
 
 	private static void assertNoLegacyStateIdentifier(Path path, String source) {

@@ -47,7 +47,7 @@ helper and narrowing the SSE initializer to synchronous catch-up, that
 checkpoint's ledger contained 702 records and had SHA-256
 `0c997ec0c53f3891126ddd2a7e8eaf8d9d82c68722f5689c64eb72beee08e427`.
 The [2026-09-24 bounded MCP-G2 review](mcp-g2-bounded-refreeze-2026-09-24.md)
-reconciles the exact current incompatibility set to 707 records, SHA-256
+reconciled the then-current incompatibility set to 707 records, SHA-256
 `24bbed473a6c4d9807cfce776a7353ffc3c99fd052d342fec5914355e1220808`.
 That review accepted the N0, P1b, and P2 differences. The subsequent
 [Skills review](../../release/mcp-qualification-2026-09-25/REVIEW.md) and
@@ -62,7 +62,7 @@ The 2026-09-26 subscription admission amendment adds six methods to
 the four selected notification-family flags, the task-ID-presence flag, and
 the deduplicated requested task IDs. Together with the existing requested
 resource URIs, these let an application select an OAuth scope before the
-stream opens. The reviewed current incompatibility set has 713 records. The
+stream opens. That checkpoint's incompatibility set had 713 records. The
 remaining P3 Apps signature delta is tracked separately from this amendment.
 
 The 2026-09-26 Bearer challenge amendment adds the general HTTP types
@@ -138,23 +138,23 @@ scope has exactly one owner:
 | `phase-4.includes` | 169 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
 | `phase-6.includes` | 67 | current-source Phase 6 types |
-| `provisional.includes` | 14 | MCP Tasks types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
+| `provisional.includes` | 22 | MCP Tasks and 2025 session/HTTP transport types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
 | `non-mcp-public-api.allowlist` | 86 | reviewed Bearer challenge, lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 295-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
-exactly 381 current types. All 295 MCP owners have reviewed phase or
-provisional signature snapshots: 1,367/240/454/98 records respectively, or
-2,159 MCP signatures. Ownership and signature coverage are checked separately;
+The 303-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
+exactly 389 current types. All 303 MCP owners have reviewed phase or
+provisional signature snapshots: 1,374/240/456/143 records respectively, or
+2,213 MCP signatures. Ownership and signature coverage are checked separately;
 the two reviewed cross-cutting signatures bring the complete frozen set to
-2,161 entries.
+2,215 entries.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `db7577ffe05d7ccf0cf559668e95d2af32ec925b609972f7518213cabef8da71`,
 `17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
 `b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
-The provisional MCP Tasks include inventory has SHA-256
-`ee87d92db2ee80694af5888955e132886f148c3c6a7b62f2031b166b37493908`.
+The provisional MCP include inventory has SHA-256
+`0a2e5329fe916b092271b0471ec24b88a59f52ce16e4608877de77ed3ee428fe`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
 It complements the baseline comparison; it is not the authoritative
@@ -3244,3 +3244,89 @@ host-enforced restrictive defaults rather than disabling protection. No owner or
 historical signature snapshot changes. The reviewed Phase 4 nullability digest
 is `0432c3fdd2421ff70be993ddb7c1c99cf5cd9993e6ba44754c43201f4b0f76a0`;
 removing only the factory's two canonical entries reproduces the preceding digest.
+
+### 2026-10-01 provisional minimum session API
+
+The accepted October 1 expansion plan introduces `McpSessionConfig`, its
+`Builder`, and `McpSessionOwnerKeyResolver` as three supported provisional
+owners. The existing server, endpoint, and endpoint annotation expose exact
+session-revision selection and server ownership/bounds. Only `2025-06-18` and
+`2025-11-25` are eligible; the server-wide value alone enables no endpoint.
+These additions leave the frozen Phase 4/5/6 owner partitions unchanged.
+The HTTP transport controller and its decision/context types belong to the
+later delivery package and are absent from this minimum package.
+
+`StreamTerminationReason.CLIENT_CANCELED` is a transport-neutral shared-host
+amendment needed by the existing cancellation-token contract; it distinguishes
+an explicit client signal from disconnection. Its existing non-MCP owner
+assignment remains unchanged. `McpStreamTerminationReason.SESSION_EXPIRED` and
+`SESSION_CLOSED` classify the MCP-specific cause separately; the removed
+`SESSION_TERMINATED` identifier is not restored. Exhaustive downstream switches
+must handle the new values when recompiling, and a previously compiled switch
+can fail if a new value reaches it. The corresponding OTel mapping treats
+explicit client cancellation as the existing non-error cancellation category.
+
+The provisional signature snapshot and dedicated session reflection contract
+track the minimum public footprint, parameter names, private construction, and
+nested JSpecify layout. Runtime and external qualification are recorded
+separately; this API checkpoint does not establish session recovery, GET/DELETE
+delivery, or a new release-candidate PASS.
+
+The reviewed minimum-session signature amendment records 1,372/240/456/117
+Phase 4/5/6/provisional entries. Phase 4 and Phase 6 signature SHA-256 values
+are `64e2e2c70cb58a76c7101ebc1734616c9eef347303a566cda7f1026e080243b8`
+and `2dff01d034b7e99c9e9f8f3899d38074f1e05f606549189b1a76ba134f962cd2`;
+the provisional SHA-256 is
+`8fd8a8017db48bcf62a6a48579c135c9aed36c501b91f2f30b4dcc0d77226fb6`.
+Phase 5 is unchanged. Reviewed Phase 4/6 nested nullability digests are
+`50881d54eaa02422f3126cbbed8b37cd133f1e05fa701167657ca39b6b1fed6b`
+and `d01b32d03135ec2ac075723f6327fc7ebad0145cb71a24727cdb2fe82066b4dc`.
+The current released-3.5.1 comparison contains 718 records, SHA-256
+`8dfb6110ff118c15822046db180a41135753ec7763e367998f0dab35a963d6f8`.
+Its two new conservative source-compatibility records are the server interface
+getter and annotation member; the annotation supplies the disabled empty-array
+default. Historical incompatibility and freeze checkpoints above are retained.
+
+### 2026-10-01 provisional HTTP transport admission API
+
+The accepted expansion plan introduces five provisional owners:
+`McpSessionTransportAdmissionContext`, `McpSessionTransportAdmissionController`,
+and `McpSessionTransportAdmissionDecision` with its two private-constructed
+`Accepted`/`Rejected` variants. `McpSessionConfig` adds an optional controller
+getter and nullable resetter. The new sealed root has exactly accepted and
+rejected decisions; no expiry-free acceptance is supported. A decision carries
+fresh identity, explicit expiry, and a narrowed subset of the offered GET
+families; DELETE requires no delivery selection. The callback exposes the
+original HTTP Request and bounded cancellation features without inventing an
+RPC method or request context. The exact implementation and qualification
+checkpoint is recorded separately from this approved public API amendment.
+
+The public-evolution scan now covers provisional inventories as well as
+Phase 4/5/6. This also classifies the already-supported `McpTaskStatus` enum as
+evolutionary; it changes no Tasks behavior or qualification. Frozen phase owner
+partitions and historical snapshots are preserved.
+
+The actual October 1 HTTP admission artifact records 143 provisional signatures,
+SHA-256 `27f85d794fbb1f60153a5b63b6e02674191687bedff31529d4b1616853630555`.
+Phase 4–6 signature bytes and the 718-record released incompatibility set are
+unchanged by this addition. The five new owners remain provisional; GET opening
+and DELETE retirement do not qualify future URI delivery or real hosts.
+
+
+## October 2 legacy notifications API amendment
+
+The implemented 2025 URI subscribe/unsubscribe path adds only
+`McpOperationType.RESOURCES_SUBSCRIBE` and `RESOURCES_UNSUBSCRIBE`. Its real RPC
+admission context exposes one selected URI for subscribe and an empty selection
+for unsubscribe, with the target operation name retained on both. Existing
+subscription authorization contexts retain the real historical subscribe
+request and latest successful application context; GET admission remains a
+separate HTTP boundary. Update exhaustive operation enum switches.
+
+The actual artifact adds exactly two Phase 4 field records, producing
+1,374/240/456/143 signatures and 2,215 total records including the two
+cross-cutting members. Phase 4 SHA-256 is
+`b1366d031f27d56c6f19d4f8083e283a9044cf0bcef26a229eff01acdb4f51fa`.
+Other signature inventories, their owner partitions, and the 718-record
+released incompatibility ledger are unchanged. This API amendment does not
+establish named-host refresh/reconnect or exact-candidate release qualification.

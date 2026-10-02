@@ -259,6 +259,45 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPagerTests.java#cursor_scope_and_current_anchor_authority_are_rechecked_without_exposing_keys"
+      ],
+      "category": "CURSOR",
+      "deterministicFailure": {
+        "contract": "Framework cursors on selected 2025 static catalogs have an independent fixed 2,048-byte bound. Malformed, over-bound, wrong-scope, stale catalog/locale, unknown and caller-hidden anchors fail with neutral invalid params; application cursors retain FINITE-CURSOR-001 bounds.",
+        "stage": "CURSOR_VALIDATION_AND_ADMITTED_ANCHOR_CHECK"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPager.java",
+          "member": "decode",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyCatalogPager"
+        }
+      ],
+      "id": "FINITE-CURSOR-002",
+      "name": "Framework static 2025 catalog cursor bound",
+      "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPagerTests.java#fitting_catalog_has_no_cursor_and_candidate_work_does_not_restart_at_the_front"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPager.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacyCatalogPager.java#com.soklet.internal.mcp.protocol.McpLegacyCatalogPager#MAXIMUM_CURSOR_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CURSOR_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyCatalogPager"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "ASCII base64url framework cursor bytes, independent of configurable application cursor bounds",
+          "key": "framework-catalog-cursor.maximum-bytes.hard",
+          "unit": "UTF8_BYTES",
+          "value": "2048"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#combinedInputAtTheCodeUnitBoundParsesAndOverTheBoundIsNotTruncated",
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#parsedRangeCountAtThirtyTwoParsesAndThirtyThreeIsNotTruncated",
         "src/test/java/com/soklet/McpRequestPropagationTests.java#baggageParsingIsBoundedDecodedAndImmutable",
@@ -497,6 +536,69 @@
           "key": "transport.maximum-header-count",
           "unit": "HEADER_FIELDS",
           "value": "100"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#active_ids_are_typed_and_bounded_and_completed_ids_have_no_lifetime_history",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#header_and_owner_validation_are_utf8_exact_and_do_not_echo_sensitive_values"
+      ],
+      "category": "HEADER",
+      "deterministicFailure": {
+        "contract": "Malformed/missing/duplicate session framing fails with 400 before lookup; invalid retained correlation never creates an unbounded registry or lifetime ID history.",
+        "stage": "LEGACY_SESSION_FRAMING"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "validRequestId",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "validSessionId",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "Owner",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Owner"
+        }
+      ],
+      "id": "FINITE-HEADER-002",
+      "name": "Enabled 2025 session header and active-correlation bounds",
+      "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#publication_is_usable_before_ack_and_retains_only_the_public_snapshot"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_CORRELATION_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CORRELATION_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_SESSION_ID_HEADER_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SESSION_ID_HEADER_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "visible ASCII session ID input after duplicate-header validation",
+          "key": "session.header.maximum-bytes",
+          "unit": "ASCII_BYTES",
+          "value": "256"
+        },
+        {
+          "accounting": "stable owner keys and independently retained request IDs/progress tokens; integer and string domains remain distinct",
+          "key": "session.owner-correlation.maximum-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "256"
         }
       ]
     },
@@ -999,6 +1101,79 @@
           "key": "output.simulation-captured-bytes",
           "unit": "BYTES",
           "value": "10485760"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpLegacySessionPublicRuntimeTests.java#oversizedClientSnapshotDoesNotPublishASessionId",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#snapshot_overflow_fails_before_any_capacity_or_partial_projection_is_published"
+      ],
+      "category": "OUTPUT",
+      "deterministicFailure": {
+        "contract": "An oversized snapshot returns neutral 200/-32602 without publishing an ID, consuming a logical slot, or retaining a partial projection.",
+        "stage": "LEGACY_SESSION_INITIALIZATION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "McpLegacySessionStore",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "publish",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "id": "FINITE-OUTPUT-002",
+      "name": "Remembered 2025 initialization projection bounds",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpSessionConfigurationTests.java#builtValuesAreSnapshotsAndNullRestoresEveryDefault",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#publication_is_usable_before_ack_and_retains_only_the_public_snapshot"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#DEFAULT_MAXIMUM_CLIENT_METADATA_SIZE_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_CLIENT_METADATA_SIZE_IN_BYTES",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_METADATA_NODES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_METADATA_NODES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumClientMetadataBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumClientMetadataBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#maximumClientMetadataSizeInBytes(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumClientMetadataSizeInBytes(Integer)",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "encoded retained public client capabilities/information, intersected with existing JSON output/token/depth limits",
+          "key": "session.metadata.maximum-bytes.default",
+          "unit": "UTF8_BYTES",
+          "value": "65536"
+        },
+        {
+          "accounting": "retained public initialization projection; not arbitrary application principal/callback graphs",
+          "key": "session.metadata.maximum-nodes",
+          "unit": "NODES",
+          "value": "4096"
         }
       ]
     },
@@ -1808,6 +1983,7 @@
     {
       "boundaryTests": [
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#terminal_lane_remains_available_while_regular_stream_lane_is_full",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestSseStreamProfileEncodingTests.java#legacyByteLimitAppliesAfterProjectionAndBeforeChannelMutation",
         "src/test/java/com/soklet/internal/mcp/protocol/McpStreamTests.java#sseFrameCapacityIncludesExactJsonEnvelopeAndFramingBytes"
       ],
       "category": "QUEUE_STREAM",
@@ -1825,6 +2001,8 @@
       "id": "FINITE-QUEUE-STREAM-002",
       "name": "SSE frame and byte-lane bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyProgressPublicRuntimeTests.java#simulatorPublishesProgressBeforeTerminalAndDuplicatesTheExactTerminalMessage",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestSseStreamProfileEncodingTests.java#legacyTerminalFramesMatchFiniteProjectionForEveryApplicationKind",
         "src/test/java/com/soklet/internal/mcp/protocol/McpStreamTests.java#neverWritesIndependentRequest"
       ],
       "sourceOwners": [
@@ -1893,6 +2071,469 @@
           "key": "rate-limit.partition-reclaim-probes",
           "unit": "PROBES",
           "value": "64"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGetStoreTests.java#rejected_replacement_preserves_both_current_gets_and_does_not_move_the_partition",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGetStoreTests.java#replacement_keeps_two_logical_gets_one_quota_and_all_old_physical_evidence",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#owner_grant_ceiling_spans_sessions_and_global_ceiling_spans_owners",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#uri_limits_are_per_owner_global_and_retained_bytes_survive_retired_ignored_callbacks",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionOwnerPolicyTests.java#owner_worker_and_queue_bounds_survive_stop_and_keep_ignoring_callbacks_physically_owned",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#all_32_active_call_slots_do_not_prevent_an_admitted_cancel_notification",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#bounded_recreation_churn_keeps_canceled_workers_charged_and_releases_every_residual_reference",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#owner_evidence_pressure_reclaims_multiple_eligible_records_without_evicting_a_physical_worker"
+      ],
+      "category": "QUEUE_STREAM",
+      "deterministicFailure": {
+        "contract": "Owner/count pressure returns 429 and global pressure 503 with bounded Retry-After. Per-session/owner/global retained-byte budgets are derived from request/header bounds and charged through residual physical exit. Snapshot accounting bounds encoded public data, not opaque application graphs; owner-policy queue/deadline failure cannot publish state. A session has at most two logical GETs and one shared fixed-partition registration; replacement keeps old request evidence until physical completion, while failed capacity preserves existing logical GETs. URI grants are bounded per session, owner, and server, including retained URI bytes through residual callback exit. Grants and GETs share one fixed session partition registration across GET gaps; duplicate subscribe replaces historical evidence without extending the original total lifetime, and rejected capacity leaves the existing grant intact.",
+        "stage": "LEGACY_SESSION_ADMISSION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "member": "invokeBoundedSessionOwnerPolicy",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "configureLegacySessions",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "acquire",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "publicationCapacityWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "releaseGrantPhysicalWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "releasePhysicalWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "reserveGet",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "reserveGrant",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "id": "FINITE-QUEUE-STREAM-004",
+      "name": "Bounded 2025 session, GET, and URI grant counts, retained evidence, and owner-policy execution",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpSessionConfigurationTests.java#defaultsRetainTheResolverWithoutInvokingIt",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGetStoreTests.java#first_get_uses_the_shared_quota_and_fixed_partition_survives_a_get_gap",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#a_grant_holds_the_shared_partition_quota_across_get_gaps_and_partition_cannot_migrate",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#grant_pins_real_subscribe_evidence_after_post_and_after_logical_revocation_until_callback_exit",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#progress_collision_is_suppressed_without_rejecting_calls_and_detach_releases_only_the_token"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#DEFAULT_MAXIMUM_SESSIONS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SESSIONS",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#DEFAULT_MAXIMUM_SESSIONS_PER_OWNER",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SESSIONS_PER_OWNER",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_ACTIVE_CALLS_PER_SESSION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_ACTIVE_CALLS_PER_SESSION",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_ANONYMOUS_SESSIONS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_ANONYMOUS_SESSIONS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_LOGICAL_GETS_PER_SESSION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_LOGICAL_GETS_PER_SESSION",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_RETAINED_URI_BYTES_PER_SESSION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_RETAINED_URI_BYTES_PER_SESSION",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_URI_GRANTS_GLOBAL",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_URI_GRANTS_GLOBAL",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_URI_GRANTS_PER_OWNER",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_URI_GRANTS_PER_OWNER",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_URI_GRANTS_PER_SESSION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_URI_GRANTS_PER_SESSION",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumGlobalEvidenceBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumGlobalEvidenceBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumOwnerEvidenceBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumOwnerEvidenceBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumSessionEvidenceBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSessionEvidenceBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumSessions",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSessions",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumSessionsPerOwner",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSessionsPerOwner",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#maximumSessions(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSessions(Integer)",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#maximumSessionsPerOwner(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSessionsPerOwner(Integer)",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "logically active calls per verified session; admitted cancellation remains available at saturation",
+          "key": "session.maximum-active-calls",
+          "unit": "CALLS",
+          "value": "32"
+        },
+        {
+          "accounting": "global anonymous namespace sub-budget, also limited by configured global capacity",
+          "key": "session.maximum-anonymous-sessions",
+          "unit": "SESSIONS",
+          "value": "64"
+        },
+        {
+          "accounting": "logical GETs per verified session; replaced physical bodies remain independently charged",
+          "key": "session.maximum-logical-gets",
+          "unit": "STREAMS",
+          "value": "2"
+        },
+        {
+          "accounting": "encoded URI evidence per session retained until logical retirement and last callback reference exit",
+          "key": "session.maximum-retained-uri-bytes",
+          "unit": "BYTES",
+          "value": "65536"
+        },
+        {
+          "accounting": "authenticated/anonymous owner namespaces, with only same-owner quiescent reclamation",
+          "key": "session.maximum-sessions-per-owner.default",
+          "unit": "SESSIONS",
+          "value": "16"
+        },
+        {
+          "accounting": "server logical records; separate retained-byte accounting outlives logical retirement",
+          "key": "session.maximum-sessions.default",
+          "unit": "SESSIONS",
+          "value": "256"
+        },
+        {
+          "accounting": "logical URI grants per verified session",
+          "key": "session.maximum-uri-grants",
+          "unit": "GRANTS",
+          "value": "64"
+        },
+        {
+          "accounting": "logical URI grants across the server",
+          "key": "session.maximum-uri-grants-global",
+          "unit": "GRANTS",
+          "value": "512"
+        },
+        {
+          "accounting": "logical URI grants across the same authenticated/anonymous owner namespace",
+          "key": "session.maximum-uri-grants-per-owner",
+          "unit": "GRANTS",
+          "value": "64"
+        },
+        {
+          "accounting": "lesser of four and configured handler concurrency; configured handler-queue capacity applies independently and physical shutdown waits for this pool",
+          "key": "session.owner-policy.maximum-concurrency",
+          "unit": "WORKERS",
+          "value": "4"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpLegacySessionTransportCapacityRuntimeTests.java#four_ignoring_renewals_hold_global_maintenance_capacity_after_their_gets_expire",
+        "src/test/java/com/soklet/McpLegacySessionTransportCapacityRuntimeTests.java#temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream",
+        "src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java#slowReauthorizationCannotDeliverPastLeaseAndRetainsPhysicalReservationUntilExit",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudgetTests.java#retained_partition_cap_rejects_churn_until_a_full_idle_second_and_never_prunes_active_work",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudgetTests.java#simultaneous_capacity_and_attempt_rate_are_independent_and_physical_release_is_required",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudgetTests.java#sliding_window_cannot_double_burst_across_a_fixed_second_boundary",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpPolicyPhysicalExitTests.java#rejected_and_queued_canceled_work_release_once_but_running_work_keeps_its_control_budget",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#grant_rate_capacity_has_no_late_establishment_and_duplicate_keeps_one_rate_registration",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#maintenance_demand_replacement_transfers_units_and_shorter_renewal_cannot_oversubscribe"
+      ],
+      "category": "QUEUE_STREAM",
+      "deterministicFailure": {
+        "contract": "Control admission fails closed when one retained-partition, simultaneous-reservation, or sliding-second attempt cap is reached. Denied concurrency attempts still consume rate budget; active reservations prevent bucket reclamation until physical release, and idle buckets expire after a full second. The fixed timestamp ring cannot double-burst across a fixed-second boundary. Aggregate renewal jobs are limited independently to four physical jobs and 64 sliding-second dispatches; temporary capacity fences delivery and retries after 50 milliseconds without extending authorization or fixed total lifetime. GET and URI grants share the aggregate physical job/dispatch ceiling and scaled maintenance-demand budget; shortening a lease cannot oversubscribe demand, and duplicate grant replacement transfers its demand rather than allocating a second logical registration.",
+        "stage": "LEGACY_HTTP_CONTROL_ADMISSION"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "scheduleRenewal",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyGetControl"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "complete",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyHttpPolicyWork"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java",
+          "member": "release",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java",
+          "member": "reserve",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "reserveGrant",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "updateGrant",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "id": "FINITE-QUEUE-STREAM-005",
+      "name": "Bounded legacy HTTP control partitions and aggregate GET/grant maintenance",
+      "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudgetTests.java#endpoint_and_partition_keys_are_separate_without_exposing_them_in_diagnostics",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudgetTests.java#monotonic_wrap_preserves_the_sliding_window_and_idle_pruning"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_LEGACY_MAINTENANCE_DISPATCHES_PER_SECOND",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_LEGACY_MAINTENANCE_DISPATCHES_PER_SECOND",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_LEGACY_MAINTENANCE_JOBS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_LEGACY_MAINTENANCE_JOBS",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java#com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget#MAXIMUM_ATTEMPTS_PER_SECOND",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_ATTEMPTS_PER_SECOND",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java#com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget#MAXIMUM_RETAINED_PARTITIONS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_RETAINED_PARTITIONS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpControlBudget.java#com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget#MAXIMUM_SIMULTANEOUS_PER_PARTITION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SIMULTANEOUS_PER_PARTITION",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpControlBudget"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_MAINTENANCE_DEMAND_UNITS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_MAINTENANCE_DEMAND_UNITS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "every attempt per effective endpoint/partition in a sliding one-second ring, including simultaneous-capacity denial",
+          "key": "session.http-control.maximum-attempts-per-second",
+          "unit": "ATTEMPTS",
+          "value": "64"
+        },
+        {
+          "accounting": "retained endpoint/partition buckets; active physical reservations cannot be pruned",
+          "key": "session.http-control.maximum-retained-partitions",
+          "unit": "PARTITIONS",
+          "value": "256"
+        },
+        {
+          "accounting": "simultaneous physical control reservations per effective endpoint/partition",
+          "key": "session.http-control.maximum-simultaneous-per-partition",
+          "unit": "RESERVATIONS",
+          "value": "4"
+        },
+        {
+          "accounting": "aggregate renewal demand scaled by 1,000,000; each live GET/grant is charged by its admitted lease",
+          "key": "session.http-maintenance.maximum-demand-units",
+          "unit": "SCALED_DISPATCHES_PER_SECOND",
+          "value": "64000000"
+        },
+        {
+          "accounting": "aggregate renewal dispatches in a strict sliding one-second window",
+          "key": "session.http-maintenance.maximum-dispatches-per-second",
+          "unit": "DISPATCHES",
+          "value": "64"
+        },
+        {
+          "accounting": "aggregate renewal jobs held through ignored callback physical exit",
+          "key": "session.http-maintenance.maximum-jobs",
+          "unit": "JOBS",
+          "value": "4"
+        },
+        {
+          "accounting": "fenced temporary-capacity retry delay; no lease or fixed total lifetime extension",
+          "key": "session.http-maintenance.retry-nanos",
+          "unit": "NANOSECONDS",
+          "value": "50000000"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#notification_bytes_enforce_exact_owner_and_global_ceilings_and_keep_retired_owner_accounting",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#permission_and_source_generations_reach_write_guards_without_losing_pending_catalog_hints",
+        "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#discard_failure_and_shutdown_release_all_callbacks_even_when_one_internal_observer_throws",
+        "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#recheck_purges_only_revoked_unwritten_frames_and_releases_the_key",
+        "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#rejected_offers_release_once_without_consuming_the_existing_key",
+        "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#write_rechecks_before_each_socket_call_and_never_finishes_a_revoked_partial_frame"
+      ],
+      "category": "QUEUE_STREAM",
+      "deterministicFailure": {
+        "contract": "Coalesced catalog/URI dirty bits retain no historical payload and survive GET gaps. Output pressure coalesces first, then sheds the stream with the largest pending notification allocation in the affected owner/global budget; dirty bits remain for later authorized delivery. Guard predicates check source/GET/grant generations and expiry at offer and before every socket write. Revoked unwritten chunks are purged; a partially written revoked chunk fails before further bytes. Every accepted byte reservation releases exactly once on full write, purge, discard, failure, or shutdown; rejected/coalesced offers release immediately. Internal release observers execute outside the channel lock. Existing modern unguarded offers retain their behavior.",
+        "stage": "LEGACY_NOTIFICATION_ADMISSION_AND_WRITE"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "shedLegacyNotificationPressure",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "reserveNotificationBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
+          "member": "offerGuardedCoalescing/recheckGuardedFrames/writeTo",
+          "owner": "com.soklet.internal.mcp.transport.McpOutboundChannel"
+        }
+      ],
+      "id": "FINITE-QUEUE-STREAM-006",
+      "name": "Guarded legacy GET encoded notification queues",
+      "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#catalog_dirty_state_coalesces_until_fresh_list_and_resynthesizes_after_a_get_gap",
+        "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#full_write_releases_once_and_clean_completion_keeps_exact_old_wire_bytes"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_NOTIFICATION_BYTES_GLOBAL",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_NOTIFICATION_BYTES_GLOBAL",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_NOTIFICATION_BYTES_PER_OWNER",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_NOTIFICATION_BYTES_PER_OWNER",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "encoded queued legacy GET invalidation bytes across the server, including data prefix and SSE suffix but excluding HTTP transfer framing",
+          "key": "session.notification.maximum-queued-bytes-global",
+          "unit": "BYTES",
+          "value": "16777216"
+        },
+        {
+          "accounting": "encoded queued legacy GET invalidation bytes across one owner, including SSE framing; physical output reservations persist until exactly-once release",
+          "key": "session.notification.maximum-queued-bytes-per-owner",
+          "unit": "BYTES",
+          "value": "2097152"
         }
       ]
     },
@@ -2692,6 +3333,104 @@
           "key": "subscription.catalog-projection.timeout-nanos",
           "unit": "NANOSECONDS",
           "value": "5000000000"
+        }
+      ]
+    },
+    {
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpSessionConfigurationTests.java#invalidReplacementDoesNotChangeThePreviousBound",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#idle_requires_actual_quiescence_but_hard_lifetime_expires_running_work",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#unaccepted_lookup_does_not_prove_delivery_or_renew_the_ack_window"
+      ],
+      "category": "TIME",
+      "deterministicFailure": {
+        "contract": "Idle/hard/ack expiry immediately fences new use; physical evidence remains charged until last exit. Positive signed-nanos durations and idle<=hard are required; no unrelated-owner eviction.",
+        "stage": "LEGACY_SESSION_RETIREMENT"
+      },
+      "enforcementOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "member": "requirePositiveDuration",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "maintainWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "member": "oldestEvictableWhileLocked",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        }
+      ],
+      "id": "FINITE-TIME-003",
+      "name": "2025 session actual-quiescence, hard-lifetime, and acknowledgement bounds",
+      "positiveTests": [
+        "src/test/java/com/soklet/McpSessionConfigurationTests.java#defaultsRetainTheResolverWithoutInvokingIt",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#completed_accepted_use_proves_delivery_and_late_initial_writer_failure_cannot_revoke_it"
+      ],
+      "sourceOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#DEFAULT_MAXIMUM_SESSION_DURATION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SESSION_DURATION",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#DEFAULT_MAXIMUM_SESSION_IDLE_DURATION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SESSION_IDLE_DURATION",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MINIMUM_EVICTION_IDLE_NANOS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MINIMUM_EVICTION_IDLE_NANOS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#maximumSessionDuration(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSessionDuration(Duration)",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSessionConfig.java#com.soklet.McpSessionConfig.Builder#maximumSessionIdleDuration(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSessionIdleDuration(Duration)",
+          "owner": "com.soklet.McpSessionConfig.Builder"
+        }
+      ],
+      "values": [
+        {
+          "accounting": "retire only unacknowledged records lacking accepted-use delivery evidence",
+          "key": "session.acknowledgement-wait-nanos",
+          "unit": "NANOSECONDS",
+          "value": "30000000000"
+        },
+        {
+          "accounting": "absolute lifetime including active work; reserved terminal winner remains authoritative",
+          "key": "session.maximum-duration-nanos.default",
+          "unit": "NANOSECONDS",
+          "value": "604800000000000"
+        },
+        {
+          "accounting": "actual quiescence including physical references; invalid messages and keepalive bytes do not refresh it",
+          "key": "session.maximum-idle-duration-nanos.default",
+          "unit": "NANOSECONDS",
+          "value": "86400000000000"
+        },
+        {
+          "accounting": "same-owner oldest-first capacity reclamation of physically quiescent records only",
+          "key": "session.minimum-eviction-idle-nanos",
+          "unit": "NANOSECONDS",
+          "value": "30000000000"
         }
       ]
     },

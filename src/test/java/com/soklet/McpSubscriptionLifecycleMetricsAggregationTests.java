@@ -73,6 +73,8 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 			List.of(McpStreamTerminationReason.COMPLETED,
 					McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					McpStreamTerminationReason.REQUEST_CANCELED,
+					McpStreamTerminationReason.SESSION_EXPIRED,
+					McpStreamTerminationReason.SESSION_CLOSED,
 					McpStreamTerminationReason.DEADLINE_EXCEEDED,
 					McpStreamTerminationReason.WRITE_FAILED,
 					McpStreamTerminationReason.BACKPRESSURE,
@@ -242,6 +244,13 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				.getSubscriptionDurations().keySet().stream()
 				.map(McpMetricsSnapshot.SubscriptionTerminationKey::getReason)
 				.collect(java.util.stream.Collectors.toUnmodifiableSet()));
+		for (McpStreamTerminationReason reason : List.of(
+				McpStreamTerminationReason.SESSION_EXPIRED, McpStreamTerminationReason.SESSION_CLOSED)) {
+			MetricsCollector.HistogramSnapshot sessionHistogram = retained.getSubscriptionDurations().get(key(reason));
+			Assertions.assertNotNull(sessionHistogram);
+			Assertions.assertEquals(1L, sessionHistogram.getCount());
+			Assertions.assertEquals(Duration.ofSeconds(reason.ordinal() + 1L).toNanos(), sessionHistogram.getSum());
+		}
 		MetricsCollector.HistogramSnapshot completedHistogram = retained
 				.getSubscriptionDurations().get(
 						key(McpStreamTerminationReason.COMPLETED));
@@ -282,7 +291,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 			expectedSamples.add(new SampleProjection(
 					SUBSCRIPTION_DURATIONS_METRIC_NAME + "_sum", labels));
 		}
-		Assertions.assertEquals(29, expectedSamples.size());
+		Assertions.assertEquals(33, expectedSamples.size());
 		Assertions.assertEquals(expectedSamples, observedSamples);
 		assertMetricType(selected, ACTIVE_SUBSCRIPTIONS_METRIC_NAME,
 				ACTIVE_SUBSCRIPTIONS_HELP, "gauge");
@@ -295,6 +304,12 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				completedLabels, 3L);
 		assertSample(selected, SUBSCRIPTION_DURATIONS_METRIC_NAME + "_sum",
 				completedLabels, 18_001_500_000_000L);
+		for (McpStreamTerminationReason reason : List.of(
+				McpStreamTerminationReason.SESSION_EXPIRED, McpStreamTerminationReason.SESSION_CLOSED)) {
+			assertSample(selected, SUBSCRIPTION_DURATIONS_METRIC_NAME + "_count", encodedLabels(reason), 1L);
+			assertSample(selected, SUBSCRIPTION_DURATIONS_METRIC_NAME + "_sum", encodedLabels(reason),
+					Duration.ofSeconds(reason.ordinal() + 1L).toNanos());
+		}
 		for (String metricName : List.of(ACTIVE_SUBSCRIPTIONS_METRIC_NAME,
 				SUBSCRIPTION_DURATIONS_METRIC_NAME)) {
 			Assertions.assertEquals(1, occurrences(selected,

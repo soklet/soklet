@@ -13,6 +13,14 @@ prompt/resource check against the same clean core bytes. Broader cloud host
 scope and exact-candidate gates remain open. This file does not record a
 release-candidate PASS.
 
+**October 1 scope supplement:** the owner selected the complete
+[2025 expansion](MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md) for 4.0.0, beginning
+with exact-revision argument completion. That plan supersedes the earlier
+completion/session/delivery scope restrictions for the selected facilities.
+The dated design and qualification checkpoints below remain historical;
+[MCP.md](../MCP.md) and the [client matrix](MCP_CLIENT_COMPATIBILITY.md) describe
+current development behavior and pending qualification.
+
 The separate [modern Apps cloud check](mcp-apps-cloud-qualification-2026-09-29/REVIEW.md)
 also passed in Claude Desktop 2.16120.0: `2026-07-28` discovery, server-provided
 App rendering, and an actual App-button refresh. This qualifies that narrow

@@ -397,6 +397,14 @@ final class McpLevelOneUriTemplate {
 	}
 
 	@NonNull
+	Set<@NonNull String> variableNames() {
+		return parts.stream()
+				.filter(part -> part instanceof VariablePart)
+				.map(part -> ((VariablePart) part).name())
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+	}
+
+	@NonNull
 	Optional<@NonNull Map<@NonNull String, @NonNull String>> match(
 			@NonNull String uri) {
 		NormalizedResourceUri normalized = normalizeResourceUriForTemplateMatching(uri);

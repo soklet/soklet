@@ -27,6 +27,9 @@ import java.lang.annotation.Target;
 /**
  * Attaches an argument completer to a prompt declared in the same MCP endpoint.
  * The named prompt must have an {@link McpPrompt} handler method.
+ * Completion supports MCP 2025-06-18, 2025-11-25, and 2026-07-28. The
+ * completer's revisions must be a nonempty subset of the target prompt's
+ * revisions.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

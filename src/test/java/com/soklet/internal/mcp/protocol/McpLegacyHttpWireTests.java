@@ -275,6 +275,62 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
+	@Timeout(60)
+	public void reusedNormalizedEndpointStillFiltersCompletionRoutesByRevision()
+			throws Exception {
+		AtomicInteger entries = new AtomicInteger();
+		McpNormalizedPromptDescriptor prompt = new McpNormalizedPromptDescriptor(
+				"modern-only", List.of(new McpNormalizedPromptArgumentDescriptor(
+						"value", false, McpJsonObject.empty())),
+				McpJsonObject.empty(), McpJsonObject.empty());
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
+				.withServerInformation(McpImplementationMetadata.withNameAndVersion("server", "4.0.0"))
+				.prompt(McpNormalizedOperation.prompt(prompt)).completionSupported(true).build();
+		McpApplicationCompletionRoute completionRoute = new McpApplicationCompletionRoute(
+				(invocation, argumentName, argumentValue, contextArguments) -> {
+					entries.incrementAndGet();
+					return McpWireResult.complete(new McpJsonObject(Map.of(
+							"completion", new McpJsonObject(Map.of("values",
+									new McpJsonArray(List.of(new McpJsonString("modern"))))))));
+				}, Set.of("value"), Set.of("2026-07-28"));
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromFrameworkHandlersAndCompletionRoutes(Map.of(), Map.of(), Map.of(),
+						Map.of(), List.of(), Optional.empty(),
+						Map.of("modern-only", completionRoute), Map.of());
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+						request -> McpAdmissionDecision.acceptedAnonymous()),
+				endpoint, router, McpRuntimeObservationSink.disabledInstance(), List.of(),
+				Optional.empty(), Map.of("2025-06-18", endpoint,
+						"2025-11-25", endpoint, "2026-07-28", endpoint));
+		HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+		try (McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0), List.of(binding))) {
+			URI uri = URI.create("http://127.0.0.1:" + runtime.start().getPort() + "/mcp");
+			String completion = "{\"jsonrpc\":\"2.0\",\"id\":\"completion\","
+					+ "\"method\":\"completion/complete\",\"params\":{"
+					+ "\"ref\":{\"type\":\"ref/prompt\",\"name\":\"modern-only\"},"
+					+ "\"argument\":{\"name\":\"value\",\"value\":\"m\"}}}";
+			for (String revision : List.of("2025-06-18", "2025-11-25")) {
+				HttpResponse<String> response = post(client, uri, Optional.of(revision),
+						Optional.empty(), completion);
+				Assertions.assertEquals(200, response.statusCode(), response.body());
+				Assertions.assertTrue(response.body().contains("\"values\":[]"), response.body());
+				Assertions.assertEquals(0, entries.get(),
+						"Endpoint object reuse must not bypass exact completion revisions.");
+			}
+			String modern = completion.replace("\"params\":{", "\"params\":{\"_meta\":{"
+					+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+					+ "\"io.modelcontextprotocol/clientCapabilities\":{}},");
+			HttpResponse<String> response = post(client, uri, Optional.of("2026-07-28"),
+					Optional.of("completion/complete"), modern);
+			Assertions.assertEquals(200, response.statusCode(), response.body());
+			Assertions.assertTrue(response.body().contains("\"values\":[\"modern\"]"), response.body());
+			Assertions.assertEquals(1, entries.get());
+		}
+	}
+
+	@Test
 	public void malformedLegacyInitializationCapabilitiesFailClosed() {
 		McpRequestWireMapper mapper = new McpRequestWireMapper(LIMITS);
 		for (String capabilities : List.of(
@@ -745,13 +801,24 @@ public class McpLegacyHttpWireTests {
 					callWithProgress.body());
 			Assertions.assertTrue(callWithProgress.headers()
 					.firstValue("Content-Type").orElse("")
-					.startsWith("application/json"));
+					.startsWith("text/event-stream"));
 			Assertions.assertTrue(callWithProgress.body().contains("\"text\":\"ok\""),
 					callWithProgress.body());
-			Assertions.assertFalse(callWithProgress.body().contains("data:"),
+			List<String> progressFrames = callWithProgress.body().lines()
+					.filter(line -> line.startsWith("data: ")).map(line -> line.substring(6)).toList();
+			Assertions.assertEquals(2, progressFrames.size(), callWithProgress.body());
+			Assertions.assertEquals(JSON.parse("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\","
+					+ "\"params\":{\"progressToken\":\"legacy-progress\",\"progress\":1,\"message\":\"working\"}}"),
+					JSON.parse(progressFrames.get(0)));
+			McpJsonObject terminal = (McpJsonObject) JSON.parse(progressFrames.get(1));
+			Assertions.assertEquals(new McpJsonNumber(java.math.BigDecimal.valueOf(32)), terminal.members().get("id"));
+			Assertions.assertEquals(((McpJsonObject) JSON.parse(call.body())).members().get("result"),
+					terminal.members().get("result"), "Finite and SSE legacy terminal projections agree.");
+			Assertions.assertFalse(callWithProgress.body().contains("resultType"), callWithProgress.body());
+			Assertions.assertTrue(callWithProgress.body().lines().noneMatch(line -> line.startsWith("id:")),
 					callWithProgress.body());
 			Assertions.assertEquals(1, progressAttempts.get());
-			Assertions.assertEquals(0, progressEmissions.get());
+			Assertions.assertEquals(1, progressEmissions.get());
 			HttpResponse<String> hiddenCall = post(client, uri,
 					Optional.of("2025-11-25"), Optional.empty(), """
 					{"jsonrpc":"2.0","id":31,"method":"tools/call",

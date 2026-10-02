@@ -157,6 +157,8 @@ class McpLocalizationCatalogExtractionTests {
 		assertTrue(tools.resolveSlots(wireObject(Map.of("tools",
 				wireArray(List.of())))).isEmpty(),
 				"An authorized empty projection has no localization callbacks.");
+		assertEquals(resolvedTools.size(), tools.ownerSlotCount("catalog.output"));
+		assertEquals(0, tools.ownerSlotCount("unknown.tool"));
 
 		McpCanonicalLocalizationPlan promptPlan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
@@ -344,6 +346,86 @@ class McpLocalizationCatalogExtractionTests {
 		DefaultMcpServer disabled = (DefaultMcpServer) wireServerBuilder(registry)
 				.build();
 		assertTrue(disabled.localizationPlan().isEmpty());
+	}
+
+	@Test
+	void legacyCatalogBoundsArePageLocalWhileMixedModernBoundsStayEligible() {
+		for (McpProtocolVersion legacy : List.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25)) {
+			McpPromptHandler handler = (requestContext, promptContext, invocationFeatures) ->
+					McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages());
+			List<McpPromptRegistration> legacyPrompts = List.of(
+					McpPromptRegistration.withName("legacy.one", Set.of(legacy))
+							.handler(handler).title("First legacy title").build(),
+					McpPromptRegistration.withName("legacy.two", Set.of(legacy))
+							.handler(handler).title("Second legacy title").build());
+			McpEndpoint legacyEndpoint = McpEndpoint.withPath("/legacy-only",
+						McpImplementation.withNameAndVersion("legacy", "1").build(),
+						Set.of(legacy))
+					.promptRegistrations(legacyPrompts).build();
+			McpCanonicalLocalizationPlan legacyPlan = DefaultMcpLocalizationCatalogExtractor.plan(
+						McpEndpointRegistry.fromEndpoints(List.of(legacyEndpoint)), 1);
+			assertEquals(2, legacyPlan.endpoints().get(0).response(
+						McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST)
+					.orElseThrow().slots().size());
+
+			List<McpPromptRegistration> mixedPrompts = new ArrayList<>(legacyPrompts);
+			mixedPrompts.add(McpPromptRegistration.withName("modern.one",
+						Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(handler).title("First modern title").build());
+			McpEndpoint mixedEndpoint = McpEndpoint.withPath("/mixed",
+						McpImplementation.withNameAndVersion("mixed", "1").build(),
+						Set.of(legacy, McpProtocolVersion.V2026_07_28))
+					.promptRegistrations(mixedPrompts).build();
+			assertEquals(3, DefaultMcpLocalizationCatalogExtractor.plan(
+						McpEndpointRegistry.fromEndpoints(List.of(mixedEndpoint)), 1)
+					.endpoints().get(0).response(
+							McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST)
+					.orElseThrow().slots().size());
+
+			mixedPrompts.add(McpPromptRegistration.withName("modern.two",
+						Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(handler).title("Second modern title").build());
+			McpEndpoint overflowingModern = McpEndpoint.withPath("/modern-overflow",
+						McpImplementation.withNameAndVersion("modern", "1").build(),
+						Set.of(legacy, McpProtocolVersion.V2026_07_28))
+					.promptRegistrations(mixedPrompts).build();
+			assertThrows(IllegalStateException.class, () ->
+					DefaultMcpLocalizationCatalogExtractor.plan(
+							McpEndpointRegistry.fromEndpoints(List.of(overflowingModern)), 1));
+		}
+	}
+
+	@Test
+	void aCustomResourceListForOneRevisionDoesNotRemoveOtherStaticOwnerSlots() {
+		for (McpProtocolVersion customRevision : List.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2026_07_28)) {
+			Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+					McpProtocolVersion.V2026_07_28);
+			McpResourceRegistration resource = McpResourceRegistration.withUriAndName(
+						URI.create("catalog://shared"), "shared", versions)
+					.handler((requestContext, resourceReadContext, invocationFeatures) ->
+							McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContents(List.of(
+									McpTextResourceContents.withUriAndText(
+											URI.create("catalog://shared"), "Shared resource").build()))))
+					.title("Shared static title").build();
+			McpEndpoint endpoint = McpEndpoint.withPath("/custom-and-static",
+						McpImplementation.withNameAndVersion("resources", "1").build(), versions)
+					.resourceRegistrations(List.of(resource))
+					.resourceListHandler((requestContext, resourceListContext, invocationFeatures) ->
+							McpResourcePage.builder().build(), Set.of(customRevision))
+					.build();
+			McpCanonicalLocalizationPlan.ResponsePlan response =
+					DefaultMcpLocalizationCatalogExtractor.plan(
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint)), 1)
+							.endpoints().get(0).response(
+									McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST)
+							.orElseThrow();
+			assertEquals(1, response.ownerSlotCount("catalog://shared"));
+			assertEquals(1, response.resolveSlots(wireObject(Map.of("resources",
+						wireArray(List.of(wireObject(Map.of("uri", wireString("catalog://shared"))))))))
+					.size());
+		}
 	}
 
 	@Test

@@ -100,6 +100,8 @@ class McpOperationTypeTests {
 		methods.put("resources/templates/list",
 				McpOperationType.RESOURCES_TEMPLATES_LIST);
 		methods.put("resources/read", McpOperationType.RESOURCES_READ);
+		methods.put("resources/subscribe", McpOperationType.RESOURCES_SUBSCRIBE);
+		methods.put("resources/unsubscribe", McpOperationType.RESOURCES_UNSUBSCRIBE);
 		methods.put("skills/list", McpOperationType.SKILLS_LIST);
 		methods.put("skills/get", McpOperationType.SKILLS_GET);
 		methods.put("completion/complete", McpOperationType.COMPLETION_COMPLETE);

@@ -847,6 +847,71 @@ Generated resources must survive shading and packaging.
 The processor rejects unsupported or ambiguous method/record shapes at build
 time. This can surface errors that 3.5.1 deferred until runtime.
 
+## Legacy MCP POST progress
+
+Explicitly selected `2025-06-18` and `2025-11-25` operations use the existing
+optional `McpProgressReporter` with a valid request progress token. The first
+update commits POST SSE; no update returns JSON, and the terminal result stays
+one complete result. After commitment, a client disconnect or lost-writer write
+failure detaches delivery without itself canceling the handler. Finite/uncommitted or queued legacy calls
+and modern calls still cancel on disconnect. Deadlines and physical worker
+reservations remain in force, including in simulation.
+
+Legacy streams are persistent and nonresumable, with no empty priming event,
+event IDs, polling, replay/history, or recovery of a lost POST result. This does
+not restore the Soklet 3.5.1 session/GET transport API. Opt-in 2025 sessions now
+use the package described below; leased GET opening and verified DELETE are
+available with optional HTTP admission, along with separately authorized
+session-owned URI grants and resource/catalog invalidations.
+Verify the actual client's progress display and retry behavior against the exact candidate before relying on them. See
+[Progress and cooperative cancelation](MCP.md#progress-and-cooperative-cancelation).
+
+## Legacy MCP session migration
+
+The new supported `McpSessionConfig`/`McpSessionOwnerKeyResolver` package applies
+only to endpoint `sessionProtocolVersions` explicitly selecting `2025-06-18`
+or `2025-11-25`. Configure server ownership/bounds and endpoint selection
+together; modern and default 2025 views remain stateless. See
+[2025 sessions](MCP.md#explicitly-enabled-2025-sessions) for header, expiry,
+quota, metadata, and cancellation behavior.
+
+There is no source migration from `McpSessionStore`, `McpSessionContext`, a
+custom session-ID generator, old session lifecycle callbacks/instruments, or
+`SESSION_TERMINATED`. Use application-owned state keyed by authenticated domain
+identity. Session defaults are now 256 per server and 16 per owner, with positive
+limits; zero is invalid and null tuning values restore defaults. The 24-hour
+idle lifetime means actual quiescence, and the separate hard lifetime defaults
+to seven days. These ceilings do not promise reserved heap or host recovery.
+Deployments need learned affinity from the initial response; restart/node loss
+requires reinitialization and may require manual client reconnection.
+
+GET/DELETE require the optional `transportAdmissionController` on the new
+configuration. It authorizes an actual HTTP request with a current identity,
+explicit expiry, and allowed notification families; no RPC method/context is
+fabricated. DELETE requires empty families. GET additionally requires selected
+legacy subscription revisions, matching session revisions, and effective
+sources, and opens leased SSE with keepalives and authorized invalidations.
+`resources/subscribe`/`resources/unsubscribe` use real POST admission and request
+limiting; successful responses contain `result: {}`. URI permission comes from
+the subscription authorizer, independently of GET admission. Grants survive GET
+loss within their original total lifetime; duplicate subscribe refreshes evidence
+without resetting that lifetime. Unsubscribe/reconciliation fence old generations.
+Existing subscription duration/authorization and partition limits apply to GETs
+and URI grants; renewal uses each operation's historical credentials. Keep
+retained application principals/contexts small; their arbitrary graphs are not
+covered by framework byte accounting.
+See [leased GET and verified DELETE](MCP.md#leased-get-and-verified-delete).
+Shared storage, replay, and recovery of lost POST results are not added.
+
+`StreamTerminationReason.CLIENT_CANCELED` is a new neutral token category.
+`McpStreamTerminationReason` adds `SESSION_EXPIRED` and `SESSION_CLOSED`, with
+explicit MCP cause tracking. `McpOperationType` also adds `RESOURCES_SUBSCRIBE`
+and `RESOURCES_UNSUBSCRIBE`. Recompile and update exhaustive switches; a
+previously compiled exhaustive switch can fail if a new value reaches it.
+Client cancellation has no framework-provided free-form cause. Cancellation
+and expiry preserve a terminal reservation that already won and retain physical
+worker/evidence reservations until exit; cancellation is not rollback.
+
 ## Request diagnostics and privacy
 
 Framework-created diagnostics no longer embed request-controlled IDs, paths,
@@ -879,8 +944,15 @@ failure into a client error.
   and operation. Use `2026-07-28` for the full 4.0 feature set; the explicitly
   selected `2025-06-18`/`2025-11-25` adapter covers synchronous tools and
   ordinary prompt listing/retrieval and resource listing/reading, including
-  Level 1 templates and custom pagination. Completion and extensions
-  still require `2026-07-28`.
+  Level 1 templates, custom and framework static catalog pagination, argument
+  completion, and request-scoped POST progress. Framework continuation cursors
+  use a separate 2,048-byte ceiling; each page uses current permissions, with
+  neutral `-32602` for catalog/locale and other cursor mismatches. Modern
+  static catalogs remain one page. Skills, Apps, Tasks, `subscriptions/listen`, and multi-round input
+  still require `2026-07-28`. Opt-in 2025 sessions/cancellation require stable
+  ownership and learned node affinity. GET/DELETE also need explicit HTTP
+  admission and effective notification families; URI subscriptions need independent
+  authorization. Named-host delivery and exact-candidate qualification remain pending.
 - Authentication and authorization failures reveal no token or protected
   resource value.
 - A real localhost listener passes discovery, list, call/read/get as applicable,

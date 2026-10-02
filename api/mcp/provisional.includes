@@ -1,5 +1,13 @@
 com.soklet.McpInMemoryTaskManager
 com.soklet.McpInMemoryTaskManager$Builder
+com.soklet.McpSessionConfig
+com.soklet.McpSessionConfig$Builder
+com.soklet.McpSessionOwnerKeyResolver
+com.soklet.McpSessionTransportAdmissionContext
+com.soklet.McpSessionTransportAdmissionController
+com.soklet.McpSessionTransportAdmissionDecision
+com.soklet.McpSessionTransportAdmissionDecision$Accepted
+com.soklet.McpSessionTransportAdmissionDecision$Rejected
 com.soklet.McpTask
 com.soklet.McpTask$Builder
 com.soklet.McpTaskCreatedResult

@@ -182,6 +182,8 @@ public class McpObservabilityPublicApiTests {
 				McpStreamTerminationReason.COMPLETED,
 				McpStreamTerminationReason.CLIENT_DISCONNECTED,
 				McpStreamTerminationReason.REQUEST_CANCELED,
+				McpStreamTerminationReason.SESSION_EXPIRED,
+				McpStreamTerminationReason.SESSION_CLOSED,
 				McpStreamTerminationReason.DEADLINE_EXCEEDED,
 				McpStreamTerminationReason.WRITE_FAILED,
 				McpStreamTerminationReason.BACKPRESSURE,

@@ -518,6 +518,12 @@ public class McpStreamTests {
 		}
 
 		@Override
+		public boolean completeWithoutMessage(boolean discardUncommittedMessages) {
+			this.mutations.incrementAndGet();
+			return true;
+		}
+
+		@Override
 		public boolean fail(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
 			this.mutations.incrementAndGet();

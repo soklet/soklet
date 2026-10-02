@@ -18,6 +18,7 @@ import {
   renderActiveTextAudit,
   verifyActiveText,
   verifyLifecycle,
+  verifyStructuralOwners,
   verifySuppressionSchema,
 } from './verify-mcp-public-evolution.mjs';
 
@@ -67,6 +68,22 @@ const reviewedIncludes = new Set(inventory.reviewedIncludeFiles.flatMap((path) =
 const reviewedLedgers = inventory.reviewedIncludeFiles.flatMap((path) =>
   readFileSync(resolve(root, path.replace('.includes', '.signatures.jsonl')),
     'utf8').trim().split(/\r?\n/u).map((line) => JSON.parse(line)));
+verifyStructuralOwners(root, inventory, reviewedIncludes, reviewedLedgers);
+const provisionalOwners = new Set(readFileSync(resolve(root,
+  'api/mcp/provisional.includes'), 'utf8').trim().split(/\r?\n/u)
+  .map((owner) => owner.replaceAll('$', '.')));
+const provisionalStructuralOwners = inventory.structuralOwners
+  .filter(({ owner }) => provisionalOwners.has(owner));
+assert.ok(provisionalStructuralOwners.some(({ owner }) =>
+  owner === 'com.soklet.McpTaskStatus'));
+for (const { owner } of provisionalStructuralOwners) {
+  const changed = structuredClone(inventory);
+  changed.structuralOwners = changed.structuralOwners
+    .filter((entry) => entry.owner !== owner);
+  assert.throws(() => verifyStructuralOwners(root, changed,
+    reviewedIncludes, reviewedLedgers), /Structural-owner inventory mismatch/u,
+  `Provisional structural owner ${owner} cannot escape exact coverage`);
+}
 verifyLifecycle(root, inventory, reviewedLedgers, reviewedIncludes);
 assert.throws(() => verifyLifecycle(root, inventory, [
   ...reviewedLedgers, { id: 'C:com/soklet/McpLogLevel' },

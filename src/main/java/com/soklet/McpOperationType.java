@@ -57,6 +57,10 @@ public enum McpOperationType {
 	RESOURCES_TEMPLATES_LIST,
 	/** Resource retrieval through {@code resources/read}. */
 	RESOURCES_READ,
+	/** 2025-era resource update subscription through {@code resources/subscribe}. */
+	RESOURCES_SUBSCRIBE,
+	/** 2025-era resource update unsubscription through {@code resources/unsubscribe}. */
+	RESOURCES_UNSUBSCRIBE,
 	/** Skills catalog retrieval through {@code skills/list}. */
 	SKILLS_LIST,
 	/** Exact Skills registration retrieval through {@code skills/get}. */
@@ -90,6 +94,8 @@ public enum McpOperationType {
 			case "resources/list" -> RESOURCES_LIST;
 			case "resources/templates/list" -> RESOURCES_TEMPLATES_LIST;
 			case "resources/read" -> RESOURCES_READ;
+			case "resources/subscribe" -> RESOURCES_SUBSCRIBE;
+			case "resources/unsubscribe" -> RESOURCES_UNSUBSCRIBE;
 			case "skills/list" -> SKILLS_LIST;
 			case "skills/get" -> SKILLS_GET;
 			case "completion/complete" -> COMPLETION_COMPLETE;

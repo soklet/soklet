@@ -194,10 +194,12 @@ record McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler,
 @ThreadSafe
 record McpApplicationCompletionRoute(
 		@NonNull McpApplicationCompletionHandler handler,
-		@NonNull Set<@NonNull String> argumentNames) {
+		@NonNull Set<@NonNull String> argumentNames,
+		@NonNull Set<@NonNull String> protocolVersions) {
 	McpApplicationCompletionRoute {
 		requireNonNull(handler);
 		argumentNames = Set.copyOf(requireNonNull(argumentNames));
+		protocolVersions = Set.copyOf(requireNonNull(protocolVersions));
 	}
 
 	@Override
@@ -669,7 +671,7 @@ final class McpApplicationRequestRouter {
 	private static boolean isFrameworkOwnedMethod(@NonNull String method) {
 		return method.startsWith("tasks/") || method.startsWith("skills/") || switch (method) {
 			case "server/discover", "tools/list", "prompts/list", "resources/list",
-					"completion/complete",
+					"completion/complete", "resources/subscribe", "resources/unsubscribe",
 					"resources/templates/list" -> true;
 			default -> false;
 		};
@@ -717,10 +719,36 @@ final class McpApplicationRequestRouter {
 		return Optional.ofNullable(exactResourceRoutesByUri.get(URI.create(wireUri)));
 	}
 
-	/** Selects executable resource routes using the same revision as the catalog. */
+	/** Resolves only a readable exact/template route in this selected revision. */
+	boolean resolvesResourceSubscription(@NonNull String uri) {
+		return resolveExactResource(requireNonNull(uri)).isPresent()
+				|| resolveResourceTemplate(uri).isPresent();
+	}
+
 	@NonNull
-	McpApplicationRequestRouter resourceView(@NonNull McpNormalizedEndpoint endpoint) {
+	McpApplicationRequestRouter completionView(@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull String protocolVersion) {
 		requireNonNull(endpoint);
+		requireNonNull(protocolVersion);
+		Set<String> promptNames = endpoint.prompts().stream()
+				.map(McpNormalizedOperation::name)
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		Set<String> templates = endpoint.resourceTemplates().stream()
+				.map(operation -> operation.resourceTemplateDescriptor().orElseThrow().uriTemplate())
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		return new McpApplicationRequestRouter(handlersByMethod, toolRoutesByName,
+				promptRoutesByName,
+				completionView(promptCompletionRoutes, promptNames, protocolVersion),
+				completionView(resourceCompletionRoutes, templates, protocolVersion),
+				exactResourceRoutesByUri, resourceTemplateRoutes, resourceListRoute);
+	}
+
+	/** Selects resource and Completion routes using the same revision as the catalog. */
+	@NonNull
+	McpApplicationRequestRouter resourceView(@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull String protocolVersion) {
+		requireNonNull(endpoint);
+		McpApplicationRequestRouter completions = completionView(endpoint, protocolVersion);
 		Set<URI> exactUris = endpoint.exactResources().stream()
 				.map(operation -> URI.create(operation.resourceDescriptor().orElseThrow().uri()))
 				.collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -736,10 +764,25 @@ final class McpApplicationRequestRouter {
 		if (endpoint.skillsPlan().isEmpty())
 			handlers.remove("resources/read");
 		return new McpApplicationRequestRouter(Collections.unmodifiableMap(handlers), toolRoutesByName,
-				promptRoutesByName, promptCompletionRoutes, resourceCompletionRoutes,
+				promptRoutesByName, completions.promptCompletionRoutes,
+				completions.resourceCompletionRoutes,
 				Collections.unmodifiableMap(exactRoutes), resourceTemplateRoutes.stream()
 						.filter(route -> templates.contains(route.uriTemplate())).toList(),
 				endpoint.customResourceListHandler() ? resourceListRoute : Optional.empty());
+	}
+
+	@NonNull
+	private static Map<@NonNull String, @NonNull McpApplicationCompletionRoute> completionView(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationCompletionRoute> routes,
+			@NonNull Set<@NonNull String> references,
+			@NonNull String protocolVersion) {
+		Map<String, McpApplicationCompletionRoute> selected = new LinkedHashMap<>();
+		routes.forEach((reference, route) -> {
+			if (references.contains(reference)
+					&& route.protocolVersions().contains(protocolVersion))
+				selected.put(reference, route);
+		});
+		return Collections.unmodifiableMap(selected);
 	}
 
 	@NonNull
@@ -1208,6 +1251,10 @@ final class McpApplicationInvocation {
 		return cancellation.isActive();
 	}
 
+	boolean isNotificationDeliveryActive() {
+		return notificationWriter.isActive();
+	}
+
 	@NonNull
 	CancelationToken cancelationToken() {
 		return cancellation;
@@ -1231,6 +1278,10 @@ final class McpApplicationInvocation {
 interface McpApplicationNotificationWriter {
 	boolean write(McpJsonRpcMessage.@NonNull Notification notification)
 			throws InterruptedException;
+
+	default boolean isActive() {
+		return true;
+	}
 }
 
 /**
@@ -1403,7 +1454,12 @@ record McpApplicationResponse(int status, @NonNull String reason,
 @ThreadSafe
 @FunctionalInterface
 interface McpApplicationResponseWriter {
+	default void didFinishPhysicalWork() {}
 	boolean write(@NonNull McpApplicationResponse response);
+
+	default boolean isNotificationDeliveryActive() {
+		return true;
+	}
 
 	default boolean writeNotification(McpJsonRpcMessage.@NonNull Notification notification)
 			throws InterruptedException {
@@ -1474,6 +1530,16 @@ final class McpApplicationExecutionStoppedException extends Exception {
 }
 
 /**
+ * Atomic ownership result for a cancellation racing an application response.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationCancellationReservation(boolean registered, boolean won, Runnable complete) {
+	@Override public String toString() { return "McpApplicationCancellationReservation{<redacted>}"; }
+}
+
+/**
  * One listener-generation's application execution state. Protocol parsing is
  * deliberately outside this type; handler admission returns immediately and
  * never consumes a protocol request-processing thread while application work
@@ -1483,6 +1549,7 @@ final class McpApplicationExecutionStoppedException extends Exception {
  */
 @ThreadSafe
 final class McpApplicationExecution {
+	private static final int MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY = 4;
 	private static final AtomicLong CANCELLATION_CALLBACK_THREAD_SEQUENCE =
 			new AtomicLong();
 
@@ -1522,7 +1589,11 @@ final class McpApplicationExecution {
 	@NonNull
 	private final ExecutorService cancellationCallbackExecutor;
 	@NonNull
+	private final ExecutorService sessionOwnerPolicyExecutor;
+	@NonNull
 	private final McpApplicationHandlerDispatcher dispatcher;
+	@NonNull
+	private final McpApplicationHandlerDispatcher sessionOwnerPolicyDispatcher;
 	@NonNull
 	private final Object executionBoundaryLock;
 	@NonNull
@@ -1636,6 +1707,24 @@ final class McpApplicationExecution {
 		this.dispatcher = new McpApplicationHandlerDispatcher(
 				configuration.handlerConcurrency(), configuration.handlerQueueCapacity(),
 				handlerExecutor, observer, this::signalDeadlineTimer);
+		int sessionOwnerConcurrency = Math.min(MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY,
+				configuration.handlerConcurrency());
+		// Session authorization must remain available while every tool-handler slot
+		// or cancellation sidecar is occupied. This hidden dispatcher retains its
+		// own physical slots and never invokes the user's executor supplier twice.
+		@Nullable ExecutorService ownerExecutor = null;
+		try {
+			ownerExecutor = McpApplicationHandlerExecutorFactory.production().create(sessionOwnerConcurrency);
+			this.sessionOwnerPolicyDispatcher = new McpApplicationHandlerDispatcher(
+					sessionOwnerConcurrency, configuration.handlerQueueCapacity(), ownerExecutor,
+					McpApplicationExecutionObserver.disabledInstance(), this::signalDeadlineTimer);
+			this.sessionOwnerPolicyExecutor = ownerExecutor;
+		} catch (RuntimeException | Error failure) {
+			shutdownFailedConstructionExecutor(ownerExecutor, failure);
+			shutdownFailedConstructionExecutor(handlerExecutor, failure);
+			shutdownFailedConstructionExecutor(cancellationCallbackExecutor, failure);
+			throw failure;
+		}
 		this.executionBoundaryLock = new Object();
 		this.requestsByIdentity = Collections.synchronizedMap(new IdentityHashMap<>());
 		this.retainedExchanges = new ConcurrentHashMap<>();
@@ -1653,6 +1742,18 @@ final class McpApplicationExecution {
 		this.stoppingReason = new AtomicReference<>();
 		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-deadline");
 		this.timerThread.setDaemon(false);
+	}
+
+	private static void shutdownFailedConstructionExecutor(@Nullable ExecutorService executor,
+			@NonNull Throwable failure) {
+		if (executor == null) return;
+		try { executor.shutdown(); }
+		catch (Throwable cleanupFailure) {
+			if (cleanupFailure != failure) {
+				try { failure.addSuppressed(cleanupFailure); }
+				catch (Throwable ignored) { /* Cleanup cannot replace the construction failure. */ }
+			}
+		}
 	}
 
 	void start() {
@@ -1880,6 +1981,7 @@ final class McpApplicationExecution {
 
 		if (stopped.get() || quiescing.get()) {
 			terminalCleanup.run();
+			responseWriter.didFinishPhysicalWork();
 			return;
 		}
 
@@ -1965,6 +2067,20 @@ final class McpApplicationExecution {
 				: exchange.reserveCancellation(reason, cause);
 	}
 
+	/** Distinguishes a lost terminal race from dispatch that has not registered yet. */
+	McpApplicationCancellationReservation tryReserveCancellation(
+			@NonNull MicrohttpRequest request, @NonNull StreamTerminationReason reason) {
+		Exchange exchange = requestsByIdentity.get(requireNonNull(request));
+		if (exchange == null)
+			return new McpApplicationCancellationReservation(false, false, () -> {});
+		Optional<Runnable> action;
+		synchronized (executionBoundaryLock) {
+			action = stopped.get() ? Optional.empty() : exchange.tryReserveCancellation(reason, true);
+		}
+		return new McpApplicationCancellationReservation(true, action.isPresent(),
+				action.orElseGet(() -> () -> {}));
+	}
+
 	void runTimerCycle() {
 		long now = clock.nanoTime();
 		if (protocolDeadlineCycle != null)
@@ -1985,6 +2101,7 @@ final class McpApplicationExecution {
 	 */
 	@ThreadSafe
 	final class BoundedPolicyCancellation implements McpApplicationCancellation {
+		private final boolean applicationCallbacksAllowed;
 		@NonNull
 		private final McpApplicationCancellationState state;
 		@NonNull
@@ -1998,7 +2115,8 @@ final class McpApplicationExecution {
 		private @Nullable BooleanSupplier cancellationTarget;
 		private boolean cancellationDispatched;
 
-		private BoundedPolicyCancellation() {
+		private BoundedPolicyCancellation(boolean applicationCallbacksAllowed) {
+			this.applicationCallbacksAllowed = applicationCallbacksAllowed;
 			this.state = new McpApplicationCancellationState();
 			this.callbackChainReleased = new CountDownLatch(1);
 			this.physicalWorkStarted = new AtomicBoolean();
@@ -2025,6 +2143,8 @@ final class McpApplicationExecution {
 		@Override
 		@NonNull
 		public CallbackRegistration onCancel(@NonNull Runnable callback) {
+			if (!applicationCallbacksAllowed)
+				throw new IllegalStateException("Session-owner policy cancellation has no application callback surface.");
 			return this.state.onCancel(requireNonNull(callback));
 		}
 
@@ -2093,7 +2213,7 @@ final class McpApplicationExecution {
 				callbackCannotRun = false;
 			}
 
-			if (callbackCannotRun) {
+			if (callbackCannotRun || !applicationCallbacksAllowed) {
 				this.state.discardCallbacks();
 				this.callbackChainReleased.countDown();
 				return;
@@ -2145,7 +2265,22 @@ final class McpApplicationExecution {
 
 	@NonNull
 	BoundedPolicyCancellation newBoundedPolicyCancellation() {
-		return new BoundedPolicyCancellation();
+		return new BoundedPolicyCancellation(true);
+	}
+
+	/** Fresh session ownership runs independently of handlers and their cancel hooks. */
+	@NonNull
+	<T extends @NonNull Object> T invokeBoundedSessionOwnerPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos) throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos,
+				new BoundedPolicyCancellation(false), () -> {}, sessionOwnerPolicyDispatcher);
+	}
+
+	<T extends @NonNull Object> T invokeBoundedSessionOwnerPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull Runnable physicalExitObserver) throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos,
+				new BoundedPolicyCancellation(false), physicalExitObserver, sessionOwnerPolicyDispatcher);
 	}
 
 	/**
@@ -2187,11 +2322,25 @@ final class McpApplicationExecution {
 			@NonNull BoundedPolicyCancellation cancellation,
 			@NonNull Runnable physicalExitObserver)
 			throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos, cancellation, physicalExitObserver, dispatcher);
+	}
+
+	@NonNull
+	private <T extends @NonNull Object> T invokeBoundedPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull BoundedPolicyCancellation cancellation,
+			@NonNull Runnable physicalExitObserver,
+			@NonNull McpApplicationHandlerDispatcher policyDispatcher) throws Exception {
 		requireNonNull(callback);
 		requireNonNull(cancellation);
 		requireNonNull(physicalExitObserver);
+		AtomicBoolean exitDelivered = new AtomicBoolean();
+		Runnable physicalExit = () -> {
+			if (exitDelivered.compareAndSet(false, true)) physicalExitObserver.run();
+		};
 		if (deadlineNanos - clock.nanoTime() <= 0L) {
 			cancellation.completeWithoutInvocation();
+			physicalExit.run();
 			throw new McpApplicationPolicyDeadlineException(true);
 		}
 		AtomicReference<T> result = new AtomicReference<>();
@@ -2201,7 +2350,7 @@ final class McpApplicationExecution {
 		CountDownLatch completed = new CountDownLatch(1);
 		AtomicReference<McpApplicationHandlerDispatcher.Ticket> ticketReference =
 				new AtomicReference<>();
-		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(() -> {
+		McpApplicationHandlerDispatcher.Ticket ticket = policyDispatcher.newTicket(() -> {
 			try {
 				cancellation.markPhysicalWorkStarted();
 				if (deadlineNanos - clock.nanoTime() <= 0L) {
@@ -2234,7 +2383,7 @@ final class McpApplicationExecution {
 			}
 		}, () -> {
 			cancellation.markPhysicalExit();
-			physicalExitObserver.run();
+			physicalExit.run();
 		});
 		ticketReference.set(ticket);
 		cancellation.bindCancellationTarget(() -> {
@@ -2243,7 +2392,7 @@ final class McpApplicationExecution {
 			boolean suppressed = state.compareAndSet(
 					BoundedPolicyState.WAITING_TO_ENTER,
 					BoundedPolicyState.SUPPRESSED_BEFORE_ENTRY);
-			boolean canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(
+			boolean canceledBeforeDispatch = policyDispatcher.cancelBeforeDispatch(
 					boundTicket);
 			if (!canceledBeforeDispatch)
 				boundTicket.requestInterrupt();
@@ -2256,14 +2405,25 @@ final class McpApplicationExecution {
 			}
 			return callbackCannotRun;
 		});
-		McpApplicationHandlerDispatcher.Admission admission = dispatcher.admit(ticket);
+		McpApplicationHandlerDispatcher.Admission admission;
+		if (policyDispatcher == sessionOwnerPolicyDispatcher) {
+			// The internal executor cannot inline application work. Admission under
+			// this boundary prevents an empty graceful check from racing a new owner
+			// ticket into an executor that is already being shut down.
+			synchronized (executionBoundaryLock) {
+				admission = stopped.get() || quiescing.get()
+						? McpApplicationHandlerDispatcher.Admission.CLOSED : policyDispatcher.admit(ticket);
+			}
+		} else admission = policyDispatcher.admit(ticket);
 		if (admission == McpApplicationHandlerDispatcher.Admission.REJECTED
 				|| admission == McpApplicationHandlerDispatcher.Admission.CLOSED) {
 			cancellation.completeWithoutInvocation();
+			physicalExit.run();
 			throw new McpApplicationPolicyCapacityException();
 		}
 		if (admission == McpApplicationHandlerDispatcher.Admission.CANCELED) {
 			cancellation.completeWithoutInvocation();
+			physicalExit.run();
 			Throwable canceledFailure = failure.get();
 			if (canceledFailure instanceof Exception exception)
 				throw exception;
@@ -2281,7 +2441,7 @@ final class McpApplicationExecution {
 			throw exception;
 		}
 		if (!finished) {
-			boolean canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket);
+			boolean canceledBeforeDispatch = policyDispatcher.cancelBeforeDispatch(ticket);
 			state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
 					BoundedPolicyState.SUPPRESSED_BEFORE_ENTRY);
 			cancellation.cancel(StreamTerminationReason.RESPONSE_TIMEOUT);
@@ -2341,6 +2501,11 @@ final class McpApplicationExecution {
 				isTerminated());
 	}
 
+	/** Internal physical accounting; these slots are not public handler executions. */
+	McpApplicationHandlerDispatcher.@NonNull Snapshot sessionOwnerPolicySnapshot() {
+		return sessionOwnerPolicyDispatcher.snapshot();
+	}
+
 	void stop() {
 		stop(StreamTerminationReason.SERVER_STOPPING);
 	}
@@ -2353,6 +2518,7 @@ final class McpApplicationExecution {
 			quiescing.set(true);
 		}
 		dispatcher.beginGracefulDrain();
+		sessionOwnerPolicyDispatcher.beginGracefulDrain();
 		finishGracefulDrainIfComplete();
 		signalDeadlineTimer();
 	}
@@ -2369,6 +2535,8 @@ final class McpApplicationExecution {
 		Runnable dispatcherCancellation =
 				dispatcher.stopAcceptingAndReserveCancellation(
 						new McpApplicationExecutionStoppedException());
+		Runnable sessionOwnerCancellation = sessionOwnerPolicyDispatcher.stopAcceptingAndReserveCancellation(
+				new McpApplicationExecutionStoppedException());
 		List<Runnable> exchangeCancellations = new ArrayList<>();
 		try {
 			for (Exchange exchange : List.copyOf(retainedExchanges.values()))
@@ -2379,6 +2547,7 @@ final class McpApplicationExecution {
 			// application onCancel callbacks run only after dispatcher-owned policy
 			// waiters have been woken and every active ticket has been interrupted.
 			dispatcherCancellation.run();
+			sessionOwnerCancellation.run();
 		}
 		for (Runnable exchangeCancellation : exchangeCancellations)
 			exchangeCancellation.run();
@@ -2387,6 +2556,7 @@ final class McpApplicationExecution {
 		// runnable promoted while its current worker is still returning, leaving
 		// the logical handler slot charged forever.
 		handlerExecutor.shutdown();
+		sessionOwnerPolicyExecutor.shutdown();
 		cancellationCallbackExecutor.shutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2395,19 +2565,24 @@ final class McpApplicationExecution {
 		if (!quiescing.get() || stopped.get())
 			return;
 		McpApplicationHandlerDispatcher.Snapshot snapshot = dispatcher.snapshot();
+		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		if (snapshot.activeSlots() != 0 || snapshot.queueDepth() != 0
+				|| ownerSnapshot.activeSlots() != 0 || ownerSnapshot.queueDepth() != 0
 				|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 			return;
 		synchronized (executionBoundaryLock) {
 			if (!quiescing.get() || stopped.get())
 				return;
 			McpApplicationHandlerDispatcher.Snapshot confirmed = dispatcher.snapshot();
+			McpApplicationHandlerDispatcher.Snapshot confirmedOwner = sessionOwnerPolicyDispatcher.snapshot();
 			if (confirmed.activeSlots() != 0 || confirmed.queueDepth() != 0
+					|| confirmedOwner.activeSlots() != 0 || confirmedOwner.queueDepth() != 0
 					|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 				return;
 			stopped.set(true);
 		}
 		handlerExecutor.shutdown();
+		sessionOwnerPolicyExecutor.shutdown();
 		cancellationCallbackExecutor.shutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2434,6 +2609,10 @@ final class McpApplicationExecution {
 			handlerExecutor.awaitTermination(remaining, TimeUnit.NANOSECONDS);
 		elapsed = System.nanoTime() - startedAt;
 		remaining = Math.max(0L, timeoutNanos - Math.max(0L, elapsed));
+		if (!sessionOwnerPolicyExecutor.isTerminated() && remaining > 0L)
+			sessionOwnerPolicyExecutor.awaitTermination(remaining, TimeUnit.NANOSECONDS);
+		elapsed = System.nanoTime() - startedAt;
+		remaining = Math.max(0L, timeoutNanos - Math.max(0L, elapsed));
 		if (!cancellationCallbackExecutor.isTerminated() && remaining > 0L)
 			cancellationCallbackExecutor.awaitTermination(
 					remaining, TimeUnit.NANOSECONDS);
@@ -2443,10 +2622,13 @@ final class McpApplicationExecution {
 	boolean isTerminated() {
 		McpApplicationHandlerDispatcher.Snapshot dispatcherSnapshot =
 				dispatcher.snapshot();
+		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		return stopped.get() && !timerThread.isAlive() && handlerExecutor.isTerminated()
+				&& sessionOwnerPolicyExecutor.isTerminated()
 				&& cancellationCallbackExecutor.isTerminated()
 				&& dispatcherSnapshot.activeSlots() == 0
 				&& dispatcherSnapshot.queueDepth() == 0
+				&& ownerSnapshot.activeSlots() == 0 && ownerSnapshot.queueDepth() == 0
 				&& retainedExchanges.isEmpty()
 				&& requestsByIdentity.isEmpty();
 	}
@@ -2510,6 +2692,11 @@ final class McpApplicationExecution {
 		private final AtomicBoolean handlerRunning;
 		@NonNull
 		private final AtomicBoolean handlerFinished;
+		private final AtomicBoolean physicalWorkFinished;
+		private final Runnable physicalExitObserver;
+		private final CountDownLatch sessionCancellationCallbacksFinished = new CountDownLatch(1);
+		private final CountDownLatch sessionCancellationEffectsReady = new CountDownLatch(1);
+		private volatile boolean sessionCancellationCallbacksOutstanding;
 		@NonNull
 		private TerminalState terminalState;
 		private boolean handlerEntryCommitted;
@@ -2553,6 +2740,8 @@ final class McpApplicationExecution {
 			this.cancellation = new McpApplicationCancellationState();
 			this.handlerRunning = new AtomicBoolean();
 			this.handlerFinished = new AtomicBoolean();
+			this.physicalWorkFinished = new AtomicBoolean();
+			this.physicalExitObserver = responseWriter::didFinishPhysicalWork;
 			this.terminalState = TerminalState.OPEN;
 			this.handlerEntryCommitted = false;
 			this.publicHandlerEntryCommitted = false;
@@ -2580,7 +2769,20 @@ final class McpApplicationExecution {
 						admissionIdentity, frameworkRequestStateContinuation,
 						catalogAccessView,
 						cancellation,
-						this::writeNotification, this::requirePublicHandlerEntry,
+						new McpApplicationNotificationWriter() {
+							@Override
+							public boolean write(McpJsonRpcMessage.@NonNull Notification notification)
+									throws InterruptedException {
+								return Exchange.this.writeNotification(notification);
+							}
+
+							@Override
+							public boolean isActive() {
+								TransportLease lease = transportLease.get();
+								return lease != null && lease.responseWriter()
+										.isNotificationDeliveryActive();
+								}
+						}, this::requirePublicHandlerEntry,
 						() -> clock.nanoTime() - deadlineNanos >= 0,
 						selectedLocaleSlot);
 				AtomicBoolean handlerInvoked = new AtomicBoolean();
@@ -2649,6 +2851,7 @@ final class McpApplicationExecution {
 							McpApplicationResponse.internalError(request.id(), 500,
 									"Internal Server Error", throwable)));
 			} finally {
+				awaitSessionCancellationCallbacks();
 				handlerRunning.set(false);
 				handlerFinished.set(true);
 				cleanupRetainedExchange();
@@ -2890,35 +3093,72 @@ final class McpApplicationExecution {
 		private Runnable reserveCancellation(
 				@NonNull StreamTerminationReason reason,
 				@Nullable Throwable ignored) {
+			return tryReserveCancellation(reason).orElseGet(() -> () -> {});
+		}
+
+		private Optional<Runnable> tryReserveCancellation(
+				@NonNull StreamTerminationReason reason) {
+			return tryReserveCancellation(reason, false);
+		}
+
+		private Optional<Runnable> tryReserveCancellation(
+				@NonNull StreamTerminationReason reason, boolean boundedCallbacks) {
 			boolean cancelBeforeDispatch;
 			boolean releaseCancellationCallbacks;
 			dispatcher.beginObserverDeferral();
 			try {
 				synchronized (terminalLock) {
 					if (terminalState != TerminalState.OPEN)
-						return () -> {};
+						return Optional.empty();
 					// Retain only the application-visible reason. Transport exceptions can
 					// retain connection internals and are detached with the response lease.
 					releaseCancellationCallbacks = cancellation.fixReason(
 							requireNonNull(reason));
 					terminalState = TerminalState.ABANDONED;
 					cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+					if (boundedCallbacks && releaseCancellationCallbacks && !cancelBeforeDispatch) {
+						sessionCancellationCallbacksOutstanding = true;
+						// The execution boundary reserves the bounded sidecar before stop
+						// can shut its executor down. Public hooks wait for HTTP offering.
+						cancellationCallbackExecutor.execute(() -> {
+							awaitCancellationLatch(sessionCancellationEffectsReady);
+							try { cancellation.releaseCallbacks(); }
+							finally { sessionCancellationCallbacksFinished.countDown(); }
+						});
+					}
 				}
 			} finally {
 				dispatcher.endObserverDeferral();
 			}
 
 			AtomicBoolean completionClaimed = new AtomicBoolean();
-			return () -> {
+			return Optional.of(() -> {
 				if (!completionClaimed.compareAndSet(false, true))
 					return;
-				if (releaseCancellationCallbacks)
+				if (releaseCancellationCallbacks && !sessionCancellationCallbacksOutstanding)
 					cancellation.releaseCallbacks();
-				if (!cancelBeforeDispatch)
-					ticket().requestInterrupt();
-				abandonedResponses.incrementAndGet();
-				releaseResponseOwnership();
-			};
+				try {
+					if (!cancelBeforeDispatch) ticket().requestInterrupt();
+					abandonedResponses.incrementAndGet();
+					releaseResponseOwnership();
+				} finally {
+					if (sessionCancellationCallbacksOutstanding) sessionCancellationEffectsReady.countDown();
+				}
+			});
+		}
+
+		private void awaitSessionCancellationCallbacks() {
+			if (!sessionCancellationCallbacksOutstanding) return;
+			awaitCancellationLatch(sessionCancellationCallbacksFinished);
+		}
+
+		private void awaitCancellationLatch(CountDownLatch latch) {
+			boolean interrupted = false;
+			while (true) {
+				try { latch.await(); break; }
+				catch (InterruptedException ignored) { interrupted = true; }
+			}
+			if (interrupted) Thread.currentThread().interrupt();
 		}
 
 		private void onTimer(long now) {
@@ -3030,10 +3270,22 @@ final class McpApplicationExecution {
 			boolean handlerCannotRun = ticketState ==
 					McpApplicationHandlerDispatcher.TicketState.CANCELED
 					|| ticketState == McpApplicationHandlerDispatcher.TicketState.REJECTED;
+			if (handlerFinished.get() || handlerCannotRun)
+				finishPhysicalWork();
 			if (transportLease.get() == null && (handlerFinished.get() || handlerCannotRun)) {
 				retainedExchanges.remove(exchangeId, this);
 				if (quiescing.get())
 					signalDeadlineTimer();
+			}
+		}
+
+		private void finishPhysicalWork() {
+			if (physicalWorkFinished.compareAndSet(false, true)) {
+				try {
+					physicalExitObserver.run();
+				} catch (Throwable ignored) {
+					// A cleanup observer cannot retain the execution or prevent its barrier.
+				}
 			}
 		}
 

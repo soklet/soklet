@@ -50,12 +50,19 @@ final class McpRequestSseStream {
 	}
 
 	record Frame(@NonNull FrameType type,
-			@Nullable McpJsonRpcMessage message, byte @NonNull [] encodedBytes) {
+			@Nullable McpJsonRpcMessage message,
+			@Nullable McpJsonObject jsonMessage, byte @NonNull [] encodedBytes) {
+		Frame(@NonNull FrameType type, @Nullable McpJsonRpcMessage message,
+				byte @NonNull [] encodedBytes) {
+			this(type, message, message == null ? null : message.toJsonObject(), encodedBytes);
+		}
+
 		Frame {
 			requireNonNull(type);
 			encodedBytes = Arrays.copyOf(requireNonNull(encodedBytes),
 					encodedBytes.length);
-			if ((type == FrameType.JSON_MESSAGE) != (message != null))
+			if ((type == FrameType.JSON_MESSAGE) != (message != null)
+					|| (type == FrameType.JSON_MESSAGE) != (jsonMessage != null))
 				throw new IllegalArgumentException(
 						"Only JSON-message frames carry an MCP message.");
 			if (encodedBytes.length == 0)
@@ -84,12 +91,36 @@ final class McpRequestSseStream {
 				@NonNull Frame frame, @NonNull Object coalescingKey,
 				@NonNull BooleanSupplier offerAllowed);
 
+		/** Immediate-capture fallback; the socket channel overrides this guard. */
+		@NonNull
+		default Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+			requireNonNull(payloadReleased);
+			try {
+				return offerCoalescingIf(requireNonNull(frame),
+						requireNonNull(coalescingKey), requireNonNull(writeAllowed));
+			} finally {
+				payloadReleased.run();
+			}
+		}
+
+		default boolean recheckGuardedFrames() {
+			return true;
+		}
+
 		default McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
 				@NonNull Frame frame, long nowNanos, long idleIntervalNanos) {
 			return offer(requireNonNull(frame));
 		}
 
 		boolean complete(@NonNull Frame terminalFrame);
+
+		default boolean completeWithoutMessage() {
+			return completeWithoutMessage(false);
+		}
+
+		boolean completeWithoutMessage(boolean discardUncommittedMessages);
 
 		boolean fail(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause);
@@ -150,6 +181,8 @@ final class McpRequestSseStream {
 
 	@NonNull
 	private final McpJsonRpcEnvelopeCodec envelopeCodec;
+	@Nullable
+	private final McpJsonCodec legacyJsonCodec;
 	@NonNull
 	private final Channel channel;
 
@@ -157,8 +190,19 @@ final class McpRequestSseStream {
 			@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
 			@NonNull McpApplicationClock clock,
 			McpOutboundChannel.@NonNull Listener listener) {
+		this(frameCapacity, jsonLimits, envelopeCodec, null,
+				Mcp20260728ProtocolProfile.INSTANCE, clock, listener);
+	}
+
+	McpRequestSseStream(int frameCapacity, @NonNull McpJsonLimits jsonLimits,
+			@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
+			@Nullable McpJsonCodec jsonCodec,
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpApplicationClock clock,
+			McpOutboundChannel.@NonNull Listener listener) {
 		requireNonNull(jsonLimits);
 		this.envelopeCodec = requireNonNull(envelopeCodec);
+		this.legacyJsonCodec = legacyJsonCodec(jsonCodec, protocolProfile);
 		int maximumFrameBytes = maximumFrameBytes(jsonLimits);
 		this.channel = new TransportChannel(frameCapacity, maximumFrameBytes,
 				requireNonNull(clock), requireNonNull(listener));
@@ -171,8 +215,24 @@ final class McpRequestSseStream {
 
 	McpRequestSseStream(@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
 			@NonNull Channel channel) {
+		this(envelopeCodec, null, Mcp20260728ProtocolProfile.INSTANCE, channel);
+	}
+
+	McpRequestSseStream(@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
+			@Nullable McpJsonCodec jsonCodec,
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull Channel channel) {
 		this.envelopeCodec = requireNonNull(envelopeCodec);
+		this.legacyJsonCodec = legacyJsonCodec(jsonCodec, protocolProfile);
 		this.channel = requireNonNull(channel);
+	}
+
+	@Nullable
+	private static McpJsonCodec legacyJsonCodec(@Nullable McpJsonCodec jsonCodec,
+			@NonNull McpProtocolProfile protocolProfile) {
+		return McpLegacyHttpWire.isLegacyRevision(requireNonNull(protocolProfile).revision())
+				? requireNonNull(jsonCodec, "A legacy SSE stream requires its bounded JSON codec.")
+				: null;
 	}
 
 	@NonNull
@@ -221,10 +281,44 @@ final class McpRequestSseStream {
 				requireNonNull(offerAllowed));
 	}
 
+	@NonNull
+	Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescingMessage(
+			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+		requireNonNull(payloadReleased);
+		boolean handedOff = false;
+		try {
+			Frame frame = frame(requireNonNull(message));
+			requireNonNull(coalescingKey);
+			requireNonNull(writeAllowed);
+			testHooks.beforeCoalescingMessageOffer();
+			handedOff = true;
+			return channel.offerGuardedCoalescing(frame, coalescingKey,
+					writeAllowed, payloadReleased);
+		} finally {
+			if (!handedOff)
+				payloadReleased.run();
+		}
+	}
+
+	boolean recheckGuardedFrames() {
+		return channel.recheckGuardedFrames();
+	}
+
 	boolean completeMessage(@NonNull McpJsonRpcMessage message) {
 		Frame terminalFrame = frame(requireNonNull(message));
 		testHooks.beforeTerminalReservation();
 		return channel.complete(terminalFrame);
+	}
+
+	/** Reserves clean SSE completion without a JSON-RPC terminal event. */
+	boolean completeWithoutMessage() {
+		return completeWithoutMessage(false);
+	}
+
+	boolean completeWithoutMessage(boolean discardUncommittedMessages) {
+		testHooks.beforeTerminalReservation();
+		return channel.completeWithoutMessage(discardUncommittedMessages);
 	}
 
 	static void setTestHooks(@Nullable TestHooks testHooks) {
@@ -289,15 +383,41 @@ final class McpRequestSseStream {
 	}
 
 	private @NonNull Frame frame(@NonNull McpJsonRpcMessage message) {
-		byte[] json = envelopeCodec.encode(
-				McpProtocolSupport.requireServerOutboundMessage(message));
+		byte[] json = encodeMessage(envelopeCodec, legacyJsonCodec, message);
+		McpJsonObject jsonMessage = legacyJsonCodec != null
+				&& message instanceof McpJsonRpcMessage.ResultResponse response
+				? McpLegacyResponseWire.projectEnvelope(response) : message.toJsonObject();
 		byte[] frame = new byte[MESSAGE_PREFIX.length + json.length
 				+ MESSAGE_SUFFIX.length];
 		System.arraycopy(MESSAGE_PREFIX, 0, frame, 0, MESSAGE_PREFIX.length);
 		System.arraycopy(json, 0, frame, MESSAGE_PREFIX.length, json.length);
 		System.arraycopy(MESSAGE_SUFFIX, 0, frame,
 				MESSAGE_PREFIX.length + json.length, MESSAGE_SUFFIX.length);
-		return new Frame(FrameType.JSON_MESSAGE, message, frame);
+		return new Frame(FrameType.JSON_MESSAGE, message, jsonMessage, frame);
+	}
+
+	/** Validates the exact selected-profile JSON bytes before stream side effects. */
+	static byte @NonNull [] encodeMessage(@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
+			@Nullable McpJsonCodec jsonCodec,
+			@NonNull McpProtocolProfile protocolProfile,
+			@NonNull McpJsonRpcMessage message) {
+		return encodeMessage(requireNonNull(envelopeCodec),
+				legacyJsonCodec(jsonCodec, protocolProfile), message);
+	}
+
+	private static byte @NonNull [] encodeMessage(
+			@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
+			@Nullable McpJsonCodec legacyJsonCodec,
+			@NonNull McpJsonRpcMessage message) {
+		McpJsonRpcMessage outbound = McpProtocolSupport.requireServerOutboundMessage(message);
+		// The selected application profile already projects result fields. Apply
+		// the same final envelope projection as finite legacy responses, omitting
+		// modern discriminators and framework-owned result metadata. Progress and
+		// errors keep the common JSON-RPC encoding used by their finite paths.
+		return legacyJsonCodec != null
+				&& outbound instanceof McpJsonRpcMessage.ResultResponse response
+				? McpLegacyResponseWire.encode(legacyJsonCodec, response)
+				: envelopeCodec.encode(outbound);
 	}
 
 	@ThreadSafe
@@ -350,6 +470,31 @@ final class McpRequestSseStream {
 		}
 
 		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+			requireNonNull(payloadReleased);
+			boolean handedOff = false;
+			try {
+				byte[] encodedBytes = requireNonNull(frame).encodedBytes();
+				requireNonNull(coalescingKey);
+				requireNonNull(writeAllowed);
+				handedOff = true;
+				return this.delegate.offerGuardedCoalescing(encodedBytes,
+						coalescingKey, writeAllowed, payloadReleased);
+			} finally {
+				if (!handedOff)
+					payloadReleased.run();
+			}
+		}
+
+		@Override
+		public boolean recheckGuardedFrames() {
+			return this.delegate.recheckGuardedFrames();
+		}
+
+		@Override
 		public McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
 				@NonNull Frame frame, long nowNanos, long idleIntervalNanos) {
 			return this.delegate.offerIfWriteIdleExpired(
@@ -361,6 +506,11 @@ final class McpRequestSseStream {
 		public boolean complete(@NonNull Frame terminalFrame) {
 			return this.delegate.complete(
 					requireNonNull(terminalFrame).encodedBytes());
+		}
+
+		@Override
+		public boolean completeWithoutMessage(boolean discardUncommittedMessages) {
+			return this.delegate.completeWithoutPayload(discardUncommittedMessages);
 		}
 
 		@Override

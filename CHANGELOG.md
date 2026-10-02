@@ -124,11 +124,79 @@
   The `2026-07-28` profile uses direct requests or `server/discover`, with
   per-request version/capabilities and no session lifecycle. An explicitly
   selected `2025-06-18` or `2025-11-25` stateless compatibility adapter accepts
-  `initialize`, `notifications/initialized`, `ping`, and synchronous
-  `tools/list`/`tools/call`. It does not issue session IDs, open GET/DELETE SSE,
-  or expose the full 2025 operation set. Applications declare exact revisions
+  `initialize`, `notifications/initialized`, `ping`, synchronous
+  `tools/list`/`tools/call`, ordinary prompts/resources, argument completion,
+  and request-scoped POST progress.
+  Sessions remain disabled unless both endpoint revisions and server
+  ownership/bounds are configured. Optional HTTP admission enables leased GET
+  opening, verified DELETE, and authorized resource/catalog invalidations. Applications declare exact revisions
   on endpoints and tools; there is no implicit profile fallback. See
   [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
+- **2025 argument completion:** prompt and URI-template completers now select
+  `2025-06-18`, `2025-11-25`, and `2026-07-28` independently within their
+  owning operation's revisions. Annotation and programmatic declarations use
+  the same handlers, fresh admission, request limiting, and bounded results.
+  Capabilities and dispatch use the selected revision; modern-only completers
+  stay hidden from 2025 requests. On a Completion-enabled legacy view, a
+  visible target with a declared argument and no enabled completer returns
+  empty suggestions. Legacy host
+  and exact-candidate qualification remain pending. See the owner-approved
+  [4.0 expansion](release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md).
+- **2025 POST progress:** the existing reporter now supports explicitly selected
+  `2025-06-18` and `2025-11-25` operations with valid progress tokens. The first
+  accepted update commits SSE; no update returns JSON. Progress and the whole
+  terminal result/error use the selected legacy projection through the existing
+  bounded stream. A committed legacy SSE disconnect or lost-writer write failure
+  detaches delivery and makes
+  later reports inert without itself canceling work; deadlines and physical
+  worker ownership remain. Finite/uncommitted and queued legacy disconnects
+  still cancel, as do modern disconnects. Simulation follows the same distinction.
+  Legacy streams omit event IDs and November's recommended empty priming event
+  because they are persistent and nonresumable; no replay or recovery is added.
+  Named-host and exact-candidate qualification remain pending.
+- **2025 static catalog pagination:** framework `tools/list`, `prompts/list`,
+  static `resources/list`, and `resources/templates/list` use bounded pages
+  when the selected catalog exceeds existing response or localization limits.
+  A fitting catalog remains one page; continuations use current admission,
+  request limits, and applicable catalog policy. Framework cursors have a
+  separate 2,048-byte ceiling and neutral `-32602` mismatch handling; they are
+  unsigned navigation data with no retained session or snapshot. Custom-list
+  cursors and modern static catalog behavior are unchanged. No public API is
+  added. Named-host and exact-candidate pagination qualification remain pending.
+- **2025 minimum sessions:** `McpSessionConfig` and its required stable owner
+  resolver configure bounded node-local sessions for explicitly selected June
+  and November endpoint revisions. Every use is freshly admitted and owner,
+  path, revision, and lifecycle-bound before remembered public client metadata
+  is supplied. Anonymous allocation requires explicit opt-in. Active-request
+  cancellation now targets only the verified session and preserves a terminal
+  response whose reservation won first; physical work/evidence accounting
+  survives logical cancellation or expiry. Default/modern paths remain
+  stateless.
+  `CLIENT_CANCELED` is a
+  neutral shared token reason; MCP adds `SESSION_EXPIRED`/`SESSION_CLOSED`.
+  Recompile exhaustive enum switches and update downstream mappings. Session
+  recovery, host interoperability, and exact-candidate qualification remain
+  pending. The removed 3.5.1 store/context/ID-generator APIs are not restored.
+- **2025 session HTTP transport:** an optional provisional admission controller
+  authorizes real GET/DELETE requests with a fresh identity, explicit expiry,
+  and a subset of offered families. GET requires selected legacy subscriptions
+  and effective sources, opens bounded leased SSE with keepalives, and renews
+  against the original credentials. Verified DELETE returns `204` and retires
+  the session with `SESSION_CLOSED`. Modern and session-disabled views keep
+  `405`; host and exact-candidate qualification remain pending. These paths add no fabricated RPC context or RPC metrics/limiter call.
+- **2025 GET notifications:** session-owned `resources/subscribe` and
+  `resources/unsubscribe` use fresh admission, request limiting, readable-route
+  checks, and independent URI authorization; success returns `result: {}`.
+  Duplicate subscribe replaces historical evidence under a new generation;
+  unsubscribe/reconciliation fence establishing and active grants. URI grants
+  and bounded catalog/URI dirty bits survive GET gaps. The newest eligible GET
+  receives coalesced resource/catalog hints with authorization checked at every
+  socket write; revoked unwritten frames are purged and partially written frames
+  close before further bytes. Grant, URI-byte, encoded-output, and aggregate
+  maintenance caps retain physical ownership through callback exit. No Tasks,
+  event history, replay, or POST result recovery is added. `McpOperationType`
+  adds `RESOURCES_SUBSCRIBE`/`RESOURCES_UNSUBSCRIBE`; update exhaustive switches.
+  Named-host refresh and exact-candidate qualification remain pending.
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
   immutable `McpJson*` values, operation-specific contexts and registrations,

@@ -28,6 +28,10 @@ public enum McpStreamTerminationReason {
 	CLIENT_DISCONNECTED,
 	/** The request was canceled. */
 	REQUEST_CANCELED,
+	/** The verified MCP session exceeded its idle or absolute lifetime. */
+	SESSION_EXPIRED,
+	/** The verified MCP session was explicitly closed. */
+	SESSION_CLOSED,
 	/** The request deadline elapsed. */
 	DEADLINE_EXCEEDED,
 	/** Stream output could not be written. */

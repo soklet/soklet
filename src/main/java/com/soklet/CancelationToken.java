@@ -35,6 +35,13 @@ import java.util.Optional;
  * support streaming, or a response deadline or streaming timeout is reached.
  * Graceful shutdown by itself does not cancel already-admitted finite MCP work;
  * its unary or request-scoped progress response may finish within that budget.
+ * <p>
+ * MCP 2025-06-18 and 2025-11-25 distinguish an already-committed progress SSE
+ * response from a finite response. Losing that SSE connection detaches its
+ * writer without canceling application work solely for connection loss. The
+ * request deadline and forced shutdown can still cancel the retained work.
+ * Disconnects before SSE commitment continue to cancel the token. MCP
+ * 2026-07-28 progress retains its disconnect cancelation behavior.
  *
  * <p>Normal completion does not mark the token canceled. Tokens
  * release registered callbacks when the associated operation completes normally,

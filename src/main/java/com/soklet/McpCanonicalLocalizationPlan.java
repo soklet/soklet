@@ -25,6 +25,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,14 +106,52 @@ final class McpCanonicalLocalizationPlan {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ResponsePlan(@NonNull ResponseKind kind,
-			@NonNull List<@NonNull Slot> slots) {
-		ResponsePlan {
-			requireNonNull(kind);
-			slots = List.copyOf(requireNonNull(slots));
-			if (slots.isEmpty())
+	static final class ResponsePlan {
+		private final @NonNull ResponseKind kind;
+		private final @NonNull List<@NonNull Slot> slots;
+		private final @NonNull List<@NonNull IndexedSlot> fixedSlots;
+		private final @NonNull Map<@NonNull String,
+				@NonNull List<@NonNull IndexedSlot>> ownerSlots;
+
+		ResponsePlan(@NonNull ResponseKind kind,
+				@NonNull List<@NonNull Slot> slots) {
+			this.kind = requireNonNull(kind);
+			this.slots = List.copyOf(requireNonNull(slots));
+			if (this.slots.isEmpty())
 				throw new IllegalArgumentException(
 						"A canonical MCP localization response plan must not be empty.");
+			List<IndexedSlot> fixed = new ArrayList<>();
+			Map<String, List<IndexedSlot>> owners = new LinkedHashMap<>();
+			for (int index = 0; index < this.slots.size(); ++index) {
+				Slot slot = this.slots.get(index);
+				IndexedSlot indexedSlot = new IndexedSlot(index, slot);
+				if (slot.structuralTarget().kind() == StructuralTargetKind.FIXED)
+					fixed.add(indexedSlot);
+				else
+					owners.computeIfAbsent(slot.ownerId(), ignored -> new ArrayList<>())
+							.add(indexedSlot);
+			}
+			this.fixedSlots = List.copyOf(fixed);
+			Map<String, List<IndexedSlot>> immutableOwners = new LinkedHashMap<>();
+			owners.forEach((ownerId, ownedSlots) ->
+					immutableOwners.put(ownerId, List.copyOf(ownedSlots)));
+			this.ownerSlots = Map.copyOf(immutableOwners);
+		}
+
+		@NonNull
+		ResponseKind kind() {
+			return this.kind;
+		}
+
+		@NonNull
+		List<@NonNull Slot> slots() {
+			return this.slots;
+		}
+
+		/** Counts one descriptor's slots without scanning the full catalog plan. */
+		int ownerSlotCount(@NonNull String ownerId) {
+			List<IndexedSlot> ownedSlots = this.ownerSlots.get(requireNonNull(ownerId));
+			return ownedSlots == null ? 0 : ownedSlots.size();
 		}
 
 		/**
@@ -127,12 +166,23 @@ final class McpCanonicalLocalizationPlan {
 			requireNonNull(projectedDocument);
 			ProjectionIndex projectionIndex = ProjectionIndex.from(kind,
 					projectedDocument);
-			List<Slot> resolved = new ArrayList<>(slots.size());
-
-			for (Slot slot : slots)
-				slot.resolve(projectionIndex).ifPresent(resolved::add);
+			// Look up only owners present in this page. Retain the construction-time
+			// callback order for existing callers without walking omitted owners.
+			List<IndexedSlot> selected = new ArrayList<>(this.fixedSlots);
+			for (String ownerId : projectionIndex.ownerIndexes().keySet()) {
+				List<IndexedSlot> ownedSlots = this.ownerSlots.get(ownerId);
+				if (ownedSlots != null)
+					selected.addAll(ownedSlots);
+			}
+			selected.sort(Comparator.comparingInt(IndexedSlot::index));
+			List<Slot> resolved = new ArrayList<>(selected.size());
+			for (IndexedSlot indexedSlot : selected)
+				indexedSlot.slot().resolve(projectionIndex).ifPresent(resolved::add);
 
 			return List.copyOf(resolved);
+		}
+
+		private record IndexedSlot(int index, @NonNull Slot slot) {
 		}
 	}
 

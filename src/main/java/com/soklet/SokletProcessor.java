@@ -1021,21 +1021,39 @@ public final class SokletProcessor extends AbstractProcessor {
 				protocolVersions);
 		List<String> taskProtocolVersions = validateMcpProtocolVersions(endpointType,
 				annotation, "@McpServerEndpoint", "taskProtocolVersions", false);
+		List<String> sessionProtocolVersions = validateMcpProtocolVersions(endpointType,
+				annotation, "@McpServerEndpoint", "sessionProtocolVersions", false);
 		List<String> subscriptionProtocolVersions = validateMcpProtocolVersions(
 				endpointType, annotation, "@McpServerEndpoint",
 				"subscriptionProtocolVersions", false);
 		validateMcpVersionSubset(endpointType, "@McpServerEndpoint taskProtocolVersions",
 				taskProtocolVersions, protocolVersions,
 				"@McpServerEndpoint protocolVersions");
+		validateMcpVersionSubset(endpointType, "@McpServerEndpoint sessionProtocolVersions",
+				sessionProtocolVersions, protocolVersions,
+				"@McpServerEndpoint protocolVersions");
+		if (sessionProtocolVersions.stream().anyMatch(sessionProtocolVersion ->
+				!"V2025_06_18".equals(sessionProtocolVersion) && !"V2025_11_25".equals(sessionProtocolVersion)))
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint sessionProtocolVersions currently supports only MCP protocol revisions 2025-06-18 and 2025-11-25.");
 		validateMcpVersionSubset(endpointType,
 				"@McpServerEndpoint subscriptionProtocolVersions",
 				subscriptionProtocolVersions, protocolVersions,
 				"@McpServerEndpoint protocolVersions");
 		validateMcpModernOnlyVersions(endpointType, "@McpServerEndpoint taskProtocolVersions",
 				taskProtocolVersions);
-		validateMcpModernOnlyVersions(endpointType,
-				"@McpServerEndpoint subscriptionProtocolVersions",
-				subscriptionProtocolVersions);
+		if (subscriptionProtocolVersions.stream().anyMatch(subscriptionProtocolVersion ->
+				!"V2025_06_18".equals(subscriptionProtocolVersion)
+						&& !"V2025_11_25".equals(subscriptionProtocolVersion)
+						&& !"V2026_07_28".equals(subscriptionProtocolVersion)))
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint subscriptionProtocolVersions currently supports only MCP protocol revisions 2025-06-18, 2025-11-25, and 2026-07-28.");
+		validateMcpVersionSubset(endpointType,
+				"@McpServerEndpoint legacy subscriptionProtocolVersions",
+				subscriptionProtocolVersions.stream()
+						.filter(subscriptionProtocolVersion -> !"V2026_07_28".equals(subscriptionProtocolVersion))
+						.toList(), sessionProtocolVersions,
+				"@McpServerEndpoint sessionProtocolVersions");
 		String title = annotationString(annotation, "title");
 		String description = annotationString(annotation, "description");
 		String websiteUrl = annotationString(annotation, "websiteUrl");
@@ -1331,7 +1349,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				List.copyOf(prompts), List.copyOf(resources), resourceList,
 				Map.copyOf(promptCompletionByName),
 				Map.copyOf(resourceCompletionByAddress), protocolVersions,
-				taskProtocolVersions, subscriptionProtocolVersions);
+				taskProtocolVersions, sessionProtocolVersions, subscriptionProtocolVersions);
 	}
 
 	private void rejectInheritedMcpOperations(
@@ -2315,7 +2333,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		String target = annotationString(annotation, prompt ? "name" : "uri");
 		List<String> protocolVersions = validateMcpProtocolVersions(method,
 				annotation, annotationName, "protocolVersions", true);
-		validateMcpModernOnlyVersions(method, annotationName, protocolVersions);
+		validateMcpReleasedAdapterVersions(method, annotationName, protocolVersions);
 		if (target.isBlank())
 			mcpError(method, "Soklet: %s target must be nonblank.",
 					annotationName);
@@ -2989,6 +3007,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!endpoint.taskProtocolVersions().isEmpty())
 			source.append("\t\tendpointBuilder.taskProtocolVersions(")
 					.append(mcpVersionSetExpression(endpoint.taskProtocolVersions()))
+					.append(");\n");
+		if (!endpoint.sessionProtocolVersions().isEmpty())
+			source.append("\t\tendpointBuilder.sessionProtocolVersions(")
+					.append(mcpVersionSetExpression(endpoint.sessionProtocolVersions()))
 					.append(");\n");
 		if (!endpoint.subscriptionProtocolVersions().isEmpty())
 			source.append("\t\tendpointBuilder.subscriptionProtocolVersions(")
@@ -4983,6 +5005,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			Map<String, McpCompletionModel> promptCompletions,
 			Map<String, McpCompletionModel> resourceCompletions,
 			List<String> protocolVersions, List<String> taskProtocolVersions,
+			List<String> sessionProtocolVersions,
 			List<String> subscriptionProtocolVersions) {}
 
 	private record McpCompletionModel(ExecutableElement method, String target,

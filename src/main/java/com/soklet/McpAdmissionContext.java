@@ -69,7 +69,8 @@ public interface McpAdmissionContext {
 	@NonNull McpProtocolVersion getProtocolVersion();
 
 	/**
-	 * @return the selected tool, prompt, resource, or task ID, when applicable
+	 * @return the selected tool, prompt, resource URI, or task ID, when applicable;
+	 *         both legacy resource subscription operations expose their URI
 	 */
 	@NonNull Optional<@NonNull String> getOperationName();
 
@@ -99,14 +100,19 @@ public interface McpAdmissionContext {
 
 	/**
 	 * @return whether resource-update subscriptions are selected for this
-	 *         {@code subscriptions/listen} request; false for other methods
+	 *         {@code subscriptions/listen} request or exact 2025-era
+	 *         {@code resources/subscribe} request; false for other methods,
+	 *         including {@code resources/unsubscribe}
 	 */
 	@NonNull Boolean isResourceSubscriptionsIncluded();
 
 	/**
 	 * Returns the validated, deduplicated resource URIs requested by a
-	 * {@code subscriptions/listen} message, in first-encounter order. The list
-	 * is empty for every other method and when the subscription request does not
+	 * {@code subscriptions/listen} message, in first-encounter order, or the
+	 * singleton URI selected by an exact 2025-era {@code resources/subscribe}
+	 * request. Selection is validated before admission and does not establish
+	 * permission. The list is empty for every other method, including
+	 * {@code resources/unsubscribe}, and when the subscription request does not
 	 * include resource subscriptions.
 	 *
 	 * @return immutable requested resource-subscription URI list

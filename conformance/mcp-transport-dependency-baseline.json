@@ -23,12 +23,40 @@
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java"
         },
         {
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#runHandler::<anonymous McpApplicationNotificationWriter>#isActive",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java"
+        },
+        {
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationInvocation#sendNotification",
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java"
         },
         {
           "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#enqueueMessage",
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#encodeMessage",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#frame",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream.Frame#Frame",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyResponseWire#projectEnvelope",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyResponseWire.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime#captureFrameWhileLocked",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime#complete",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java"
         },
         {
           "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#offerCoalescingMessage",
@@ -40,7 +68,7 @@
         }
       ],
       "id": "MCP-TRANSPORT-001",
-      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate."
+      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock."
     },
     {
       "evidence": [
@@ -119,12 +147,40 @@
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
         {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#configureLegacySessions",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#sessionsEnabled",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#legacyHttpMethods",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processLegacySessionHttp",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#mcpPreflightRequestHeaders",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#withInitializationResponse",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore#requireLegacy",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java"
+        },
+        {
           "owner": "MCP production-scope named type and direct-field declarations",
           "path": "src/main/java/com/soklet/internal/mcp"
         }
       ],
       "id": "MCP-TRANSPORT-005",
-      "statement": "Reviewed production declarations contain no future transport state under the documented exact-field, domain/role, cross-domain, and data-bearing-record rules; legacy session/replay headers remain forbidden."
+      "statement": "Production declarations allow only exact reviewed preexisting handles and approved bounded 2025 session/leased GET/URI grant state under the domain/role, cross-domain, and data-bearing-declaration rules. GET/DELETE require their selected legacy session facilities; Last-Event-ID is ignored input allowed in preflight only where GET is configured. Modern sessions, replay, and stdio state remain excluded, and application-authored session/replay headers remain forbidden."
     }
   ],
   "derivation": {
@@ -188,13 +244,331 @@
     },
     "stateStorageDeclarationPolicy": {
       "crossDomainRule": "An identifier combining two or more future-transport domain terms is state-bearing even without a separate storage-role term.",
-      "dataBearingClassRule": "A class whose name contains a future-transport domain term and that declares direct fields is state-bearing unless it is one exact reviewed preexisting simulation-lifecycle type.",
+      "dataBearingClassRule": "A class whose name contains a future-transport domain term and that declares direct fields is state-bearing unless it is one exact reviewed preexisting simulation-lifecycle type or approved bounded 2025 session type.",
       "dataBearingRecordRule": "A nonempty record whose name contains a future-transport domain term is state-bearing.",
-      "directFieldRule": "A direct field name containing any future-transport domain term is state-bearing unless it is one exact reviewed preexisting non-roadmap field.",
+      "directFieldRule": "A direct field name containing any future-transport domain term is state-bearing unless it is one exact reviewed preexisting non-roadmap field or approved 2025 session field.",
       "domainTerms": [
         "replay",
         "session",
         "stdio"
+      ],
+      "reviewed2025SessionDomainFields": [
+        {
+          "field": "MAXIMUM_URI_GRANTS_PER_SESSION",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Exact 64 logical URI grants per enabled 2025 session; no historical payload or replay."
+        },
+        {
+          "field": "MAXIMUM_RETAINED_URI_BYTES_PER_SESSION",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Exact 65536 retained URI bytes per enabled 2025 session through residual callback exit."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Delivery",
+          "rationale": "Bounded one-session dirty-state delivery view; no historical event payload."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.EvidenceReservation",
+          "rationale": "Shared bounded subscribe evidence stays charged until its final logical/physical reference exits."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.GrantEntry",
+          "rationale": "Bounded node-local URI grant tied to the exact 2025 session and authorization generation."
+        },
+        {
+          "field": "MAXIMUM_LOGICAL_GETS_PER_SESSION",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Exact two-logical-GET cap for explicitly enabled 2025 sessions; no replay or modern session state."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Get",
+          "rationale": "Bounded GET handle retains its exact node-local session through physical completion; no event history."
+        },
+        {
+          "field": "maximumSessions",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+        },
+        {
+          "field": "maximumSessionsPerOwner",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+        },
+        {
+          "field": "maximumSessionIdleDuration",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+        },
+        {
+          "field": "maximumSessionDuration",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+        },
+        {
+          "field": "anonymousSessionsAllowed",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved provisional minimum 2025 session configuration; no modern session state or replay."
+        },
+        {
+          "field": "DEFAULT_MAXIMUM_SESSIONS",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "DEFAULT_MAXIMUM_SESSIONS_PER_OWNER",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "DEFAULT_MAXIMUM_SESSION_IDLE_DURATION",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "DEFAULT_MAXIMUM_SESSION_DURATION",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "maximumSessions",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "maximumSessionsPerOwner",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "maximumSessionIdleDuration",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "maximumSessionDuration",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "anonymousSessionsAllowed",
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig.Builder",
+          "rationale": "Reviewed defaults and copied tuning values for explicitly enabled 2025 sessions only."
+        },
+        {
+          "field": "sessionConfig",
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "owner": "com.soklet.McpServer.Builder",
+          "rationale": "Optional server ownership/bounds configuration requiring a corresponding explicitly enabled 2025 endpoint."
+        },
+        {
+          "field": "sessionConfig",
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "owner": "com.soklet.DefaultMcpServer",
+          "rationale": "Immutable server session configuration forwarded to the exact legacy runtime; modern remains stateless."
+        },
+        {
+          "field": "sessionProtocolVersions",
+          "file": "src/main/java/com/soklet/McpEndpoint.java",
+          "owner": "com.soklet.McpEndpoint",
+          "rationale": "Explicit endpoint subset restricted to served June/November 2025 revisions; empty disables sessions."
+        },
+        {
+          "field": "sessionProtocolVersions",
+          "file": "src/main/java/com/soklet/McpEndpoint.java",
+          "owner": "com.soklet.McpEndpoint.Builder",
+          "rationale": "Explicit endpoint subset restricted to served June/November 2025 revisions; empty disables sessions."
+        },
+        {
+          "field": "MAXIMUM_ACTIVE_CALLS_PER_SESSION",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+        },
+        {
+          "field": "MAXIMUM_ANONYMOUS_SESSIONS",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+        },
+        {
+          "field": "MAXIMUM_SESSION_ID_HEADER_BYTES",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+        },
+        {
+          "field": "sessions",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+        },
+        {
+          "field": "anonymousSessions",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local 2025 session records/correlation; no event journal or lifetime ID history."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Initialization",
+          "rationale": "Bounded initialization delivery and physical-exit handle for the selected 2025 record."
+        },
+        {
+          "field": "session",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Call",
+          "rationale": "Bounded admitted-use handle retaining evidence until actual physical exit."
+        },
+        {
+          "field": "liveSessions",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.OwnerUsage",
+          "rationale": "Per-owner logical session accounting, separate from retained physical evidence."
+        },
+        {
+          "field": "MCP_SESSION_ID",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacySessionRevisions",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacySessionStore",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacySessionOwnerResolver",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacySessionsConfigured",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacyAnonymousSessionsAllowed",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+          "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
+        },
+        {
+          "field": "legacySessionSelected",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+        },
+        {
+          "field": "legacySessionTerminationCause",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+        },
+        {
+          "field": "legacySessionStreamTerminationObserved",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
+        },
+        {
+          "field": "legacySessionTransportCompletionDeadlineNanos",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "rationale": "Existing response-write timeout bounds physical terminal delivery after session cancellation; no deadline extension or replay."
+        },
+        {
+          "field": "sessionCancellationCallbacksFinished",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
+          "rationale": "Exact bounded cancellation sidecar completion fence; the handler retains its slot until public callbacks physically exit."
+        },
+        {
+          "field": "sessionCancellationEffectsReady",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
+          "rationale": "Exact sidecar publication fence ensuring cancellation callbacks wait until HTTP effects are offered."
+        },
+        {
+          "field": "sessionCancellationCallbacksOutstanding",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
+          "rationale": "Physical callback ownership flag bounded by the existing handler concurrency; not a session registry."
+        },
+        {
+          "field": "MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "rationale": "Exact four-worker ceiling for fresh legacy owner resolution; additionally bounded by configured handler concurrency."
+        },
+        {
+          "field": "sessionOwnerPolicyExecutor",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "rationale": "Dedicated bounded owner-resolution execution, included in physical shutdown accounting without public handler metrics."
+        },
+        {
+          "field": "sessionOwnerPolicyDispatcher",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
+          "rationale": "Configured bounded owner-resolution queue/worker dispatcher; cancellation has no application-hook sidecar."
+        }
+      ],
+      "reviewed2025SessionDomainTypes": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DefaultSessionTransportAdmissionContext",
+          "rationale": "Immutable exact-request context for explicit 2025 GET/DELETE admission and renewal; it carries no JSON-RPC context or replay position."
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSessionConfig.java",
+          "owner": "com.soklet.McpSessionConfig",
+          "rationale": "Approved immutable provisional minimum session configuration, not a wire history or modern lifecycle."
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Approved bounded node-local store for explicitly enabled June/November 2025 sessions only."
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Session",
+          "rationale": "Bounded owner/path/revision/generation record, retained metadata and active correlation; no replay or lifetime ID history."
+        }
       ],
       "reviewedExistingDomainFields": [
         {
@@ -234,7 +608,7 @@
         "storage",
         "store"
       ],
-      "scope": "Named type declarations in the production scope fail when one identifier combines a future-transport domain term with a state/storage role term or combines multiple domain terms; every unreviewed direct field name containing a future-transport domain term, nonempty domain-named record, and field-bearing domain-named class also fail, while the exact reviewed preexisting fields and simulation-lifecycle types plus fieldless single-domain capability/control declarations remain allowed."
+      "scope": "Named type declarations in the production scope fail when one identifier combines a future-transport domain term with a state/storage role term or combines multiple domain terms; every unreviewed direct field name containing a future-transport domain term, nonempty domain-named record, and field-bearing domain-named class also fail, while exact reviewed preexisting declarations, approved bounded 2025 session declarations, and fieldless single-domain capability/control declarations remain allowed. These exact session allowances grant neither modern lifecycle nor replay/stdio state."
     }
   },
   "directMicrohttpDependencies": [
@@ -285,6 +659,10 @@
     {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
       "type": "com.soklet.internal.microhttp.TransportFailureObserver"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionTransportAdmission.java",
+      "type": "com.soklet.internal.microhttp.Header"
     },
     {
       "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
@@ -376,8 +754,8 @@
   "formatVersion": 2,
   "summary": {
     "directMicrohttp": {
-      "fileCount": 8,
-      "pairCount": 26,
+      "fileCount": 9,
+      "pairCount": 27,
       "typeCount": 13
     },
     "directSocketEventLoop": {

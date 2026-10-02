@@ -65,6 +65,96 @@ public class McpSimulationCaptureRuntimeTests {
 			"\n\n".getBytes(StandardCharsets.US_ASCII);
 
 	@Test
+	public void uncommittedCancellationDiscardsStagedProgressBeforeItsEmptySseHead() throws Exception {
+		SseCapture capture = newSseCapture(options(1, 1024));
+		Assertions.assertTrue(capture.runtime().enqueue(frame("progress")));
+		capture.runtime().reserveClientCancellation();
+		Assertions.assertTrue(capture.runtime().completeWithoutMessage(true));
+		capture.runtime().acceptResponse(capture.runtime().response(List.of(new Header("Content-Type", "text/event-stream"))));
+		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		Assertions.assertTrue(capture.runtime().isTerminalWritten());
+		Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, completion(capture).getReason());
+		SseCapture committed = openSse(options(1, 1024));
+		Assertions.assertThrows(IllegalStateException.class, () -> committed.runtime().completeWithoutMessage(true));
+		Assertions.assertTrue(committed.runtime().completeWithoutMessage());
+	}
+
+	@Test
+	public void sessionRetirementPreservesItsReasonWhileDeliveringAFiniteOrSseError() throws Exception {
+		for (McpStreamTerminationReason reason : List.of(McpStreamTerminationReason.SESSION_EXPIRED,
+				McpStreamTerminationReason.SESSION_CLOSED)) {
+			McpSimulationRuntime finite = new McpSimulationRuntime(options(1, 1024), () -> {});
+			finite.reserveLegacySessionReason(reason);
+			finite.acceptResponse(new MicrohttpResponse(200, "OK", List.of(), "error".getBytes(StandardCharsets.US_ASCII)));
+			Assertions.assertTrue(finite.awaitResponse(Duration.ZERO).isPresent());
+			finite.didFinishRequest(McpRequestOutcome.DEADLINE_EXCEEDED, List.of());
+			Assertions.assertEquals(reason, finite.awaitCompletion(Duration.ZERO).orElseThrow().getReason());
+			SseCapture stream = openSse(options(1, 1024));
+			stream.runtime().reserveLegacySessionReason(reason);
+			Assertions.assertTrue(stream.runtime().complete(frame("retirement_error")));
+			Assertions.assertTrue(stream.runtime().isTerminalWritten());
+			stream.listener().assertTermination(StreamTerminationReason.COMPLETED, reason);
+			stream.runtime().didFinishRequest(McpRequestOutcome.DEADLINE_EXCEEDED, List.of());
+			Assertions.assertEquals(reason, completion(stream).getReason());
+		}
+	}
+
+	@Test
+	public void clientCancellationAllowsOnlyItsEmptySseHeadAndCleanCompletion() throws Exception {
+		SseCapture capture = newSseCapture(options(1, 1));
+		capture.runtime().reserveClientCancellation();
+		capture.runtime().acceptResponse(new MicrohttpResponse(200, "OK",
+				List.of(new Header("Content-Type", "application/json")), new byte[]{'{', '}'}));
+		Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty());
+		Assertions.assertFalse(capture.runtime().complete(frame("late_result")));
+		Assertions.assertTrue(capture.runtime().completeWithoutMessage());
+		Assertions.assertFalse(capture.runtime().completeWithoutMessage());
+		Assertions.assertEquals(0, capture.listener().terminationCount(), "No termination precedes the response head.");
+		MicrohttpResponse head = capture.runtime().response(List.of(new Header("Content-Type", "text/event-stream")));
+		capture.runtime().acceptResponse(new MicrohttpResponse(200, "OK", head.headers(), new byte[0]));
+		Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty(), "An unrelated head cannot use the exception.");
+		capture.runtime().acceptResponse(head);
+		McpSimulationResponse response = capture.runtime().awaitResponse(Duration.ZERO).orElseThrow();
+		Assertions.assertEquals(200, response.getStatusCode());
+		Assertions.assertEquals(McpSimulationBodyType.SSE, response.getBodyType());
+		Assertions.assertEquals(Set.of("text/event-stream"), response.getHeaders().get("Content-Type"));
+		capture.listener().assertTermination(StreamTerminationReason.COMPLETED, McpStreamTerminationReason.REQUEST_CANCELED);
+		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
+		capture.runtime().didFinishRequest(McpRequestOutcome.COMPLETE, List.of());
+		Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, completion(capture).getReason());
+		Assertions.assertTrue(completion(capture).getTerminalMessage().isEmpty());
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+	}
+
+	@Test
+	public void clientCancellationDrainsCommittedProgressWithoutAResultOrExtraCaptureReservation() throws Exception {
+		McpRequestSseStream.Frame progress = frame("progress");
+		SseCapture capture = openSse(options(1, progress.encodedBytes().length));
+		Assertions.assertTrue(capture.runtime().enqueue(progress));
+		capture.runtime().reserveClientCancellation();
+		Assertions.assertFalse(capture.runtime().enqueue(frame("later")));
+		Assertions.assertTrue(capture.runtime().completeWithoutMessage());
+		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
+		assertEncodedBytes(progress, capture.runtime().awaitStreamItem(Duration.ZERO).orElseThrow());
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		Assertions.assertTrue(completion(capture).getTerminalMessage().isEmpty());
+		Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, completion(capture).getReason());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+		capture.listener().assertTermination(StreamTerminationReason.COMPLETED, McpStreamTerminationReason.REQUEST_CANCELED);
+	}
+
+	@Test
+	public void otherRuntimeCancellationCannotUseTheEmptyCompletionException() throws Exception {
+		SseCapture capture = newSseCapture(options(1, 128));
+		capture.runtime().reserveRuntimeReason(McpStreamTerminationReason.CLIENT_DISCONNECTED);
+		Assertions.assertFalse(capture.runtime().completeWithoutMessage());
+		capture.runtime().acceptResponse(capture.runtime().response(List.of(new Header("Content-Type", "text/event-stream"))));
+		Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty());
+	}
+
+	@Test
 	public void pendingItemCapacityRefundsOnlyDequeuedSlots() throws Exception {
 		SseCapture refunded = openSse(options(1, 1_024));
 		McpRequestSseStream.Frame first = frame("first");

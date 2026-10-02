@@ -2,8 +2,8 @@
 
 Soklet's qualified 4.0.0 server target is MCP `2026-07-28`. The development
 source implements explicitly selected `2025-06-18` and `2025-11-25` revisions
-on the same endpoint URL for synchronous tools, ordinary prompts, and ordinary
-resources. Those adapters still need
+on the same endpoint URL for synchronous tools, ordinary prompts/resources,
+argument completion, and request-scoped POST progress. Those adapters still need
 exact-candidate release qualification. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
@@ -108,23 +108,33 @@ On `2026-07-28`, clients may send a direct versioned request or call
 `server/discover`. On the explicitly selected `2025-06-18` and `2025-11-25` path, clients
 start with `initialize`, may send `notifications/initialized`, and can call
 `ping`. Later POST requests use their selected `MCP-Protocol-Version` header;
-Soklet does not issue a session ID in this first adapter. GET and DELETE do
-not open an SSE channel. The implemented compatibility surface covers synchronous
-`tools/list`/`tools/call`, ordinary `prompts/list`/`prompts/get`, and ordinary
-`resources/list`, `resources/templates/list`, and `resources/read`. The
-`2025-03-26` revision has additional wire differences and is not implemented.
+the default stateless view does not issue a session ID. Explicit endpoint and
+server configuration enables the [minimum 2025 session package](#explicitly-enabled-2025-sessions).
+An optional HTTP transport admission controller enables leased GET opening and
+verified DELETE retirement on configured session views. Selected legacy subscriptions
+also enable session-owned URI grants and resource/catalog invalidations over GET. The implemented compatibility surface covers synchronous
+`tools/list`/`tools/call`, ordinary `prompts/list`/`prompts/get`, ordinary
+`resources/list`, `resources/templates/list`, and `resources/read`, plus
+`completion/complete` for declared prompt arguments and resource-template
+variables. A valid progress token also enables the existing reporter over the
+originating POST response's lazily committed SSE stream. A handler that emits
+no progress returns JSON. Framework static catalogs support bounded pages on
+both 2025 revisions, as described [below](#static-catalog-pages-on-2025-revisions).
+The `2025-03-26` revision has additional wire differences and is
+not implemented.
 A declared enum constant
 does not by itself mean that the runtime supports or has qualified its wire
 revision; unsupported endpoint/operation combinations fail construction.
 
 Tasks and `subscriptions/listen` are separate endpoint opt-ins through
 `taskProtocolVersions` and `subscriptionProtocolVersions`. Empty sets mean
-disabled. For 4.0, these facilities select only `V2026_07_28`; installing a
-server-wide task manager or subscription event publisher alone does not
-advertise them on an endpoint. Skills and Apps metadata also select exact
-revisions. The 2025 adapter does not include Skills,
-Apps UI, Tasks, subscriptions, completion, multi-round input, or server-initiated
-requests. In a stateless 2025 call after `initialize`, the request context
+disabled. Tasks select only `V2026_07_28`. Subscription selection may also name session-enabled
+2025 revisions to offer the HTTP GET families described below. URI subscriptions
+use real legacy POST operations and independent authorization grants. Installing
+a server-wide task manager or event publisher alone does not advertise a facility
+on an endpoint. Skills and Apps metadata also select exact revisions. The 2025
+adapter does not include Skills, Apps UI, Tasks, `subscriptions/listen`,
+multi-round input, or server-initiated requests. In a stateless 2025 call after `initialize`, the request context
 cannot attribute the earlier client's capabilities or information to that
 call; application policy must treat those values as unknown.
 
@@ -132,13 +142,15 @@ An ordinary prompt selects its revisions through `@McpPrompt(protocolVersions = 
 or `McpPromptRegistration.withName(name, protocolVersions)`, using a subset of
 the endpoint's exact revisions. String arguments, user/assistant messages and
 application metadata use the same public handler on each selected revision.
-Prompt catalogs remain one page; cursors are rejected. Caller catalog policy
-is checked again before `prompts/get`, including when the caller already
+Modern prompt catalogs remain one page and reject cursors; the two 2025 views
+use framework pagination. Caller catalog policy is checked again before
+`prompts/get`, including when the caller already
 listed the prompt. Icons are advertised for `2025-11-25` and omitted for
 `2025-06-18`; a returned resource link with icons cannot be represented on
 `2025-06-18` and fails safely. A prompt that declares input requests or
-request state cannot select a 2025 revision. Completion remains explicitly
-restricted to `V2026_07_28`.
+request state cannot select a 2025 revision. Completion selects its own
+explicit subset of the prompt's revisions, using the existing completer and
+handler signature.
 
 Ordinary resources select revisions through `@McpResource(protocolVersions = ...)`
 or the exact-URI and URI-template registration factories. Custom listing uses
@@ -151,29 +163,43 @@ revision. Application handlers remain responsible for resource permissions and
 for binding opaque cursors to the intended caller, snapshot, and expiry.
 Resource catalogs do not use the tools/prompts catalog access policy.
 
-Static resource and template catalogs are one page and reject cursors. Custom
-resource lists retain application pagination, result metadata, and bounded
+Modern static resource and template catalogs are one page and reject cursors;
+the two 2025 views use framework pagination. Custom resource lists retain
+application pagination, result metadata, and bounded
 opaque cursors, including an empty string. Text and base64 blob reads retain
 their content metadata. The adapter omits 2026 cache fields and result framing,
 omits June catalog icons, and retains November icons. Missing resources use the
-legacy `-32002` error. Resource input requests, request state, and completion
-remain 2026-only. Apps resource declarations and returned Apps content are
+legacy `-32002` error. Template completion selects its own explicit subset of
+the registered template's revisions. Resource input requests and request
+state remain 2026-only. Apps resource declarations and returned Apps content are
 rejected on the legacy adapter.
 
 The client is configured with the endpoint URL. Soklet does not discover or
 choose a sibling URL on the client's behalf. Only completed adapter tests and
 qualification against the exact candidate artifact can establish a release or
-host compatibility claim. The detailed implementation and gate plan is in
+host compatibility claim. The earlier implementation and qualification
+checkpoints remain in
 [the compatibility plan](release/MCP_LEGACY_COMPATIBILITY_PLAN_2026-09-27.md).
+The owner selected the complete
+[2025 expansion](release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md) for 4.0.0:
+completion, POST progress, static catalog pagination, opt-in sessions with
+remembered metadata/cancellation, and GET/DELETE notification delivery. This
+development source implements completion, POST progress, and static catalog
+pagination, plus explicitly enabled 2025 sessions with remembered public client
+metadata and active-request cancellation, leased GET opening, and verified DELETE
+retirement, session-owned URI grants, and resource/catalog invalidations over GET.
+Earlier host evidence retains its original stateless scope; session
+ownership, cancellation, expiry, and reconnect recovery require separate
+qualification against the exact candidate.
 
 `McpLocalizationContext` is a Soklet-owned final request value built through
 `withLocale(locale, localizationLookup)`, with an optional revision and a
 thread-safe `McpLocalizationLookup` over the captured translation snapshot;
 applications do not implement or subtype the context.
 
-Localization is node-local by design. Ordinary requests may be routed round-
-robin because each node creates a fresh context from the request's portable
-inputs and one response retains one immutable catalog snapshot. A live SSE
+Localization is node-local by design. Modern and session-disabled 2025 requests
+may be routed round-robin because each node creates a fresh context from the
+request's portable inputs and one response retains one immutable catalog snapshot. A live SSE
 subscription remains on the listener that accepted it; after node loss, the
 client reconnects to a survivor and that node creates a fresh context rather
 than recovering a distributed localization session. `invalidateCatalogs()` is
@@ -485,15 +511,17 @@ disables Soklet's cap and therefore requires an effective external bound.
 `streamQueueCapacity(...)`; both configure the same per-stream outbound queue,
 whose default is 128, and the most recent call wins.
 
-JSON-RPC requires a sender not to reuse an ID while an earlier request from
-that sender is still in flight. That is a sender obligation, not a receiver-
+On the modern stateless path, JSON-RPC requires a sender not to reuse an ID
+while an earlier request from that sender is still in flight. That is a sender obligation, not a receiver-
 side global namespace. Because this protocol is stateless, Soklet cannot
 reliably infer whether two HTTP requests came from one sender; a connection,
 endpoint, admitted identity, or authorization partition is not a protocol
 sender identity. Soklet therefore correlates each response within its own
 request/stream and permits independent concurrent requests to carry the same
 string or integer ID. It does not reserve IDs across the listener or reject a
-request merely because another live request has an equal ID.
+request merely because another live request has an equal ID. Enabled 2025
+sessions have a separate active-ID registry and the protocol's whole-session
+no-reuse obligation, described [below](#explicitly-enabled-2025-sessions).
 
 Every server must resolve:
 
@@ -771,16 +799,16 @@ inputs to a neutral failure that reveals no protected value. The
 compile-checks one deployment-specific allowlist and canary policy; it is not a
 universal injection detector.
 
-The prompt catalog follows registration order and is returned as one page. A
-present cursor is invalid because Soklet does not expose prompt-list
-pagination.
+On `2026-07-28`, the prompt catalog follows registration order and is returned
+as one page; a present cursor is invalid. The two 2025 revisions use
+[framework static catalog pages](#static-catalog-pages-on-2025-revisions).
 
 Tool and prompt catalogs are caller-neutral unless the server configures an
 `McpCatalogAccessPolicy`. With a policy, Soklet evaluates canonical,
-untranslated registrations in registration order after admission and the
+untranslated registrations after admission and the
 request limiter, on bounded application execution. `tools/list` and
 `prompts/list` return only the admitted caller's permitted descriptors while
-preserving canonical relative order; filtering every registration produces a
+preserving the selected revision's canonical relative order; filtering every registration produces a
 successful empty catalog. Policy callbacks receive the admitted
 `McpRequestContext`, a cancellation feature, and the same applicable
 `McpLocalizationContext` later used for rendering or handler dispatch.
@@ -867,9 +895,10 @@ pair and 1,048,576 states per endpoint, failing closed when either limit would
 be exceeded. These fixed limits bound parsing, matching, and pairwise overlap
 validation without introducing a regex engine.
 
-Without a custom list handler, Soklet returns exact registrations in
+Without a custom list handler, `2026-07-28` returns exact registrations in
 registration order as one page, excludes templates, and rejects every present
-cursor. With `McpResourceListHandler` or `@McpResourceList`, the application
+cursor. The two 2025 views page exact registrations and templates separately.
+With `McpResourceListHandler` or `@McpResourceList`, the application
 handler is the sole authority for every `McpResourcePage`—Soklet never merges
 static registrations into the handler result. The handler reads the optional
 cursor from `McpResourceListContext` and places any following cursor on the
@@ -889,7 +918,7 @@ registered templates before returning them.
 view of exact registrations. It excludes templates and is not automatically
 authorization-filtered.
 
-Cursors are opaque application strings. Soklet preserves the distinction
+Custom-list cursors are opaque application strings. Soklet preserves the distinction
 between absent and present-empty cursor values and enforces a positive UTF-8
 size limit (4,096 bytes by default) on incoming and outgoing cursors. The
 largest configurable limit is 174,762 bytes: one sixth of the production JSON
@@ -902,7 +931,35 @@ portability. Bind each cursor to its page position, retained snapshot, catalog
 revision, expiry, and current authorization context as the deployment
 requires. Tampered, expired, cross-principal, missing-snapshot, wrong-revision,
 and malformed values should produce the same neutral application error;
-Soklet has no cursor store, signing key, or pagination magic.
+Soklet has no application cursor store or signing key.
+
+### Static catalog pages on 2025 revisions
+
+On explicitly selected `2025-06-18` and `2025-11-25` views, Soklet pages
+`tools/list`, `prompts/list`, static `resources/list`, and
+`resources/templates/list` in stable canonical key order. A catalog that fits
+the existing response byte, JSON-node, and localization-lookup limits remains
+one page. Larger catalogs return `nextCursor`; an individual descriptor that
+cannot fit a page fails safely. No new application handler or public API is
+required. Custom resource-list handlers keep their application-owned pages
+and cursors; modern static catalogs remain unpaged.
+
+Every page passes fresh admission and request limiting. Tools and prompts use
+the caller's current catalog policy; a previous page or cursor grants no
+permission to a later listing, call, or resource read. Soklet localizes only
+the selected page, retaining one context and cached lookup outcomes while
+shrinking a page that exceeds its publication budget.
+
+Framework cursors have a fixed 2,048-byte ceiling independent of
+`maximumCursorSizeInBytes`, which still controls application cursors. They
+identify a resume position in the endpoint/revision/catalog and, when
+localized, its negotiated locale. Wrong-kind/path/revision, changed catalog
+or locale, corrupt, unknown, or caller-hidden anchors produce the same neutral
+JSON-RPC `-32602` error. The cursor is unsigned navigation data, not an
+authorization grant: it has no MAC, server-side session, retained translation
+snapshot, or promise of consistent permissions and translations across pages.
+Restart enumeration when the catalog or negotiated locale changes. Named-host
+pagination and exact-candidate release qualification remain pending.
 
 Soklet ships no `file://` mapper. A handler that maps resource URIs to a
 filesystem owns root containment, traversal rejection, canonicalization,
@@ -933,8 +990,9 @@ public scope only when the same descriptors are safe to share across callers.
 Protocol cache hints do not turn the HTTP transport into a shared cache: MCP
 transport responses use `Cache-Control: no-store`.
 
-The static exact-resource fallback is registration-ordered and
-caller-neutral, like the static tool and prompt catalogs. A custom
+The static exact-resource fallback is caller-neutral: modern lists use
+registration order, and the two 2025 views use canonical key order. Tool and
+prompt catalogs additionally apply any configured caller catalog policy. A custom
 `McpResourceListHandler` is dynamic and application-owned: it may return
 identity-specific descriptors, but the application must keep the endpoint
 cache scope conservative enough for every page it can return. Framework
@@ -1564,7 +1622,7 @@ A framework-owned protocol-operation deadline returns a bodyless HTTP 504 with
 the normal bounded response headers; there is no JSON-RPC `-32603` body in that
 case. Both paths are recorded as deadline-exceeded outcomes.
 
-An absolute request timeout, disconnect, forced shutdown after the graceful
+An absolute request timeout, forced shutdown after the graceful
 budget, or response-stream backpressure failure cancels the invocation's
 `CancelationToken`. Graceful shutdown itself fences new work but preserves the
 response path for already-admitted finite unary and request-scoped progress
@@ -1572,6 +1630,13 @@ requests. Soklet interrupts the dispatch thread where applicable after
 cancelation, but Java cannot forcibly stop a non-cooperative handler. Such a
 handler retains its execution slot until it actually exits even if the client
 request has already completed.
+
+A committed legacy POST SSE disconnect or lost-writer write failure detaches
+that writer without canceling work solely because delivery was lost. Blocked
+reporters wake, later reports are inert, and the eventual result is discarded. The absolute deadline and
+physical execution reservation remain owned until their normal boundaries.
+Finite, uncommitted, or queued legacy requests and modern requests retain
+disconnect cancellation.
 
 The same non-forcible rule applies to application-supplied request-pipeline
 callbacks such as admission, rate limiting, and custom request-state
@@ -1705,10 +1770,11 @@ parameter is rejected because progress is legitimately unavailable for some
 requests.
 
 The cancelation token is always present after an application handler is
-selected. It is signaled by client disconnect, the absolute request deadline,
+selected. It is signaled by the absolute request deadline,
 forced shutdown after graceful drain expires, or a response-stream
-write/backpressure failure. Beginning graceful drain does not signal it for an
-already-admitted finite request. Cancelation is cooperative: handlers should
+timeout, internal failure, or backpressure failure. Disconnect cancellation
+follows the revision and commitment rules below. Beginning graceful drain does
+not signal it for an already-admitted finite request. Cancelation is cooperative: handlers should
 check between expensive operations, register a short nonblocking callback with
 `onCancel(...)`, or call `throwIfCanceled()`. Reports made after cancelation or
 terminal completion have no effect.
@@ -1734,6 +1800,35 @@ decrease while the invocation is active throws `IllegalArgumentException`.
 Delivery is synchronous through the request's bounded SSE queue, so a slow
 client applies bounded backpressure to the reporting handler. Progress and
 keep-alive writes never extend the absolute request deadline.
+
+The same reporter works on explicitly selected `2025-06-18`, `2025-11-25`, and
+`2026-07-28` operations. On either 2025 revision, the first accepted update
+commits the originating POST response to SSE; no update leaves the terminal
+response as JSON. Each notification preserves the exact token, and one whole,
+sanitized, size-checked terminal result or error uses the selected legacy wire
+projection. Tool results are complete results, not incremental result chunks.
+Stateless progress tokens are POST-local; clients must still choose unique
+tokens across active requests. An explicitly session-enabled 2025 view also
+checks tokens across its logically active calls: a collision suppresses the
+reporter but does not reject either call. Detaching a writer releases that
+call's progress-token registration; it does not recover the lost result.
+
+After legacy POST SSE commitment, a client disconnect or lost-writer write
+failure detaches delivery rather than canceling the handler. Soklet wakes
+blocked reporters, ignores later reports, and discards the undeliverable
+terminal result. Deadlines, forced shutdown, stream timeouts, internal failures,
+and backpressure still enforce cancellation, and a handler retains its execution
+slot until physical exit. Before commitment, including
+queued work, legacy disconnects still cancel; modern disconnect behavior is
+unchanged. No lost POST result is replayed or moved to another connection.
+
+The [November transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
+recommends an initial empty event with an event ID to prime reconnect/polling.
+Soklet intentionally omits that SHOULD behavior for its persistent,
+nonresumable legacy POST streams: there is no empty priming event, `id:` or
+`retry:` field, intentional polling, event history, or `Last-Event-ID` recovery.
+This disposition does not establish client interoperability; named-host and
+official progress/priming qualification remain pending for the exact candidate.
 
 If an operation has a missing `CONDITIONAL` input-request capability, Soklet
 must keep the response uncommitted until the handler chooses a complete or
@@ -1913,32 +2008,245 @@ backpressure. See the
 [README integration-testing guide](README.md#integration-testing) for HTTP,
 SSE, capture, and cleanup examples.
 
+## Explicitly enabled 2025 sessions
+
+Sessions are disabled by default and are available only on explicitly selected
+`2025-06-18` and `2025-11-25` endpoint revisions. Configure both
+`McpServer.Builder.sessionConfig(McpSessionConfig)` and the endpoint's
+`sessionProtocolVersions` subset, through its builder or `@McpServerEndpoint`.
+A session-enabled endpoint requires the server configuration; an unused server
+configuration is rejected. `2026-07-28` stays stateless. GET and DELETE require the
+additional HTTP transport admission configuration described below.
+
+Create the configuration with
+`McpSessionConfig.withOwnerKeyResolver(sessionOwnerKeyResolver).build()`.
+The required `McpSessionOwnerKeyResolver` maps the freshly admitted identity to
+one stable, opaque owner key, including issuer/tenant/subject distinctions as
+needed. It must be local, nonblocking, thread-safe, nonblank, and at most 256
+UTF-8 bytes. Principal equality and authorization/rate-limit partition keys do
+not necessarily identify one owner. Resolver failure or timeout fails closed.
+Anonymous allocation is disabled by default. `anonymousSessionsAllowed(true)`
+is an explicit opt-in: a constant anonymous key deliberately shares a quota,
+and a fresh key per initialization must not bypass owner limits.
+
+Successful `initialize` publishes a framework-minted 256-bit opaque ID before
+response bytes expose it. The record is usable during the 30-second
+acknowledgement window; `notifications/initialized` acknowledges it, and accepted
+owner-bound use also proves delivery. Initialization stores a bounded public
+client-info/capability snapshot, never the original identity as current
+permission. Every later POST is freshly admitted and request-limited before
+owner, exact endpoint path, revision, and lifecycle generation are verified.
+Only then does its request context receive the remembered client metadata.
+A well-formed stale ID on `initialize` requests a fresh allocation; it does not
+revive or replace that referenced session.
+
+Malformed, duplicate, oversized, or missing required session framing returns
+`400`. After fresh admission, unknown, expired, wrong-owner, and wrong-path IDs
+share a neutral `404`; a verified owner/path with the wrong stored revision
+returns `400` and preserves the record. Session-path admission rejections remap
+application `400`/`404`/`405` to neutral `403`, preserving validated safe headers.
+Accepted JSON-RPC operation results/errors use `200`. Per-owner capacity returns
+`429`, global allocation pressure returns `503`, with bounded Retry-After;
+there is no implicit stateless downgrade or unrelated-owner eviction.
+
+Initial defaults are 256 sessions per server, 16 per owner, 24 hours of actual
+quiescence, seven days absolute lifetime, and a 64 KiB initialization projection
+also capped at 4,096 nodes and existing JSON limits. Active calls are capped at
+32 per session. Request IDs and progress tokens retained for correlation have
+separate 256-byte UTF-8 bounds; integer `1` and string `"1"` remain distinct.
+Anonymous allocation additionally shares a 64-session global sub-budget.
+Metadata and retained request evidence have independent session/owner/global
+byte accounting. Limits are ceilings, not reserved memory entitlements or a
+bound on graphs retained by application-owned principals/callbacks. Positive
+configurable values are required; null tuning arguments restore defaults.
+
+Idle expiry requires actual quiescence; invalid/foreign messages and keepalive
+bytes do not refresh activity. Capacity reclamation may retire only expired or
+eligible same-owner quiescent records; active work and other owners' live state
+are preserved. Logical retirement fences new use immediately, while callback,
+worker, and evidence reservations remain until physical exit. Hard expiry can
+signal active work. A terminal result whose reservation already won is
+preserved; otherwise server expiry attempts a neutral correlated `-32603` on a
+usable POST and signals the token's `RESPONSE_TIMEOUT`, with MCP stream reason
+`SESSION_EXPIRED`.
+
+After successful framing, fresh admission/request limiting, and session binding,
+`notifications/cancelled` receives its own empty `202`. Within that verified
+session, a usable request ID can cancel matching logically active client work if cancellation wins the terminal reservation. Unknown,
+completed, initialization, and otherwise uncancellable targets are ignored.
+Invalid optional reason text does not invalidate a usable target; free-form
+reasons never enter built-in logs or metric labels. Winning cancellation signals
+`CLIENT_CANCELED`, fences later progress/results, and completes the target as
+zero-event `200` SSE if it was finite, or cleanly ends an already committed SSE
+response without a result. Cancellation is cooperative and does not roll back
+side effects. A losing cancellation preserves reserved terminal bytes. A signal
+that overtakes target registration may be ignored. Active duplicate IDs return
+`-32600`; clients still own the protocol's no-reuse rule for the whole session,
+and Soklet keeps no lifetime ID history.
+
+Sessions are node-local. Route initialization and subsequent requests to the same
+node using affinity learned from the initial response or an equivalent routing
+policy; hashing a newly minted ID cannot route that first request. Restart/node
+loss yields neutral `404`. Transparent recovery and operational defaults remain
+pending real-host qualification; document manual reconnection until verified.
+No shared store, event history, `Last-Event-ID` recovery, GET result recovery, or
+restoration of the 3.5.1 session-store/context/ID-generator APIs is provided.
+
+### Leased GET and verified DELETE
+
+Set the optional `McpSessionConfig.Builder.transportAdmissionController(...)`
+to authorize real HTTP GET/DELETE requests. Null clears it. The controller sees
+an immutable `McpSessionTransportAdmissionContext` containing the original
+request, endpoint, exact revision, offered notification families,
+`isReauthorization()`, and a queue-inclusive deadline. Invocation features expose
+cooperative cancellation; progress and task creation are unavailable. There is
+no fabricated JSON-RPC method or request context.
+
+`McpSessionTransportAdmissionDecision.accepted(identity, validUntil, notificationTypes)`
+requires a fresh identity, explicit future expiry, and a subset of the offered
+families. DELETE offers and requires an empty set. Rejection uses an existing
+`McpAdmissionRejection`; its JSON-RPC error is not published for these HTTP-only
+operations. Safe headers and explicitly authored authentication challenges are
+preserved, while reserved application `400`/`404`/`405` statuses map to neutral
+`403` on session paths.
+
+Both methods require an empty body, one explicit selected protocol revision,
+and the live session ID. Host/Origin/CORS and framing run before fresh HTTP
+admission and owner/path/revision/generation verification. DELETE is available
+on a session view with the controller even without notification families. A
+verified, still-authorized DELETE returns empty `204`, fences new use, and
+retires that session with `SESSION_CLOSED`; active POST cancellation uses the
+neutral token reason `CLIENT_CANCELED`. A terminal result already reserved
+remains authoritative.
+
+GET additionally requires selected `subscriptionProtocolVersions`, nonempty
+effective notification sources for that revision, and `Accept: text/event-stream`.
+Legacy subscription revisions must also select sessions. RESOURCE_UPDATED needs
+an existing subscription authorizer; legacy Tasks cannot supply an effective
+source. GET can open before the initialization acknowledgement. It returns a
+persistent SSE stream with keepalives and authorized resource/catalog invalidations.
+GET admission itself grants no resource URI. It never carries POST progress or a
+recovered POST result.
+These persistent, nonresumable GET streams also omit November's recommended
+empty priming event, event IDs, `retry:`, and event history; ignored
+`Last-Event-ID` input never supplies recovery.
+
+A GET lease ends at the earliest application expiry, configured maximum
+authorization duration, fixed `maximumSubscriptionDuration`, or session deadline.
+Renewal reuses the original GET credentials and repeats current HTTP admission,
+owner verification, identity and partition checks; it cannot extend that fixed
+total lifetime or revive a retired stream. Reconciliation fences earlier GET
+authorization before bounded reevaluation. A session allows at most two logical
+GETs and one shared modern/legacy subscription registration charged to its fixed
+first partition. Capacity rejection is `503` and preserves existing live
+streams. Replaced GET request evidence remains charged through physical exit;
+active GET leases prevent quiescent session reclamation.
+
+### Legacy URI grants and catalog invalidations
+
+On an explicitly subscription-enabled 2025 session view, `resources/subscribe`
+and `resources/unsubscribe` are real POST requests through fresh admission,
+request limiting, and session verification. Subscribe exposes the one validated
+URI through `McpAdmissionContext.getResourceSubscriptionUris()` and requires a
+readable route in that revision. Unsubscribe exposes its validated URI through
+`getOperationName()` with an empty selection. Both successful operations return
+the matching JSON-RPC ID with `result: {}`. Missing and denied subscribe targets
+share a neutral error; route existence does not grant notification permission.
+
+The existing `McpSubscriptionAuthorizer` grants and renews each URI lease using
+the real subscribe request context. Its historical credentials and latest
+successful application context remain retained evidence, so the authorizer must
+check current authority. Duplicate subscribe obtains fresh authorization and
+atomically replaces that evidence without extending the original total grant
+lifetime. Unsubscribe fences both establishing and active grants. Reconciliation
+synchronously fences GET and URI authorization before bounded reevaluation;
+a late result cannot restore a revoked generation.
+
+URI grants belong to the session and survive GET loss within their lease,
+fixed total lifetime, and session deadlines. A new GET needs fresh HTTP admission
+and receives notifications only for its admitted families and current URI grants.
+The newest eligible GET is preferred, with one selected writer per session.
+Resource updates carry only the URI; resource, tool, and prompt catalog changes
+are coarse invalidation hints. Configured publisher hints and applicable
+localization/caller-dependent catalogs determine the advertised `subscribe` and
+`listChanged` capabilities; immutable caller-independent catalogs do not
+advertise a false change source. Modern `subscriptions/listen` remains separate.
+
+One dirty bit per catalog family or URI grant survives GET gaps. A newly admitted
+GET may receive a newly synthesized hint for current state. Catalog hints remain
+coalesced until a freshly admitted corresponding list operation rearms them.
+These bits provide neither event history nor receipt guarantees. No legacy
+subscription acknowledgement, subscription-ended, or Tasks notification is sent.
+
+A session/owner has at most 64 URI grants, with 512 per server and 65,536 retained
+URI bytes per session. GETs and grants share the fixed session partition quota.
+Encoded queued GET invalidations, including SSE framing, are capped at 2 MiB per
+owner and 16 MiB globally, in addition to existing stream frame limits. Pressure
+coalesces hints, then sheds the largest pending stream in the affected budget;
+dirty state remains bounded for a later authorized GET. Guarded frames recheck
+GET/grant generations and expiry before every socket write. Revoked unwritten
+frames are purged; a partially written revoked frame closes before further bytes.
+Byte reservations release exactly once after write, drop, or close.
+
+GET and URI maintenance share the four-job and 64-dispatches-per-second scheduler;
+short leases also consume a bounded aggregate maintenance-demand reservation.
+Physical callbacks and historical evidence stay charged until actual exit.
+Framework byte accounting does not measure arbitrary application principal or
+context graphs: keep those retained objects small and safe. Named-host refresh,
+credential renewal/reconnect, and exact-candidate qualification remain pending.
+
+GET/DELETE use the existing generic HTTP lifecycle/metrics boundary with
+`ServerType.HTTP` and no `ResourceMethod`; they do not create MCP RPC request or
+limiter events. GET lifetimes use `SubscriptionOpened`/`SubscriptionClosed`, not
+RPC `RequestStreamOpened`/`RequestStreamClosed`. Sensitive original requests and
+Throwables at application observer boundaries require application retention
+policy. No public session lifecycle callback or session/owner metric dimension
+is added. Real-host GET/DELETE behavior, renewal, and recovery remain pending
+qualification against the exact candidate.
+
+The existing simulator supports GET/DELETE through the same session and lease
+path. DELETE ends a simulated GET with `SESSION_CLOSED` and no JSON-RPC
+message; disconnect uses `CLIENT_DISCONNECTED` and leaves ordinary POST usable.
+Real-socket tests supplement simulation for physical writes and cleanup.
+A bounded released TypeScript Client/Core `2.2.0` development check exercised
+both exact 2025 revisions: automatic GET opening and version/session headers,
+fresh renewal, RPC use alongside GET, verified DELETE, renewal denial, and
+explicit reconnection. It does not qualify named hosts, automatic recovery,
+URI/catalog payload delivery, or an immutable release candidate. See the
+[development compatibility record](release/MCP_CLIENT_COMPATIBILITY.md).
+
 ## HTTP and error policy
 
-MCP messages use POST. `OPTIONS` exists only for the CORS preflight path; GET
-and DELETE return 405. POST requires `Content-Type: application/json`, and
+MCP messages use POST. `OPTIONS` exists only for the CORS preflight path. Modern
+and session-disabled views return `405` for GET/DELETE; opted-in 2025 views use
+[HTTP transport admission](#leased-get-and-verified-delete). POST requires `Content-Type: application/json`, and
 `Accept` must permit both `application/json` and `text/event-stream` according
 to the protocol's negotiation rules.
 
-Every JSON-RPC request carries `Mcp-Method`. Tool calls, prompt gets, and
-resource reads also carry `Mcp-Name`; each header must agree with the JSON-RPC
-method or selected operation. Notifications are exempt from these header
-requirements. Legacy `MCP-Session-Id` and `Last-Event-ID` headers are ignored
-and never stored. They are also forbidden in application-authored MCP response
-headers, so neither automatic transport behavior nor policy output can echo
-them.
+On `2026-07-28`, every JSON-RPC request carries `Mcp-Method`. Tool calls,
+prompt gets, and resource reads also carry `Mcp-Name`; each header must agree
+with the JSON-RPC method or selected operation. Notifications are exempt from
+these modern header requirements. Modern and session-disabled 2025 views ignore
+`MCP-Session-Id`; an explicitly session-enabled 2025 view requires its initialized
+ID on later POSTs. `Last-Event-ID` is ignored at every revision and supplies no
+replay position. Both names remain forbidden in application-authored MCP response
+headers; only the framework may publish a session ID on successful initialization.
 
 An identifiable HTTP `notifications/cancelled` message still traverses version
-validation, admission, and request limiting, then returns an empty HTTP 202.
-Its payload is ignored and it never cancels active work, including when the
-supplied ID names an active request. Stream-level disconnect, deadline, forced
-shutdown after graceful drain, and backpressure signals drive cooperative
-cancelation for this transport instead. Other notifications never receive a
-JSON-RPC response body.
+validation, admission, and request limiting. An accepted notification returns an
+empty HTTP 202; session-enabled paths also verify framing and session binding.
+Modern and session-disabled 2025 views ignore its payload. A verified 2025
+session can target a matching active client request, subject to its atomic
+terminal reservation. See [2025 sessions](#explicitly-enabled-2025-sessions).
+Deadline, forced shutdown after graceful drain, and stream failure signals also
+drive cooperative cancelation; disconnect and lost-writer failure follow the
+legacy commitment rules above. Other notifications never receive a JSON-RPC
+response body.
 
 ## Validation precedence
 
-The JSON-RPC request path has 17 ordered groups. The first failure wins:
+The `2026-07-28` JSON-RPC request path has 17 ordered groups. The first failure
+wins:
 
 1. connection, header-count, header-size, request-size, and timeout limits;
 2. endpoint routing;
@@ -2032,9 +2340,15 @@ authorizer result fails closed without CORS allow headers. See
 [SECURITY.md](SECURITY.md#mcp-deployment-security) for deployment guidance.
 
 The allowed request-header surface contains the modern protocol/name headers,
-registered `Mcp-Param-*` headers, and `Authorization`; it contains no legacy
-session/replay header. Successful CORS responses can expose
-`WWW-Authenticate` for application-owned authentication challenges.
+registered `Mcp-Param-*` headers, and `Authorization`. A path enabling 2025
+sessions additionally permits and exposes the framework-owned `Mcp-Session-Id`;
+session-disabled paths still reject it in preflight. A URL with configured legacy
+GET also permits bounded `Last-Event-ID` input, which is ignored and supplies no
+replay position. Other paths reject it in preflight. Preflight without a revision
+selector uses the URL's configured facility union; actual dispatch and `Allow` use
+the explicit selected revision. Both session/replay names remain forbidden in
+admission-policy response headers. Successful CORS responses can expose `WWW-Authenticate` for
+application-owned authentication challenges.
 
 ## Mirrored tool headers
 
@@ -2793,7 +3107,10 @@ request as `CANCELED` without a protocol or transport failure.
 Cancel, close, and cooperative simulator-scope exit publish
 `CLIENT_DISCONNECTED` only if they win the existing request-control terminal
 reservation. They are idempotent and cannot replace an earlier response or
-terminal winner. Scope cleanup is bounded; escaped handles remain readable,
+terminal winner. For a committed legacy POST SSE, simulated disconnect instead
+detaches delivery without canceling the handler solely because capture closed;
+the request deadline and physical execution reservation remain in force.
+Scope cleanup is bounded; escaped handles remain readable,
 while residual noncooperative work makes the scope fail and blocks new
 simulation and live start until that work exits. A consumer failure retains
 the cleanup failure as suppressed. Null waits fail, negative waits reject,
@@ -3388,15 +3705,22 @@ An arbitrary extension field or an unsupported extension capability still does
 not register a method or enable matching server behavior.
 
 Current source supports MCP argument Completion for declared prompt arguments
-and literal registered resource templates with configured completers. It
-advertises `completions` only where a completer is available. Each suggestion
-must be authorized by the application callback; Completion neither invokes a
+and literal registered resource templates at explicitly selected
+`2025-06-18`, `2025-11-25`, and `2026-07-28` revisions. Completer revisions must
+fit inside the owning prompt/template and endpoint revisions. It advertises
+`completions` only where a completer is available in the selected revision.
+On a Completion-enabled 2025 endpoint/revision, a visible registered target
+and declared argument without an enabled completer return empty suggestions;
+unknown or hidden targets and
+undeclared arguments fail with invalid params. Each suggestion must be
+authorized by the application callback; Completion neither invokes a
 prompt/resource read handler nor makes client-supplied arguments trustworthy.
 Enabling a completer requires a server-wide request limiter, which applies to
 all admitted MCP methods, not just Completion. See
 [Argument completion](README.md#argument-completion) for registrations,
 annotations, limits, and the request-wide policy boundary. The current-source
-API additions remain pending the coordinated API refreeze.
+API additions remain pending the coordinated API refreeze. Legacy Completion
+host checks and exact-candidate qualification remain outstanding.
 
 Soklet does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP logging capability, or an application result-extension

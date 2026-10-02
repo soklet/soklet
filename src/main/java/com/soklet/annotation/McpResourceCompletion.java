@@ -28,6 +28,9 @@ import java.lang.annotation.Target;
  * Attaches an argument completer to a resource URI template declared in the
  * same MCP endpoint. Exact-resource registrations have no declared variables
  * and cannot have a completer.
+ * Completion supports MCP 2025-06-18, 2025-11-25, and 2026-07-28. The
+ * completer's revisions must be a nonempty subset of the target resource
+ * template's revisions.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

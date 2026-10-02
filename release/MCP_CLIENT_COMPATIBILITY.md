@@ -4,6 +4,147 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
+## October 2 development legacy notification SDK check
+
+Unmodified released TypeScript Client/Core **2.2.0**, Node **24.19.0**, and
+Corretto **17.0.20.1** passed a bounded loopback check on both exact 2025
+revisions. Automatic GET opening, URI subscribe/update/duplicate/unsubscribe
+(including neutral unknown-unsubscribe `result: {}`), current GET/URI renewal,
+and DELETE `204` passed. Tool/prompt/dynamic-resource invalidations coalesced
+until freshly admitted lists rearmed them. An intentional GET gap followed by
+explicit same-session transport reconnection delivered a newly synthesized dirty
+URI hint. Clean replacement GET captures contained only legacy notification
+fields and no SSE `id:` or `retry:`. The intentionally aborted first GET was
+observed through SDK handlers, not asserted as a complete captured body.
+
+This development receipt used JAR SHA-256
+`b20cfdd49fc824d060ae2eec0fdd99f19185397730734e022369b7c9a176e182`.
+It does not establish named-host display/refresh, automatic recovery, replay,
+refreshed-credential host behavior, or immutable candidate/release qualification.
+Raw disposable evidence remains outside this repository.
+
+## October 2 development GET/DELETE SDK check
+
+Released TypeScript Client/Core **2.2.0**, Node **24.19.0**, and Corretto
+**17.0.20.1** passed a bounded loopback check on both exact 2025 revisions.
+The SDK automatically opened GET with the negotiated version/session headers;
+fresh renewal and ordinary RPC use alongside GET passed. `terminateSession()`
+sent DELETE, received empty `204`, cleared its stored ID, and observed clean
+zero-message GET EOF. Renewal denial closed only GET while ordinary RPC remained
+usable. Plain initial `403` carried no implicit `WWW-Authenticate` challenge and
+surfaced the expected SDK stream-open failure. Explicit fresh Client/Transport
+recreation obtained a new session ID and GET `200`.
+
+This development receipt used JAR SHA-256
+`7a2558ef06ff6a35861a29f83c192c3aac66fa35512c15b19a73c8ff7447c48b`.
+The check was repeated against this final slice build after the internal
+simulator/suppressed-callback cleanup fixes. Automatic recovery, URI/catalog notification
+payload delivery, named-host/UI behavior, OAuth flow, and immutable candidate or
+release qualification were not exercised. The earlier GET `405` receipt below
+retains its own artifact and minimum-session scope.
+
+## October 1 development minimum-session SDK check
+
+Released TypeScript Client and Core **2.2.0**, Node **24.19.0** and JDK **17**
+passed a bounded disposable loopback check through both exact 2025 revisions.
+The SDK automatically retained the initialization session ID, acknowledged
+initialization, and sent later POSTs with the negotiated session/version headers.
+The server preserved remembered public client metadata while exposing each
+request's current metadata separately. Explicit client cancellation won active
+finite and progress calls: finite cancellation returned an empty SSE response,
+and progress cancellation retained the previously emitted update without a
+terminal result; the application token reported `CLIENT_CANCELED`.
+
+The SDK leaves its canceled tool-call promise pending after sending the
+notification alone; the probe bounded it with a **1,400 ms** local timer. It
+does not automatically reinitialize after a neutral `404`. Explicit fresh
+client recreation passed; automatic recovery remains unqualified. `GET`
+returned `405`, as expected before the delivery slice. These are recorded SDK
+limitations, not a named-host or immutable-release qualification.
+
+The tested working-tree JAR SHA-256 was
+`42dcf567830c9abcdfafaa9f17dd261d9c9ea4b9ac2eb6f7f7d303d51bebbf58`.
+Later internal constructor-cleanup and stale-handle retirement corrections
+are covered by Java regression evidence separately; the SDK receipt is not
+silently assigned to their artifact. Raw evidence remains outside Git.
+
+## October 1 development static catalog pagination check
+
+Released `@modelcontextprotocol/client` **2.2.0** with
+`@modelcontextprotocol/core` **2.2.0**, Node **24.18.0** and JDK **17** passed
+a disposable loopback HTTP check for each exact `2025-06-18` and `2025-11-25`
+revision. The SDK's normal no-cursor list methods automatically collected
+**16 tools / 15 prompts / 17 resources / 15 resource templates** over
+**8 / 8 / 9 / 8 pages**, respectively. Current-caller tool/prompt filtering,
+Portuguese (`pt-BR`) page localization, negotiated protocol headers, final
+cursor exhaustion, no missing/duplicate entries and clean shutdown passed.
+
+The working-tree JAR SHA-256 was
+`1d909c85c0866aa872be845804fc0083e9017c01a4b0021bc0e494cae0d43b97`.
+SDK client/core entry-point SHA-256 values were
+`b5891864a6ebcef27d8d999d662d03d7095368a2c0ff072ac578c2f31b27afa4` /
+`dcf5e4173148f276be335db8a85fadf417a8728634be5ec3ef5159bd18a6ab8f`;
+their source commits were not verified. Raw logs and fixture output remain
+outside Git. This is a released-SDK development supplement, not named-host,
+official-conformance or immutable-candidate qualification. Codex CLI and
+VS Code pagination remain unqualified. This pagination check did not exercise
+sessions or notification delivery; the separate minimum-session check above
+records its narrower evidence.
+
+## October 1 development completion and POST progress expansion
+
+Current development source implements `completion/complete` for explicitly
+selected `2025-06-18` and `2025-11-25` prompt arguments and resource-template
+variables. The existing annotated and programmatic completers use the same
+handlers and request-wide policy, with capability advertisement and routing
+filtered by exact revision. On a Completion-enabled legacy view, a visible
+registered target and declared argument without an enabled completer return
+empty suggestions.
+
+Selected 2025 operations also use the existing progress reporter when the
+request supplies a valid token and SSE is safe. The first update commits POST
+SSE; no update returns JSON. Progress and one whole terminal result/error use
+the selected legacy projection. A committed legacy SSE disconnect or lost-writer
+write failure detaches delivery without itself canceling the handler; deadlines and physical worker
+ownership remain. Finite/uncommitted and queued legacy disconnects still cancel.
+Stateless tokens are POST-local. Streams intentionally omit November's
+recommended empty priming event and event IDs because they are persistent and
+nonresumable, with no polling/replay or lost-POST-result recovery.
+
+Inspector **2.9.0** in isolated Chrome **154.0.8037.59** passed a scoped local
+POST-progress check for each exact 2025 revision on October 1. Its visible
+"Tool progress" notification showed `12.5 / 100 (13%)` while the handler was
+held and before any terminal result. Releasing the handler produced the whole
+final result. A token-bearing control with no progress completed normally in
+the UI and returned HTTP `200` / `application/json` in the direct wire check.
+
+This used a working-tree build of `soklet-4.0.0.jar`, SHA-256
+`38b2523a93401a703642a155b5c0fe1d60cfb1142eeec9e7e3ba8f14cd3ffd9a`.
+Raw development-run evidence remains outside source control. This display
+check does not qualify host cancellation, Completion, November priming or an
+immutable release candidate; no new official scenario PASS is claimed.
+A bounded Claude Code **2.1.274** terminal check invoked neither fixture tool,
+so its progress presentation remains untested; that attempt does not establish
+a Soklet progress failure.
+The historical results below retain their original source identities and
+feature limits. The owner selected the complete
+[2025 expansion](MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md) for 4.0.0.
+Current source also implements framework pagination for the four static 2025
+catalogs, with fresh admission/current catalog policy, page-local localization,
+and independently bounded navigation cursors. This does not add a named-host
+pagination PASS or immutable candidate qualification. Sessions/remembered
+metadata and active-request cancellation are implemented behind explicit
+endpoint/session-owner configuration. Their host behavior, expiry/recovery, and
+operational defaults remain pending qualification; earlier stateless receipts
+provide no session PASS. Current source additionally implements explicit HTTP
+admission for leased GET opening/keepalives and verified DELETE retirement.
+Current source additionally implements session-owned URI grants and bounded
+resource/catalog invalidations over freshly authorized GET streams. This is not
+a named-host refresh, credential renewal, or reconnect PASS. GET/DELETE host
+behavior, renewal/reconciliation, and exact-candidate
+qualification are pending; the earlier minimum-session receipt's GET `405`
+remains evidence only for its recorded artifact.
+
 ## September 30 Claude Apps security and localization check
 
 Claude's unchanged web custom connector and cloud backend passed these scoped
@@ -386,10 +527,12 @@ and record its exact version, use its HTTP/Streamable HTTP server form, and
 point it at the application's configured endpoint URL. A client that uses
 `initialize` may connect only if the endpoint explicitly declares a supported
 2025 revision; the 2026-only configuration used for the September 1 Inspector
-smoke does not accept that wire protocol. The implemented 2025 adapter for synchronous tools and ordinary prompts/resources is
-stateless: it does not provide Soklet 3.5.1 sessions, GET SSE, or the removed
-standalone HTTP+SSE transport. Do not select an stdio command or a deprecated
-transport when testing the HTTP endpoint.
+smoke does not accept that wire protocol. The implemented 2025 adapter for
+synchronous tools, ordinary prompts/resources, and argument completion defaults
+to stateless operation. Explicit 2025 session selection also requires server
+ownership/bounds; it does not restore the 3.5.1 Java session API. GET SSE and
+the removed standalone HTTP+SSE transport remain unavailable. Do not select an
+stdio command or a deprecated transport when testing the HTTP endpoint.
 
 - Visual Studio Code documents workspace/user MCP configuration in
   [Use MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).

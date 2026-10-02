@@ -395,20 +395,20 @@ public class McpHttpContractGoldenProductionTests {
 		}
 		Assertions.assertEquals(Map.of(
 				"McpHttpServerRuntime.java:early-errors", 1,
-				"McpHttpServerRuntime.java:fixed-response", 1,
+				"McpHttpServerRuntime.java:fixed-response", 3,
 				"McpRequestSseStream.java:stream-response", 1,
 				"McpSimulationRuntime.java:fixed-response", 1), responseCreators,
 				"A new response authority requires complete no-store golden coverage.");
 		Assertions.assertEquals(1, creatorOccurrences(responseCreators,
 				":early-errors"));
-		Assertions.assertEquals(2, creatorOccurrences(responseCreators,
+		Assertions.assertEquals(4, creatorOccurrences(responseCreators,
 				":fixed-response"));
 		Assertions.assertEquals(1, creatorOccurrences(responseCreators,
 				":stream-response"));
-		Assertions.assertEquals(3, responseCreators.entrySet().stream()
+		Assertions.assertEquals(5, responseCreators.entrySet().stream()
 				.filter(entry -> !entry.getKey().startsWith("McpSimulationRuntime.java:"))
 				.mapToInt(Map.Entry::getValue).sum(),
-				"The production listener must retain exactly three response authorities.");
+				"The production listener must retain exactly five response authorities; legacy session status rewrites preserve the original no-store headers.");
 	}
 
 	private static McpServer server(FixtureState state) {

@@ -111,7 +111,10 @@ Compound failures never move application callbacks ahead of their documented sta
 A readable post-JSON `initialize` method on a modern-only endpoint receives a
 rejection diagnostic whose supported-version list names only `2026-07-28`.
 On an endpoint explicitly declaring a compatible 2025 revision, the stateless
-adapter accepts `initialize` without creating a session. For modern requests,
+adapter accepts `initialize` without creating a session unless exact 2025
+session revisions and server ownership/bounds are explicitly configured.
+Session IDs are correlation handles, never credentials; every later use is
+freshly admitted before owner/path/revision/generation verification. For modern requests,
 a selector that has passed cardinality/plain-string validation and is absent
 from the immutable 2026 profile registry is the only additive trigger for
 other methods. Pre-JSON failures, unparseable JSON, unreadable methods,
@@ -218,7 +221,7 @@ diagnostics are disabled by default and can still disclose received header
 names to application-owned logging and retention systems, although Soklet
 never includes their values.
 
-Pagination cursors are opaque, application-owned strings. Soklet enforces type
+Custom-list pagination cursors are opaque, application-owned strings. Soklet enforces type
 and UTF-8 byte bounds but does not mint, decode, sign, encrypt, authorize, or
 make cursors portable between instances. A custom resource-list handler owns
 cursor integrity, expiry, authorization binding, backing snapshot semantics,
@@ -227,6 +230,17 @@ expired, cross-principal, missing-snapshot, wrong-revision, and malformed
 cursors should collapse to one neutral error without diagnostic data. Do not
 put confidential data in a cursor unless the application protects it
 appropriately.
+
+Framework static catalog pagination on explicitly selected `2025-06-18` and
+`2025-11-25` uses separate unsigned navigation cursors with a fixed 2,048-byte
+ceiling, independent of the configured application-cursor limit. Every page
+is freshly admitted and request-limited; tools and prompts also use current
+catalog permissions. A cursor grants no access and carries no MAC or retained
+session/snapshot. Endpoint, revision, catalog, negotiated-locale, malformed,
+unknown, and caller-hidden-anchor mismatches collapse to neutral JSON-RPC
+`-32602`. Listing does not authorize a subsequent call or resource read.
+Modern static catalogs remain unpaged. Applications still own resource
+authorization and all protection of custom-list cursors.
 
 Tools, prompt gets, and resource reads may now perform multi-round-trip
 `input_required` exchanges. The operation must declare every client request it
@@ -393,12 +407,53 @@ receives one framework token whose cancellation category is a fixed
 `StreamingResponseCanceledException`. An application may retain that fixed
 category under its own policy, but must not substitute attacker-controlled
 free-form text or make a cancellation detail a metric dimension. Incoming HTTP
-`notifications/cancelled` is a compatibility no-op after admission and request
-limiting; disconnect, deadline, shutdown, and response-stream failure drive
-cooperative cancellation on this transport. The exact
+`notifications/cancelled` remains a compatibility no-op on modern and
+session-disabled views after admission and request limiting. Within a verified
+2025 session it may target matching active client work if its terminal
+reservation wins, using only the neutral `CLIENT_CANCELED` token reason.
+Deadline, shutdown, and response-stream failure also drive cooperative
+cancellation. Unknown/completed targets remain indistinguishable. The exact
 `McpProgressAndCancelationRuntimeTests#every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause`
 gate iterates every non-`COMPLETED` category and proves the fixed reason, empty
 cause, and bounded exception message.
+
+On explicitly selected 2025 revisions, progress uses the originating POST's
+bounded SSE stream and one complete sanitized terminal result. After commitment,
+client disconnect or lost-writer write failure detaches that writer, wakes
+blocked reporters, and discards later output without itself canceling
+application work. Deadlines and physical
+worker reservations remain in force; finite/uncommitted or queued legacy calls
+and modern calls retain disconnect cancellation. Stateless tokens stay
+POST-local; enabled 2025 sessions suppress reporters for active token collisions
+without rejecting calls. Session IDs, owner keys, remembered metadata, and
+free-form cancellation text stay out of built-in logs/metric labels. Snapshots
+and request evidence have independent count/byte/lifetime accounting, including
+residual callback references after logical retirement; opaque application graphs
+remain application responsibility. Anonymous allocation is disabled by default
+and has a separate namespace/sub-budget when explicitly enabled. Only the
+framework may publish a session ID; policy-authored session/replay response
+headers remain forbidden. There are no event IDs, replay/history, or lost-result
+recovery. Optional 2025 GET/DELETE admission receives the original HTTP request
+and must reconstruct current permission and stable ownership. Acceptances need
+an explicit expiry and only offered families; DELETE requires none. GET lease
+renewal uses the original credentials and cannot extend its fixed total lifetime
+or revive a fenced stream. Shared partition quotas and retained request evidence
+outlive logical replacement until physical cleanup. Legacy URI subscribe requests
+require fresh admission plus independent readable-route and notification permission
+checks. Session-owned grants retain the real subscribe credentials/context through
+physical callback exit; duplicate subscribe replaces evidence without resetting
+total lifetime, and unsubscribe/reconciliation fence late renewals. A fresh GET
+never grants a URI implicitly. Queued notifications check current GET/grant
+generations and expiry before every socket write; revoked unwritten frames are
+purged, while a partially written revoked frame closes before further bytes.
+Coalesced dirty bits survive GET gaps without retaining event history. Grant counts,
+URI bytes, queued encoded bytes, and maintenance demand have independent caps;
+opaque application graphs remain application responsibility. Bounded Last-Event-ID input is
+allowed in preflight only where legacy GET is configured and is ignored.
+Generic HTTP observers receive exact Request/Throwable values under application
+retention policy; built-in metric labels contain neither session nor owner IDs.
+Applications must retain idempotency controls when retrying after
+delivery loss; disconnect does not prove that side effects did not occur.
 
 Trace correlation is default-off. With a configured trace-correlation key,
 Soklet attempts one bounded `MCP_TRACE_CORRELATION` log record at the admitted
@@ -954,7 +1009,9 @@ collections, and terminal-message duplication are immutable or defensively
 copied.
 
 Cancel, close, and scope exit reserve `CLIENT_DISCONNECTED` only if they win.
-They are idempotent and cannot replace an earlier terminal. Cleanup is bounded;
+They are idempotent and cannot replace an earlier terminal. Committed legacy
+POST SSE disconnect instead detaches capture without itself canceling its
+handler; deadline and physical execution ownership remain. Cleanup is bounded;
 noncooperative residual work fails the scope, is suppressed under a consumer
 failure, and blocks new simulation and live start until release. Escaped
 handles remain readable. Zero waits poll, huge waits saturate safely,

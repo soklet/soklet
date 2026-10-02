@@ -74,5 +74,11 @@
     "tree": "6c3369484ff14786774186f93cb378fb06111709"
   },
   "productionProfile": "2026-07-28",
-  "releaseTarget": "4.0.0"
+  "releaseTarget": "4.0.0",
+  "scopeAmendments": [
+    {
+      "path": "release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md",
+      "sha256": "a2287f8db3a01c9c890c6f5f21f31fde9c20a7ed2489f9f9dea37ef7c6ff46a0"
+    }
+  ]
 }

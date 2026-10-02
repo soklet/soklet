@@ -31,6 +31,10 @@ public enum StreamTerminationReason {
 	 */
 	CLIENT_DISCONNECTED,
 	/**
+	 * The client explicitly canceled the operation before it completed.
+	 */
+	CLIENT_CANCELED,
+	/**
 	 * The server stopped before the stream completed.
 	 */
 	SERVER_STOPPING,

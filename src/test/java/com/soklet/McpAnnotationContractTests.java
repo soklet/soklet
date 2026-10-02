@@ -78,7 +78,7 @@ public class McpAnnotationContractTests {
 	public void annotationElementsAreLimitedToReviewedMcpVerticals() {
 		Assertions.assertEquals(Set.of("path", "name", "version", "title",
 				"description", "websiteUrl", "instructions", "toolRateLimiterName",
-				"protocolVersions", "taskProtocolVersions",
+				"protocolVersions", "taskProtocolVersions", "sessionProtocolVersions",
 				"subscriptionProtocolVersions",
 				"resourceListCacheTimeToLiveInMilliseconds", "resourceListCacheScope",
 				"resourceTemplateListCacheTimeToLiveInMilliseconds",
@@ -127,6 +127,8 @@ public class McpAnnotationContractTests {
 				McpProtocolVersion.V2026_07_28}, endpoint.protocolVersions());
 		Assertions.assertArrayEquals(new McpProtocolVersion[0],
 				endpoint.taskProtocolVersions());
+		Assertions.assertArrayEquals(new McpProtocolVersion[0],
+				endpoint.sessionProtocolVersions());
 		Assertions.assertArrayEquals(new McpProtocolVersion[0],
 				endpoint.subscriptionProtocolVersions());
 		Assertions.assertEquals("", endpoint.title());

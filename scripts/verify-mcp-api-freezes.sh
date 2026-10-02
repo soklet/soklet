@@ -111,4 +111,4 @@ generated_provisional_signatures="$GENERATED_DIRECTORY/provisional.signatures.js
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness-self-test.mjs"
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness.mjs"
 
-echo "Verified frozen MCP API phases and provisional Tasks API against reviewed signature snapshots"
+echo "Verified frozen MCP API phases and provisional MCP API against reviewed signature snapshots"

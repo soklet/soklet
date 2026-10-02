@@ -308,6 +308,64 @@ class McpLocalizationRendererTests {
 						+ "so the second provider callback must never run.");
 	}
 
+	@Test
+	void aLegacyPageAggregateOverflowRequestsResizeWithoutProviderFailure() {
+		McpJsonObject canonical = catalog();
+		List<String> observed = new ArrayList<>();
+		McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.renderPage(
+				canonical, CODEC.toUtf8Bytes(canonical).length, ENVELOPE_BYTES,
+				CODEC.toUtf8Bytes(canonical).length + ENVELOPE_BYTES + 4,
+				MAXIMUM_REPLACEMENT_CHARACTERS, slots(), context(text -> {
+					observed.add(text.getDefaultText());
+					return McpLocalizationResult.localized(text.getDefaultText()
+							+ "01234567890123456789");
+				}), McpLocalizationFailurePolicy.FAIL_REQUEST, () -> false,
+				document -> CODEC.toUtf8Bytes(document).length);
+
+		assertEquals(McpLocalizationRenderer.Disposition.TOO_LARGE,
+				outcome.disposition());
+		assertSame(canonical, outcome.document());
+		assertEquals(1, observed.size());
+	}
+
+	@Test
+	void aLegacyPageEncoderAggregateSentinelCannotOverflowEnvelopeAccounting() {
+		McpJsonObject canonical = catalog();
+		McpLocalizationContext context = context(text ->
+				McpLocalizationResult.localized("L:" + text.getDefaultText()));
+		McpLocalizationRenderer.Outcome page = McpLocalizationRenderer.renderPage(
+				canonical, CODEC.toUtf8Bytes(canonical).length, ENVELOPE_BYTES,
+				GENEROUS_CEILING, MAXIMUM_REPLACEMENT_CHARACTERS, slots(), context,
+				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
+				document -> Long.MAX_VALUE);
+		McpLocalizationRenderer.Outcome modern = McpLocalizationRenderer.render(
+				canonical, CODEC.toUtf8Bytes(canonical).length, ENVELOPE_BYTES,
+				GENEROUS_CEILING, MAXIMUM_REPLACEMENT_CHARACTERS, slots(), context,
+				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
+				document -> Long.MAX_VALUE);
+
+		assertEquals(McpLocalizationRenderer.Disposition.TOO_LARGE,
+				page.disposition());
+		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
+				modern.disposition());
+	}
+
+	@Test
+	void aLegacyPageKeepsProviderAndPerValueFailuresSeparateFromResize() {
+		for (McpLocalizationLookup lookup : List.<McpLocalizationLookup>of(
+				text -> McpLocalizationResult.failure(),
+				text -> McpLocalizationResult.localized("123456789"),
+				text -> { throw new AssertionError("untrusted provider detail"); })) {
+			McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.renderPage(
+						catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
+						GENEROUS_CEILING, 8L, slots(), context(lookup),
+						McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
+						document -> CODEC.toUtf8Bytes(document).length);
+			assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
+						outcome.disposition());
+		}
+	}
+
 	private static McpLocalizationContext localeContext(Locale locale,
 			McpLocalizationLookup localizationLookup) {
 		return McpLocalizationContext.withLocale(locale, localizationLookup)

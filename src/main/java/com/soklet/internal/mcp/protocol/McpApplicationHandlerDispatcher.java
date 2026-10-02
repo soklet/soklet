@@ -80,6 +80,8 @@ final class McpApplicationHandlerDispatcher {
 		@NonNull
 		private final Runnable physicalExitObserver;
 		@NonNull
+		private final AtomicBoolean physicalExitDelivered;
+		@NonNull
 		private final Object interruptLock;
 		private volatile @Nullable Thread handlerThread;
 		private boolean interruptRequested;
@@ -94,6 +96,7 @@ final class McpApplicationHandlerDispatcher {
 			this.failureObserver = requireNonNull(failureObserver);
 			this.cancellationObserver = requireNonNull(cancellationObserver);
 			this.physicalExitObserver = requireNonNull(physicalExitObserver);
+			this.physicalExitDelivered = new AtomicBoolean();
 			this.interruptLock = new Object();
 			this.state = TicketState.NEW;
 		}
@@ -285,6 +288,8 @@ final class McpApplicationHandlerDispatcher {
 
 		if (dequeued)
 			drainObserver();
+		if (canceled)
+			notifyPhysicalExit(ticket);
 		return canceled;
 	}
 
@@ -310,6 +315,8 @@ final class McpApplicationHandlerDispatcher {
 
 		if (!canceledTickets.isEmpty())
 			drainObserver();
+		for (Ticket ticket : canceledTickets)
+			notifyPhysicalExit(ticket);
 		return List.copyOf(canceledTickets);
 	}
 
@@ -348,8 +355,10 @@ final class McpApplicationHandlerDispatcher {
 		return () -> {
 			if (!delivered.compareAndSet(false, true))
 				return;
-			for (Ticket ticket : immutableCanceled)
+			for (Ticket ticket : immutableCanceled) {
 				notifyCancellation(ticket, cancellationCause);
+				notifyPhysicalExit(ticket);
+			}
 			for (Ticket ticket : immutableDispatched) {
 				notifyCancellation(ticket, cancellationCause);
 				ticket.requestInterrupt();
@@ -569,6 +578,8 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	private void notifyPhysicalExit(@NonNull Ticket ticket) {
+		if (!ticket.physicalExitDelivered.compareAndSet(false, true))
+			return;
 		try {
 			ticket.physicalExitObserver.run();
 		} catch (Throwable ignored) {

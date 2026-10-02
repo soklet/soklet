@@ -59,7 +59,25 @@ public @interface McpServerEndpoint {
 	McpProtocolVersion @NonNull [] taskProtocolVersions() default {};
 
 	/**
-	 * Revisions on which this endpoint exposes {@code subscriptions/listen}.
+	 * Exact served revisions on which this endpoint enables sessions. Only
+	 * {@code 2025-06-18} and {@code 2025-11-25} are eligible; Soklet's
+	 * {@code 2026-07-28} implementation does not use sessions. The server must
+	 * configure {@link com.soklet.McpSessionConfig}. Once enabled, later requests
+	 * require the initialized session ID rather than falling back to stateless
+	 * operation. The selected revisions must be a subset of {@link #protocolVersions()}.
+	 *
+	 * @return session-enabled revisions, or an empty array when disabled
+	 */
+	@NonNull
+	McpProtocolVersion @NonNull [] sessionProtocolVersions() default {};
+
+	/**
+	 * Exact revisions on which this endpoint enables subscriptions. Modern
+	 * {@code 2026-07-28} exposes {@code subscriptions/listen}; supported
+	 * {@code 2025-06-18} and {@code 2025-11-25} use session GET delivery and must
+	 * also appear in {@link #sessionProtocolVersions()}. Legacy delivery requires
+	 * server HTTP admission and an effective event source/family set. URI updates
+	 * require an explicit URI authorizer; legacy catalog-only delivery does not.
 	 *
 	 * @return subscription-enabled revisions, or an empty array when disabled
 	 */

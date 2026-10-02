@@ -30,6 +30,13 @@ import javax.annotation.concurrent.ThreadSafe;
  * thread-safe. Reports from concurrent callers are serialized in accepted
  * progress order.
  *
+ * <p>Progress is supported for MCP 2025-06-18, 2025-11-25, and 2026-07-28.
+ * The first accepted update commits the originating POST response to SSE;
+ * a handler that reports no progress retains a nonstreaming JSON response.
+ * Progress does not divide the final tool, prompt, resource, or completion
+ * result into chunks: one whole terminal result or error follows the
+ * notifications.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -40,7 +47,8 @@ public interface McpProgressReporter {
 	 *
 	 * <p>An update equal to the last accepted progress value is coalesced. A
 	 * lower value is rejected while the invocation remains active. Once the
-	 * invocation is canceled or terminal, reports have no effect.
+	 * invocation is canceled or terminal, or its response writer has detached,
+	 * reports have no effect.
 	 *
 	 * <p>Reporting is synchronous and may block while the bounded
 	 * request-scoped outbound queue applies backpressure. If that wait is

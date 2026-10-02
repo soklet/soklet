@@ -57,6 +57,8 @@ public interface McpRuntimeCatalogLocalizer {
 		CANONICAL,
 		/** Publish the returned localized document. */
 		LOCALIZED,
+		/** A paged catalog must retry a smaller prefix using the same context. */
+		RESIZE_PAGE,
 		/** Return the fixed sanitized internal error. */
 		FAIL_REQUEST
 	}
@@ -185,6 +187,40 @@ public interface McpRuntimeCatalogLocalizer {
 	 */
 	@NonNull
 	Outcome localizeCatalog(@NonNull Input input);
+
+	/** Response-wide lookup ceiling for framework-produced legacy pages. */
+	default int maximumPageSlotCount() {
+		return Integer.MAX_VALUE;
+	}
+
+	/** Counts only the indexed slots belonging to this canonical owner. */
+	default int ownerSlotCount(@NonNull ResponseKind responseKind,
+			@NonNull String ownerId) {
+		return 0;
+	}
+
+	/** One request's locale and cached lookup outcomes, retained only during rendering. */
+	interface PageSession {
+		@NonNull Optional<@NonNull String> negotiatedLocale();
+
+		@NonNull Outcome localize(@NonNull Input input);
+	}
+
+	/** Opens a page renderer before validating the admitted cursor's locale. */
+	default @NonNull PageSession openPage(@NonNull Input seed) {
+		requireNonNull(seed);
+		return new PageSession() {
+			@Override
+			public @NonNull Optional<@NonNull String> negotiatedLocale() {
+				return seed.localizationContext().map(context -> context.getLocale().toLanguageTag());
+			}
+
+			@Override
+			public @NonNull Outcome localize(@NonNull Input input) {
+				return localizeCatalog(input);
+			}
+		};
+	}
 
 	/**
 	 * Names the framework catalog response kinds this endpoint actually

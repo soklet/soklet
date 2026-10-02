@@ -429,7 +429,14 @@ class SimulatorConfigDerivationTests {
 	@Test
 	void importedMcpConstructionSnapshotCoversEveryBuilderField()
 			throws Exception {
-		McpEndpointRegistry endpointRegistry = endpointRegistry("/complete-snapshot");
+		McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(List.of(
+				McpEndpoint.withPath("/complete-snapshot", McpImplementation.withNameAndVersion(
+						"simulator-config-derivation-test", "4.0.0").build(),
+						Set.of(McpProtocolVersion.V2026_07_28, McpProtocolVersion.V2025_06_18))
+						.sessionProtocolVersions(Set.of(McpProtocolVersion.V2025_06_18)).build()));
+		McpSessionConfig sessionConfig = McpSessionConfig.withOwnerKeyResolver(
+				admissionIdentity -> "simulator-owner").maximumSessions(20)
+				.maximumSessionsPerOwner(3).anonymousSessionsAllowed(true).build();
 		McpAdmissionController admissionController = context ->
 				McpAdmissionDecision.accepted();
 		McpCatalogAccessPolicy catalogAccessPolicy =
@@ -485,6 +492,7 @@ class SimulatorConfigDerivationTests {
 				.writeTimeout(Duration.ofSeconds(9))
 				.requestHandlerExecutorServiceSupplier(executorSupplier)
 				.endpointRegistry(endpointRegistry)
+				.sessionConfig(sessionConfig)
 				.admissionController(admissionController)
 				.catalogAccessPolicy(catalogAccessPolicy)
 				.handlerInterceptor(handlerInterceptor)
@@ -513,6 +521,7 @@ class SimulatorConfigDerivationTests {
 		Assertions.assertNotNull(derivedMcpServer);
 		Assertions.assertSame(catalogAccessPolicy,
 				derivedMcpServer.getCatalogAccessPolicy());
+		Assertions.assertSame(sessionConfig, derivedMcpServer.getSessionConfig().orElseThrow());
 		assertCompleteMcpBuilderFieldInventory();
 		assertMcpConstructionTemplatesMatch(sourceMcpServer, derivedMcpServer);
 		Assertions.assertNotSame(sourceMcpServer.getProtectionKeyringManager(),
@@ -739,7 +748,7 @@ class SimulatorConfigDerivationTests {
 					"maximumSubscriptionAuthorizationDuration",
 					"requestTimeout", "requestHeaderTimeout", "requestBodyTimeout",
 					"writeTimeout",
-				"requestHandlerExecutorServiceSupplier", "endpointRegistry",
+				"requestHandlerExecutorServiceSupplier", "endpointRegistry", "sessionConfig",
 				"admissionController", "admissionControllerExplicitlyConfigured",
 				"catalogAccessPolicy", "catalogAccessPolicyExplicitlyConfigured",
 				"skillAccessPolicy", "skillAccessPolicyExplicitlyConfigured",

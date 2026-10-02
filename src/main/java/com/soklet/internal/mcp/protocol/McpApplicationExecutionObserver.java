@@ -19,10 +19,15 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.MetricsCollector;
 import com.soklet.McpMetricsEvent;
 import com.soklet.McpRequestContext;
+import com.soklet.McpStreamTerminationReason;
+import com.soklet.Request;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Internal two-phase observation boundary for semantic MCP metrics. Record
@@ -36,6 +41,32 @@ import javax.annotation.concurrent.ThreadSafe;
 public interface McpApplicationExecutionObserver {
 	/** Opaque identity for a provisionally recorded metric transition. */
 	interface PendingMetricRecord {
+	}
+
+	/** Physical HTTP observation without a fabricated MCP request context. */
+	interface HttpRequestObservation {
+		void didFinish(int statusCode, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
+				@NonNull Duration duration, @NonNull List<@NonNull Throwable> throwables);
+	}
+
+	@NonNull
+	default HttpRequestObservation didStartHttpRequest(@NonNull Request request) {
+		if (request == null)
+			throw new NullPointerException("request");
+		return (statusCode, headers, duration, throwables) -> {};
+	}
+
+	/** Records one successfully opened HTTP legacy subscription channel. */
+	default void recordSubscriptionOpened(@NonNull String endpointPath) {
+		if (endpointPath == null)
+			throw new NullPointerException("endpointPath");
+	}
+
+	/** Records one terminal HTTP legacy subscription channel. */
+	default void recordSubscriptionClosed(@NonNull String endpointPath,
+			@NonNull McpStreamTerminationReason reason, @NonNull Duration duration) {
+		if (endpointPath == null || reason == null || duration == null)
+			throw new NullPointerException("subscription close metric property");
 	}
 
 	void beginDeferral();
