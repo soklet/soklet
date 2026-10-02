@@ -989,6 +989,8 @@ run_candidate_conformance() {
 	node "$repin_helper" restore "$checkout"
 	node conformance/official/self-test.mjs --suite-dir "$checkout"
 	node conformance/official/runner-self-test.mjs
+	node conformance/official/legacy/runner-self-test.mjs
+	node conformance/official/legacy/verify-evidence-self-test.mjs
 	local fixture_root="$project_root/target/conformance/public-fixture"
 	local classpath
 	classpath=$(sh conformance/official/build-public-fixture.sh \
@@ -998,24 +1000,29 @@ run_candidate_conformance() {
 	main_sha=$(node "$evidence_helper" sha256 "$candidate_jar")
 	sources_sha=$(node "$evidence_helper" sha256 "$candidate_sources_jar")
 	javadoc_sha=$(node "$evidence_helper" sha256 "$candidate_javadoc_jar")
+	local -a candidate_options=(
+		--project-root "$project_root" --mode release --candidate-commit "$candidate_commit"
+		--candidate-pom "$candidate_pom" --candidate-pom-sha256 "$pom_sha"
+		--candidate-jar "$candidate_jar" --candidate-jar-sha256 "$main_sha"
+		--candidate-sources-jar "$candidate_sources_jar" --candidate-sources-jar-sha256 "$sources_sha"
+		--candidate-javadoc-jar "$candidate_javadoc_jar" --candidate-javadoc-jar-sha256 "$javadoc_sha"
+	)
 	node conformance/official/run.mjs \
 		--suite-dir "$checkout" \
 		--work-dir "$conformance_work" \
 		--classpath "$classpath" \
-		--project-root "$project_root" \
 		--java "$core_java_home/bin/java" \
 		--phase 5 \
-		--mode release \
 		--p0c-policy accepted-2026-09-22 \
-		--candidate-commit "$candidate_commit" \
-		--candidate-pom "$candidate_pom" \
-		--candidate-pom-sha256 "$pom_sha" \
-		--candidate-jar "$candidate_jar" \
-		--candidate-jar-sha256 "$main_sha" \
-		--candidate-sources-jar "$candidate_sources_jar" \
-		--candidate-sources-jar-sha256 "$sources_sha" \
-		--candidate-javadoc-jar "$candidate_javadoc_jar" \
-		--candidate-javadoc-jar-sha256 "$javadoc_sha"
+		"${candidate_options[@]}"
+	local legacy_fixture_root="$project_root/target/conformance/legacy-fixture"
+	local legacy_classpath
+	legacy_classpath=$(sh conformance/official/legacy/build-fixture.sh \
+		"$candidate_jar" "$legacy_fixture_root")
+	node conformance/official/legacy/run.mjs \
+		--suite-dir "$checkout" --work-dir "$conformance_work/legacy" \
+		--classpath "$legacy_classpath" --java "$core_java_home/bin/java" \
+		"${candidate_options[@]}"
 	node "$evidence_helper" verify-conformance \
 		"$manifest_path" "$candidate_commit" "$artifact_descriptor" \
 		"$conformance_work/evidence.json"

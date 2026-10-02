@@ -4,6 +4,178 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
+## October 2 expanded release-conformance integration
+
+Candidate validation now requires the existing modern checks plus all **41
+selected legacy official combinations** and **15 HTTP runtime contracts per
+2025 revision**. Both runners must use the same exact candidate commit and
+four artifact identities. The default legacy development runner also executes
+the HTTP supplement. It covers URI/catalog delivery, independent GET/URI
+credentials, renewal, revocation, gap reconnect, unsubscribe and DELETE; it
+does not qualify host display or OAuth UI behavior.
+
+The combined legacy run and independent receipt verification passed against
+development JAR SHA-256
+`78db80cf18605f00b7bd6a7ee213250ed056f649c9194443ee1ff4bd15264e32`,
+with **40 receipt rejection cases**, runner controls, **54 targeted JDK 17
+tests**, Javadoc and API compatibility/freezes passing. The private scheduler
+holder changed from a record to a plain class; public signatures and dispatch
+behavior are unchanged. Earlier JDK 21/25 and host observations below retain
+their original artifact identities.
+
+The checkout is dirty, and release mode correctly rejected it before executing
+scenarios. The new legacy lifecycle scopes and imported fixtures have now been
+reviewed: the audit covers 1,449 scopes across 222 JUnit files, with shared
+request/read deadlines and composed outer guards. Its verifier and 138-case
+adversarial self-test pass, as do 157 focused tests on each of JDK 17 and 25.
+This is development evidence, not a release-candidate PASS. Downstream pins
+are unchanged and raw output stays outside Git.
+
+## October 2 delayed-fence correction and Bearer credential qualification
+
+Two deterministic regressions reproduced a real GET/URI retirement defect.
+The store fences authorization before invoking the deferred target callback.
+A renewal can begin under that already-fenced generation before the callback
+arrives; canceling whichever check is then current incorrectly retired that
+fresh renewal as `AUTHORIZATION_FAILED`, before lease expiry. Cancellation now
+targets only older-generation checks. Both regressions pass for both 2025
+revisions and still verify resumed notification delivery. This changes no public
+type or signature. The original lost-grant stress trace lacks identity, deadline
+and retirement cause, so this establishes a repaired loss mechanism, not certain
+attribution of that historical incident.
+
+**332 focused JDK 17 tests**, **54 targeted tests each on JDK 21 and 25**, API
+compatibility/freezes, Javadoc and website source-contract/link checks passed.
+The rebuilt development JAR is SHA-256
+`1863f35500193df8130e25f231e3716175c92922da14eed35c328b7b16ede4f4`.
+All **41 official legacy scenarios** passed against that JAR: **86 SUCCESS**,
+**3 expected INFO**, **192 schema-checked messages**, and **41 clean fixture
+shutdowns**. Runner negative controls and public-only fixture compilation/dependency
+checks passed. Toolchain: released Client/Core **2.2.0**, Node **26.5.0**,
+npm **11.17.0**, Corretto **17.0.20.1**.
+
+A separate **16.848-second** public-API fixture check sent actual disposable
+Bearer credentials over HTTP through the unmodified released SDK for both exact
+2025 revisions. It verified:
+
+- same-session GET refresh from credential A to B and renewal using B;
+- GET B did not refresh the exact URI grant's historical A credentials;
+- duplicate template subscribe replaced its evidence with B; fresh exact
+  resubscribe restored delivery after A revocation;
+- both B URI grants renewed twice during a seven-second quiet window, retained
+  B's application context and did not repeat a delivered URI hint;
+- revoking B denied URI renewal and closed B's own GET on the wire; subsequent
+  publications produced no notification;
+- revoked reconnect returned `401` with an `invalid_token` Bearer challenge;
+  a valid credential for the same owner could still DELETE with `204`.
+
+The fixture stopped normally with no signal or truncated capture. This qualifies
+the exercised HTTP credential/evidence behavior, not OAuth token issuance,
+named-host token refresh UI, or an immutable release candidate.
+
+One **30.389-second causal diagnostic** on the same JAR retained **32 URI grants**
+across **8 clients**, **12,320 publications**, **5,890 notifications**, **4 GET
+gaps** and **4 explicit reconnects**, with a **2-second effective lease cap**.
+Observed retirements were **20 replacements**, **20 explicit unsubscribes** and
+**32 session closes**, with no observed unexpected cause. Peaks were four
+maintenance jobs and 60 dispatches in a sampled sliding second; every measured
+retention ledger drained to zero after DELETE. It wrapped internal grant targets
+to record causes while delegating their calls, so it is diagnostic evidence,
+not an unmodified-runtime qualification or heap-reachability proof. It exited
+normally. Raw fixtures, logs, wire captures and run data remain outside Git.
+
+## October 2 maintenance deadline-priority correction
+
+Due GET and URI renewals now share dispatch ordering by shortest remaining
+authorization lease. Two regressions reproduced starvation with the old
+scheduler: four blocked longer-lived URI renewals occupied every maintenance
+slot ahead of a shorter GET or URI lease. Both pass with the correction on both
+2025 revisions. Capacity, physical callback ownership, generation fences and
+authorization deadlines remain enforced. No public API changed.
+
+**329 focused JDK 17 tests**, **51 targeted tests each on JDK 21 and 25**,
+API compatibility/freezes, Javadoc, and website source-contract/link checks passed.
+The rebuilt development JAR is SHA-256
+`96701989a681ead498b5340476706bdb79b0602607d1e06eea494468d77dc6ed`.
+All **41 official legacy scenarios** passed against that same JAR, with **86
+success observations**, **3 expected INFO observations**, **192 schema-checked
+messages**, and **41 clean fixture shutdowns**. The runner negative controls
+also passed.
+Released Client/Core **2.2.0**, Node **26.5.0**, and Corretto **17.0.20.1** passed
+both exact 2025 revisions: quiet URI renewals, policy-generation reconciliation,
+automatic GET recovery, dirty-gap delivery, unsubscribe and DELETE `204`.
+A **30.584-second** stress check with a **2-second effective lease cap** retained
+all **32 URI grants** across **8 clients**, **12,320 publications**, **5,790
+notifications**, **4 GET gaps** and **4 explicit reconnects**. Peaks stayed within
+the existing **4-job / 64-dispatches-per-second** budget (four jobs, 61 dispatches
+in a sampled sliding second). Every measured retention ledger drained to zero
+after DELETE, and both disposable fixtures exited normally. The stress fixture
+observed counters and deadlines through read-only reflection; it did not replace
+grant targets or alter authorization decisions. Ledger counts do not establish
+heap reachability or total application-object retention.
+
+The separate **30.477-second** causal diagnostic on the earlier `3a9539f0` JAR
+also passed. It wrapped internal grant targets solely to observe retirement
+causes, so it is diagnostic evidence, not an unmodified runtime qualification.
+Its retirements were replacement, explicit unsubscribe or session close.
+Neither that diagnostic nor the passing corrected-artifact checks establish why
+the original stress run lost a grant. That incident remains unresolved. These
+checks do not qualify actual Bearer credential rotation, named-host behavior on
+the new JAR, or an immutable release candidate. Raw data stays outside Git.
+
+## October 2 fixed-artifact legacy notification qualification
+
+The checks in this section used the corrected development JAR, SHA-256
+`3a9539f03239966fe98ca0a2e0b194247a239a6e7cc2aa71601245c9f6adb7d7`.
+The internal renewal/duplicate-subscribe correction preserves an already written
+URI hint while invalidating queued frames under their old authorization
+generation. It adds no public API. **302 focused JDK 17 tests**, **24 grant-store
+tests on JDK 21 and 25**, and the API compatibility/freeze gates passed.
+
+The official toolchain exercised **41 legacy scenarios**, recording **86
+success observations**, **3 expected INFO observations**, **192 schema-checked
+messages**, and **41 clean server stops**. Released TypeScript Client/Core
+**2.2.0** additionally passed both exact 2025 revisions: automatic GET recovery,
+current-policy reconciliation, and a **13-second quiet window spanning two URI
+grant renewals without repeating a delivered hint**. Actual Bearer credential
+rotation was not exercised.
+
+| Unmodified released host | Exact revision | Observed behavior and limits |
+| --- | --- | --- |
+| Inspector **2.9.0**, Chrome **154.0.8037.97** | `2025-06-18` | Tool, prompt and resource lists refreshed automatically and visibly after their hints. Subscribe and resource-update delivery passed. The resource preview required its manual Refresh action. After a clean GET drop, the host automatically reconnected with the same session ID and received the dirty URI hint. Unsubscribe returned `200`; a subsequent publication produced no URI hint before the supervised Inspector stopped. Inspector expiry did not send DELETE, so this run does not qualify June host DELETE. |
+| VS Code **1.139.1** | `2025-11-25` | The tools picker showed `catalog_after`; unsent prompt autocomplete showed `prompt_after`. A resource hint caused an automatic read, and a different-length update refreshed the visible editor. After a clean GET drop, the host automatically reconnected with the same session ID; its fresh read and visible editor showed the updated content. Stop Server sent DELETE and received `204`. This configuration requires an explicit static `MCP-Protocol-Version: 2025-11-25` header. |
+
+Each named host received exactly **two URI hints** across the original
+publication and the publication during its GET gap. Reconciliation of the
+current policy generation did not repeat a delivered hint. The disposable
+fixture exited normally without a termination signal. Host OAuth and actual
+Bearer credential rotation were not exercised.
+
+VS Code's installed MCP resource filesystem has a **3-second read cache** and
+derives its ETag from a fixed modification time and content length. A same-size
+update was read on the wire but did not change the visible editor; the
+different-length control did. These are observations about this host build.
+Its public configuration cannot express a dynamic negotiated version header
+for a June-only endpoint, so native `2025-06-18` qualification remains open.
+The host was not patched and no proxy rewrote its negotiation.
+
+A normal stress check with a **4-second effective lease cap** ran **8 clients / 32 grants**, with
+**12,320 publications**, **5,811 notifications**, **4 GET gaps**, and **4 explicit
+reconnects**; every retention ledger returned to zero. An earlier **2-second**
+stress check ended with **31 of 32** expected live URI grants. The cause of that
+grant retirement remains unresolved and is not established by the passing normal
+check. An instrumented **30.744-second** repeat at the 2-second cap retained
+all **32 grants** before DELETE and drained every measured counter afterward;
+its sampled disappearances matched explicit unsubscribe/resubscribe or DELETE
+requests. The original missing grant persisted for **5.273 seconds**, but that
+run did not record its identity/deadline or maintenance retirement outcome.
+The repeat does not explain the original failure.
+
+This is development evidence, not immutable candidate qualification. A future
+candidate must rerun the **41 legacy scenarios and local supplements** against
+its exact artifact. The chronological receipts below retain their original
+artifacts and narrower scopes. Raw run data and screenshots remain outside Git.
+
 ## October 2 development legacy notification SDK check
 
 Unmodified released TypeScript Client/Core **2.2.0**, Node **24.19.0**, and
@@ -530,8 +702,9 @@ point it at the application's configured endpoint URL. A client that uses
 smoke does not accept that wire protocol. The implemented 2025 adapter for
 synchronous tools, ordinary prompts/resources, and argument completion defaults
 to stateless operation. Explicit 2025 session selection also requires server
-ownership/bounds; it does not restore the 3.5.1 Java session API. GET SSE and
-the removed standalone HTTP+SSE transport remain unavailable. Do not select an
+ownership/bounds; it does not restore the 3.5.1 Java session API. Explicit
+legacy subscription selection and a session transport admission controller
+enable GET SSE; the removed standalone HTTP+SSE transport remains unavailable. Do not select an
 stdio command or a deprecated transport when testing the HTTP endpoint.
 
 - Visual Studio Code documents workspace/user MCP configuration in

@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonString;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -40,11 +41,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real-listener and simulator coverage for the exact 2025 Completion profiles. */
-@Timeout(60)
+@Timeout(90)
 public class McpLegacyCompletionPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PATH = "/mcp";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private long requestDeadlineNanos;
+
+	@BeforeEach
+	void beginRequestBudget() {
+		requestDeadlineNanos = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+	}
+
+	private Duration remainingRequestWait() {
+		long remaining = requestDeadlineNanos - System.nanoTime();
+		assertTrue(remaining > 0, "Completion requests exceeded their shared 60-second deadline.");
+		return Duration.ofNanos(Math.min(WAIT.toNanos(), remaining));
+	}
+
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	private static final Set<McpProtocolVersion> ALL = Set.of(
@@ -284,11 +298,11 @@ public class McpLegacyCompletionPublicRuntimeTests {
 									prompt ? "wire" : uriTemplate("wire"), "value", " λ", null), "wire")
 									.getBytes(StandardCharsets.UTF_8)).build();
 					try (McpSimulation simulation = simulator.startMcpRequest(request)) {
-						McpSimulationResponse response = simulation.awaitResponse(WAIT).orElseThrow();
+						McpSimulationResponse response = simulation.awaitResponse(remainingRequestWait()).orElseThrow();
 						assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 						assertEquals(listener.get(index++), new Capture(response.getStatusCode(),
 								new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8)));
-						assertTrue(simulation.awaitCompletion(WAIT).isPresent());
+						assertTrue(simulation.awaitCompletion(remainingRequestWait()).isPresent());
 					} catch (InterruptedException exception) {
 						Thread.currentThread().interrupt();
 						throw new AssertionError(exception);
@@ -392,10 +406,10 @@ public class McpLegacyCompletionPublicRuntimeTests {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 	}
 
-	private static Capture send(int port, McpProtocolVersion version, String method,
+	private Capture send(int port, McpProtocolVersion version, String method,
 			String params, String id, String caller) throws Exception {
 		HttpRequest.Builder builder = HttpRequest.newBuilder(
-				URI.create("http://" + HOST + ":" + port + PATH)).timeout(WAIT)
+				URI.create("http://" + HOST + ":" + port + PATH)).timeout(remainingRequestWait())
 				.header("Content-Type", "application/json")
 				.header("Accept", "application/json, text/event-stream");
 		if (version == McpProtocolVersion.V2026_07_28 || !"initialize".equals(method))

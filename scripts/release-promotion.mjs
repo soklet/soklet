@@ -389,9 +389,9 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
   ),
   'candidate-conformance': receiptIdentity(
-    'node conformance/official/run.mjs --phase 5 --mode release',
+    'node conformance/official/run.mjs --phase 5 --mode release; node conformance/official/legacy/run.mjs --mode release',
     'release',
-    'ALL_46_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
+    'MODERN_46_AND_TASK_8_PLUS_LEGACY_41_AND_RUNTIME_15_PER_REVISION_PASS',
   ),
   'candidate-localization': receiptIdentity(
     'verification/localization/verify.sh',
@@ -441,7 +441,8 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
 });
 
 function gateEvidenceContractVersion(gateId) {
-  return ['matrix-closure', 'candidate-conformance', 'barebones-app', 'soklet-servlet-javax',
+  if (gateId === 'candidate-conformance') return 3;
+  return ['matrix-closure', 'barebones-app', 'soklet-servlet-javax',
     'soklet-servlet-jakarta'].includes(gateId) ? 2 : 1;
 }
 

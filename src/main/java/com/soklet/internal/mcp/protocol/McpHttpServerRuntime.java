@@ -4482,12 +4482,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpLegacySessionStore store = legacySessionStore;
 		if (store != null)
 			store.maintain();
-		for (LegacyUriGrantControl grant : legacyUriGrantControls) {
-			try { grant.onTimer(nowNanos); }
-			catch (Throwable ignored) { /* The current lease still bounds a failed maintenance dispatch. */ }
-		}
-		for (Map.Entry<String, Map<String, Set<McpResourceNotificationType>>> endpoint : legacyTransportFamilies.entrySet())
-			for (String revision : endpoint.getValue().keySet()) flushLegacyNotifications(endpoint.getKey(), revision);
 		List<RequestControl> controls;
 		synchronized (requestControls) {
 			controls = List.copyOf(requestControls.values());
@@ -4500,6 +4494,36 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				control.cancel(StreamTerminationReason.INTERNAL_ERROR, throwable);
 			}
 		}
+		// URI grants and GET channels share the same bounded maintenance budget.
+		// Dispatch the shortest remaining authorization lease first so slow URI
+		// callbacks cannot take every slot ahead of an urgent GET (or URI) renewal.
+		List<LegacyMaintenanceDispatch> renewals = new ArrayList<>();
+		for (LegacyUriGrantControl grant : legacyUriGrantControls) {
+			LegacyMaintenanceDispatch renewal = grant.dueRenewal(nowNanos);
+			if (renewal != null) renewals.add(renewal);
+		}
+		for (LegacyGetControl get : legacyGetControls.values()) {
+			LegacyMaintenanceDispatch renewal = get.dueRenewal(nowNanos);
+			if (renewal != null) renewals.add(renewal);
+		}
+		renewals.sort(Comparator.comparingLong(renewal -> renewal.deadlineNanos() - nowNanos));
+		for (LegacyMaintenanceDispatch renewal : renewals) {
+			try { renewal.dispatch().run(); }
+			catch (Throwable ignored) { /* The current lease still bounds a failed maintenance dispatch. */ }
+		}
+		for (Map.Entry<String, Map<String, Set<McpResourceNotificationType>>> endpoint : legacyTransportFamilies.entrySet())
+			for (String revision : endpoint.getValue().keySet()) flushLegacyNotifications(endpoint.getKey(), revision);
+	}
+
+	private static final class LegacyMaintenanceDispatch {
+		private final long deadlineNanos;
+		private final Runnable dispatch;
+		LegacyMaintenanceDispatch(long deadlineNanos, Runnable dispatch) {
+			this.deadlineNanos = deadlineNanos;
+			this.dispatch = dispatch;
+		}
+		long deadlineNanos() { return deadlineNanos; }
+		Runnable dispatch() { return dispatch; }
 	}
 
 	private @Nullable MicrohttpResponse processRequest(
@@ -6956,7 +6980,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				long generation = grant.generation();
 				McpApplicationExecution.BoundedPolicyCancellation cancellation = control.application.newBoundedPolicyCancellation();
 				synchronized (control.lock) { control.legacyHttpCancellation = cancellation; }
-				target.bindCancellation(cancellation);
+				target.bindCancellation(cancellation, generation);
 				if (!control.protocolProcessingAllowed()) {
 					grant.retireIfCurrent(generation, McpLegacySessionStore.GrantCause.AUTHORIZATION_FAILED);
 					return null;
@@ -9667,6 +9691,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable McpLegacySessionStore.Grant grant;
 		private @Nullable McpApplicationExecution.BoundedPolicyCancellation cancellation;
 		private Optional<Object> applicationContext;
+		private long cancellationGeneration;
 		private Optional<Instant> previousValidUntil = Optional.empty();
 		private long acceptedContextGeneration;
 		private long renewalNanos;
@@ -9684,9 +9709,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.applicationContext = initialContext.getAdmissionIdentity().getApplicationContext();
 		}
 		void bind(McpLegacySessionStore.Grant grant) { synchronized (lock) { this.grant = grant; } }
-		void bindCancellation(McpApplicationExecution.BoundedPolicyCancellation next) {
+		void bindCancellation(McpApplicationExecution.BoundedPolicyCancellation next, long generation) {
 			boolean canceled;
-			synchronized (lock) { cancellation = next; canceled = retired; }
+			synchronized (lock) { cancellation = next; cancellationGeneration = generation; canceled = retired; }
 			if (canceled) next.cancel(StreamTerminationReason.APPLICATION_CANCELED);
 		}
 		void callbackEntered() { synchronized (lock) { callbacks++; } }
@@ -9738,7 +9763,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		@Override public void fence(long generation) {
 			McpApplicationExecution.BoundedPolicyCancellation old;
-			synchronized (lock) { renewalNanos = applicationClock.nanoTime(); old = cancellation; }
+			synchronized (lock) {
+				if (generation > acceptedContextGeneration) renewalNanos = applicationClock.nanoTime();
+				// Store actions run after its lock is released. A fresh check may
+				// already own this fenced generation when its target action arrives.
+				old = cancellationGeneration < generation ? cancellation : null;
+			}
 			recheckLegacyWriters(path, revision);
 			if (old != null && old.isActive()) old.cancel(StreamTerminationReason.APPLICATION_CANCELED);
 		}
@@ -9749,6 +9779,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (old != null && old.isActive()) old.cancel(cause == McpLegacySessionStore.GrantCause.SERVER_STOPPING
 					? StreamTerminationReason.SERVER_STOPPING : StreamTerminationReason.APPLICATION_CANCELED);
 			releaseInitialIfComplete();
+		}
+		@Nullable LegacyMaintenanceDispatch dueRenewal(long now) {
+			synchronized (lock) {
+				if (retired || !initialized || pending || grant == null || now - renewalNanos < 0L) return null;
+				return new LegacyMaintenanceDispatch(grant.deadlineNanos(), () -> onTimer(now));
+			}
 		}
 		void onTimer(long now) {
 			synchronized (lock) { if (retired || !initialized || pending || now - renewalNanos < 0L) return; }
@@ -9776,9 +9812,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		void renew(LegacyHttpPolicyWork work) {
 			McpLegacySessionStore.Grant current;
+			long generation;
 			McpApplicationExecution.BoundedPolicyCancellation next = application.newBoundedPolicyCancellation();
-			synchronized (lock) { if (retired || grant == null) return; current = grant; cancellation = next; }
-			long generation = current.generation();
+			synchronized (lock) {
+				if (retired || grant == null) return;
+				current = grant; generation = current.generation(); cancellation = next; cancellationGeneration = generation;
+			}
 			Optional<McpLegacySessionStore.GrantWork> held = current.acquireWork(generation);
 			if (held.isEmpty()) return;
 			McpLegacySessionStore.GrantWork physical = held.orElseThrow();
@@ -9854,6 +9893,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable McpRequestSseStream stream;
 		private @Nullable McpApplicationExecution.BoundedPolicyCancellation cancellation;
 		private Set<McpResourceNotificationType> authorizedTypes = Set.of();
+		private long cancellationGeneration;
+		private long acceptedAuthorizationGeneration;
 		private @Nullable McpEffectivePartition fixedPartition;
 		private long reconciliationGeneration;
 		private long establishmentGeneration = 1L;
@@ -9913,6 +9954,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					}
 					authorizedTypes = Set.copyOf(selected); fixedPartition = partition;
 					headOwned = true;
+					acceptedAuthorizationGeneration = registration.generation();
 					openedNanos = applicationClock.nanoTime();
 					renewalNanos = openedNanos + Math.max(1L, (registration.deadlineNanos() - openedNanos) / 2L);
 					control.responseStream = requireNonNull(stream);
@@ -9955,10 +9997,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@Override public void fence(long generation) {
 			McpApplicationExecution.BoundedPolicyCancellation old;
 			synchronized (control.lock) {
-				establishmentGeneration++;
-				reconciliation = true;
-				renewalNanos = applicationClock.nanoTime();
-				old = cancellation;
+				if (generation == 0L || generation > acceptedAuthorizationGeneration) {
+					establishmentGeneration++;
+					reconciliation = true;
+					renewalNanos = applicationClock.nanoTime();
+				}
+				old = generation == 0L || cancellationGeneration < generation ? cancellation : null;
 			}
 			if (old != null && old.isActive()) old.cancel(StreamTerminationReason.APPLICATION_CANCELED);
 			recheckNotifications();
@@ -10034,12 +10078,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		void onTimer(long now) {
 			McpRequestSseStream current;
 			boolean finishClose;
-			boolean due;
 			synchronized (control.lock) {
 				if (!headOwned || writerTerminated) return;
 				current = stream;
 				finishClose = closing && now - closeDeadlineNanos >= 0L;
-				due = !closing && !pending && now - renewalNanos >= 0L;
 			}
 			if (finishClose) { requireNonNull(current).close(StreamTerminationReason.RESPONSE_TIMEOUT, null); return; }
 			if (current != null && !closing) {
@@ -10047,7 +10089,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null)) return;
 				current.offerKeepAliveIfWriteIdleExpired(now, transportConfiguration.keepAliveInterval().toNanos());
 			}
-			if (due) scheduleRenewal(now);
+		}
+		@Nullable LegacyMaintenanceDispatch dueRenewal(long now) {
+			synchronized (control.lock) {
+				if (closing || writerTerminated || pending || !headOwned || registration == null || now - renewalNanos < 0L) return null;
+				return new LegacyMaintenanceDispatch(registration.deadlineNanos(), () -> scheduleRenewal(now));
+			}
 		}
 		void scheduleRenewal(long now) {
 			boolean capacityRejected;
@@ -10059,7 +10106,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						|| legacyMaintenanceDispatchTimes.size() >= MAXIMUM_LEGACY_MAINTENANCE_DISPATCHES_PER_SECOND;
 				if (!capacityRejected) {
 					synchronized (control.lock) {
-						if (closing || pending || !headOwned) return;
+						if (closing || writerTerminated || pending || !headOwned || now - renewalNanos < 0L) return;
 						pending = true;
 					}
 					legacyMaintenanceActive++; legacyMaintenanceDispatchTimes.addLast(now);
@@ -10081,7 +10128,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpApplicationExecution.BoundedPolicyCancellation next = control.application.newBoundedPolicyCancellation();
 			synchronized (control.lock) {
 				if (closing || registration == null) return;
-				current = registration; generation = current.generation(); cancellation = next;
+				current = registration; generation = current.generation(); cancellation = next; cancellationGeneration = generation;
 				long now = applicationClock.nanoTime();
 				deadline = minimumDeadline(now, current.deadlineNanos(), now
 						+ subscriptionRuntimeConfiguration.authorizationTimeout().toNanos());
@@ -10105,6 +10152,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						synchronized (control.lock) {
 							if (current.generation() != generation + 1L) { maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.STALE_RESULT_DISCARDED); return; }
 							authorizedTypes = accepted.notificationTypes(); reconciliation = false;
+							acceptedAuthorizationGeneration = generation + 1L;
 							long now = applicationClock.nanoTime();
 							renewalNanos = now + Math.max(1L, (current.deadlineNanos() - now) / 2L);
 						}

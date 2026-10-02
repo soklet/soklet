@@ -373,8 +373,8 @@ final class McpLegacySessionStore {
 							session.grants.put(URI.create(uri), entry); logicalGrants++; session.usage.liveGrants++;
 							session.retainedUriBytes += uriBytes; retainedUriBytes += uriBytes;
 						}
+						invalidatePendingGrantHintsWhileLocked(entry);
 						entry.generation++; entry.authorized = false;
-						entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
 						if (entry.pending != null) retireGrantHandleWhileLocked(entry.pending, GrantCause.REPLACED, actions);
 						fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation, actions);
 						Grant grant = new Grant(entry, target, verifiedUse.evidence);
@@ -1072,7 +1072,7 @@ final class McpLegacySessionStore {
 		@NonNull Snapshot snapshot() { return entry.session.snapshot; }
 		@NonNull Optional<@NonNull GrantTarget> target() { synchronized (lock) { return Optional.ofNullable(target); } }
 		long generation() { return entry.generation; }
-		long deadlineNanos() { return entry.leaseDeadlineNanos; }
+		long deadlineNanos() { synchronized (lock) { return entry.leaseDeadlineNanos; } }
 		long totalDeadlineNanos() { return entry.totalDeadlineNanos; }
 		long retainedEvidenceBytes() { return evidence.bytes; }
 		boolean active() {
@@ -1223,8 +1223,8 @@ final class McpLegacySessionStore {
 						entry.pending = null; entry.activeGrant = grant;
 						maintenanceDemandUnits += demand - entry.maintenanceDemandUnits;
 						entry.maintenanceDemandUnits = demand;
+						invalidatePendingGrantHintsWhileLocked(entry);
 						entry.leaseDeadlineNanos = deadline; entry.generation++; entry.authorized = true;
-						entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
 						result = Status.ACCEPTED;
 					}
 				}
@@ -1380,9 +1380,17 @@ final class McpLegacySessionStore {
 
 	private void fenceGrantEntryWhileLocked(GrantEntry entry, List<Runnable> actions) {
 		if (!entry.live || !entry.session.live) return;
-		entry.authorized = false; entry.generation++; entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
+		invalidatePendingGrantHintsWhileLocked(entry);
+		entry.authorized = false; entry.generation++;
 		fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation, actions);
 		fenceGrantTargetWhileLocked(entry.pending, entry.generation, actions);
+	}
+
+	/** A generation change drops queued guards, but does not repeat a hint whose payload was already released. */
+	private void invalidatePendingGrantHintsWhileLocked(GrantEntry entry) {
+		if (entry.lastOfferedAttempt != null && entry.lastOfferedAttempt.reservations > 0) {
+			entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
+		}
 	}
 
 	private void fenceGrantTargetWhileLocked(@Nullable Grant grant, long generation, List<Runnable> actions) {

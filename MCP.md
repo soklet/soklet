@@ -2160,7 +2160,15 @@ check current authority. Duplicate subscribe obtains fresh authorization and
 atomically replaces that evidence without extending the original total grant
 lifetime. Unsubscribe fences both establishing and active grants. Reconciliation
 synchronously fences GET and URI authorization before bounded reevaluation;
-a late result cannot restore a revoked generation.
+a late result cannot restore a revoked generation. Deferred cancellation actions
+cancel only older-generation checks, preserving a fresh renewal that has already
+started under the fenced generation.
+
+Refreshing credentials requires a newly admitted GET for stream permission and
+a fresh or duplicate subscribe for each URI permission. A GET with refreshed
+credentials does not replace the historical credentials of existing URI grants.
+Revocation must be checked against current authority during both renewals;
+request reconciliation when permission changes need prompt reevaluation.
 
 URI grants belong to the session and survive GET loss within their lease,
 fixed total lifetime, and session deadlines. A new GET needs fresh HTTP admission
@@ -2189,11 +2197,17 @@ frames are purged; a partially written revoked frame closes before further bytes
 Byte reservations release exactly once after write, drop, or close.
 
 GET and URI maintenance share the four-job and 64-dispatches-per-second scheduler;
-short leases also consume a bounded aggregate maintenance-demand reservation.
+due renewals are ordered by the shortest remaining authorization lease across
+both kinds of work, including after reconciliation. Priority does not interrupt
+an already running callback or extend an authorization deadline.
+Short leases also consume a bounded aggregate maintenance-demand reservation.
 Physical callbacks and historical evidence stay charged until actual exit.
 Framework byte accounting does not measure arbitrary application principal or
-context graphs: keep those retained objects small and safe. Named-host refresh,
-credential renewal/reconnect, and exact-candidate qualification remain pending.
+context graphs: keep those retained objects small and safe. Named-host refresh
+and reconnect development observations are recorded in the
+[compatibility record](release/MCP_CLIENT_COMPATIBILITY.md). Released-SDK
+development checks also exercised actual Bearer refresh and revocation;
+named-host OAuth recovery and exact-candidate qualification remain pending.
 
 GET/DELETE use the existing generic HTTP lifecycle/metrics boundary with
 `ServerType.HTTP` and no `ResourceMethod`; they do not create MCP RPC request or
@@ -2201,18 +2215,24 @@ limiter events. GET lifetimes use `SubscriptionOpened`/`SubscriptionClosed`, not
 RPC `RequestStreamOpened`/`RequestStreamClosed`. Sensitive original requests and
 Throwables at application observer boundaries require application retention
 policy. No public session lifecycle callback or session/owner metric dimension
-is added. Real-host GET/DELETE behavior, renewal, and recovery remain pending
+is added. Real-host GET/DELETE behavior, renewal, and recovery still require
 qualification against the exact candidate.
 
 The existing simulator supports GET/DELETE through the same session and lease
 path. DELETE ends a simulated GET with `SESSION_CLOSED` and no JSON-RPC
 message; disconnect uses `CLIENT_DISCONNECTED` and leaves ordinary POST usable.
 Real-socket tests supplement simulation for physical writes and cleanup.
-A bounded released TypeScript Client/Core `2.2.0` development check exercised
-both exact 2025 revisions: automatic GET opening and version/session headers,
-fresh renewal, RPC use alongside GET, verified DELETE, renewal denial, and
-explicit reconnection. It does not qualify named hosts, automatic recovery,
-URI/catalog payload delivery, or an immutable release candidate. See the
+Bounded released TypeScript Client/Core `2.2.0` development checks exercised
+both exact 2025 revisions, including URI/catalog hint delivery, automatic GET
+recovery, policy-generation reconciliation, quiet lease renewal, and verified
+DELETE. Separate Inspector and VS Code observations cover their exercised
+revisions and specific display/refresh limits. A separate released-SDK HTTP
+check exercised real disposable Bearer credentials: a refreshed GET did not
+refresh historical URI evidence, fresh/duplicate subscribe replaced that
+evidence, and revocation closed GET and denied URI renewal. Revoked reconnect
+received `401` with an `invalid_token` challenge; a valid same-owner credential
+could still DELETE with `204`. These checks do not establish OAuth token
+issuance, named-host credential recovery or immutable release qualification. See the
 [development compatibility record](release/MCP_CLIENT_COMPATIBILITY.md).
 
 ## HTTP and error policy

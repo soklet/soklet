@@ -17,6 +17,7 @@ import {
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
 import { taskNotificationSupplementChecks } from '../conformance/official/run.mjs';
+import { verifyLegacyEvidence } from '../conformance/official/legacy/verify-evidence.mjs';
 import {
   acceptedP0CStatus,
   verifyAcceptedP0CRow,
@@ -561,15 +562,15 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'candidate-conformance': gateEvidenceContract(
     'candidate-conformance',
     'nodePin',
-    'node conformance/official/run.mjs --phase 5 --mode release',
+    'node conformance/official/run.mjs --phase 5 --mode release; node conformance/official/legacy/run.mjs --mode release',
     'release',
-    'ALL_46_REVIEWED_SCENARIO_PROFILES_MATCH_WITH_DECLARED_UPSTREAM_SKIP_AND_8_TASK_NOTIFICATION_CHECKS_PASS',
+    'MODERN_46_AND_TASK_8_PLUS_LEGACY_41_AND_RUNTIME_15_PER_REVISION_PASS',
     [directoryRole(
       'conformance-evidence',
       'application/vnd.soklet.conformance-evidence',
       'release',
     )],
-    2,
+    3,
   ),
   'candidate-localization': gateEvidenceContract(
     'candidate-localization',
@@ -2197,6 +2198,12 @@ export function verifyReleaseConformanceEvidence(
     fail('Conformance artifact provenance does not match the candidate artifact descriptor');
   }
 
+  verifyLegacyEvidence({
+    projectRoot: config.projectRoot,
+    evidencePath: resolve(dirname(conformanceEvidencePath), 'legacy/evidence.json'),
+    expectedProvenance: provenance,
+    pins,
+  });
   return evidence;
 }
 

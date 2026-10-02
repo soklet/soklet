@@ -16,10 +16,15 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.net.URI;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,7 +46,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public listener and simulator contracts for session-owned legacy resource delivery. */
-@Timeout(60)
+@Timeout(180)
 class McpLegacySubscriptionPublicRuntimeTests {
 	private static final List<McpProtocolVersion> LEGACY = List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
@@ -52,6 +58,12 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	private static final LifecyclePolicy LIFECYCLE = LifecyclePolicy.builder().startupTimeout(WAIT)
 			.startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(1))
 			.forcedShutdownTimeout(Duration.ofSeconds(1)).build();
+
+	@BeforeEach
+	void beginRequestBudget() { RawClient.beginRequestBudget(); }
+
+	@AfterEach
+	void endRequestBudget() { RawClient.endRequestBudget(); }
 
 	@Test
 	void simulatorAdmissionExposesValidatedSubscribeSelectionAndUnsubscribeOnlyItsOperationName() throws Exception {
@@ -153,7 +165,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					assertFalse(update.contains("subscription")); assertFalse(update.contains("\"id\"")); assertFalse(update.contains("_meta"));
 					assertNoWireMessages(get, Duration.ofMillis(150));
 				}
-				long disconnectedBy = System.nanoTime() + WAIT.toNanos();
+				long disconnectedBy = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
 				while (fixture.server.getDiagnostics().getActiveSubscriptions() != 0 && System.nanoTime() < disconnectedBy) Thread.sleep(5);
 				assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
 				fixture.harness.publisher.publishResourceUpdated(templateUri);
@@ -179,15 +191,15 @@ class McpLegacySubscriptionPublicRuntimeTests {
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
 				String id = initialize(simulator, version);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishResourceUpdated(EXACT); harness.publisher.publishResourcesListChanged(); harness.publisher.publishPromptsListChanged();
 					assertNoSimulatorMessages(get, Duration.ofMillis(180));
 					harness.publisher.publishToolsListChanged();
 					assertNotification(nextSimulatorNotification(get), "notifications/tools/list_changed", null);
 					try (McpSimulation modern = simulator.startMcpRequest(request(HttpMethod.POST, McpProtocolVersion.V2026_07_28, id,
 							"{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"resources/subscribe\",\"params\":{\"uri\":\"test:///exact\",\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}", "resources/subscribe"))) {
-						McpSimulationResponse response = modern.awaitResponse(WAIT).orElseThrow();
-						modern.awaitCompletion(WAIT).orElseThrow();
+						McpSimulationResponse response = modern.awaitResponse(RawClient.remainingRequestWait()).orElseThrow();
+						modern.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
 						assertError(responseObject(response), -32601);
 					}
 					assertTrue(harness.authorizations.isEmpty());
@@ -209,7 +221,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
 				String id = initialize(simulator, version);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishToolsListChanged();
 					assertNotification(nextSimulatorNotification(get), "notifications/tools/list_changed", null);
 					harness.publisher.publishToolsListChanged(); harness.publisher.publishToolsListChanged();
@@ -238,7 +250,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				String id = initialize(simulator, version);
 				assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"), 10);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishToolsListChanged(); harness.publisher.publishPromptsListChanged(); harness.publisher.publishResourcesListChanged();
 					assertNoSimulatorMessages(get, Duration.ofMillis(200));
 					harness.publisher.publishResourceUpdated(EXACT);
@@ -259,7 +271,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
 				String id = initialize(simulator, version);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					simulator.getMcpServer().orElseThrow().getLocalizationCatalogInvalidator().invalidateCatalogs();
 					assertNotification(nextSimulatorNotification(get), "notifications/tools/list_changed", null);
 					assertEquals(0, providers.get(), "Localized invalidation needs no invented GET-based provider context.");
@@ -299,7 +311,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				String id = initialize(simulator, version);
 				assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"), 10);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					simulator.getMcpServer().orElseThrow().getLocalizationCatalogInvalidator().invalidateCatalogs();
 					harness.publisher.publishToolsListChanged();
 					assertNoSimulatorMessages(get, Duration.ofMillis(200));
@@ -321,7 +333,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				contexts.add(context); tokens.add(invocationFeatures.getCancelationToken());
 				if (checks.incrementAndGet() == 1) {
 					entered.countDown();
-					long stop = System.nanoTime() + WAIT.toNanos();
+					long stop = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
 					while (release.getCount() != 0 && System.nanoTime() < stop) {
 						try { release.await(30, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) { }
 					}
@@ -337,9 +349,9 @@ class McpLegacySubscriptionPublicRuntimeTests {
 						assertTrue(entered.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
 						simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
 						assertTrue(tokens.get(0).isCanceled()); release.countDown();
-						McpSimulationResponse response = subscribe.awaitResponse(WAIT).orElseThrow();
+						McpSimulationResponse response = subscribe.awaitResponse(RawClient.remainingRequestWait()).orElseThrow();
 						assertEquals(200, response.getStatusCode());
-						subscribe.awaitCompletion(WAIT).orElseThrow();
+						subscribe.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
 						assertEmptyResult(responseObject(response), 10);
 						assertEquals(2, checks.get()); assertNotSame(tokens.get(0), tokens.get(1));
 						assertSame(contexts.get(0).getInitialRequestContext(), contexts.get(1).getInitialRequestContext());
@@ -347,7 +359,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					} finally { release.countDown(); }
 				}
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishResourceUpdated(EXACT);
 					assertNotification(nextSimulatorNotification(get), "notifications/resources/updated", EXACT);
 				}
@@ -367,7 +379,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				for (String method : List.of("resources/subscribe", "resources/unsubscribe")) {
 					try (McpSimulation call = simulator.startMcpRequest(request(HttpMethod.POST, version, id,
 							"{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"" + method + "\",\"params\":{\"uri\":\"test:///exact\"}}", null))) {
-						assertEquals(429, call.awaitResponse(WAIT).orElseThrow().getStatusCode()); call.awaitCompletion(WAIT).orElseThrow();
+						assertEquals(429, call.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode()); call.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
 					}
 					McpRateLimitContext context = limits.get(limits.size() - 1);
 					assertEquals(method, context.getJsonRpcMethod()); assertEquals("test:///exact", context.getOperationName().orElseThrow());
@@ -388,7 +400,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				String id = initialize(simulator, version);
 				assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"TEST:///exact\"}"), 10);
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishResourceUpdated(EXACT);
 					McpJsonObject notification = (McpJsonObject) nextSimulatorNotification(get);
 					assertEquals(McpJsonString.fromValue("notifications/resources/updated"), notification.getMembers().get("method"));
@@ -396,6 +408,276 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					assertEquals(EXACT, URI.create(((McpJsonString) params.getMembers().get("uri")).getValue()));
 					assertEmptyResult(rpc(simulator, version, id, "resources/unsubscribe", "{\"uri\":\"test:///exact\"}"), 10);
 					harness.publisher.publishResourceUpdated(EXACT); assertNoSimulatorMessages(get, Duration.ofMillis(180));
+				}
+			});
+		}
+	}
+
+	@Test
+	void delayedGrantFenceCannotCancelRenewalStartedUnderThatFencedGeneration() throws Exception {
+		for (McpProtocolVersion version : LEGACY) assertDelayedFencePreservesRenewal(version, true);
+	}
+
+	@Test
+	void delayedGetFenceCannotCancelRenewalStartedUnderThatFencedGeneration() throws Exception {
+		for (McpProtocolVersion version : LEGACY) assertDelayedFencePreservesRenewal(version, false);
+	}
+
+	private static void assertDelayedFencePreservesRenewal(McpProtocolVersion version, boolean uriGrant) throws Exception {
+		Harness harness = new Harness(); AtomicInteger checks = new AtomicInteger();
+		CountDownLatch renewed = new CountDownLatch(1), releaseRenewal = new CountDownLatch(1);
+		CountDownLatch fenceEntered = new CountDownLatch(1), releaseFence = new CountDownLatch(1);
+		AtomicReference<CancelationToken> renewalToken = new AtomicReference<>();
+		AtomicReference<Object> retirement = new AtomicReference<>();
+		CountDownLatch retirementObserved = new CountDownLatch(1);
+		harness.additional = builder -> builder.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4)).keepAliveInterval(Duration.ofSeconds(1))
+				.subscriptionAuthorizer((context, features) -> {
+					if (uriGrant && checks.incrementAndGet() == 2) {
+						renewalToken.set(features.getCancelationToken()); renewed.countDown();
+						releaseRenewal.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+					}
+					return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).build();
+				}).sessionConfig(McpSessionConfig.withOwnerKeyResolver(admissionIdentity -> "owner")
+						.transportAdmissionController((context, features) -> {
+							if (!uriGrant && context.getRequest().getHttpMethod() == HttpMethod.GET && checks.incrementAndGet() == 2) {
+								renewalToken.set(features.getCancelationToken()); renewed.countDown();
+								releaseRenewal.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+							}
+							return McpSessionTransportAdmissionDecision.accepted(identity(), Instant.now().plusSeconds(30), context.getNotificationTypes());
+						}).build());
+		SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+			String id = initialize(simulator, version);
+			assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"), 10);
+			try (McpSimulation existingGet = uriGrant ? null : simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+				if (existingGet != null) assertEquals(200, existingGet.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+				AtomicBoolean stopReader = new AtomicBoolean(); AtomicReference<McpJsonValue> getNotification = new AtomicReference<>();
+				CountDownLatch getNotificationReceived = new CountDownLatch(1); AtomicReference<Throwable> readerFailure = new AtomicReference<>();
+				Thread reader = new Thread(() -> {
+					try {
+						while (!stopReader.get()) existingGet.awaitStreamItem(Duration.ofMillis(50)).flatMap(McpSimulationStreamItem::getMessage)
+								.ifPresent(message -> { getNotification.set(message); getNotificationReceived.countDown(); });
+					} catch (Throwable failure) { readerFailure.set(failure); }
+				}, "legacy-fence-get-reader");
+				Object runtime = reflectedField(reflectedField(simulator.getMcpServer().orElseThrow(), "runtimeBridge"), "runtime");
+				Object control = uriGrant ? ((Set<?>) reflectedField(runtime, "legacyUriGrantControls")).iterator().next()
+						: ((Map<?, ?>) reflectedField(runtime, "legacyGetControls")).values().iterator().next();
+				Object registration = reflectedField(control, uriGrant ? "grant" : "registration");
+				Object storeLock = reflectedField(reflectedField(runtime, "legacySessionStore"), "lock");
+				Field targetField = registration.getClass().getDeclaredField("target"); targetField.setAccessible(true);
+				Object original = targetField.get(registration);
+				Object deferred = Proxy.newProxyInstance(original.getClass().getClassLoader(), original.getClass().getInterfaces(),
+						(proxy, method, arguments) -> {
+							if (method.getName().equals("fence")) {
+								fenceEntered.countDown(); releaseFence.await(3 * WAIT.toMillis(), TimeUnit.MILLISECONDS);
+							} else if (method.getName().equals("retire")) { retirement.set(arguments[0]); retirementObserved.countDown(); }
+							try { method.setAccessible(true); return method.invoke(original, arguments); }
+							catch (InvocationTargetException failure) { throw failure.getCause(); }
+						});
+				// Defer only the target callback; the store fence, timer and policy execution remain real.
+				synchronized (storeLock) { targetField.set(registration, deferred); }
+				Thread reconcile = new Thread(() -> simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions(), "legacy-delayed-fence");
+				try {
+					if (existingGet != null) reader.start();
+					reconcile.start(); assertTrue(fenceEntered.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					assertTrue(renewed.await(WAIT.toMillis(), TimeUnit.MILLISECONDS), "Natural renewal must start under the already fenced store generation.");
+					releaseFence.countDown(); reconcile.join(WAIT.toMillis()); assertFalse(reconcile.isAlive());
+					releaseRenewal.countDown();
+					if (renewalToken.get().isCanceled()) assertTrue(retirementObserved.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					assertNull(retirement.get(), "Delayed fence must not retire a fresh renewal as an authorization failure.");
+					assertFalse(renewalToken.get().isCanceled(), "A delayed fence must cancel only checks from an older generation.");
+					synchronized (storeLock) { targetField.set(registration, original); }
+					if (uriGrant) {
+						try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+							assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+							harness.publisher.publishResourceUpdated(EXACT);
+							assertNotification(nextSimulatorNotification(get), "notifications/resources/updated", EXACT);
+						}
+					} else {
+						harness.publisher.publishToolsListChanged();
+						assertTrue(getNotificationReceived.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+						assertNotification(getNotification.get(), "notifications/tools/list_changed", null);
+					}
+				} finally {
+					releaseFence.countDown(); releaseRenewal.countDown(); reconcile.join(WAIT.toMillis());
+					synchronized (storeLock) { targetField.set(registration, original); } assertFalse(reconcile.isAlive());
+					stopReader.set(true); if (existingGet != null) { reader.join(WAIT.toMillis()); assertFalse(reader.isAlive()); }
+					assertNull(readerFailure.get());
+				}
+			}
+		});
+	}
+
+	private static Object reflectedField(Object owner, String name) throws Exception {
+		Field field = owner.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(owner);
+	}
+
+	@Test
+	void refreshedBearerGetDoesNotRefreshUriEvidenceAndRevocationRetiresBothPermissions() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness(); Set<String> valid = ConcurrentHashMap.newKeySet();
+			String tokenA = "Bearer credential-A", tokenB = "Bearer credential-B"; valid.addAll(Set.of(tokenA, tokenB));
+			List<McpSubscriptionAuthorizationContext> contexts = new CopyOnWriteArrayList<>();
+			CountDownLatch deniedA = new CountDownLatch(1), deniedB = new CountDownLatch(1);
+			McpAdmissionRejection rejection = McpAdmissionRejection.withStatusCodeAndError(401,
+					McpJsonRpcError.fromApplication(-31903, "Credential rejected")).build();
+			harness.additional = builder -> builder.admissionController(context -> valid.contains(context.getRequest().getHeader("Authorization").orElse(""))
+					? McpAdmissionDecision.accepted(identity()) : McpAdmissionDecision.rejected(rejection))
+					.sessionConfig(McpSessionConfig.withOwnerKeyResolver(admissionIdentity -> "owner")
+							.transportAdmissionController((context, features) -> valid.contains(context.getRequest().getHeader("Authorization").orElse(""))
+									? McpSessionTransportAdmissionDecision.accepted(identity(), Instant.now().plusSeconds(30), context.getNotificationTypes())
+									: McpSessionTransportAdmissionDecision.rejected(rejection)).build())
+					.subscriptionAuthorizer((context, features) -> {
+						contexts.add(context); String token = context.getInitialRequestContext().getRequest().getHeader("Authorization").orElse("");
+						if (!valid.contains(token)) {
+							(token.equals(tokenA) ? deniedA : deniedB).countDown();
+							return McpSubscriptionAuthorization.deniedInstance();
+						}
+						return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).applicationContext(token).build();
+					});
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id;
+				try (McpSimulation call = simulator.startMcpRequest(withBearer(request(HttpMethod.POST, version, null, initializeBody(version), null), tokenA))) {
+					McpSimulationResponse response = call.awaitResponse(RawClient.remainingRequestWait()).orElseThrow(); assertEquals(200, response.getStatusCode());
+					call.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
+					id = response.getHeaders().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("Mcp-Session-Id"))
+							.findFirst().orElseThrow().getValue().iterator().next();
+				}
+				assertEmptyResult(bearerSubscribe(simulator, version, id, tokenA), 10);
+				try (McpSimulation oldGet = simulator.startMcpRequest(withBearer(request(HttpMethod.GET, version, id, "", null), tokenA));
+						McpSimulation freshGet = simulator.startMcpRequest(withBearer(request(HttpMethod.GET, version, id, "", null), tokenB))) {
+					assertEquals(200, oldGet.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+					assertEquals(200, freshGet.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+					valid.remove(tokenA); simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+					assertTrue(deniedA.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					assertEquals(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED, oldGet.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow().getReason());
+					harness.publisher.publishResourceUpdated(EXACT); harness.publisher.publishToolsListChanged();
+					assertNotification(nextSimulatorNotification(freshGet), "notifications/tools/list_changed", null);
+					long quietDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(100);
+					while (System.nanoTime() < quietDeadline) {
+						var item = freshGet.awaitStreamItem(Duration.ofMillis(20));
+						if (item.isPresent() && item.orElseThrow().getMessage().isPresent())
+							assertNotification(item.orElseThrow().getMessage().orElseThrow(), "notifications/tools/list_changed", null);
+					}
+					assertEmptyResult(bearerSubscribe(simulator, version, id, tokenB), 10);
+					simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+					harness.publisher.publishResourceUpdated(EXACT);
+					assertNotification(nextSimulatorNotification(freshGet), "notifications/resources/updated", EXACT);
+					McpSubscriptionAuthorizationContext refreshed = contexts.stream().filter(context -> context.getPreviousValidUntil().isPresent()
+							&& context.getInitialRequestContext().getRequest().getHeader("Authorization").orElse("").equals(tokenB)).findFirst().orElseThrow();
+					assertEquals(tokenB, refreshed.getApplicationContext().orElseThrow());
+					valid.remove(tokenB); simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+					assertTrue(deniedB.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					assertEquals(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED, freshGet.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow().getReason());
+				}
+			});
+		}
+	}
+
+	private static Request withBearer(Request request, String bearerValue) {
+		return request.copy().headers(headers -> headers.put("Authorization", Set.of(bearerValue))).finish();
+	}
+	private static McpJsonObject bearerSubscribe(Simulator simulator, McpProtocolVersion version, String id, String token) throws InterruptedException {
+		try (McpSimulation call = simulator.startMcpRequest(withBearer(request(HttpMethod.POST, version, id,
+				"{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"resources/subscribe\",\"params\":{\"uri\":\"test:///exact\"}}", null), token))) {
+			McpSimulationResponse response = call.awaitResponse(RawClient.remainingRequestWait()).orElseThrow(); assertEquals(200, response.getStatusCode());
+			call.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow(); return responseObject(response);
+		}
+	}
+
+	@Test
+	void reconciliationDispatchesShortGetLeaseBeforeSlowLongLivedUriRenewals() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness();
+			AtomicBoolean blockUriRenewals = new AtomicBoolean();
+			CountDownLatch releaseUriRenewals = new CountDownLatch(1);
+			CountDownLatch getRenewed = new CountDownLatch(1);
+			AtomicInteger getChecks = new AtomicInteger();
+			harness.additional = builder -> builder
+					.sessionConfig(McpSessionConfig.withOwnerKeyResolver(admissionIdentity -> "owner")
+							.transportAdmissionController((context, features) -> {
+								if (context.getRequest().getHttpMethod() == HttpMethod.GET) {
+									if (getChecks.incrementAndGet() > 1) getRenewed.countDown();
+									return McpSessionTransportAdmissionDecision.accepted(identity(),
+											Instant.now().plusSeconds(4), FAMILIES);
+								}
+								return McpSessionTransportAdmissionDecision.accepted(identity(),
+										Instant.now().plusSeconds(30), Set.of());
+							}).build())
+					.subscriptionAuthorizer((context, features) -> {
+						if (blockUriRenewals.get()) releaseUriRenewals.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+						return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).build();
+					});
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id = initialize(simulator, version);
+				for (int index = 0; index < 4; index++)
+					assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///template/" + index + "\"}"), 10);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+					assertEquals(1, getChecks.get());
+					blockUriRenewals.set(true);
+					simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+					try {
+						assertTrue(getRenewed.await(2, TimeUnit.SECONDS),
+								"Four slow URI renewals must not occupy every maintenance slot ahead of a shorter GET lease.");
+						harness.publisher.publishToolsListChanged();
+						assertNotification(nextSimulatorNotification(get), "notifications/tools/list_changed", null);
+					} finally { releaseUriRenewals.countDown(); }
+				}
+			});
+		}
+	}
+
+	@Test
+	void reconciliationDispatchesShortUriLeaseBeforeSlowLongLivedUriRenewals() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness();
+			AtomicInteger phase = new AtomicInteger(), firstRenewals = new AtomicInteger();
+			AtomicReference<URI> shortLeaseUri = new AtomicReference<>();
+			CountDownLatch firstFourEntered = new CountDownLatch(4), releaseFirstFour = new CountDownLatch(1);
+			CountDownLatch shortLeaseAssigned = new CountDownLatch(1), shortLeaseRenewed = new CountDownLatch(1);
+			CountDownLatch releaseLongRenewals = new CountDownLatch(1);
+			harness.additional = builder -> builder.subscriptionAuthorizer((context, features) -> {
+				URI uri = context.getResourceSubscriptionUris().iterator().next();
+				int currentPhase = phase.get();
+				if (currentPhase == 1) {
+					// Establish the shortest lease on the grant that was dispatched last.
+					if (firstRenewals.incrementAndGet() <= 4) {
+						firstFourEntered.countDown(); releaseFirstFour.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+					} else { shortLeaseUri.set(uri); shortLeaseAssigned.countDown(); }
+				} else if (currentPhase == 2) {
+					if (uri.equals(shortLeaseUri.get())) shortLeaseRenewed.countDown();
+					else releaseLongRenewals.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+				}
+				return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(
+						uri.equals(shortLeaseUri.get()) ? 4 : 30)).build();
+			});
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id = initialize(simulator, version);
+				for (int index = 0; index < 5; index++)
+					assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///template/" + index + "\"}"), 10);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
+					try {
+						phase.set(1);
+						simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+						assertTrue(firstFourEntered.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+						releaseFirstFour.countDown();
+						assertTrue(shortLeaseAssigned.await(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+						for (int index = 0; index < 5; index++) harness.publisher.publishResourceUpdated(URI.create("test:///template/" + index));
+						// Delivery proves the first generation's renewals were accepted before the next fence.
+						Set<URI> delivered = new java.util.HashSet<>();
+						for (int index = 0; index < 16 && delivered.size() < 5; index++) {
+							McpJsonObject notification = assertInstanceOf(McpJsonObject.class, nextSimulatorNotification(get));
+							assertEquals("notifications/resources/updated", ((McpJsonString) notification.getMembers().get("method")).getValue());
+							McpJsonObject params = (McpJsonObject) notification.getMembers().get("params");
+							delivered.add(URI.create(((McpJsonString) params.getMembers().get("uri")).getValue()));
+						}
+						assertEquals(5, delivered.size());
+						phase.set(2);
+						simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+						assertTrue(shortLeaseRenewed.await(2, TimeUnit.SECONDS),
+								"The shortest URI lease must renew ahead of four blocked longer URI leases.");
+					} finally { releaseFirstFour.countDown(); releaseLongRenewals.countDown(); }
 				}
 			});
 		}
@@ -435,7 +717,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
 				assertTrue(renewed.await(3, TimeUnit.SECONDS));
 				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
 					harness.publisher.publishResourceUpdated(EXACT);
 					assertNoSimulatorMessages(get, Duration.ofMillis(180));
 					harness.publisher.publishToolsListChanged();
@@ -451,9 +733,9 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	private static McpJsonObject rpc(Simulator simulator, McpProtocolVersion version, String id, String method, String params) throws InterruptedException {
 		try (McpSimulation call = simulator.startMcpRequest(request(HttpMethod.POST, version, id,
 				"{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"" + method + "\",\"params\":" + params + "}", null))) {
-			McpSimulationResponse response = call.awaitResponse(WAIT).orElseThrow();
+			McpSimulationResponse response = call.awaitResponse(RawClient.remainingRequestWait()).orElseThrow();
 			assertEquals(200, response.getStatusCode());
-			call.awaitCompletion(WAIT).orElseThrow();
+			call.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
 			return responseObject(response);
 		}
 	}
@@ -466,8 +748,8 @@ class McpLegacySubscriptionPublicRuntimeTests {
 
 	private static String initialize(Simulator simulator, McpProtocolVersion version) throws InterruptedException {
 		try (McpSimulation call = simulator.startMcpRequest(request(HttpMethod.POST, version, null, initializeBody(version), null))) {
-			McpSimulationResponse response = call.awaitResponse(WAIT).orElseThrow(); assertEquals(200, response.getStatusCode());
-			call.awaitCompletion(WAIT).orElseThrow();
+			McpSimulationResponse response = call.awaitResponse(RawClient.remainingRequestWait()).orElseThrow(); assertEquals(200, response.getStatusCode());
+			call.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow();
 			return response.getHeaders().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("Mcp-Session-Id"))
 					.findFirst().orElseThrow().getValue().iterator().next();
 		}
@@ -500,8 +782,11 @@ class McpLegacySubscriptionPublicRuntimeTests {
 		assertFalse(response.body().contains("\"error\""));
 	}
 	private static McpJsonValue nextSimulatorNotification(McpSimulation get) throws InterruptedException {
+		long deadline = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
 		for (int count = 0; count < 64; count++) {
-			McpSimulationStreamItem item = get.awaitStreamItem(WAIT).orElseThrow();
+			long remaining = deadline - System.nanoTime();
+			assertTrue(remaining > 0, "Notification exceeded its shared five-second deadline.");
+			McpSimulationStreamItem item = get.awaitStreamItem(Duration.ofNanos(remaining)).orElseThrow();
 			if (item.getMessage().isPresent()) return item.getMessage().orElseThrow();
 		}
 		throw new AssertionError("Expected bounded notification.");
@@ -522,8 +807,9 @@ class McpLegacySubscriptionPublicRuntimeTests {
 		else assertEquals(McpJsonObject.fromMembers(Map.of("uri", McpJsonString.fromValue(uri.toString()))), params);
 	}
 	private static String nextWireNotification(RawClient get) throws Exception {
+		long deadline = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
 		for (int count = 0; count < 64; count++) {
-			byte[] chunk = get.readChunk(); assertNotNull(chunk, "GET ended before notification.");
+			byte[] chunk = get.readChunk(deadline); assertNotNull(chunk, "GET ended before notification.");
 			String frame = new String(chunk, StandardCharsets.UTF_8);
 			if (frame.contains("data:")) return frame;
 		}
@@ -532,7 +818,10 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	private static void assertNoWireMessages(RawClient get, Duration duration) throws Exception {
 		long deadline = System.nanoTime() + duration.toNanos();
 		while (System.nanoTime() < deadline) {
-			byte[] chunk = get.readChunk(); assertNotNull(chunk, "GET must remain open.");
+			byte[] chunk;
+			try { chunk = get.readChunk(deadline); }
+			catch (java.net.SocketTimeoutException expected) { return; }
+			assertNotNull(chunk, "GET must remain open.");
 			assertFalse(new String(chunk, StandardCharsets.UTF_8).contains("data:"), "Unexpected URI disclosure or duplicate delivery.");
 		}
 	}

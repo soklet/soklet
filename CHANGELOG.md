@@ -193,10 +193,18 @@
   receives coalesced resource/catalog hints with authorization checked at every
   socket write; revoked unwritten frames are purged and partially written frames
   close before further bytes. Grant, URI-byte, encoded-output, and aggregate
-  maintenance caps retain physical ownership through callback exit. No Tasks,
+  maintenance caps retain physical ownership through callback exit. Due GET and
+  URI renewals share deadline priority so longer-lived grants cannot take every
+  maintenance slot ahead of an urgent renewal. This does not interrupt running
+  callbacks or extend authorization deadlines. Delayed fence cancellation only
+  targets older-generation checks, preserving fresh GET and URI renewals under
+  the fenced generation. Refreshed GET credentials do not replace URI grant
+  credentials; each URI needs a fresh or duplicate subscribe. No Tasks,
   event history, replay, or POST result recovery is added. `McpOperationType`
   adds `RESOURCES_SUBSCRIBE`/`RESOURCES_UNSUBSCRIBE`; update exhaustive switches.
-  Named-host refresh and exact-candidate qualification remain pending.
+  Named-host development refresh observations and their limits are recorded in
+  [the compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md);
+  exact-candidate qualification remains pending.
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
   immutable `McpJson*` values, operation-specific contexts and registrations,

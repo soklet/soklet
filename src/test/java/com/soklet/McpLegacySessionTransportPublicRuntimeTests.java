@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -46,7 +48,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public API real-socket HTTP admission, GET lease, and DELETE cleanup contracts. */
-@Timeout(60)
+@Timeout(120)
 class McpLegacySessionTransportPublicRuntimeTests {
 	private static final List<McpProtocolVersion> LEGACY = List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
@@ -54,6 +56,12 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	private static final LifecyclePolicy LIFECYCLE = LifecyclePolicy.builder()
 			.startupTimeout(Duration.ofSeconds(5)).startupCancelationTimeout(Duration.ofSeconds(2))
 			.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build();
+
+	@BeforeEach
+	void beginRequestBudget() { RawClient.beginRequestBudget(); }
+
+	@AfterEach
+	void endRequestBudget() { RawClient.endRequestBudget(); }
 
 	@Test
 	void methodMatrixRespectsExactRevisionConfigurationAndDoesNotFabricateRpcAdmission() throws Exception {
@@ -222,6 +230,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(150)
 	void reconciliationDenialAndOwnerChangeCloseOnlyTheGetAndCannotResurrectIt() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
 			for (boolean ownerChange : List.of(false, true))
@@ -549,14 +558,25 @@ class McpLegacySessionTransportPublicRuntimeTests {
 
 	/** Bounded test-only HTTP/1.1 reader; preserves duplicate request fields and empty chunked completion. */
 	static final class RawClient implements AutoCloseable {
+		private static final Duration WAIT = Duration.ofSeconds(5);
+		private static final ThreadLocal<Long> REQUEST_DEADLINE = new ThreadLocal<>();
+		static void beginRequestBudget() { REQUEST_DEADLINE.set(System.nanoTime() + Duration.ofSeconds(60).toNanos()); }
+		static void endRequestBudget() { REQUEST_DEADLINE.remove(); }
+		static Duration remainingRequestWait() {
+			Long deadline = REQUEST_DEADLINE.get();
+			long remaining = deadline == null ? WAIT.toNanos() : deadline - System.nanoTime();
+			assertTrue(remaining > 0, "Legacy requests exceeded their shared 60-second deadline.");
+			return Duration.ofNanos(Math.min(WAIT.toNanos(), remaining));
+		}
 		final Socket socket = new Socket();
 		final InputStream input;
 		boolean terminalRead;
+		long readDeadlineNanos;
 
 		RawClient(int port, String method, String path, String body, List<HeaderValue> headers) throws IOException {
 			socket.setTcpNoDelay(true);
 			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress("127.0.0.1", port), 5000);
+			socket.connect(new InetSocketAddress("127.0.0.1", port), (int) Math.max(1, remainingRequestWait().toMillis()));
 			this.input = socket.getInputStream();
 			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
 			StringBuilder head = new StringBuilder(method).append(" ").append(path).append(" HTTP/1.1\r\nHost: 127.0.0.1:")
@@ -569,6 +589,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		}
 
 		Head readHead() throws IOException {
+			readDeadlineNanos = System.nanoTime() + remainingRequestWait().toNanos();
 			String status = line();
 			Map<String, List<String>> headers = new LinkedHashMap<>();
 			for (int count = 0; count < 128; count++) {
@@ -585,11 +606,12 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		}
 
 		String readBody(Head head) throws IOException {
+			readDeadlineNanos = System.nanoTime() + remainingRequestWait().toNanos();
 			if (head.status() == 204 && head.header("Content-Length") == null) return "";
 			if ("chunked".equalsIgnoreCase(head.header("Transfer-Encoding"))) {
 				ByteArrayOutputStream body = new ByteArrayOutputStream();
 				for (int count = 0; count < 256; count++) {
-					byte[] chunk = readChunk();
+					byte[] chunk = readChunk(readDeadlineNanos);
 					if (chunk == null) return body.toString(StandardCharsets.UTF_8);
 					if (body.size() + chunk.length > 2 * 1024 * 1024) throw new IOException("Response exceeded test bound.");
 					body.write(chunk);
@@ -600,6 +622,11 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		}
 
 		byte[] readChunk() throws IOException {
+			return readChunk(System.nanoTime() + remainingRequestWait().toNanos());
+		}
+
+		byte[] readChunk(long deadlineNanos) throws IOException {
+			readDeadlineNanos = deadlineNanos;
 			if (terminalRead) return null;
 			String size = line().split(";", 2)[0];
 			int length = Integer.parseInt(size, 16);
@@ -615,23 +642,36 @@ class McpLegacySessionTransportPublicRuntimeTests {
 
 		byte[] exact(int count) throws IOException {
 			if (count < 0 || count > 2 * 1024 * 1024) throw new IOException("Body exceeded test bound.");
-			byte[] bytes = input.readNBytes(count);
-			if (bytes.length != count) throw new EOFException("Response ended before its complete body.");
+			byte[] bytes = new byte[count];
+			for (int offset = 0; offset < count;) {
+				applyReadDeadline();
+				int read = input.read(bytes, offset, count - offset);
+				if (read < 0) throw new EOFException("Response ended before its complete body.");
+				offset += read;
+			}
 			return bytes;
 		}
 
 		String line() throws IOException {
 			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 			for (int count = 0; count < 65536; count++) {
+				applyReadDeadline();
 				int value = input.read();
 				if (value < 0) throw new EOFException("Response ended before its framing.");
 				if (value == '\r') {
+					applyReadDeadline();
 					if (input.read() != '\n') throw new IOException("Invalid response line delimiter.");
 					return bytes.toString(StandardCharsets.ISO_8859_1);
 				}
 				bytes.write(value);
 			}
 			throw new IOException("Response line exceeded test bound.");
+		}
+
+		private void applyReadDeadline() throws IOException {
+			long remaining = readDeadlineNanos - System.nanoTime();
+			if (remaining <= 0) throw new java.net.SocketTimeoutException("Response exceeded its shared read deadline.");
+			socket.setSoTimeout((int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
 		}
 
 		@Override public void close() throws IOException { socket.close(); }

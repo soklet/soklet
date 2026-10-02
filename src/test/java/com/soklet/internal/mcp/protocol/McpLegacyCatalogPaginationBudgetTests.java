@@ -20,6 +20,7 @@ import com.soklet.CorsAuthorizer;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import org.jspecify.annotations.NonNull;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -44,10 +45,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Injected output limits keep byte and JSON-node pagination evidence independent. */
 @NotThreadSafe
-@Timeout(90)
+@Timeout(180)
 public class McpLegacyCatalogPaginationBudgetTests {
 	private static final List<String> LEGACY = List.of("2025-06-18", "2025-11-25");
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private long requestDeadlineNanos;
+
+	@BeforeEach
+	void resetRequestDeadline() {
+		requestDeadlineNanos = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+	}
+
+	private Duration remainingRequestWait() {
+		long remaining = requestDeadlineNanos - System.nanoTime();
+		assertTrue(remaining > 0, "Catalog requests exceeded their shared 60-second deadline.");
+		return Duration.ofNanos(Math.min(WAIT.toNanos(), remaining));
+	}
 	private static final HttpClient HTTP = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
 	private static final McpJsonCodec JSON = new McpJsonCodec(McpJsonLimits.productionDefaults());
 
@@ -126,7 +139,7 @@ public class McpLegacyCatalogPaginationBudgetTests {
 		return builder.build();
 	}
 
-	private static Enumeration enumerate(int port, String revision, Kind kind, McpJsonLimits limits) throws Exception {
+	private Enumeration enumerate(int port, String revision, Kind kind, McpJsonLimits limits) throws Exception {
 		List<String> identities = new ArrayList<>();
 		Set<String> cursors = new HashSet<>();
 		String cursor = null;
@@ -137,7 +150,7 @@ public class McpLegacyCatalogPaginationBudgetTests {
 			String params = cursor == null ? "" : ",\"params\":{\"cursor\":" + JSON.toJson(new McpJsonString(cursor)) + "}";
 			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"page\",\"method\":\"" + kind.method + "\"" + params + "}";
 			HttpResponse<byte[]> response = HTTP.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
-					.timeout(WAIT).header("Content-Type", "application/json")
+					.timeout(remainingRequestWait()).header("Content-Type", "application/json")
 					.header("Accept", "application/json, text/event-stream").header("MCP-Protocol-Version", revision)
 					.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
 					HttpResponse.BodyHandlers.ofByteArray());

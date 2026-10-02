@@ -298,7 +298,7 @@ export async function runOfficialConformance(options, { processObject = process 
   }
 }
 
-async function verifyProjectCheckout(projectRoot, expectedCommit, supervisor) {
+export async function verifyProjectCheckout(projectRoot, expectedCommit, supervisor) {
   const result = await runBoundedCommand(
     'git', [
       '-c', `safe.directory=${resolve(projectRoot)}`,
@@ -638,7 +638,7 @@ export function verifyExplicitReleaseCandidate(descriptor, pins) {
   });
 }
 
-function verifyReleaseCandidateOptions(options, pins) {
+export function verifyReleaseCandidateOptions(options, pins) {
   const hasManifestInput = options.releaseManifest !== undefined
     || options.releaseManifestSha256 !== undefined;
   const directInputs = [
@@ -793,7 +793,7 @@ function verifyReleaseCandidateDescriptor(descriptor, pins, { source, manifestSh
   });
 }
 
-function assertReleaseCandidateUnchanged(options) {
+export function assertReleaseCandidateUnchanged(options) {
   const current = verifyReleaseCandidateOptions(options, options.releasePins);
   if (JSON.stringify(current.evidence) !== JSON.stringify(options.releaseCandidate.evidence)
       || current.candidateJar !== options.releaseCandidate.candidateJar) {
@@ -801,7 +801,7 @@ function assertReleaseCandidateUnchanged(options) {
   }
 }
 
-function verifyCandidatePomMatchesCheckout(releaseCandidate, projectRoot) {
+export function verifyCandidatePomMatchesCheckout(releaseCandidate, projectRoot) {
   const checkoutPom = readRealFile(
     resolve(projectRoot, 'pom.xml'), 'Candidate checkout POM', maximumCandidatePomBytes,
   );

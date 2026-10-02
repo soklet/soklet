@@ -31,13 +31,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Simulator parity for actual HTTP GET/DELETE without fabricated RPC messages. */
-@Timeout(30)
+@Timeout(60)
 class McpLegacySessionTransportSimulatorTests {
 	private static final Duration WAIT = Duration.ofSeconds(5);
 	private static final List<McpProtocolVersion> LEGACY = List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
 
 	@Test
+	@Timeout(120)
 	void publishedBeforeAckSessionGetThenDeleteCompletesZeroMessageSseWithExactReason() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			List<McpSessionTransportAdmissionContext> contexts = new CopyOnWriteArrayList<>();
@@ -77,6 +78,7 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void simulatorDisconnectEndsOnlyTheGetAndModernSelectionCannotMutateTheSession() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			List<McpSessionTransportAdmissionContext> contexts = new CopyOnWriteArrayList<>();

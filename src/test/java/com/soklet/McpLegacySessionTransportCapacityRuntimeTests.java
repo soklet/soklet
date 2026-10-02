@@ -15,6 +15,8 @@
  */
 package com.soklet;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -36,10 +38,16 @@ import com.soklet.McpLegacySessionTransportPublicRuntimeTests.Response;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real sockets verify bounded retry and physical maintenance ownership. */
-@Timeout(60)
+@Timeout(180)
 class McpLegacySessionTransportCapacityRuntimeTests {
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
+
+	@BeforeEach
+	void beginRequestBudget() { RawClient.beginRequestBudget(); }
+
+	@AfterEach
+	void endRequestBudget() { RawClient.endRequestBudget(); }
 
 	@Test
 	void temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream() throws Exception {

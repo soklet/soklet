@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "b088bf45e03906c782c11f3f6bef86615095b529e258e6a32e3636289f89e540"
+      "sha256": "c80941f094b95fbbb2b99343091701a0a5dc444042392835d7f458b327cc8279"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -336,7 +336,7 @@
       "commit": "a983ba93c91e0bb31d0b6849eeb52f0ad1083107",
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.candidate-conformance.v2",
+      "evidenceContract": "soklet.release.candidate-conformance.v3",
       "id": "candidate-conformance",
       "kind": "CANDIDATE_ARTIFACT",
       "reason": "",

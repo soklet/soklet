@@ -257,8 +257,12 @@ standard 60-second JUnit deadlock guard, and the five short-bound harness
 families settled by the lifecycle plan. The verifier fails on source-line or
 policy drift, an unclassified candidate, an unresolved migration action, an
 unbounded startup without controlled-completion proof, or a lifecycle path
-that does not fit its recorded guard. Its adversarial self-test runs before the
-inventory verifier during release-candidate validation. Ordinary push and pull
+that does not fit its recorded guard. Imported test-fixture constructors retain
+their declaring source hashes and contribute their policies and execution to
+the caller's closure. The October 2 legacy expansion review covers 1,449 scopes
+across 222 JUnit files; repeated revision/restart owners and shared request/read
+deadlines are included in their composed bounds. Its adversarial self-test runs
+before the inventory verifier during release-candidate validation. Ordinary push and pull
 request CI does not run this release-governance census.
 
 ## D1p historical preview scope
@@ -719,7 +723,10 @@ Once every gate is ready, the validator:
    terminal `PASSED_WITH_REVIEWED_EXCEPTION` evidence under the explicit accepted
    P0-C policy. The validator independently checks the two unchanged upstream
    failures, same-run real-socket controls, artifact identity, and strict success
-   for every other scenario and the notification supplement, then compiles and runs a library-neutral
+   for every other scenario and the notification supplement. It also requires
+   all 41 selected legacy combinations and 15 HTTP runtime contracts for each
+   exact 2025 revision, with the same candidate artifact provenance and clean
+   fixture teardown, then compiles and runs a library-neutral
    localization provider against the candidate JAR alone;
 8. checks out every downstream at its exact manifest commit and invokes its
    candidate hook, including same-candidate default/override servlet matrices, candidate-only
@@ -730,7 +737,7 @@ Once every gate is ready, the validator:
 9. rehashes the candidate and assembles a canonical evidence manifest only
    after the exact ordered 26-gate set has typed PASS evidence.
 
-The version-2 candidate-conformance contract pins the Tasks-capable
+The version-3 candidate-conformance contract pins the Tasks-capable
 `0.2.0-alpha.11-descriptive` suite and all 49 reviewed Phase 5 scenario
 profiles (39 existing profiles plus 10 Tasks profiles). A profile match is
 not a claim that every upstream check executed: `tasks-status-notifications`
@@ -741,6 +748,13 @@ successful `taskNotificationSupplement` result; missing, false, reordered,
 duplicate, or extra checks fail closed. The final-tag schema golden-message
 count remains 48. This coverage does not resolve the external toolchain's open
 security-risk disposition or change its blocked gate status.
+
+Version 3 additionally requires the [selected legacy checks](../conformance/official/legacy/README.md)
+and their HTTP runtime supplement under `legacy/evidence.json` in the same
+conformance evidence directory. The modern selection and exception policy are
+unchanged. Missing legacy profiles, altered check vectors, incomplete runtime
+contracts, mismatched artifact/source/class identities, development receipts,
+or unclean fixture teardown fail closed. The gate universe remains 26.
 
 Each gate has one immutable evidence-contract ID and one manifest-selected
 toolchain. `record-gate` requires the artifact descriptor plus an exact ordered

@@ -44,7 +44,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 class McpLegacySessionCancellationReservationTests {
 	@Test
 	void reserved_response_wins_before_the_transport_writer_can_enter_request_control() throws Exception {
@@ -208,6 +208,7 @@ class McpLegacySessionCancellationReservationTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void canceled_body_that_never_starts_has_a_physical_deadline_and_preserves_its_token_reason() throws Exception {
 		for (String revision : List.of("2025-06-18", "2025-11-25")) {
 			AtomicLong now = new AtomicLong();

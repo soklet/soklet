@@ -452,6 +452,7 @@ jobs:
             --suite-dir .mcp-conformance-source
           node conformance/official/runner-self-test.mjs
           node conformance/official/legacy/runner-self-test.mjs
+          node conformance/official/legacy/verify-evidence-self-test.mjs
 
       - name: Run all applicable Phase 5 official scenarios
         run: |
@@ -465,7 +466,7 @@ jobs:
             --phase 5 \
             --p0c-policy accepted-2026-09-22
 
-      - name: Run bounded 2025 tool, prompt, and resource compatibility scenarios
+      - name: Run bounded 2025 baseline, completion, progress, and session compatibility scenarios
         shell: bash
         run: |
           set -euo pipefail

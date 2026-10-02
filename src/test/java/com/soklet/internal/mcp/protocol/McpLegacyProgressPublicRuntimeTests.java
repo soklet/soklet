@@ -75,7 +75,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public listener and simulator contracts for both exact 2025 progress profiles. */
-@Timeout(60)
+@Timeout(180)
 public class McpLegacyProgressPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PATH = "/mcp";

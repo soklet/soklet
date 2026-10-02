@@ -24,6 +24,7 @@ import {
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
 import { taskNotificationSupplementChecks } from '../conformance/official/run.mjs';
+import { createLegacyReceiptFixture } from '../conformance/official/legacy/test-support.mjs';
 import {
   EXPECTED_GATE_EVIDENCE_CONTRACTS,
   assembleReleaseEvidence,
@@ -2296,6 +2297,9 @@ run_barebones
     taskNotificationSupplement: { passed: true, checks: [...taskNotificationSupplementChecks] },
   };
   writeFileSync(conformanceEvidencePath, `${JSON.stringify(conformanceEvidence, null, 2)}\n`);
+  const legacyEvidencePath = fixturePath('evidence/legacy/evidence.json');
+  createLegacyReceiptFixture(fixtureRoot, legacyEvidencePath,
+    conformanceEvidence.releaseCandidateProvenance, conformanceManifests.pins);
   verifyReleaseConformanceEvidence(
     fixtureManifestPath,
     candidateCommit,
@@ -2389,6 +2393,24 @@ run_barebones
     /release conformance evidence keys must be exactly/,
   );
   writeFileSync(conformanceEvidencePath, `${JSON.stringify(conformanceEvidence, null, 2)}\n`);
+
+  const legacyBytes = readFileSync(legacyEvidencePath);
+  rmSync(legacyEvidencePath);
+  assert.throws(() => verifyReleaseConformanceEvidence(fixtureManifestPath, candidateCommit,
+    artifactDescriptorPath, conformanceEvidencePath), /ENOENT/);
+  writeFileSync(legacyEvidencePath, legacyBytes);
+  for (const mutate of [
+    value => { value.mode = 'development'; },
+    value => { value.jarSha256 = 'c'.repeat(64); },
+    value => { value.scenarios.pop(); },
+    value => { value.runtimeSupplement.results[0].checks.pop(); },
+  ]) {
+    const changed = JSON.parse(legacyBytes); mutate(changed);
+    writeFileSync(legacyEvidencePath, JSON.stringify(changed));
+    assert.throws(() => verifyReleaseConformanceEvidence(fixtureManifestPath, candidateCommit,
+      artifactDescriptorPath, conformanceEvidencePath));
+  }
+  writeFileSync(legacyEvidencePath, legacyBytes);
 
   function writeInteropLog(gate, path, overrides = {}) {
     const client = gate.id === 'typescript-interop' ? 'typescript' : 'go';

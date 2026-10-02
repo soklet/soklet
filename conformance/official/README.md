@@ -4,6 +4,12 @@ Recorded run output was removed from the checkout on September 30. Historical
 results below describe the original runs; artifact links refer to that earlier
 commit. New run output belongs outside source control.
 
+The current version-3 candidate-conformance gate also requires the
+[selected legacy checks and HTTP runtime supplement](legacy/README.md): 41
+official revision/profile combinations and 15 contracts per 2025 revision,
+bound to the same candidate artifacts as the modern runner. The dated
+preparatory observations below retain their original narrower scopes.
+
 This directory owns Soklet's executable integration with the official MCP
 server conformance suite. It is test infrastructure inside the core Soklet
 repository, not a separate product or published `soklet-mcp` artifact.

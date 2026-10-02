@@ -294,6 +294,114 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	@Test
+	void written_uri_hint_is_not_repeated_by_grant_renewal_reconciliation_or_duplicate_subscribe() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+			McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt written = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(written, 80).orElseThrow();
+			assertTrue(fixture.store.acknowledgeOffered(written)); bytes.release();
+			for (int renewal = 1; renewal <= 3; renewal++) {
+				fixture.now.set(renewal * SECOND);
+				assertTrue(grant.renew(grant.generation(), fixture.now.get() + 60 * SECOND));
+				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty(), "A lease renewal is not a new resource invalidation.");
+			}
+			fixture.store.fenceGrants(); assertFalse(written.valid());
+			assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+			McpLegacySessionStore.Call duplicateCall = fixture.call(session, 16);
+			McpLegacySessionStore.Grant duplicate = fixture.begin(duplicateCall, grant.uri(), new GrantTarget(), 120 * SECOND);
+			assertTrue(duplicate.commit(duplicate.generation(), 70 * SECOND));
+			duplicateCall.physicalComplete(); duplicate.physicalComplete();
+			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+			fixture.store.markResourceDirty("/mcp", revision, duplicate.uri());
+			assertTrue(onlyDelivery(fixture).forGet(get).isPresent(), "A subsequent publisher invalidation must still be offered.");
+			get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+		}
+	}
+
+	@Test
+	void queued_uri_hint_is_reoffered_after_grant_generation_changes_even_if_old_release_is_late() {
+		for (String revision : List.of("2025-06-18", "2025-11-25"))
+			for (String transition : List.of("renew", "reconcile", "duplicate")) {
+				Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+				McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+				McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
+				fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+				McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
+				McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+				assertTrue(fixture.store.acknowledgeOffered(old)); assertTrue(oldBytes.valid());
+				if (transition.equals("duplicate")) {
+					McpLegacySessionStore.Call duplicateCall = fixture.call(session, 16);
+					McpLegacySessionStore.Grant duplicate = fixture.begin(duplicateCall, grant.uri(), new GrantTarget(), 120 * SECOND);
+					assertFalse(oldBytes.valid()); assertTrue(duplicate.commit(duplicate.generation(), 70 * SECOND));
+					duplicateCall.physicalComplete(); duplicate.physicalComplete();
+				} else {
+					if (transition.equals("reconcile")) { fixture.store.fenceGrants(); assertFalse(oldBytes.valid()); }
+					assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+				}
+				assertFalse(oldBytes.valid()); assertFalse(fixture.store.acknowledgeOffered(old));
+				McpLegacySessionStore.DeliveryAttempt replacement = onlyDelivery(fixture).forGet(get).orElseThrow();
+				McpLegacySessionStore.NotificationReservation replacementBytes = fixture.store.reserveNotificationBytes(replacement, 80).orElseThrow();
+				assertTrue(fixture.store.acknowledgeOffered(replacement));
+				assertEquals(160, fixture.store.grantCounts().queuedNotificationBytes());
+				oldBytes.release(); oldBytes.release(); assertTrue(replacementBytes.valid());
+				assertEquals(80, fixture.store.grantCounts().queuedNotificationBytes());
+				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+				replacementBytes.release(); replacementBytes.release();
+				assertEquals(0, fixture.store.grantCounts().queuedNotificationBytes());
+				get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+			}
+	}
+
+	@Test
+	void release_before_offer_acknowledgement_preserves_only_a_current_written_uri_hint() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+			McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt written = onlyDelivery(fixture).forGet(get).orElseThrow();
+			fixture.store.reserveNotificationBytes(written, 80).orElseThrow().release(); // A fast writer can drain before ACCEPTED returns.
+			assertTrue(fixture.store.acknowledgeOffered(written));
+			assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt revoked = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation revokedBytes = fixture.store.reserveNotificationBytes(revoked, 80).orElseThrow();
+			assertTrue(grant.renew(grant.generation(), 80 * SECOND));
+			revokedBytes.release(); assertFalse(fixture.store.acknowledgeOffered(revoked));
+			assertTrue(onlyDelivery(fixture).forGet(get).isPresent(), "A dropped stale frame cannot acknowledge the dirty state.");
+			get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+		}
+	}
+
+	@Test
+	void coalesced_uri_hint_survives_a_written_older_hint_and_later_grant_renewal() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+			McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+			assertTrue(fixture.store.acknowledgeOffered(old));
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt coalesced = onlyDelivery(fixture).forGet(get).orElseThrow();
+			fixture.store.reserveNotificationBytes(coalesced, 80).orElseThrow().release(); // COALESCED releases its reservation without acknowledgement.
+			oldBytes.release(); assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+			McpLegacySessionStore.DeliveryAttempt fresh = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).orElseThrow();
+			assertTrue(fixture.store.acknowledgeOffered(fresh)); freshBytes.release();
+			assertTrue(grant.renew(grant.generation(), 80 * SECOND));
+			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+			get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+		}
+	}
+
+	@Test
 	void uri_guard_requires_current_grant_and_get_but_unsubscribe_does_not_revoke_other_families() {
 		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
 		McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
@@ -418,7 +526,7 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	private static McpLegacySessionStore.Delivery onlyDelivery(Fixture fixture) {
-		List<McpLegacySessionStore.Delivery> result = fixture.store.pendingDeliveries("/mcp", REVISION);
+		List<McpLegacySessionStore.Delivery> result = fixture.store.pendingDeliveries("/mcp", fixture.revision);
 		assertEquals(1, result.size()); return result.get(0);
 	}
 
@@ -441,6 +549,7 @@ class McpLegacySessionGrantStoreTests {
 		@Override public void release(McpEffectivePartition partition) { releases.incrementAndGet(); active.compute(partition, (key, value) -> value == 1 ? null : value - 1); }
 	}
 	private static final class Fixture {
+		private final String revision;
 		private final AtomicLong now = new AtomicLong();
 		private final AtomicInteger tokens = new AtomicInteger();
 		private final AtomicInteger requests = new AtomicInteger();
@@ -450,17 +559,18 @@ class McpLegacySessionGrantStoreTests {
 		private final McpLegacySessionStore store = new McpLegacySessionStore(new McpLegacySessionStore.Config(
 				32, 4, 300 * SECOND, 600 * SECOND, 65_536, false, 1_048_576, 2_097_152, 16_777_216),
 				McpJsonLimits.productionDefaults(), now::get, () -> ByteBuffer.allocate(32).putInt(tokens.incrementAndGet()).array());
-		private Fixture() { store.configureGetQuota(quota); }
+		private Fixture() { this(REVISION); }
+		private Fixture(String revision) { this.revision = revision; store.configureGetQuota(quota); }
 		private Session session(String ownerKey) {
 			McpLegacySessionStore.Owner owner = new McpLegacySessionStore.Owner(ownerKey, false);
-			McpLegacySessionStore.Initialization init = store.publish(owner, "/mcp", REVISION, generation,
+			McpLegacySessionStore.Initialization init = store.publish(owner, "/mcp", revision, generation,
 					new McpLegacySessionStore.Snapshot(McpClientCapabilities.empty(), Optional.empty()), REQUEST_TARGET).initialization().orElseThrow();
 			init.physicalComplete(); Session result = new Session(owner, init.sessionId());
 			McpLegacySessionStore.Call acknowledged = call(result, 0); assertTrue(store.acknowledge(acknowledged)); acknowledged.physicalComplete();
 			return result;
 		}
 		private McpLegacySessionStore.Call call(Session session, long bytes) {
-			McpLegacySessionStore.Call call = store.acquire(session.id, session.owner, "/mcp", REVISION, generation,
+			McpLegacySessionStore.Call call = store.acquire(session.id, session.owner, "/mcp", revision, generation,
 					new McpJsonRpcId.StringId(Integer.toString(requests.incrementAndGet())), null, REQUEST_TARGET, bytes).call().orElseThrow();
 			assertTrue(call.acceptedUse()); return call;
 		}
@@ -473,7 +583,7 @@ class McpLegacySessionGrantStoreTests {
 			assertTrue(grant.commit(grant.generation(), lease)); call.physicalComplete(); grant.physicalComplete(); return grant;
 		}
 		private McpLegacySessionStore.Get get(Session session, Set<McpResourceNotificationType> families, long lease) {
-			return store.reserveGet(session.id, session.owner, "/mcp", REVISION, generation, partition, new McpLegacySessionStore.GetTarget() {
+			return store.reserveGet(session.id, session.owner, "/mcp", revision, generation, partition, new McpLegacySessionStore.GetTarget() {
 				@Override public void retire(McpLegacySessionStore.GetCause cause) {}
 				@Override public void fence(long generation) {}
 			}, 0, lease, 120 * SECOND, families).get().orElseThrow();

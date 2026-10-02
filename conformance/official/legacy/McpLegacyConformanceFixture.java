@@ -19,6 +19,8 @@ package com.soklet.conformance.legacy;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAbsentOriginPolicy;
 import com.soklet.McpAdmissionController;
+import com.soklet.McpAdmissionIdentity;
+import com.soklet.McpArgumentCompletionResult;
 import com.soklet.McpBlobResourceContents;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEmbeddedResource;
@@ -30,6 +32,7 @@ import com.soklet.McpPromptArgumentDeclaration;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtocolVersion;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRateLimiter;
@@ -37,6 +40,12 @@ import com.soklet.McpResourceContents;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
+import com.soklet.McpSessionConfig;
+import com.soklet.McpSessionTransportAdmissionDecision;
+import com.soklet.McpSubscriptionAuthorization;
+import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolRegistration;
@@ -46,13 +55,15 @@ import com.soklet.SokletConfig;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Public-API-only fixture for a bounded 2025 synchronous tool, prompt, and resource conformance subset.
+ * Public-API-only fixture for bounded, separately selected stateless and session-enabled 2025 checks.
  * Each process serves exactly one requested revision and exits on stdin EOF.
  */
 public final class McpLegacyConformanceFixture {
@@ -65,46 +76,73 @@ public final class McpLegacyConformanceFixture {
 	}
 
 	public static void main(String[] arguments) throws Exception {
-		if (arguments.length != 2 || !"--version".equals(arguments[0]))
+		if ((arguments.length != 2 && arguments.length != 4) || !"--version".equals(arguments[0])
+				|| (arguments.length == 4 && !"--profile".equals(arguments[2])))
 			throw new IllegalArgumentException(
-					"Usage: McpLegacyConformanceFixture --version <2025-06-18|2025-11-25>");
+					"Usage: McpLegacyConformanceFixture --version <2025-06-18|2025-11-25> "
+							+ "[--profile <stateless-baseline|stateless-expansion|session-enabled>]");
 		McpProtocolVersion version = switch (arguments[1]) {
 			case "2025-06-18" -> McpProtocolVersion.V2025_06_18;
 			case "2025-11-25" -> McpProtocolVersion.V2025_11_25;
 			default -> throw new IllegalArgumentException(
 					"Unsupported legacy fixture revision: " + arguments[1]);
 		};
+		String profile = arguments.length == 4 ? arguments[3] : "stateless-baseline";
+		if (!Set.of("stateless-baseline", "stateless-expansion", "session-enabled").contains(profile))
+			throw new IllegalArgumentException("Unsupported legacy fixture profile: " + profile);
+		boolean expansion = !profile.equals("stateless-baseline");
+		boolean sessions = profile.equals("session-enabled");
 		Set<McpProtocolVersion> versions = Set.of(version);
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+		List<McpToolRegistration<?>> tools = new ArrayList<>(List.of(
+				McpToolRegistration.withName("test_simple_text", versions)
+						.jsonObjectArguments()
+						.handler((requestContext, argumentsContext, invocationFeatures) ->
+								McpCompleteResult.fromToolText("This is a simple text response for testing."))
+						.description("Returns deterministic text content.").build(),
+				McpToolRegistration.withName("test_error_handling", versions)
+						.jsonObjectArguments()
+						.handler((requestContext, argumentsContext, invocationFeatures) ->
+								McpCompleteResult.fromToolErrorText("This tool intentionally returns an error for testing"))
+						.description("Returns a deterministic application-level error.").build()));
+		if (expansion)
+			tools.add(McpToolRegistration.withName("test_tool_with_progress", versions)
+					.jsonObjectArguments()
+					.handler((requestContext, argumentsContext, invocationFeatures) -> {
+						for (double progress : new double[]{0.0, 50.0, 100.0}) {
+							invocationFeatures.getProgressReporter().ifPresent(reporter -> reporter.report(
+									McpProgressUpdate.withProgress(progress).total(100.0).build()));
+							if (progress < 100.0) Thread.sleep(50);
+						}
+						return McpCompleteResult.fromToolText("Progress operation complete.");
+					}).description("Reports three bounded progress updates before one whole result.").build());
+		List<McpResourceRegistration> resources = new ArrayList<>(resources(versions));
+		if (sessions)
+			resources.add(McpResourceRegistration.withUriAndName(URI.create("test://watched-resource"),
+					"watched-resource", versions)
+					.handler((requestContext, resourceReadContext, invocationFeatures) ->
+							McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContents(List.of(
+									McpTextResourceContents.withUriAndText(URI.create("test://watched-resource"),
+											"Watched resource for subscription acceptance checks.").build()))))
+					.build());
+		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(PATH,
 				McpImplementation.withNameAndVersion(
 						"soklet-legacy-conformance", "4.0.0")
 						.description("Bounded legacy tool, prompt, and resource fixture")
 						.build(), versions)
-				.toolRegistrations(List.of(
-					McpToolRegistration.withName("test_simple_text", versions)
-							.jsonObjectArguments()
-							.handler((requestContext, argumentsContext,
-									invocationFeatures) ->
-									McpCompleteResult.fromToolText(
-											"This is a simple text response for testing."))
-							.description("Returns deterministic text content.")
-							.build(),
-					McpToolRegistration.withName("test_error_handling", versions)
-							.jsonObjectArguments()
-							.handler((requestContext, argumentsContext,
-									invocationFeatures) ->
-									McpCompleteResult.fromToolErrorText(
-											"This tool intentionally returns an error for testing"))
-							.description("Returns a deterministic application-level error.")
-							.build()))
-				.promptRegistrations(prompts(versions))
-				.resourceRegistrations(resources(versions))
-				.build();
+				.toolRegistrations(tools)
+				.promptRegistrations(prompts(versions, expansion))
+				.resourceRegistrations(resources);
+		if (sessions)
+			endpointBuilder.sessionProtocolVersions(versions).subscriptionProtocolVersions(versions)
+					.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
+							McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+							Set.of(McpSubscriptionNotificationType.RESOURCE_UPDATED)).build());
+		McpEndpoint endpoint = endpointBuilder.build();
 		AtomicInteger boundPort = new AtomicInteger(-1);
 		CorsAuthorizer corsAuthorizer = CorsAuthorizer.fromWhitelistAuthorizer(
 				origin -> origin.equals("http://" + HOST + ":" + boundPort.get()));
 		McpRateLimiter allowLimiter = context -> McpRateLimitDecision.allowed();
-		McpServer server = McpServer.withPort(0)
+		McpServer.Builder serverBuilder = McpServer.withPort(0)
 				.host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -112,8 +150,19 @@ public final class McpLegacyConformanceFixture {
 				.toolRateLimiter(allowLimiter)
 				.corsAuthorizer(corsAuthorizer)
 				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
-				.allowedHosts(Set.of(HOST))
-				.build();
+				.allowedHosts(Set.of(HOST));
+		if (sessions) {
+			// This loopback-only public fixture deliberately permits one anonymous test owner.
+			// Owner-binding and production OAuth are verified by separate local supplements.
+			serverBuilder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(identity -> "official-loopback-test-owner")
+					.anonymousSessionsAllowed(true)
+					.transportAdmissionController((context, invocationFeatures) ->
+							McpSessionTransportAdmissionDecision.accepted(McpAdmissionIdentity.anonymousInstance(),
+									Instant.now().plusSeconds(60), context.getNotificationTypes())).build())
+					.subscriptionAuthorizer((context, invocationFeatures) ->
+							McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(60)).build());
+		}
+		McpServer server = serverBuilder.build();
 		SokletConfig configuration = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
@@ -128,7 +177,8 @@ public final class McpLegacyConformanceFixture {
 			System.out.println("{\"format\":1,\"event\":\"ready\",\"host\":\""
 					+ HOST + "\",\"port\":" + address.getPort()
 					+ ",\"path\":\"" + PATH + "\",\"revision\":\""
-					+ version.getWireValue() + "\"}");
+					+ version.getWireValue() + "\""
+					+ (arguments.length == 4 ? ",\"profile\":\"" + profile + "\"" : "") + "}");
 			System.out.flush();
 			while (System.in.read() >= 0) {
 				// EOF from the supervised runner requests graceful shutdown.
@@ -140,7 +190,17 @@ public final class McpLegacyConformanceFixture {
 		System.out.flush();
 	}
 
-	private static List<McpPromptRegistration> prompts(Set<McpProtocolVersion> versions) {
+	private static List<McpPromptRegistration> prompts(Set<McpProtocolVersion> versions, boolean expansion) {
+		McpPromptRegistration.Builder argumentPrompt = McpPromptRegistration.withName("test_prompt_with_arguments", versions)
+				.handler((requestContext, promptContext, invocationFeatures) ->
+						completePrompt(McpPromptMessage.fromUserContent(McpTextContent.fromText(
+								"Prompt with arguments: arg1='" + promptContext.findArgument("arg1").orElseThrow()
+										+ "', arg2='" + promptContext.findArgument("arg2").orElseThrow() + "'"))))
+				.description("Substitutes two required string arguments.")
+				.arguments(List.of(requiredArgument("arg1"), requiredArgument("arg2")));
+		if (expansion)
+			argumentPrompt.completionHandler((requestContext, completionContext, invocationFeatures) ->
+					McpArgumentCompletionResult.fromValues(List.of("test-one", "test-two")), versions);
 		return List.of(
 				McpPromptRegistration.withName("test_simple_prompt", versions)
 						.handler((requestContext, promptContext, invocationFeatures) ->
@@ -148,15 +208,7 @@ public final class McpLegacyConformanceFixture {
 										McpTextContent.fromText("This is a simple prompt for testing."))))
 						.description("Returns a deterministic simple prompt.")
 						.build(),
-				McpPromptRegistration.withName("test_prompt_with_arguments", versions)
-						.handler((requestContext, promptContext, invocationFeatures) ->
-								completePrompt(McpPromptMessage.fromUserContent(McpTextContent.fromText(
-										"Prompt with arguments: arg1='"
-												+ promptContext.findArgument("arg1").orElseThrow()
-												+ "', arg2='" + promptContext.findArgument("arg2").orElseThrow() + "'"))))
-						.description("Substitutes two required string arguments.")
-						.arguments(List.of(requiredArgument("arg1"), requiredArgument("arg2")))
-						.build(),
+				argumentPrompt.build(),
 				McpPromptRegistration.withName("test_prompt_with_embedded_resource", versions)
 						.handler((requestContext, promptContext, invocationFeatures) ->
 								completePrompt(McpPromptMessage.fromUserContent(McpEmbeddedResource

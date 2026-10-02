@@ -21,6 +21,7 @@ import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonString;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -49,6 +50,18 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PATH = "/mcp";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private long requestDeadlineNanos;
+
+	@BeforeEach
+	void resetRequestDeadline() {
+		requestDeadlineNanos = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+	}
+
+	private Duration remainingRequestWait() {
+		long remaining = requestDeadlineNanos - System.nanoTime();
+		assertTrue(remaining > 0, "Catalog requests exceeded their shared 60-second deadline.");
+		return Duration.ofNanos(Math.min(WAIT.toNanos(), remaining));
+	}
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	private static final Set<McpProtocolVersion> LEGACY_SET = Set.copyOf(LEGACY);
@@ -473,13 +486,13 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 
-	private static Capture execute(Simulator simulator, Request request) {
+	private Capture execute(Simulator simulator, Request request) {
 		try (McpSimulation simulation = simulator.startMcpRequest(request)) {
-			McpSimulationResponse response = simulation.awaitResponse(WAIT).orElseThrow();
+			McpSimulationResponse response = simulation.awaitResponse(remainingRequestWait()).orElseThrow();
 			assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 			String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
 			assertTrue(body.getBytes(StandardCharsets.UTF_8).length <= McpJsonLimits.productionDefaults().maximumOutputBytes());
-			assertTrue(simulation.awaitCompletion(WAIT).isPresent());
+			assertTrue(simulation.awaitCompletion(remainingRequestWait()).isPresent());
 			return new Capture(response.getStatusCode(), body);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
@@ -515,7 +528,7 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 		return new Page(identities, cursor, capture);
 	}
 
-	private static Enumeration enumerate(Simulator simulator, String path, McpProtocolVersion version,
+	private Enumeration enumerate(Simulator simulator, String path, McpProtocolVersion version,
 			Kind kind, String locale, int maximumPageEntries) {
 		List<String> identities = new ArrayList<>();
 		Set<String> cursors = new HashSet<>();

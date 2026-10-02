@@ -765,6 +765,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(150)
 	void legacy_sse_handoff_failure_detaches_delivery_without_refunding_running_work()
 			throws Exception {
 		for (String revision : List.of("2025-06-18", "2025-11-25")) {

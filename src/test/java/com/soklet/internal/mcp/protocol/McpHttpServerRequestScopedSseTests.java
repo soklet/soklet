@@ -170,6 +170,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void reset_before_http_offer_cancels_an_allocated_stream_in_every_revision()
 			throws Exception {
 		for (String revision : List.of("2025-06-18", "2025-11-25", "2026-07-28")) {

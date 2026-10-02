@@ -97,6 +97,120 @@ run('positive production closure', () => {
   assert.ok(result.discoveryCandidates > 4_000);
 });
 
+run('legacy revision and restart loops retain exact sequential owner counts', () => {
+  for (const [name, count] of [
+    ['changedCatalogRejectsAnOldCursorButEquivalentInstancesCanResumeIt', 6],
+    ['ownerResolverFailureAndInvalidKeysFailClosedWithoutPublishingIdentifiers', 5],
+    ['reconciliationDenialAndOwnerChangeCloseOnlyTheGetAndCannotResurrectIt', 4],
+    ['localizationInvalidationWorksWithoutCallerPolicyAndIgnoresModernOnlyLocalizedOwners', 3],
+    ['simulatorDisconnectUsesTheSameCommittedVersusFiniteRule', 4],
+  ]) {
+    const row = rowByName(INVENTORY, name);
+    assert.equal(row.review.generationMode, 'SEQUENTIAL');
+    assert.equal(row.review.generationCount, count);
+    assert.equal(row.review.completeGenerationMultiplier, count);
+    const mutated = clone(INVENTORY);
+    rowByName(mutated, name).review.generationCount = 1;
+    expectFailure(() => verifyDocument(mutated), /generation|closure contract/u);
+  }
+});
+
+run('shared request and notification deadlines cannot drift behind reviewed bounds', () => {
+  for (const [path, before, after] of [
+    ['src/test/java/com/soklet/McpLegacyCatalogPaginationPublicRuntimeTests.java',
+      'Duration.ofSeconds(60).toNanos()', 'Duration.ofSeconds(600).toNanos()'],
+    ['src/test/java/com/soklet/McpLegacyCompletionPublicRuntimeTests.java',
+      'Duration.ofSeconds(60).toNanos()', 'Duration.ofSeconds(600).toNanos()'],
+    ['src/test/java/com/soklet/McpLegacySubscriptionPublicRuntimeTests.java',
+      'get.awaitStreamItem(Duration.ofNanos(remaining))', 'get.awaitStreamItem(WAIT)'],
+  ]) {
+    const source = readFileSync(join(ROOT, path), 'utf8');
+    assert.ok(source.includes(before));
+    const scopes = buildLifecycleScopeObservations(new Map([[path,
+      source.replace(before, after)]]));
+    expectFailure(() => buildReviewedLifecycleScopeRows(scopes,
+      { requireRegistryCompleteness: false }), /stale/u);
+  }
+});
+
+run('imported fixture constructors contribute policy and execution to their caller', () => {
+  const callerPath = 'src/test/java/com/soklet/ImportedFixtureTests.java';
+  const fixturePath = 'src/test/java/com/soklet/SharedLifecycleFixture.java';
+  const sources = new Map([
+    [callerPath, `
+      package com.soklet;
+      import com.soklet.SharedLifecycleFixture.Fixture;
+      @Timeout(120) class ImportedFixtureTests {
+        @Test void runsBoth() {
+          for (int revision = 0; revision < 2; revision++)
+            try (Fixture fixture = new Fixture()) { }
+        }
+      }
+    `],
+    [fixturePath, `
+      package com.soklet;
+      class SharedLifecycleFixture {
+        @Timeout(5) static class Fixture {
+          final Soklet soklet;
+          Fixture() {
+            soklet = Soklet.fromConfig(SokletConfig.builder()
+              .lifecyclePolicy(LifecyclePolicy.builder()
+                .startupTimeout(Duration.ofSeconds(5))
+                .startupCancelationTimeout(Duration.ofSeconds(2))
+                .gracefulShutdownTimeout(Duration.ofSeconds(1))
+                .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+            soklet.start();
+          }
+        }
+        static class Unrelated {
+          static class Fixture {
+            Fixture() {
+              Soklet other = Soklet.fromConfig(SokletConfig.builder()
+                .lifecyclePolicy(LifecyclePolicy.builder()
+                  .startupTimeout(Duration.ofSeconds(50))
+                  .startupCancelationTimeout(Duration.ofSeconds(20))
+                  .gracefulShutdownTimeout(Duration.ofSeconds(10))
+                  .forcedShutdownTimeout(Duration.ofSeconds(10)).build()).build());
+              other.start();
+            }
+          }
+        }
+      }
+    `],
+  ]);
+  const scopes = buildLifecycleScopeObservations(sources);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].path, callerPath);
+  assert.equal(scopes[0].hasExecution, true);
+  assert.equal(scopes[0].generationSiteCount, 2);
+  assert.equal(scopes[0].effectiveOuterTimeoutMillis, 120_000);
+  assert.equal(scopes[0].importedLifecycleHelperEvidence.length, 1);
+  assert.deepEqual(scopes[0].literalPhasePolicies, [{
+    startupMillis: 5_000, startupCancellationMillis: 2_000,
+    gracefulShutdownMillis: 1_000, forcedShutdownMillis: 1_000,
+  }]);
+  const [row] = buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false });
+  assert.equal(row.source.importedLifecycleHelperEvidence[0].path, fixturePath);
+  assert.match(row.source.importedLifecycleHelperEvidence[0].fileSha256,
+    /^[0-9a-f]{64}$/u);
+});
+
+run('production imported fixtures cannot disappear or change without new evidence', () => {
+  const name = 'temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream';
+  const row = rowByName(INVENTORY, name);
+  assert.equal(row.review.generationCount, 2);
+  assert.equal(row.source.importedLifecycleHelperEvidence.length, 1);
+  for (const mutate of [
+    (source) => { delete source.importedLifecycleHelperEvidence; },
+    (source) => { source.importedLifecycleHelperEvidence[0].fileSha256 = '0'.repeat(64); },
+  ]) {
+    const document = clone(INVENTORY);
+    mutate(rowByName(document, name).source);
+    expectFailure(() => verifyDocument(document), /closure contract|source census/u);
+  }
+});
+
 run('Tasks notification supplement has an invoked process-tree guard', () => {
   const guard = taskNotificationSupplementGuard(sourceTexts('conformance/official/run.mjs'));
   assert.equal(guard.millis, 120_000);
@@ -2008,8 +2122,8 @@ run('generated D1p semantic evidence is not live lifecycle source', () => {
   const source = readFileSync(join(ROOT, path), 'utf8');
   assert.match(source, /\bshutdownTimeout\s*\(/u);
   assert.deepEqual(verifyNoSurvivingLegacySites(new Map([[path, source]])), []);
-  assert.equal(EVIDENCE.currentLegacyExclusions.length, 24);
-  assert.equal(INVENTORY.currentLegacyExclusions.length, 24);
+  assert.equal(EVIDENCE.currentLegacyExclusions.length, 25);
+  assert.equal(INVENTORY.currentLegacyExclusions.length, 25);
 });
 
 run('only exact generated D1p evidence paths bypass source scanning', () => {
