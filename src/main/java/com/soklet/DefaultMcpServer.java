@@ -1384,42 +1384,44 @@ final class DefaultMcpServer implements McpServer {
 		if (seed.terminalBoundary().getAsBoolean())
 			return failedCatalogPage(configuredLocalizer);
 
-		Map<McpLocalizableText, McpLocalizationResult> cachedResults = new LinkedHashMap<>();
 		int maximumLookups = configuredLocalizer.getMaximumLocalizableTextCountPerResponse();
-		int[] distinctLookupCount = {0};
-		McpLocalizationContext cachedContext = McpLocalizationContext
-				.withLocale(context.getLocale(), text -> {
-					synchronized (cachedResults) {
-						McpLocalizationResult cached = cachedResults.get(text);
-						if (cached != null)
-							return cached;
-						if (distinctLookupCount[0] >= maximumLookups)
-							return McpLocalizationResult.failure();
-						++distinctLookupCount[0];
-						McpLocalizationResult result;
-						try {
-							result = context.localize(text);
-							if (result instanceof McpLocalizationResult.Localized localized) {
-								String replacement = localized.getText();
-								// Do not retain malformed or individually over-limit
-								// application strings in the response's retry cache.
-								if (replacement.length() > seed.maximumReplacementCharacters()
-										|| McpLocalizationByteAccounting.serializedTokenCharacters(replacement)
-												> seed.maximumReplacementCharacters())
-									result = McpLocalizationResult.failure();
-							}
-						} catch (Throwable exception) {
-							if (exception instanceof InterruptedException)
-								Thread.currentThread().interrupt();
-							result = McpLocalizationResult.failure();
-						}
-						cachedResults.put(text, result);
-						return result;
-					}
-				}).revision(context.getRevision().orElse(null)).build();
 		Optional<String> negotiatedLocale = contentLanguageTag(context.getLocale());
 		McpCanonicalLocalizationPlan.ResponsePlan resolvedPlan = responsePlan.orElseThrow();
 		return new McpRuntimeCatalogLocalizer.PageSession() {
+			private final Object cacheLock = new Object();
+			private final Map<McpLocalizableText, McpLocalizationResult> cachedResults = new LinkedHashMap<>();
+			private int distinctLookupCount;
+			private final McpLocalizationContext cachedContext = McpLocalizationContext
+					.withLocale(context.getLocale(), text -> {
+						synchronized (cacheLock) {
+							McpLocalizationResult cached = cachedResults.get(text);
+							if (cached != null)
+								return cached;
+							if (distinctLookupCount >= maximumLookups)
+								return McpLocalizationResult.failure();
+							++distinctLookupCount;
+							McpLocalizationResult result;
+							try {
+								result = context.localize(text);
+								if (result instanceof McpLocalizationResult.Localized localized) {
+									String replacement = localized.getText();
+									// Do not retain malformed or individually over-limit
+									// application strings in the response's retry cache.
+									if (replacement.length() > seed.maximumReplacementCharacters()
+											|| McpLocalizationByteAccounting.serializedTokenCharacters(replacement)
+													> seed.maximumReplacementCharacters())
+										result = McpLocalizationResult.failure();
+								}
+							} catch (Throwable exception) {
+								if (exception instanceof InterruptedException)
+									Thread.currentThread().interrupt();
+								result = McpLocalizationResult.failure();
+							}
+							cachedResults.put(text, result);
+							return result;
+						}
+					}).revision(context.getRevision().orElse(null)).build();
+
 			@Override
 			public @NonNull Optional<@NonNull String> negotiatedLocale() {
 				return negotiatedLocale;
@@ -1441,7 +1443,7 @@ final class DefaultMcpServer implements McpServer {
 				Set<McpLocalizableText> retainedTexts = slots.stream()
 						.map(McpCanonicalLocalizationPlan.Slot::text)
 						.collect(java.util.stream.Collectors.toSet());
-				synchronized (cachedResults) {
+				synchronized (cacheLock) {
 					// Retries strictly shrink the selected canonical-key prefix.
 					// A dropped owner cannot return, so its translated payload is
 					// released without resetting the response-wide lookup count.

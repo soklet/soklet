@@ -320,10 +320,9 @@ public final class McpSessionConfig {
 		@NonNull
 		private static Duration requirePositiveDuration(@NonNull Duration duration) {
 			requireNonNull(duration);
-			if (duration.isZero() || duration.isNegative())
-				throw new IllegalArgumentException("MCP session lifetimes must be positive.");
 			try {
-				duration.toNanos();
+				if (duration.isZero() || duration.isNegative() || duration.toNanos() <= 0L)
+					throw new IllegalArgumentException("MCP session lifetimes must be positive.");
 			} catch (ArithmeticException exception) {
 				throw new IllegalArgumentException("MCP session lifetimes must fit in a signed nanosecond duration.", exception);
 			}

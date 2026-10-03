@@ -6807,7 +6807,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						delivery, sessionRequestEvidenceBytes(request), lease, total, accepted.notificationTypes());
 				if (allocation.status() != McpLegacySessionStore.Status.ACCEPTED)
 					return legacyHttpStatusResponse(allocation.status(), headers);
-				if (!delivery.open(allocation.get().orElseThrow(), expectedGeneration, accepted.notificationTypes(), partition))
+				if (!delivery.open(allocation.get().orElseThrow(), expectedGeneration, partition))
 					return emptyResponse(403, "Forbidden", headers);
 				return null;
 			} finally { work.complete(); }
@@ -9688,8 +9688,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final McpRequestContext initialContext;
 		private final McpApplicationExecution application;
 		private final LifecycleRequestProcessor processor;
-		private @Nullable McpLegacySessionStore.Grant grant;
-		private @Nullable McpApplicationExecution.BoundedPolicyCancellation cancellation;
+		private McpLegacySessionStore.@Nullable Grant grant;
+		private McpApplicationExecution.@Nullable BoundedPolicyCancellation cancellation;
 		private Optional<Object> applicationContext;
 		private long cancellationGeneration;
 		private Optional<Instant> previousValidUntil = Optional.empty();
@@ -9876,7 +9876,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				applicationExecutionObserver.recordSubscriptionMaintenance(path,
 						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION, outcome);
 				transportMetricDrainScheduler.schedule();
-			} catch (Throwable ignored) { }
+			} catch (Throwable ignored) { /* Observation failure must not alter URI authorization maintenance. */ }
 		}
 	}
 
@@ -9889,10 +9889,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final String revision;
 		private final Set<McpResourceNotificationType> offered;
 		private final List<Header> headers;
-		private @Nullable McpLegacySessionStore.Get registration;
+		private McpLegacySessionStore.@Nullable Get registration;
 		private @Nullable McpRequestSseStream stream;
-		private @Nullable McpApplicationExecution.BoundedPolicyCancellation cancellation;
-		private Set<McpResourceNotificationType> authorizedTypes = Set.of();
+		private McpApplicationExecution.@Nullable BoundedPolicyCancellation cancellation;
 		private long cancellationGeneration;
 		private long acceptedAuthorizationGeneration;
 		private @Nullable McpEffectivePartition fixedPartition;
@@ -9905,7 +9904,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean closing;
 		private boolean writerTerminated;
 		private boolean pending;
-		private boolean reconciliation;
 		private McpStreamTerminationReason closeReason = McpStreamTerminationReason.COMPLETED;
 
 		LegacyGetControl(RequestControl control, Request originalRequest, EndpointRuntime endpoint,
@@ -9941,7 +9939,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (control.lock) { stream = prepared; }
 		}
 		boolean open(McpLegacySessionStore.Get registration, long expectedGeneration,
-				Set<McpResourceNotificationType> selected, McpEffectivePartition partition) {
+				McpEffectivePartition partition) {
 			Consumer<MicrohttpResponse> callback;
 			MicrohttpResponse response;
 			synchronized (legacyMaintenanceLock) {
@@ -9952,7 +9950,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							|| reconciliationGeneration != legacyTransportReconciliationGeneration) {
 						registration.logicalComplete(); return false;
 					}
-					authorizedTypes = Set.copyOf(selected); fixedPartition = partition;
+					fixedPartition = partition;
 					headOwned = true;
 					acceptedAuthorizationGeneration = registration.generation();
 					openedNanos = applicationClock.nanoTime();
@@ -9999,7 +9997,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (control.lock) {
 				if (generation == 0L || generation > acceptedAuthorizationGeneration) {
 					establishmentGeneration++;
-					reconciliation = true;
 					renewalNanos = applicationClock.nanoTime();
 				}
 				old = generation == 0L || cancellationGeneration < generation ? cancellation : null;
@@ -10151,7 +10148,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (renewalStatus == McpLegacySessionStore.Status.ACCEPTED) {
 						synchronized (control.lock) {
 							if (current.generation() != generation + 1L) { maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.STALE_RESULT_DISCARDED); return; }
-							authorizedTypes = accepted.notificationTypes(); reconciliation = false;
 							acceptedAuthorizationGeneration = generation + 1L;
 							long now = applicationClock.nanoTime();
 							renewalNanos = now + Math.max(1L, (current.deadlineNanos() - now) / 2L);
@@ -10174,7 +10170,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				applicationExecutionObserver.recordSubscriptionMaintenance(endpoint.path(),
 						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION, outcome);
 				transportMetricDrainScheduler.schedule();
-			} catch (Throwable ignored) { }
+			} catch (Throwable ignored) { /* Observation failure must not alter GET authorization maintenance. */ }
 		}
 		void retryCapacity() {
 			McpLegacySessionStore.Get current;
@@ -10193,7 +10189,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		void physicalComplete() {
 			McpLegacySessionStore.Get current;
-			synchronized (control.lock) { current = registration; registration = null; authorizedTypes = Set.of(); }
+			synchronized (control.lock) { current = registration; registration = null; }
 			if (current != null) current.physicalComplete();
 			legacyGetControls.remove(control, this);
 		}
@@ -10311,15 +10307,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable LegacyGetControl legacyGet;
 		private int legacyHttpPolicyWork;
 		private boolean legacyHttpControl;
-		private @Nullable McpApplicationExecution.BoundedPolicyCancellation legacyHttpCancellation;
+		private McpApplicationExecution.@Nullable BoundedPolicyCancellation legacyHttpCancellation;
 		private McpApplicationExecutionObserver.@Nullable HttpRequestObservation legacyHttpObservation;
 		private long legacyHttpStartedNanos;
 		private @Nullable MicrohttpResponse legacyHttpResponse;
 		private boolean legacyHttpObservationFinished;
 		private boolean legacySessionSelected;
 		private boolean legacyAdmissionRejected;
-		private @Nullable McpLegacySessionStore.Call legacyCall;
-		private @Nullable McpLegacySessionStore.Initialization legacyInitialization;
+		private McpLegacySessionStore.@Nullable Call legacyCall;
+		private McpLegacySessionStore.@Nullable Initialization legacyInitialization;
 		private McpLegacySessionStore.@Nullable Snapshot legacySnapshot;
 		private @Nullable McpJsonRpcId legacyRequestId;
 		private McpLegacySessionStore.@Nullable Cause legacySessionTerminationCause;
@@ -10400,7 +10396,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				headers.computeIfAbsent(header.name(), ignored -> new ArrayList<>()).add(header.value());
 			try { observation.didFinish(response == null ? 503 : response.status(), Map.copyOf(headers),
 					Duration.ofNanos(Math.max(0L, applicationClock.nanoTime() - start)), List.of()); }
-			catch (Throwable ignored) { }
+			catch (Throwable ignored) { /* Observation failure must not prevent HTTP lifecycle cleanup. */ }
 		}
 		private void reserveLegacyHttpPolicyWork() {
 			synchronized (lock) { legacyHttpPolicyWork++; if (lifecycleAdmission != null) lifecycleWorkOwners++; }

@@ -888,6 +888,8 @@ public final class McpOutboundChannel {
 		lock.notifyAll();
 	}
 
+	// Throwable identity is required to avoid illegal self-suppression.
+	@SuppressWarnings("ReferenceEquality")
 	private static void runPayloadReleases(@NonNull List<@NonNull Runnable> releases) {
 		Throwable firstFailure = null;
 		for (Runnable release : releases) {

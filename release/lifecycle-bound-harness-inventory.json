@@ -1371,8 +1371,8 @@
       "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
     },
     {
-      "id": "CURRENT-LEGACY-623e8805b885a45a",
-      "line": 10039,
+      "id": "CURRENT-LEGACY-caf9d70b9e65c3fb",
+      "line": 10036,
       "lineSha256": "8cd5edafb7f485aa83c330419de286713a8ad6c31538b7155735a69bb4436d36",
       "occurrenceIndex": 0,
       "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"

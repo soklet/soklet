@@ -1744,6 +1744,8 @@ final class McpApplicationExecution {
 		this.timerThread.setDaemon(false);
 	}
 
+	// Throwable identity is required to avoid illegal self-suppression.
+	@SuppressWarnings("ReferenceEquality")
 	private static void shutdownFailedConstructionExecutor(@Nullable ExecutorService executor,
 			@NonNull Throwable failure) {
 		if (executor == null) return;
