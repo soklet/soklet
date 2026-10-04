@@ -4,7 +4,7 @@
 standalone probe of the built-in SSE server over loopback sockets. The current
 fixture has a finite, synchronous initializer and fills connections through
 `SseBroadcaster`; it owns no per-client subscription or unicaster termination
-listener. The September 22 [milestone 5b measurements](streaming-api-milestone-5b.md)
+listener. The September 22 [milestone 5b measurements](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-5b.md)
 belong to the earlier subscription/callback candidate and do not quantify this
 final 4.0 shape.
 Three-trial measurements of the final initializer/broadcaster candidate are

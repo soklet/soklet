@@ -150,7 +150,7 @@ Fourteen new exclusions identify exact non-telemetry receivers; they do not
 expand generic matcher exceptions. The framework cleanup diagnostic has a new
 secret-seeding canary while exact application failure delivery remains intact.
 
-See the [slice report](../docs/streaming-api-milestone-6b.md) for source-specific
+See the [slice report](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-6b.md) for source-specific
 attribution, validator results, test evidence and remaining release conditions.
 These semantic anchors are current development review records; they neither
 refreeze the independent MCP API nor accept an immutable release candidate.

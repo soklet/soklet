@@ -37,11 +37,11 @@ response-compression change. The 4.0 streaming
 redesign contributed 47 non-MCP HTTP/SSE incompatibilities at its September 22
 checkpoint. The optional `ResponseStream.writeUtf8(String)` addition and four
 provisional `SseUnicaster` methods were later removed from the final surface. The
-[streaming amendment](streaming-api-amendment-2026-09-22.md) preserves every
+[streaming amendment](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/api/mcp/streaming-api-amendment-2026-09-22.md) preserves every
 previous record and all historical MCP signature snapshots. At that checkpoint
 the ledger contained 706 records and had SHA-256
 `d09dd3b74137e8a181fa9732ffa236dfd383d302ba22fa16a842cc287a5409b9`.
-The [separate route-component amendment](route-component-api-amendment-2026-09-22.md)
+The [separate route-component amendment](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/api/mcp/route-component-api-amendment-2026-09-22.md)
 adds one independently reviewed non-MCP removal. After removing the streaming
 helper and narrowing the SSE initializer to synchronous catch-up, that
 checkpoint's ledger contained 702 records and had SHA-256
@@ -50,7 +50,7 @@ The [2026-09-24 bounded MCP-G2 review](mcp-g2-bounded-refreeze-2026-09-24.md)
 reconciled the then-current incompatibility set to 707 records, SHA-256
 `24bbed473a6c4d9807cfce776a7353ffc3c99fd052d342fec5914355e1220808`.
 That review accepted the N0, P1b, and P2 differences. The subsequent
-[Skills review](../../release/mcp-qualification-2026-09-25/REVIEW.md) and
+[Skills review](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/release/mcp-qualification-2026-09-25/REVIEW.md) and
 [Apps signature review](mcp-g2-apps-refreeze-2026-09-27.md) accept the remaining
 signatures. The aggregate API-freeze now verifies exactly; full Apps host
 qualification remains open.
@@ -181,7 +181,7 @@ above supersede that HOLD status.
 
 ### 2026-09-22 route-component compatibility amendment
 
-The [route-component amendment](route-component-api-amendment-2026-09-22.md)
+The [route-component amendment](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/api/mcp/route-component-api-amendment-2026-09-22.md)
 records the independently documented `ResourcePathDeclaration.Component`
 factory rename. It preserves the 706 records reviewed at the streaming
 checkpoint and all historical MCP phase/provisional signatures. The current
@@ -190,7 +190,7 @@ their coordinated refreeze remains pending.
 
 ### 2026-09-22 streaming/SSE compatibility amendment (later narrowed)
 
-The [streaming amendment](streaming-api-amendment-2026-09-22.md) accounts for the
+The [streaming amendment](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/api/mcp/streaming-api-amendment-2026-09-22.md) accounts for the
 breaking HTTP API, the then-proposed SSE ownership API, and its shared neutral
 callback handle. The September 23 SSE decision keeps checked synchronous
 initialization but removes the four provisional `SseUnicaster` methods and the

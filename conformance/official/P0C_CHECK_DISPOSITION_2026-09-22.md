@@ -14,7 +14,7 @@ commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107` and reviewed source-tree
 SHA-256 `e63d6f13100504101afdfd5cfd084c92d801e2b4466d68965aa2e0c48a87998d`,
 the owner accepts classifying **only** these two `server-stateless` results as
 upstream-harness limitations when all conditions in the
-[P0-C proposal](../../docs/streaming-api-milestone-6d.md#conditions-for-a-reviewable-disposition)
+[P0-C proposal](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-6d.md#conditions-for-a-reviewable-disposition)
 are met:
 
 | Check ID | Exact raw result required |

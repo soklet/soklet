@@ -37,7 +37,7 @@ Normal cancelation exercised all four callback workers and the supervisor; it
 did not start a diagnostic worker. Every run reported zero diagnostics and zero
 owned live threads after termination.
 
-[Raw output from all three JVMs](stream-lifecycle-footprint-2026-09-21.txt) preserves
+[Raw output from all three JVMs](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/stream-lifecycle-footprint-2026-09-21.txt) preserves
 the exact bytes, thread counts, VM arguments, class location, and bytecode hash.
 After production bytecode changes, rerun the probe before attributing these
 measurements to the changed implementation.

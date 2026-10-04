@@ -108,14 +108,14 @@ end-to-end measurements, not isolated producer throughput. Eight fixed error
 categories retain counts and one bounded example each, including the connection,
 request-write, or response-read phase; response errors remain excluded from
 successful throughput. See the
-[streaming lifecycle qualification](docs/streaming-lifecycle-qualification.md)
+[streaming lifecycle qualification](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-lifecycle-qualification.md)
 for the baseline comparison and memory-probe commands.
 
 The current harness uses the one-argument streaming writer API. It cannot run
 against a historical two-argument runtime by swapping only the runtime classpath;
 historical comparisons require a compatible harness for each ABI. The current
 equal-body output scenarios compare API paths within the same runtime.
-The [HTTP streaming API qualification](docs/streaming-api-qualification-2026-09-22.md)
+The [HTTP streaming API qualification](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-qualification-2026-09-22.md)
 preserves the earlier output-path throughput/allocation and full-capacity heap
 results. Its UTF-8 helper measurements predate removal of `writeUtf8`; rerun the
 remaining workloads before treating those results as current qualification.
@@ -210,5 +210,5 @@ and physical teardown. The separate [SSE heap probe](docs/sse-lifecycle-footprin
 measures idle connections, distinct full queues, retained terminated runtimes, and
 released references. Both compile with Java 17 and require Java 21 or newer for
 live SSE. Their standalone commands avoid the recorded MCP benchmark-module
-compile blocker. See the [milestone 5b report](docs/streaming-api-milestone-5b.md)
+compile blocker. See the [milestone 5b report](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-5b.md)
 for the tested workloads, selected defaults, raw evidence, and limitations.

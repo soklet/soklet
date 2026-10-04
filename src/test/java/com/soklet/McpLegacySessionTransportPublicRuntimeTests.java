@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -62,6 +63,53 @@ class McpLegacySessionTransportPublicRuntimeTests {
 
 	@AfterEach
 	void endRequestBudget() { RawClient.endRequestBudget(); }
+
+	@Test
+	void chunkReadResumesAfterTimeoutAtEveryHeaderPayloadAndDelimiterByte() throws Exception {
+		String frame = "5;part=1\r\nhello\r\n";
+		for (int offset = 0; offset < frame.length(); offset++) {
+			try (RawClient client = new RawClient(timeoutOnce(frame + "3\r\nbye\r\n0\r\n\r\n", offset))) {
+				assertThrows(java.net.SocketTimeoutException.class, client::readChunk);
+				assertArrayEquals("hello".getBytes(StandardCharsets.UTF_8), client.readChunk());
+				assertArrayEquals("bye".getBytes(StandardCharsets.UTF_8), client.readChunk());
+				assertNull(client.readChunk());
+			}
+		}
+	}
+
+	@Test
+	void terminalChunkReadResumesAfterTimeoutWithoutDiscardingItsFraming() throws Exception {
+		String wire = "0\r\n\r\n";
+		for (int offset = 0; offset < wire.length(); offset++) {
+			try (RawClient client = new RawClient(timeoutOnce(wire, offset))) {
+				assertThrows(java.net.SocketTimeoutException.class, client::readChunk);
+				assertNull(client.readChunk());
+				assertNull(client.readChunk());
+			}
+		}
+	}
+
+	private static InputStream timeoutOnce(String wire, int timeoutOffset) {
+		byte[] bytes = wire.getBytes(StandardCharsets.ISO_8859_1);
+		return new InputStream() {
+			private int offset;
+			private boolean timedOut;
+			@Override public int read() throws IOException {
+				if (!timedOut && offset == timeoutOffset) {
+					timedOut = true;
+					throw new java.net.SocketTimeoutException("Interrupted test frame.");
+				}
+				return offset == bytes.length ? -1 : bytes[offset++] & 0xff;
+			}
+			@Override public int read(byte[] target, int offset, int length) throws IOException {
+				if (length == 0) return 0;
+				int value = read();
+				if (value < 0) return -1;
+				target[offset] = (byte) value;
+				return 1;
+			}
+		};
+	}
 
 	@Test
 	void methodMatrixRespectsExactRevisionConfigurationAndDoesNotFabricateRpcAdmission() throws Exception {
@@ -573,11 +621,15 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		boolean terminalRead;
 		long readDeadlineNanos;
 
+		RawClient(InputStream input) {
+			this.input = new BufferedInputStream(input);
+		}
+
 		RawClient(int port, String method, String path, String body, List<HeaderValue> headers) throws IOException {
 			socket.setTcpNoDelay(true);
 			socket.setSoTimeout(5000);
 			socket.connect(new InetSocketAddress("127.0.0.1", port), (int) Math.max(1, remainingRequestWait().toMillis()));
-			this.input = socket.getInputStream();
+			this.input = new BufferedInputStream(socket.getInputStream());
 			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
 			StringBuilder head = new StringBuilder(method).append(" ").append(path).append(" HTTP/1.1\r\nHost: 127.0.0.1:")
 					.append(port).append("\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\n");
@@ -628,16 +680,24 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		byte[] readChunk(long deadlineNanos) throws IOException {
 			readDeadlineNanos = deadlineNanos;
 			if (terminalRead) return null;
-			String size = line().split(";", 2)[0];
-			int length = Integer.parseInt(size, 16);
-			if (length == 0) {
-				if (!line().isEmpty()) throw new IOException("Unexpected terminal trailer.");
-				terminalRead = true;
-				return null;
+			// A short negative-observation deadline can expire anywhere in a chunk.
+			// Retain the bounded frame so the next observation resumes at its start.
+			input.mark(2 * 1024 * 1024 + 2 * 65536);
+			try {
+				String size = line().split(";", 2)[0];
+				int length = Integer.parseInt(size, 16);
+				if (length == 0) {
+					if (!line().isEmpty()) throw new IOException("Unexpected terminal trailer.");
+					terminalRead = true;
+					return null;
+				}
+				byte[] bytes = exact(length);
+				if (!line().isEmpty()) throw new IOException("Missing chunk delimiter.");
+				return bytes;
+			} catch (java.net.SocketTimeoutException exception) {
+				input.reset();
+				throw exception;
 			}
-			byte[] bytes = exact(length);
-			if (!line().isEmpty()) throw new IOException("Missing chunk delimiter.");
-			return bytes;
 		}
 
 		byte[] exact(int count) throws IOException {

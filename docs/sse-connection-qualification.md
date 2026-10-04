@@ -7,7 +7,7 @@ same concrete resource path. This tests the final 4.0 initializer/broadcaster
 model, 256-slot connection admission, exact delivery, churn recovery, and
 physical teardown. It is a paced workload, not a maximum-throughput benchmark
 or a long-term soak. The September 22
-[milestone 5b measurements](streaming-api-milestone-5b.md) used the superseded
+[milestone 5b measurements](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-5b.md) used the superseded
 per-client subscription/callback design and must not be presented as results of
 this harness.
 The first run of the final initializer/broadcaster candidate is recorded in

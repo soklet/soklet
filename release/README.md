@@ -93,7 +93,7 @@ inventory digest supplies that owner decision. Preserve frozen provenance
 hashes. Current finite/privacy semantic repins and their reviewed reasons are
 recorded separately in that document.
 
-The [September 22 streaming inventory checkpoint](../docs/streaming-api-milestone-6b.md)
+The [September 22 streaming inventory checkpoint](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-6b.md)
 records the next current-only finite/privacy review, lifecycle harness
 reconciliation and source-version census. Its development checks do not change
 the release-gate universe or statuses, downstream commit pins, historical

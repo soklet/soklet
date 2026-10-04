@@ -27,7 +27,7 @@ and legacy-wire regressions. The existing Skills runner/proxy checks passed
 **14 tests** after allowing their disposable loopback listeners. New raw output
 stays outside Git; no local fuzz campaign was run.
 
-The [September 25 review](../../release/mcp-qualification-2026-09-25/REVIEW.md#skills)
+The [September 25 review](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/release/mcp-qualification-2026-09-25/REVIEW.md#skills)
 retains the named Inspector retrieval/operational-matrix and pinned corpus
 observations. This review supplies current server regression evidence; it
 does not repeat that host run or claim agent consent, activation, execution,
