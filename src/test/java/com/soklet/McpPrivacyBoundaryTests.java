@@ -223,7 +223,7 @@ class McpPrivacyBoundaryTests {
 		IllegalFormParameterException form = assertThrows(
 				IllegalFormParameterException.class,
 				() -> Request.withPath(HttpMethod.POST, "/")
-						.headers(Map.of("Content-Type", Set.of(
+						.headers(Map.of("Content-Type", List.of(
 								"application/x-www-form-urlencoded")))
 						.body((SECRET + "=" + SECRET + "-one&" + SECRET
 								+ "=" + SECRET + "-two").getBytes(StandardCharsets.UTF_8))
@@ -238,7 +238,7 @@ class McpPrivacyBoundaryTests {
 				IllegalRequestHeaderException.class,
 				() -> Request.withPath(HttpMethod.GET, "/")
 						.headers(Map.of(headerName,
-								Set.of(SECRET + "-one", SECRET + "-two")))
+								List.of(SECRET + "-one", SECRET + "-two")))
 						.build()
 						.getHeader(headerName));
 		assertMessageRedacted(header);
@@ -248,7 +248,7 @@ class McpPrivacyBoundaryTests {
 		IllegalRequestCookieException cookie = assertThrows(
 				IllegalRequestCookieException.class,
 				() -> Request.withPath(HttpMethod.GET, "/")
-						.headers(Map.of("Cookie", Set.of(SECRET + "=" + SECRET
+						.headers(Map.of("Cookie", List.of(SECRET + "=" + SECRET
 								+ "-one; " + SECRET + "=" + SECRET + "-two")))
 						.build()
 						.getCookie(SECRET));
@@ -267,7 +267,7 @@ class McpPrivacyBoundaryTests {
 		IllegalMultipartFieldException multipart = assertThrows(
 				IllegalMultipartFieldException.class,
 				() -> Request.withPath(HttpMethod.POST, "/")
-						.headers(Map.of("Content-Type", Set.of(
+						.headers(Map.of("Content-Type", List.of(
 								"multipart/form-data; boundary=" + boundary)))
 						.body(multipartBody.getBytes(StandardCharsets.UTF_8))
 						.build()
@@ -280,7 +280,7 @@ class McpPrivacyBoundaryTests {
 		IllegalRequestBodyException invalidBoundary = assertThrows(
 				IllegalRequestBodyException.class,
 				() -> Request.withPath(HttpMethod.POST, "/")
-						.headers(Map.of("Content-Type", Set.of(
+						.headers(Map.of("Content-Type", List.of(
 								"multipart/form-data; boundary=" + SECRET + "@")))
 						.body("invalid".getBytes(StandardCharsets.UTF_8))
 						.build()
@@ -338,7 +338,7 @@ class McpPrivacyBoundaryTests {
 
 		Request bodyRequest = Request.withPath(HttpMethod.POST,
 				"/privacy-binding/body")
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 				.body(SECRET.getBytes(StandardCharsets.UTF_8))
 				.build();
 		IllegalRequestBodyException body = assertThrows(
@@ -398,9 +398,9 @@ class McpPrivacyBoundaryTests {
 				"/" + SECRET + "?query=" + SECRET)
 				.id(SECRET)
 				.headers(Map.of(
-						"Authorization", Set.of("Bearer " + SECRET),
-						"Cookie", Set.of("session=" + SECRET),
-						"Accept-Language", Set.of(SECRET)))
+						"Authorization", List.of("Bearer " + SECRET),
+						"Cookie", List.of("session=" + SECRET),
+						"Accept-Language", List.of(SECRET)))
 				.body(SECRET.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -418,7 +418,7 @@ class McpPrivacyBoundaryTests {
 		body.append("--").append(boundary).append("--\r\n");
 
 		return Request.withPath(HttpMethod.POST, "/privacy-binding/multipart")
-				.headers(Map.of("Content-Type", Set.of(
+				.headers(Map.of("Content-Type", List.of(
 						"multipart/form-data; boundary=" + boundary)))
 				.body(body.toString().getBytes(StandardCharsets.UTF_8))
 				.build();

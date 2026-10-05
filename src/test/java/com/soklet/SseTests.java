@@ -106,9 +106,9 @@ public class SseTests {
 																	 @NonNull @PathParameter String exampleId) {
 			return SseHandshakeResult.Accepted.builder()
 					.headers(Map.of(
-							"X-Soklet-Example", Set.of(exampleId)
+							"X-Soklet-Example", List.of(exampleId)
 					))
-					.cookies(Set.of(
+					.cookies(List.of(
 							ResponseCookie.with("cookie-test", exampleId).build()
 					))
 					.clientInitializer(unicaster -> {
@@ -171,7 +171,7 @@ public class SseTests {
 					.build(), simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
-					.headers(Map.of("Origin", Set.of("https://www.revetkn.com")))
+					.headers(Map.of("Origin", List.of("https://www.revetkn.com")))
 					.build();
 
 			SseRequestResult requestResult = simulator.performSseRequest(request);
@@ -182,16 +182,16 @@ public class SseTests {
 				Assertions.assertEquals(200, marshaledResponse.getStatusCode(), "Unexpected HTTP status code for accepted handshake");
 
 				// Verify the headers and cookies came through
-				Set<String> headerValues = marshaledResponse.getHeaders().entrySet().stream()
+				List<String> headerValues = marshaledResponse.getHeaders().entrySet().stream()
 						.filter(entry -> entry.getKey().equals("X-Soklet-Example"))
 						.map(entry -> entry.getValue())
 						.findAny()
-						.orElse(Set.of());
+						.orElse(List.of());
 
-				Assertions.assertEquals(Set.of("abc"), headerValues, "Unexpected X-Soklet-Example header value");
+				Assertions.assertEquals(List.of("abc"), headerValues, "Unexpected X-Soklet-Example header value");
 
 				// Verify that CORS headers were applied
-				Assertions.assertEquals(Set.of("https://www.revetkn.com"), marshaledResponse.getHeaders().get("Access-Control-Allow-Origin"), "Unexpected Access-Control-Allow-Origin header value");
+				Assertions.assertEquals(List.of("https://www.revetkn.com"), marshaledResponse.getHeaders().get("Access-Control-Allow-Origin"), "Unexpected Access-Control-Allow-Origin header value");
 
 				ResponseCookie testCookie = marshaledResponse.getCookies().stream()
 						.filter(responseCookie -> responseCookie.getName().equals("cookie-test"))
@@ -310,7 +310,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseTraceContextResource.class)))
 				.build(), simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/trace")
-					.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
+					.headers(Map.of("traceparent", List.of(TRACEPARENT)))
 					.build();
 
 			SseRequestResult requestResult = simulator.performSseRequest(request);
@@ -799,7 +799,7 @@ public class SseTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 200"), "Non-200 handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
 				Assertions.assertTrue(singleHeaderValue("content-type", headers).get().toLowerCase().contains("text/event-stream"),
 						"Missing text/event-stream");
 				Assertions.assertEquals("no", singleHeaderValue("x-accel-buffering", headers).get().toLowerCase());
@@ -1808,7 +1808,7 @@ public class SseTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
 				// Body should be present and connection closed
 				Assertions.assertEquals("close", firstOrEmpty(headers, "connection").toLowerCase(Locale.ROOT));
 				// Our custom header survived
@@ -2335,9 +2335,9 @@ public class SseTests {
 				Assertions.assertNotNull(rawHeaders);
 
 				String[] lines = rawHeaders.split("\r?\n");
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 
-				Set<String> cls = headers.getOrDefault("content-length", Set.of());
+				List<String> cls = headers.getOrDefault("content-length", List.of());
 				Assertions.assertEquals(1, cls.size(), "Expected exactly one Content-Length header");
 				Assertions.assertEquals("3", cls.stream().findFirst().get());
 			}
@@ -2443,7 +2443,7 @@ public class SseTests {
 				// 200 OK handshake
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// Should echo Origin (because credentials=true)
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -2490,7 +2490,7 @@ public class SseTests {
 				// Rejected handshake returns a non-200 status (we use 403 in the resource)
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// CORS must still be applied to the error response
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -2535,7 +2535,7 @@ public class SseTests {
 
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
+				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// Origin not authorized => no CORS headers
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-credentials"));
@@ -2558,7 +2558,7 @@ public class SseTests {
 			// Reject with a simple body; CORS should still be applied
 			return SseHandshakeResult.rejectWithResponse(
 					Response.withStatusCode(403)
-							.headers(Map.of("Content-Type", Set.of("text/plain; charset=utf-8")))
+							.headers(Map.of("Content-Type", List.of("text/plain; charset=utf-8")))
 							.body("denied")
 							.build()
 			);
@@ -2571,9 +2571,9 @@ public class SseTests {
 			// Rejected SSE handshake with a body, header, and a cookie
 			ResponseCookie cookie = ResponseCookie.with("session", "sse-reject").path("/").build();
 			Response response = Response.withStatusCode(403)
-					.headers(Map.of("X-Why", Set.of("nope"),
-							"Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.cookies(Set.of(cookie))
+					.headers(Map.of("X-Why", List.of("nope"),
+							"Content-Type", List.of("text/plain; charset=UTF-8")))
+					.cookies(List.of(cookie))
 					.body("denied")
 					.build();
 			return SseHandshakeResult.rejectWithResponse(response);
@@ -2591,7 +2591,7 @@ public class SseTests {
 		@SseEventSource("/sse/accepted-transfer-encoding")
 		public SseHandshakeResult accept() {
 			return SseHandshakeResult.Accepted.builder()
-					.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
+					.headers(Map.of("Transfer-Encoding", List.of("chunked")))
 					.build();
 		}
 	}
@@ -2601,8 +2601,8 @@ public class SseTests {
 		public SseHandshakeResult accept() {
 			return SseHandshakeResult.Accepted.builder()
 					.headers(Map.of(
-							"Connection", Set.of("close"),
-							"Keep-Alive", Set.of("timeout=5, max=1000")))
+							"Connection", List.of("close"),
+							"Keep-Alive", List.of("timeout=5, max=1000")))
 					.build();
 		}
 	}
@@ -2611,8 +2611,8 @@ public class SseTests {
 		@SseEventSource("/sse/reject-explicit-cl")
 		public SseHandshakeResult reject(@NonNull Request request) {
 			Response response = Response.withStatusCode(418)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8"),
-							"Content-Length", Set.of("3")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8"),
+							"Content-Length", List.of("3")))
 					.body("abc")
 					.build();
 			return SseHandshakeResult.rejectWithResponse(response);
@@ -3503,7 +3503,7 @@ public class SseTests {
 		for (boolean accepted : List.of(false, true)) {
 			for (boolean explicit : List.of(false, true)) {
 				MarshaledResponse response = MarshaledResponse.withStatusCode(accepted ? 200 : 503)
-						.headers(explicit ? Map.of("dAtE", Set.of(explicitDate)) : Map.of()).build();
+						.headers(explicit ? Map.of("dAtE", List.of(explicitDate)) : Map.of()).build();
 				HttpRequestResult result = HttpRequestResult.withMarshaledResponse(response)
 						.sseHandshakeResult(accepted ? SseHandshakeResult.accept() : null).build();
 				String wire = new String((byte[]) handshake.invoke(server, result), StandardCharsets.ISO_8859_1);
@@ -3535,10 +3535,10 @@ public class SseTests {
 
 		MarshaledResponse response = MarshaledResponse.withStatusCode(503)
 				.headers(Map.of(
-						"X-Test", Set.of("one"),
-						"Content-Type", Set.of("text/plain")
+						"X-Test", List.of("one"),
+						"Content-Type", List.of("text/plain")
 				))
-				.cookies(Set.of(cookie))
+				.cookies(List.of(cookie))
 				.body("payload".getBytes(StandardCharsets.UTF_8))
 				.build();
 
@@ -3557,7 +3557,7 @@ public class SseTests {
 		Assertions.assertEquals("HTTP/1.1 503 Service Unavailable", lines[0]);
 		assertFreshResponseDate(output);
 
-		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines).subList(1, lines.length));
+		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines).subList(1, lines.length));
 
 		Assertions.assertEquals("one", firstOrEmpty(headers, "x-test"));
 		Assertions.assertEquals("text/plain", firstOrEmpty(headers, "content-type"));
@@ -3575,7 +3575,7 @@ public class SseTests {
 		Method method = DefaultSseServer.class.getDeclaredMethod("createHandshakeHttpResponse", HttpRequestResult.class);
 		method.setAccessible(true);
 		byte[] bytes = (byte[]) method.invoke(server, HttpRequestResult.withMarshaledResponse(
-				MarshaledResponse.withStatusCode(599).headers(Map.of("X-Text", Set.of("\u00e9"))).build()).build());
+				MarshaledResponse.withStatusCode(599).headers(Map.of("X-Text", List.of("\u00e9"))).build()).build());
 		String wire = new String(bytes, StandardCharsets.ISO_8859_1);
 		Assertions.assertTrue(wire.startsWith("HTTP/1.1 599 \r\n"), wire);
 		Assertions.assertTrue(wire.contains("X-Text: \u00e9\r\n"), wire);
@@ -4382,8 +4382,8 @@ public class SseTests {
 		return out;
 	}
 
-	private static String firstOrEmpty(Map<String, Set<String>> headers, String key) {
-		Set<String> v = headers.getOrDefault(key.toLowerCase(Locale.ROOT), Set.of());
+	private static String firstOrEmpty(Map<String, List<String>> headers, String key) {
+		List<String> v = headers.getOrDefault(key.toLowerCase(Locale.ROOT), List.of());
 		return v.isEmpty() ? "" : v.stream().findFirst().get();
 	}
 
@@ -4586,8 +4586,8 @@ public class SseTests {
 	}
 
 	@NonNull
-	private static Optional<String> singleHeaderValue(String name, Map<String, Set<String>> headers) {
-		Set<String> values = headers.get(name);
+	private static Optional<String> singleHeaderValue(String name, Map<String, List<String>> headers) {
+		List<String> values = headers.get(name);
 
 		if (values == null || values.size() == 0)
 			return Optional.empty();
@@ -4599,11 +4599,11 @@ public class SseTests {
 	}
 
 	@NonNull
-	private static Set<String> headerValues(String name, Map<String, Set<String>> headers) {
-		Set<String> values = headers.get(name);
+	private static List<String> headerValues(String name, Map<String, List<String>> headers) {
+		List<String> values = headers.get(name);
 
 		if (values == null || values.size() == 0)
-			return Set.of();
+			return List.of();
 
 		return values;
 	}

@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -46,7 +47,7 @@ import static java.util.Objects.requireNonNull;
 @NotThreadSafe
 public final class EffectiveClientIpResolver {
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 	@NonNull
 	private final TrustPolicy trustPolicy;
 	@Nullable
@@ -62,7 +63,7 @@ public final class EffectiveClientIpResolver {
 	 * @return the resolver
 	 */
 	@NonNull
-	public static EffectiveClientIpResolver withHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	public static EffectiveClientIpResolver withHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 																											@NonNull TrustPolicy trustPolicy) {
 		requireNonNull(headers);
 		requireNonNull(trustPolicy);
@@ -85,9 +86,9 @@ public final class EffectiveClientIpResolver {
 		return resolver;
 	}
 
-	private EffectiveClientIpResolver(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	private EffectiveClientIpResolver(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 																		@NonNull TrustPolicy trustPolicy) {
-		this.headers = new LinkedCaseInsensitiveMap<>(headers);
+		this.headers = Utilities.immutableValueLists(headers, true);
 		this.trustPolicy = trustPolicy;
 	}
 
@@ -150,7 +151,7 @@ public final class EffectiveClientIpResolver {
 	}
 
 	@NonNull
-	Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 

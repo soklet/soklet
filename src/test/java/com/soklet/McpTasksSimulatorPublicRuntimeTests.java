@@ -310,9 +310,9 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			Assertions.assertEquals(expectedStatus, response.getStatusCode());
 			Assertions.assertEquals(McpSimulationBodyType.JSON,
 					response.getBodyType());
-			Assertions.assertEquals(Set.of("no-store"),
+			Assertions.assertEquals(List.of("no-store"),
 					response.getHeaders().get("Cache-Control"));
-			Assertions.assertEquals(Set.of(JSON_MEDIA_TYPE),
+			Assertions.assertEquals(List.of(JSON_MEDIA_TYPE),
 					response.getHeaders().get("Content-Type"));
 			String json = new String(response.getBody().orElseThrow(),
 					StandardCharsets.UTF_8);
@@ -353,7 +353,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 		Assertions.assertEquals(McpSimulationBodyType.SSE,
 				response.getBodyType());
 		Assertions.assertTrue(response.getBody().isEmpty());
-		Assertions.assertEquals(Set.of("text/event-stream"),
+		Assertions.assertEquals(List.of("text/event-stream"),
 				response.getHeaders().get("Content-Type"));
 		return simulation;
 	}
@@ -459,14 +459,14 @@ public class McpTasksSimulatorPublicRuntimeTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
 				+ capabilities + "}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
-		headers.put("Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
+		headers.put("Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

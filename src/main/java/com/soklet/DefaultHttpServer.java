@@ -51,12 +51,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.IdentityHashMap;
@@ -1235,7 +1233,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		Set<String> connectionNamedHeaders = new TreeSet<>(
 				String.CASE_INSENSITIVE_ORDER);
-		Set<String> connectionValues = marshaledResponse.getHeaders()
+		List<String> connectionValues = marshaledResponse.getHeaders()
 				.get("Connection");
 
 		if (connectionValues != null) {
@@ -1249,7 +1247,7 @@ final class DefaultHttpServer implements HttpServer {
 		}
 
 		List<Header> headers = new ArrayList<>();
-		for (Map.Entry<String, Set<String>> entry :
+		for (Map.Entry<String, List<String>> entry :
 				marshaledResponse.getHeaders().entrySet()) {
 			String name = entry.getKey();
 			if (unparsedResponseHeaderIsTransportOwned(name)
@@ -1263,10 +1261,8 @@ final class DefaultHttpServer implements HttpServer {
 			}
 		}
 
-		Set<ResponseCookie> cookies = marshaledResponse.getCookies();
+		List<ResponseCookie> cookies = marshaledResponse.getCookies();
 		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
-		if (!isAlreadySorted(cookies))
-			sortedCookies.sort(Comparator.comparing(ResponseCookie::getName));
 		if (!connectionNamedHeaders.contains("Set-Cookie")) {
 			for (ResponseCookie cookie : sortedCookies) {
 				String value = cookie.toSetCookieHeaderRepresentation();
@@ -1465,14 +1461,14 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Map<@NonNull String, @NonNull Set<@NonNull String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
+	protected Map<@NonNull String, @NonNull List<@NonNull String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 		for (Header header : microhttpRequest.headers())
 			Utilities.addParsedHeader(headers, header.name(), header.value());
 
-		Utilities.freezeStringValueSets(headers);
+		Utilities.freezeStringValueLists(headers);
 		return Collections.unmodifiableMap(headers);
 	}
 
@@ -1500,10 +1496,10 @@ final class DefaultHttpServer implements HttpServer {
 
 		List<Header> headers = new ArrayList<>();
 
-		// Emit one header line per value (order preserved for SortedSet/LinkedHashSet)
-		for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+		// Emit one header line per value (list order and repeated values preserved)
+		for (Map.Entry<String, List<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 			String name = entry.getKey();
-			Set<String> values = entry.getValue();
+			List<String> values = entry.getValue();
 
 			if (name == null || values == null || values.isEmpty())
 				continue;
@@ -1518,11 +1514,9 @@ final class DefaultHttpServer implements HttpServer {
 
 		// ResponseCookie headers are split into multiple instances of Set-Cookie.
 		// Force natural ordering for consistent output if the set is not already sorted.
-		Set<ResponseCookie> cookies = marshaledResponse.getCookies();
+		List<ResponseCookie> cookies = marshaledResponse.getCookies();
 		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
 
-		if (!isAlreadySorted(cookies))
-			sortedCookies.sort(Comparator.comparing(ResponseCookie::getName));
 
 		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
@@ -1681,7 +1675,7 @@ final class DefaultHttpServer implements HttpServer {
 	@Nullable
 	private Integer contentEncodingQuality(@NonNull Request request, @NonNull String contentEncoding) {
 		Integer quality = null;
-		for (String value : request.getHeaderValues("Accept-Encoding").orElse(Set.of())) {
+		for (String value : request.getHeaderValues("Accept-Encoding").orElse(List.of())) {
 			for (String part : value.split(",", -1)) {
 				EncodingPreference preference = EncodingPreference.fromHeaderValue(part).orElse(null);
 				if (preference != null && contentEncoding.equalsIgnoreCase(preference.coding()))
@@ -1983,33 +1977,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Boolean isAlreadySorted(@NonNull Set<?> set) {
-		requireNonNull(set);
-		return set instanceof SortedSet || set instanceof LinkedHashSet;
-	}
-
-	@NonNull
-	private static List<String> normalizeHeaderValues(@NonNull Set<String> values) {
-		requireNonNull(values);
-
-		if (values.isEmpty())
-			return List.of();
-
-		List<String> normalizedValues;
-
-		if (values instanceof SortedSet || values instanceof LinkedHashSet
-				|| values.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
-			normalizedValues = new ArrayList<>(values.size());
-			for (String value : values)
-				normalizedValues.add(value == null ? "" : value);
-		} else {
-			SortedSet<String> sortedValues = new TreeSet<>();
-			for (String value : values)
-				sortedValues.add(value == null ? "" : value);
-			normalizedValues = new ArrayList<>(sortedValues);
-		}
-
-		return normalizedValues;
+	private static List<String> normalizeHeaderValues(@NonNull List<String> values) {
+		return List.copyOf(requireNonNull(values));
 	}
 
 

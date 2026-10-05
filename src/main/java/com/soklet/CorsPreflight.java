@@ -107,18 +107,18 @@ public final class CorsPreflight {
 	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
 	 */
 	@NonNull
-	public static Optional<@NonNull CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<@NonNull CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Build a lowercase-key view of headers for case-insensitive lookups
-		Map<String, Set<String>> normalizedHeaders = headers.entrySet().stream()
+		Map<String, List<String>> normalizedHeaders = headers.entrySet().stream()
 				.collect(java.util.stream.Collectors.toMap(
 						entry -> entry.getKey().toLowerCase(java.util.Locale.ROOT),
 						Map.Entry::getValue,
 						(a, b) -> b, // if duplicate differing only by case, keep last
 						java.util.LinkedHashMap::new));
 
-		Set<String> originHeaderValues = normalizedHeaders.get("origin");
+		List<String> originHeaderValues = normalizedHeaders.get("origin");
 
 		if (originHeaderValues == null || originHeaderValues.size() == 0)
 			return Optional.empty();
@@ -128,10 +128,10 @@ public final class CorsPreflight {
 		if (originHeaderValue == null)
 			return Optional.empty();
 
-		Set<String> accessControlRequestMethodHeaderValues = normalizedHeaders.get("access-control-request-method");
+		List<String> accessControlRequestMethodHeaderValues = normalizedHeaders.get("access-control-request-method");
 
 		if (accessControlRequestMethodHeaderValues == null)
-			accessControlRequestMethodHeaderValues = Set.of();
+			accessControlRequestMethodHeaderValues = List.of();
 
 		List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
 				.filter(headerValue -> {
@@ -153,7 +153,7 @@ public final class CorsPreflight {
 
 		Set<String> accessControlRequestHeaderValues = Optional
 				.ofNullable(normalizedHeaders.get("access-control-request-headers"))
-				.orElse(Set.of())
+				.orElse(List.of())
 				.stream()
 				.flatMap(value -> Arrays.stream(value.split(",")))
 				.map(value -> trimAggressivelyToEmpty(value))

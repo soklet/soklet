@@ -496,14 +496,14 @@ class McpLocalizationCatalogExtractionTests {
 		// the representation varies by Accept-Language and an all-default render
 		// is still the selected locale's representation.
 		assertEquals(Map.of(
-				"Cache-Control", Set.of("no-store"),
-				"Content-Type", Set.of(JSON_MEDIA_TYPE)),
+				"Cache-Control", List.of("no-store"),
+				"Content-Type", List.of(JSON_MEDIA_TYPE)),
 				baselineResponse.headers());
 		assertEquals(Map.of(
-				"Cache-Control", Set.of("no-store"),
-				"Content-Type", Set.of(JSON_MEDIA_TYPE),
-				"Vary", Set.of("Accept-Language"),
-				"Content-Language", Set.of("en")),
+				"Cache-Control", List.of("no-store"),
+				"Content-Type", List.of(JSON_MEDIA_TYPE),
+				"Vary", List.of("Accept-Language"),
+				"Content-Language", List.of("en")),
 				localizedResponse.headers());
 		assertEquals(List.of("Cache-Control", "Content-Type", "Vary",
 				"Content-Language"),
@@ -608,11 +608,11 @@ class McpLocalizationCatalogExtractionTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
 		return Request.withPath(HttpMethod.POST, WIRE_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
-						"Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("server/discover")))
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
+						"Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("server/discover")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -881,7 +881,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private record WireResponse(int statusCode,
-			Map<String, Set<String>> headers, byte[] body) {}
+			Map<String, List<String>> headers, byte[] body) {}
 
 	private record ParityArguments(
 			@McpToolProperty(name = "query", title = "Search query",

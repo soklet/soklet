@@ -4199,7 +4199,7 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		private static List<@NonNull String> acceptLanguageValues(
 				@NonNull Request request) {
-			Set<String> values = requireNonNull(request)
+			List<String> values = requireNonNull(request)
 					.getHeaders().get("Accept-Language");
 			return values == null ? List.of() : List.copyOf(values);
 		}

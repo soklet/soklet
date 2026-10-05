@@ -447,7 +447,7 @@ public class McpSimulationCaptureFuzzTest {
 			Assertions.assertEquals(List.of("first", "second"),
 					new ArrayList<>(response.getHeaders().get("X-Fuzz")));
 			Assertions.assertThrows(UnsupportedOperationException.class,
-					() -> response.getHeaders().put("mutation", Set.of("x")));
+					() -> response.getHeaders().put("mutation", List.of("x")));
 			if (expected.length > this.byteCapacity) {
 				Assertions.assertTrue(response.getBody().isEmpty());
 				this.terminalReason = McpStreamTerminationReason

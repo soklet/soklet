@@ -34,11 +34,11 @@ public class PublicNamingContractTests {
 		StreamingResponseBody body = StreamingResponseBody.fromWriter(streamingResponseWriter);
 		ResponseCookie cookie = ResponseCookie.with("example", "value").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-				.streamingResponseBody(body).cookies(Set.of(cookie)).build();
+				.streamingResponseBody(body).cookies(List.of(cookie)).build();
 		assertSame(body, response.getStreamingResponseBody().orElseThrow());
 		assertSame(streamingResponseWriter, ((StreamingResponseBody.WriterBody) body).getWriter());
 		assertSame(body, response.copy().finish().getStreamingResponseBody().orElseThrow());
-		assertEquals(Set.of(cookie), response.copy().withoutStreamingResponseBody().finish().getCookies());
+		assertEquals(List.of(cookie), response.copy().withoutStreamingResponseBody().finish().getCookies());
 		assertTrue(response.copy().streamingResponseBody(null).finish().getStreamingResponseBody().isEmpty());
 		assertTrue(MarshaledResponse.withStatusCode(200).streamingResponseBody(body)
 				.withoutStreamingResponseBody().build().getStreamingResponseBody().isEmpty());
@@ -221,7 +221,7 @@ public class PublicNamingContractTests {
 			assertNotNull(owner.getMethod("getCookies"));
 		for (Class<?> owner : List.of(Response.Builder.class, Response.Copier.class, MarshaledResponse.Builder.class,
 				MarshaledResponse.Copier.class, SseHandshakeResult.Accepted.Builder.class))
-			assertParameter(owner.getMethod("cookies", Set.class), Set.class, "cookies");
+			assertParameter(owner.getMethod("cookies", List.class), List.class, "cookies");
 		for (Class<?> owner : List.of(StreamTermination.class, UnparsedRequest.class,
 				MetricsCollector.TransportFailureKey.class, MetricsCollector.RequestReadFailureKey.class,
 				MetricsCollector.RequestRejectionKey.class))

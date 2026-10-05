@@ -38,6 +38,57 @@ older 4.x patches, and unreleased source builds are not supported releases.
 7. Exercise the application through a real loopback listener in addition to
    off-network simulation.
 
+### HTTP values preserve every occurrence
+
+HTTP value collections now use ordered lists instead of sets:
+
+| Values | Type |
+| --- | --- |
+| Query and form parameters, request cookies, request and response headers | `Map<String, List<String>>` |
+| Multipart fields grouped by name | `Map<String, List<MultipartField>>` |
+| Response cookies | `List<ResponseCookie>` |
+
+This applies to `Request`, `Response`, `MarshaledResponse`, `MultipartParser`,
+`SseHandshakeResult.Accepted`, `McpSimulationResponse`, HTTP utilities, proxy
+resolvers, and static-file header resolvers, including their builders and copiers.
+Custom implementations and integrations must use the new signatures.
+
+Replace HTTP value factories such as `Set.of("value")` with `List.of("value")`.
+Keep genuine sets, including allowed HTTP methods, CORS policy header names,
+trusted proxy addresses, and MCP protocol versions and capabilities.
+
+```java
+Request request = Request.withPath(HttpMethod.GET, "/items")
+    .queryParameters(Map.of("id", List.of("one", "one", "two")))
+    .build();
+
+// Returns all three occurrences, in order.
+List<String> ids = request.getQueryParameters().get("id");
+
+Response response = Response.withStatusCode(200)
+    .headers(Map.of("X-Example", List.of("first", "first", "second")))
+    .cookies(List.of(ResponseCookie.with("session", "value").build()))
+    .build();
+```
+
+The maps and nested lists returned by built requests and responses are immutable
+snapshots. A copier's consumer overload provides mutable maps and lists:
+
+```java
+Response updated = response.copy()
+    .headers(headers -> headers.get("X-Example").add("third"))
+    .finish();
+```
+
+Identical values count as separate occurrences. Single-value request accessors
+and scalar annotation parameters reject more than one occurrence with the
+existing request exceptions; default HTTP error handling returns a bad request.
+Use list accessors or annotated `List<T>` parameters when repetition is allowed.
+Header names remain case insensitive, while query, form, and cookie names remain
+case sensitive. Header and outgoing-cookie values retain their supplied order.
+For signatures or ordering across different query names, use `Request.getRawQuery()`;
+a grouped map preserves per-name order rather than the entire interleaved query.
+
 ### Public API naming pass
 
 The 4.0.0 release candidate uses the following names without deprecated aliases.
@@ -104,6 +155,27 @@ empty; null elements fail atomically. Replace `.addTool(a).addTool(b)` with
 Loops should collect values first. Required resource-output contents and
 subscription notification sets remain nonempty. Resource-descriptor/link
 `addIcon(...)` and `McpJsonArray.Builder.add(...)` are unchanged.
+
+### Strict request text decoding
+
+Malformed request text is rejected rather than converted to replacement
+characters. This applies to percent-decoded paths and query/form parameters,
+cookie values, request-body text, multipart metadata, and multipart field text.
+Paths, queries, and cookie values use UTF-8. Body and field text use their
+specified charset, falling back to UTF-8 when none is specified. Valid Unicode,
+including an explicitly encoded U+FFFD replacement character, remains accepted.
+
+Path and query validation occurs when the request is constructed, including
+query values that a handler never selects. Body, form, cookie, and multipart
+decoding remains lazy. Existing `IllegalRequestException` and
+`IllegalRequestBodyException` types report these failures; the default response
+marshaler returns HTTP 400 with a redacted diagnostic.
+
+For binary payloads or application-defined text decoding, continue using
+`Request.getBody()` and `MultipartField.getData()`. The raw bytes are unchanged.
+Cookie `+` characters remain literal, and malformed cookie percent-escapes such
+as `%ZZ` remain literal text; syntactically valid escapes containing invalid
+UTF-8, such as `%FF`, are rejected.
 
 ### HTTP streaming callbacks and sources
 

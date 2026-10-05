@@ -450,8 +450,8 @@ final class DefaultMcpServer implements McpServer {
 					requireNonNull(headers); requireNonNull(duration); requireNonNull(throwables);
 					if (!finished.compareAndSet(false, true))
 						return;
-					Map<String, Set<String>> publicHeaders = new LinkedHashMap<>();
-					headers.forEach((name, values) -> publicHeaders.put(name, Set.copyOf(values)));
+					Map<String, List<String>> publicHeaders = new LinkedHashMap<>();
+					headers.forEach((name, values) -> publicHeaders.put(name, List.copyOf(values)));
 					MarshaledResponse response = MarshaledResponse.withStatusCode(statusCode).headers(publicHeaders).build();
 					List<Throwable> allThrowables = new ArrayList<>(immutableStartThrowables);
 					allThrowables.addAll(throwables);
@@ -4867,7 +4867,7 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 	@NonNull
 	static List<@NonNull String> acceptLanguageValues(
 			@NonNull Request request) {
-		Set<String> values = requireNonNull(request)
+		List<String> values = requireNonNull(request)
 				.getHeaders().get("Accept-Language");
 		return values == null ? List.of() : List.copyOf(values);
 	}

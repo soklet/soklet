@@ -238,15 +238,15 @@ public class DefaultHttpServerTests {
 		Request request = Request.withPath(HttpMethod.GET, "/large").build();
 		ResponseCompressor responseCompressor = ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(8);
 		MarshaledResponse jsonResponse = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("Application/Problem+JSON; charset=UTF-8")))
+				.headers(Map.of("Content-Type", List.of("Application/Problem+JSON; charset=UTF-8")))
 				.body("long enough".getBytes(java.nio.charset.StandardCharsets.UTF_8))
 				.build();
 		MarshaledResponse octetStreamResponse = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+				.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 				.body("long enough".getBytes(java.nio.charset.StandardCharsets.UTF_8))
 				.build();
 		MarshaledResponse smallTextResponse = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain")))
+				.headers(Map.of("Content-Type", List.of("text/plain")))
 				.body("short".getBytes(java.nio.charset.StandardCharsets.UTF_8))
 				.build();
 
@@ -263,12 +263,12 @@ public class DefaultHttpServerTests {
 				.build();
 		byte[] body = "abcdefghijklmnopqrstuvwxyz".repeat(64).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		Request request = Request.withPath(HttpMethod.GET, "/large")
-				.headers(Map.of("Accept-Encoding", Set.of("br;q=1, gzip;q=0.8")))
+				.headers(Map.of("Accept-Encoding", List.of("br;q=1, gzip;q=0.8")))
 				.build();
 		MarshaledResponse marshaledResponse = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of(
-						"Content-Type", Set.of("text/plain"),
-						"ETag", Set.of("\"v1\"")))
+						"Content-Type", List.of("text/plain"),
+						"ETag", List.of("\"v1\"")))
 				.body(body)
 				.build();
 
@@ -295,15 +295,15 @@ public class DefaultHttpServerTests {
 				false,
 				new InetSocketAddress("127.0.0.1", 12345));
 
-		Map<String, Set<String>> headers = server.headersFromMicrohttpRequest(microhttpRequest);
+		Map<String, List<String>> headers = server.headersFromMicrohttpRequest(microhttpRequest);
 
-		Assertions.assertEquals(new LinkedHashSet<>(List.of("no-cache", "no-store")), headers.get("Cache-Control"));
+		Assertions.assertEquals(List.of("no-cache", "no-store"), headers.get("Cache-Control"));
 		Assertions.assertEquals(
 				List.of("session=xyz; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"),
 				new ArrayList<>(headers.get("Set-Cookie")));
-		Assertions.assertEquals(Set.of("abc123"), headers.get("x-trace-id"));
+		Assertions.assertEquals(List.of("abc123"), headers.get("x-trace-id"));
 		Assertions.assertFalse(headers.containsKey("X-Empty"));
-		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", Set.of("value")));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", List.of("value")));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.get("X-Trace-Id").add("def456"));
 	}
 

@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
@@ -32,30 +33,30 @@ import java.util.Set;
 public class CookieTests {
 	@Test
 	public void cookieHeaderTests() {
-		Map<String, Set<String>> happyPath = Utilities.extractCookiesFromHeaders(Map.of(
-				"Cookie", Set.of("a=1")
+		Map<String, List<String>> happyPath = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", List.of("a=1")
 		));
 
-		Assertions.assertEquals(Set.of("1"), happyPath.get("a"));
+		Assertions.assertEquals(List.of("1"), happyPath.get("a"));
 
-		Map<String, Set<String>> multipleValues = Utilities.extractCookiesFromHeaders(Map.of(
-				"Cookie", Set.of("a=1; b=2; a=2;")
+		Map<String, List<String>> multipleValues = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", List.of("a=1; b=2; a=2;")
 		));
 
-		Assertions.assertEquals(Set.of("1", "2"), multipleValues.get("a"));
-		Assertions.assertEquals(Set.of("2"), multipleValues.get("b"));
+		Assertions.assertEquals(List.of("1", "2"), multipleValues.get("a"));
+		Assertions.assertEquals(List.of("2"), multipleValues.get("b"));
 
-		Map<String, Set<String>> blank = Utilities.extractCookiesFromHeaders(Map.of(
-				"Cookie", Set.of()
+		Map<String, List<String>> blank = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", List.of()
 		));
 
 		Assertions.assertEquals(Set.of(), blank.keySet());
 
-		Map<String, Set<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
-				"Cookie", Set.of("a=")
+		Map<String, List<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", List.of("a=")
 		));
 
-		Assertions.assertEquals(Set.of(), missingValue.get("a"));
+		Assertions.assertEquals(List.of(), missingValue.get("a"));
 	}
 
 	@Test

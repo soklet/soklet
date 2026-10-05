@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -57,11 +58,11 @@ public class MarshaledResponseTests {
 
 	@Test
 	public void headers_and_cookies_are_immutable_snapshots() {
-		Set<String> headerValues = new LinkedHashSet<>(List.of("first", "second"));
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		List<String> headerValues = new ArrayList<>(List.of("first", "second"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
 		headers.put("X-Example", headerValues);
 		ResponseCookie cookie = ResponseCookie.with("session", "secret").build();
-		Set<ResponseCookie> cookies = new LinkedHashSet<>(Set.of(cookie));
+		List<ResponseCookie> cookies = new ArrayList<>(List.of(cookie));
 
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 				.headers(headers)
@@ -72,12 +73,12 @@ public class MarshaledResponseTests {
 		headers.clear();
 		cookies.clear();
 
-		Assertions.assertEquals(Set.of("first", "second"), response.getHeaders().get("x-example"));
+		Assertions.assertEquals(List.of("first", "second"), response.getHeaders().get("x-example"));
 		Assertions.assertEquals(List.of("first", "second"),
 				List.copyOf(response.getHeaders().get("X-Example")));
-		Assertions.assertEquals(Set.of(cookie), response.getCookies());
+		Assertions.assertEquals(List.of(cookie), response.getCookies());
 		Assertions.assertThrows(UnsupportedOperationException.class,
-				() -> response.getHeaders().put("X-Other", Set.of("value")));
+				() -> response.getHeaders().put("X-Other", List.of("value")));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> response.getHeaders().get("X-Example").add("third"));
 		Assertions.assertThrows(UnsupportedOperationException.class,
@@ -88,29 +89,29 @@ public class MarshaledResponseTests {
 	public void public_builder_header_contract_matches_latin1_wire_format() {
 		String obsText = "\u0080\u0085\u00FF";
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("X-Obs-Text", Set.of(obsText)))
+				.headers(Map.of("X-Obs-Text", List.of(obsText)))
 				.build();
 
-		Assertions.assertEquals(Set.of(obsText), response.getHeaders().get("X-Obs-Text"));
+		Assertions.assertEquals(List.of(obsText), response.getHeaders().get("X-Obs-Text"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> MarshaledResponse.withStatusCode(200)
-						.headers(Map.of(" X-Leading-Space", Set.of("value")))
+						.headers(Map.of(" X-Leading-Space", List.of("value")))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> MarshaledResponse.withStatusCode(200)
-						.headers(Map.of("X-Delete", Set.of("before\u007Fafter")))
+						.headers(Map.of("X-Delete", List.of("before\u007Fafter")))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> MarshaledResponse.withStatusCode(200)
-						.headers(Map.of("X-Non-Latin-1", Set.of("before\u0100after")))
+						.headers(Map.of("X-Non-Latin-1", List.of("before\u0100after")))
 						.build());
 	}
 
 	@Test
 	public void to_string_redacts_headers_and_cookies() {
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Authorization", Set.of("secret-token")))
-				.cookies(Set.of(ResponseCookie.with("session", "secret-cookie").build()))
+				.headers(Map.of("Authorization", List.of("secret-token")))
+				.cookies(List.of(ResponseCookie.with("session", "secret-cookie").build()))
 				.body(new byte[]{1, 2, 3})
 				.build();
 
@@ -162,7 +163,7 @@ public class MarshaledResponseTests {
 		StreamingResponseWriter streamingResponseWriter = responseStream -> invocationCount.incrementAndGet();
 		StreamingResponseWriter replacementWriter = responseStream -> invocationCount.incrementAndGet();
 		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain")));
+				.headers(Map.of("Content-Type", List.of("text/plain")));
 
 		Assertions.assertSame(builder, builder.stream(streamingResponseWriter));
 		MarshaledResponse response = builder.build();
@@ -259,9 +260,9 @@ public class MarshaledResponseTests {
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
 				.stream(streamingResponseWriter).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Length", Set.of("10"))).stream(streamingResponseWriter).build());
+				.headers(Map.of("Content-Length", List.of("10"))).stream(streamingResponseWriter).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.fromStatusCode(200).copy()
-				.headers(Map.of("Transfer-Encoding", Set.of("chunked"))).stream(streamingResponseWriter).finish());
+				.headers(Map.of("Transfer-Encoding", List.of("chunked"))).stream(streamingResponseWriter).finish());
 	}
 
 	@Test
@@ -324,12 +325,12 @@ public class MarshaledResponseTests {
 		});
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Length", Set.of("10")))
+				.headers(Map.of("Content-Length", List.of("10")))
 				.streamingResponseBody(stream)
 				.build());
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
+				.headers(Map.of("Transfer-Encoding", List.of("chunked")))
 				.streamingResponseBody(stream)
 				.build());
 	}
@@ -379,12 +380,12 @@ public class MarshaledResponseTests {
 		byte[] body = null;
 
 		MarshaledResponse response = MarshaledResponse.withResponse(Response.fromStatusCode(204))
-				.headers(Map.of("Content-Type", Set.of("application/json;charset=UTF-8")))
+				.headers(Map.of("Content-Type", List.of("application/json;charset=UTF-8")))
 				.body(body)
 				.build();
 
 		Assertions.assertEquals(Integer.valueOf(204), response.getStatusCode());
-		Assertions.assertEquals(Set.of("application/json;charset=UTF-8"), response.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("application/json;charset=UTF-8"), response.getHeaders().get("Content-Type"));
 		Assertions.assertTrue(response.getBody().isEmpty());
 		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
 	}
@@ -447,11 +448,11 @@ public class MarshaledResponseTests {
 				.build();
 
 		Assertions.assertEquals(200, response.getStatusCode());
-		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), response.getHeaders().get("Content-Type"));
-		Assertions.assertEquals(Set.of("\"v1\""), response.getHeaders().get("ETag"));
-		Assertions.assertEquals(Set.of("Mon, 04 May 2026 01:02:03 GMT"), response.getHeaders().get("Last-Modified"));
-		Assertions.assertEquals(Set.of("public, max-age=60"), response.getHeaders().get("Cache-Control"));
-		Assertions.assertEquals(Set.of("bytes"), response.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), response.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("\"v1\""), response.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of("Mon, 04 May 2026 01:02:03 GMT"), response.getHeaders().get("Last-Modified"));
+		Assertions.assertEquals(List.of("public, max-age=60"), response.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(List.of("bytes"), response.getHeaders().get("Accept-Ranges"));
 		Assertions.assertEquals(Long.valueOf(6), response.getBodyLength());
 		Assertions.assertTrue(response.getBody().orElseThrow() instanceof MarshaledResponseBody.File);
 		MarshaledResponseBody.File body = (MarshaledResponseBody.File) response.getBody().orElseThrow();
@@ -546,7 +547,7 @@ public class MarshaledResponseTests {
 					Request.withPath(HttpMethod.HEAD, "/example.txt").build(), getResponse);
 
 			Assertions.assertTrue(headResponse.getBody().isEmpty());
-			Assertions.assertEquals(Set.of("6"), headResponse.getHeaders().get("Content-Length"));
+			Assertions.assertEquals(List.of("6"), headResponse.getHeaders().get("Content-Length"));
 			Assertions.assertFalse(fileChannel.isOpen());
 		} finally {
 			if (fileChannel.isOpen())
@@ -557,7 +558,7 @@ public class MarshaledResponseTests {
 	@Test
 	public void default_head_response_omits_content_length_for_streaming_body() {
 		MarshaledResponse getResponse = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 				.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> responseStream.write(new byte[]{1, 2, 3})))
 				.build();
 		MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(
@@ -566,7 +567,7 @@ public class MarshaledResponseTests {
 		Assertions.assertTrue(headResponse.getBody().isEmpty());
 		Assertions.assertTrue(headResponse.getStreamingResponseBody().isEmpty());
 		Assertions.assertFalse(headResponse.getHeaders().containsKey("Content-Length"));
-		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), headResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), headResponse.getHeaders().get("Content-Type"));
 	}
 
 	@Test

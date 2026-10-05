@@ -37,11 +37,10 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -189,7 +188,7 @@ public final class StaticFiles {
 		EntityTag entityTag = requireNonNull(getEntityTagResolver().entityTagFor(file, attributes), "entityTagResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		Instant lastModified = requireNonNull(getLastModifiedResolver().lastModifiedFor(file, attributes), "lastModifiedResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		String cacheControl = requireNonNull(getCacheControlResolver().cacheControlFor(file, attributes), "cacheControlResolver returned null; use Optional.empty() to omit the header.").orElse(null);
-		Map<String, Set<String>> headers = requireNonNull(getHeadersResolver().headersFor(file, attributes), "headersResolver returned null; return an empty map to omit extra headers.");
+		Map<String, List<String>> headers = requireNonNull(getHeadersResolver().headersFor(file, attributes), "headersResolver returned null; return an empty map to omit extra headers.");
 		FileResponse.rejectControlledHeaderConflicts(headers, "StaticFiles.HeadersResolver");
 		Boolean rangeRequests = requireNonNull(getRangeRequestsResolver().rangeRequestsFor(file, attributes), "rangeRequestsResolver returned null; return false to disable range requests.");
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
@@ -463,17 +462,17 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> copyHeaders(
-			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> copyHeaders(
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
-		Map<String, Set<String>> copiedHeaders = new LinkedHashMap<>();
+		Map<String, List<String>> copiedHeaders = new LinkedHashMap<>();
 
-		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
+		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
 			String headerName = requireNonNull(entry.getKey());
-			Set<String> copiedHeaderValues = new LinkedHashSet<>(requireNonNull(entry.getValue()));
+			List<String> copiedHeaderValues = new ArrayList<>(requireNonNull(entry.getValue()));
 			copiedHeaderValues.forEach(value -> requireNonNull(value, format("Header '%s' includes a null value.", headerName)));
-			copiedHeaders.put(headerName, Collections.unmodifiableSet(copiedHeaderValues));
+			copiedHeaders.put(headerName, Collections.unmodifiableList(copiedHeaderValues));
 		}
 
 		return Collections.unmodifiableMap(copiedHeaders);
@@ -913,9 +912,9 @@ public final class StaticFiles {
 		 * @throws IllegalArgumentException if a header is controlled by file responses
 		 */
 		@NonNull
-		static HeadersResolver fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		static HeadersResolver fromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			requireNonNull(headers);
-			Map<String, Set<String>> copiedHeaders = copyHeaders(headers);
+			Map<String, List<String>> copiedHeaders = copyHeaders(headers);
 			FileResponse.rejectControlledHeaderConflicts(copiedHeaders, "StaticFiles.HeadersResolver");
 			return (path, attributes) -> copiedHeaders;
 		}
@@ -942,7 +941,7 @@ public final class StaticFiles {
 		 * @return extra headers to emit
 		 */
 		@NonNull
-		Map<@NonNull String, @NonNull Set<@NonNull String>> headersFor(@NonNull Path path,
+		Map<@NonNull String, @NonNull List<@NonNull String>> headersFor(@NonNull Path path,
 																																	 @NonNull BasicFileAttributes attributes);
 	}
 
@@ -1194,7 +1193,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Map<@NonNull String, @NonNull Set<@NonNull String>> headersFor(@NonNull Path path,
+		public Map<@NonNull String, @NonNull List<@NonNull String>> headersFor(@NonNull Path path,
 																																					@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);

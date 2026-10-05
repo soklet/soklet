@@ -574,7 +574,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				Assertions.assertEquals(httpTracestates.get(index),
 						context.getRequest().getTraceContext().orElseThrow()
 								.toTracestateHeaderValue().orElseThrow());
-				Assertions.assertEquals(Set.of(httpBaggage.get(index)),
+				Assertions.assertEquals(List.of(httpBaggage.get(index)),
 						context.getRequest().getHeaders().get("baggage"));
 				DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
 						context.traceCorrelationToken().orElseThrow();
@@ -1096,7 +1096,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					() -> finishThrowables.add(new RuntimeException("must-not-add")));
 			Request applicationOwnedRequest = recordingObserver.startedContext.get()
 					.getRequest();
-			Assertions.assertEquals(Set.of("Bearer " + requestHeaderCanary),
+			Assertions.assertEquals(List.of("Bearer " + requestHeaderCanary),
 					applicationOwnedRequest.getHeaders().get("Authorization"));
 			Assertions.assertTrue(applicationOwnedRequest.getBodyAsString().orElseThrow()
 					.contains(requestBodyCanary));

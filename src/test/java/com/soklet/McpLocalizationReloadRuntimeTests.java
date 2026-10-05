@@ -925,12 +925,12 @@ class McpLocalizationReloadRuntimeTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
 				+ additionalParameters + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 		return Request.withPath(HttpMethod.POST, path)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

@@ -312,8 +312,13 @@ public final class MultipartField {
 
 	/**
 	 * The value of this field represented as a string, if available.
+	 * <p>
+	 * Decodes strictly using {@link #getCharset()}, or UTF-8 when no charset is specified.
+	 * Malformed or unmappable byte sequences are rejected without substituting replacement characters.
+	 * Use {@link #getData()} for binary field data or application-defined decoding.
 	 *
 	 * @return the string value, or {@link Optional#empty()} if not available
+	 * @throws com.soklet.exception.IllegalRequestBodyException if the data cannot be decoded using its selected charset
 	 */
 	@NonNull
 	public Optional<@NonNull String> getDataAsString() {
@@ -322,7 +327,7 @@ public final class MultipartField {
 			getLock().lock();
 			try {
 				if (this.dataAsString == null)
-					this.dataAsString = new String(this.data, getCharset().orElse(DEFAULT_CHARSET));
+					this.dataAsString = RequestTextDecoder.decodeBody(this.data, getCharset().orElse(DEFAULT_CHARSET));
 			} finally {
 				getLock().unlock();
 			}

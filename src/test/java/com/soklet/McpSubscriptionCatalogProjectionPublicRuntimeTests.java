@@ -629,13 +629,13 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 				+ "\"resourcesListChanged\":true}}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(
 								"application/json; charset=UTF-8"),
-						"Accept", Set.of(
+						"Accept", List.of(
 								"application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("subscriptions/listen")))
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("subscriptions/listen")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}

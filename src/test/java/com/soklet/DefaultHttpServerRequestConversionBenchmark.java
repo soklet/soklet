@@ -115,9 +115,9 @@ public final class DefaultHttpServerRequestConversionBenchmark {
 			consume(SERVER.headersFromMicrohttpRequest(REQUEST));
 	}
 
-	private static void consume(Map<String, Set<String>> headers) {
+	private static void consume(Map<String, List<String>> headers) {
 		long value = headers.size();
-		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
+		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
 			value = value * 31L + entry.getKey().length();
 			value = value * 31L + entry.getValue().size();
 		}

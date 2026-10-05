@@ -134,12 +134,12 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	private static Request request(HttpMethod method, McpProtocolVersion version, String id, String body) {
-		Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-		headers.put("Host", Set.of("127.0.0.1:0"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("Content-Type", Set.of("application/json"));
-		headers.put("MCP-Protocol-Version", Set.of(version.getWireValue()));
-		if (id != null) headers.put("Mcp-Session-Id", Set.of(id));
+		Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+		headers.put("Host", List.of("127.0.0.1:0"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("Content-Type", List.of("application/json"));
+		headers.put("MCP-Protocol-Version", List.of(version.getWireValue()));
+		if (id != null) headers.put("Mcp-Session-Id", List.of(id));
 		return Request.withPath(method, "/mcp").headers(headers).body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 

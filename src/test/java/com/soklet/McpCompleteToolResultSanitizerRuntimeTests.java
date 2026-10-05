@@ -471,9 +471,9 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 		McpJsonObject body = McpJsonObject.builder().put("jsonrpc", "2.0").put("id", "request")
 				.put("method", method).put("params", McpJsonObject.fromMembers(params)).build();
 		return Request.withPath(HttpMethod.POST, PATH).headers(Map.of(
-				"Host", Set.of("127.0.0.1:0"), "X-Caller", Set.of(caller),
-				"Content-Type", Set.of("application/json"), "Accept", Set.of("application/json, text/event-stream"),
-				"MCP-Protocol-Version", Set.of("2026-07-28"), "Mcp-Method", Set.of(method), "Mcp-Name", Set.of(name)))
+				"Host", List.of("127.0.0.1:0"), "X-Caller", List.of(caller),
+				"Content-Type", List.of("application/json"), "Accept", List.of("application/json, text/event-stream"),
+				"MCP-Protocol-Version", List.of("2026-07-28"), "Mcp-Method", List.of(method), "Mcp-Name", List.of(name)))
 				.body(JSON.toUtf8Bytes(McpPublicJsonValueConverter.toInternal(body))).build();
 	}
 
@@ -482,7 +482,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 			McpSimulationResponse response = simulation.awaitResponse(WAIT).orElseThrow();
 			String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
 			simulation.awaitCompletion(WAIT).orElseThrow();
-			assertEquals(Set.of("no-store"), response.getHeaders().get("Cache-Control"));
+			assertEquals(List.of("no-store"), response.getHeaders().get("Cache-Control"));
 			return new Capture(response.getStatusCode(), body);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();

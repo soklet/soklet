@@ -83,7 +83,7 @@ import static java.util.Objects.requireNonNull;
  *     return MarshaledResponse.fromStatusCode(204);
  *
  *   return MarshaledResponse.withStatusCode(200)
- *     .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+ *     .headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
  *     .body(body.getBytes(StandardCharsets.UTF_8))
  *     .build();
  * }

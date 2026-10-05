@@ -381,12 +381,12 @@ class McpLocalizationAdversarialTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
 				+ additionalParameters + "}}";
-		Map<String, Set<String>> headers = baseHeaders(method);
+		Map<String, List<String>> headers = baseHeaders(method);
 
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		if (!acceptLanguage.isEmpty())
-			headers.put("Accept-Language", acceptLanguage);
+			headers.put("Accept-Language", List.copyOf(acceptLanguage));
 
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
@@ -422,13 +422,13 @@ class McpLocalizationAdversarialTests {
 				.build();
 	}
 
-	private static Map<String, Set<String>> baseHeaders(String method) {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+	private static Map<String, List<String>> baseHeaders(String method) {
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 		return headers;
 	}
 

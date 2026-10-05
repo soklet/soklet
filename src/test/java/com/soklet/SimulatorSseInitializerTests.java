@@ -147,7 +147,7 @@ public class SimulatorSseInitializerTests {
 				.streamingLifecycleCapacity(1).connectionQueueCapacity(3).build();
 		SokletConfig sourceConfig = SokletConfig.withSseServer(source)
 				.responseMarshaler(ResponseMarshaler.builder().serviceUnavailableHandler((request, resourceMethod) ->
-						MarshaledResponse.withStatusCode(503).headers(Map.of("X-Capacity", Set.of("full"))).build()).build())
+						MarshaledResponse.withStatusCode(503).headers(Map.of("X-Capacity", List.of("full"))).build()).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Fixture.class)))
 				.instanceProvider(provider(fixture)).build();
 		SimulatorConfig imported = SimulatorConfig.fromSokletConfig(sourceConfig);
@@ -159,7 +159,7 @@ public class SimulatorSseInitializerTests {
 			SseRequestResult.RequestFailed rejected = Assertions.assertInstanceOf(SseRequestResult.RequestFailed.class,
 					simulator.performSseRequest(request()));
 			Assertions.assertEquals(503, rejected.getHttpRequestResult().getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals(Set.of("full"), rejected.getHttpRequestResult().getMarshaledResponse().getHeaders().get("X-Capacity"));
+			Assertions.assertEquals(List.of("full"), rejected.getHttpRequestResult().getMarshaledResponse().getHeaders().get("X-Capacity"));
 			Assertions.assertTrue(rejected.getHttpRequestResult().getResourceMethod().isPresent());
 			Assertions.assertTrue(rejected.getHttpRequestResult().getSseHandshakeResult().isEmpty());
 			Assertions.assertEquals(1, fixture.entries.get());

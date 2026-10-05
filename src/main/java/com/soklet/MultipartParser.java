@@ -20,7 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
-import java.util.Set;
+import java.util.List;
 
 /**
  * Contract for parsing HTML form fields encoded according to the <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> specification.
@@ -38,15 +38,19 @@ public interface MultipartParser {
 	 * Given a request, detect all HTML form fields with <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> encoding and parse their values.
 	 *
 	 * @param request the request to parse
-	 * @return a mapping of form field names to corresponding sets of form field values
+	 * @return a mapping of form field names to corresponding ordered lists of form field values, including identical repeated parts
 	 */
 	@NonNull
-	Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request);
+	Map<@NonNull String, @NonNull List<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request);
 
 	/**
 	 * Acquires a threadsafe {@link MultipartParser}.
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
+	 * Multipart headers and encoded metadata are decoded strictly. Invalid byte sequences
+	 * in a supported charset produce {@link com.soklet.exception.IllegalRequestBodyException}.
+	 * Field data remains available as raw bytes; text decoding occurs when
+	 * {@link MultipartField#getDataAsString()} is invoked.
 	 *
 	 * @return a {@code MultipartParser} instance
 	 */

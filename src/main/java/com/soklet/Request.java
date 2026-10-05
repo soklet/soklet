@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
 import com.soklet.exception.IllegalQueryParameterException;
+import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestCookieException;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.exception.IllegalRequestHeaderException;
@@ -37,13 +38,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -62,7 +63,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be automatically performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
- * For performance, collection values (headers, query parameters, form parameters, cookies, multipart fields) are shallow-copied and not defensively deep-copied. Treat returned collections as immutable.
+ * Collection values (headers, query parameters, form parameters, cookies, multipart fields) are immutable snapshots. Lists preserve per-name occurrence order, including identical repeated values.
  * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
@@ -97,7 +98,7 @@ public final class Request {
 	@Nullable
 	private final String rawQueryForLazyParameters;
 	@Nullable
-	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters;
+	private volatile Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters;
 	@Nullable
 	private final String contentType;
 	@Nullable
@@ -134,11 +135,11 @@ public final class Request {
 	@Nullable
 	private volatile List<@NonNull MediaRange> mediaRanges = null;
 	@Nullable
-	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> cookies = null;
+	private volatile Map<@NonNull String, @NonNull List<@NonNull String>> cookies = null;
 	@Nullable
-	private volatile Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> multipartFields = null;
+	private volatile Map<@NonNull String, @NonNull List<@NonNull MultipartField>> multipartFields = null;
 	@Nullable
-	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> formParameters = null;
+	private volatile Map<@NonNull String, @NonNull List<@NonNull String>> formParameters = null;
 
 	/**
 	 * Acquires a builder for {@link Request} instances from the URL provided by clients on a "raw" HTTP/1.1 request line.
@@ -149,7 +150,7 @@ public final class Request {
 	 * Note: request targets are normalized to origin-form. For example, if a client sends an absolute-form URL like {@code http://example.com/path?query}, only the path and query components are retained.
 	 * <p>
 	 * Paths will be percent-decoded. Percent-encoded slashes (e.g. {@code %2F}) are rejected.
-	 * Malformed percent-encoding is rejected.
+	 * Malformed percent-encoding and invalid UTF-8 are rejected without substituting replacement characters.
 	 * <p>
 	 * Query parameters are parsed and decoded using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
 	 * Query decoding always uses UTF-8, regardless of any {@code Content-Type} charset.
@@ -288,7 +289,7 @@ public final class Request {
 		String rawQueryForLazyParameters = null;
 		Boolean lazyQueryParameters = false;
 		@Nullable
-		Map<String, Set<String>> initialQueryParameters;
+		Map<String, List<String>> initialQueryParameters;
 
 		// If we use PathBuilder, use its path directly.
 		// If we use RawBuilder, parse and decode its path.
@@ -304,7 +305,7 @@ public final class Request {
 						Request.class.getSimpleName(), Map.class.getSimpleName()));
 
 			// Use already-decoded query parameters as provided by the path builder
-			initialQueryParameters = pathBuilder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(pathBuilder.queryParameters));
+			initialQueryParameters = pathBuilder.queryParameters == null ? Map.of() : Utilities.immutableValueLists(pathBuilder.queryParameters, false);
 		} else {
 			// RawBuilder scenario
 			String rawUrl = trimAggressivelyToEmpty(requireNonNull(rawBuilder).rawUrl);
@@ -359,7 +360,7 @@ public final class Request {
 					rawPath = Utilities.encodePath(path);
 				}
 
-				Map<String, Set<String>> queryParameters = requireNonNull(initialQueryParameters);
+				Map<String, List<String>> queryParameters = requireNonNull(initialQueryParameters);
 				if (queryParameters.isEmpty()) {
 					rawQuery = null;
 				} else {
@@ -500,10 +501,11 @@ public final class Request {
 	 * Use {@link #getCookie(String)} for a convenience method to access cookie values when only one is expected.
 	 *
 	 * @return the request's cookies
+	 * @throws IllegalRequestException if a cookie value contains invalid UTF-8 bytes or unpaired surrogates
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getCookies() {
-		Map<String, Set<String>> result = this.cookies;
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getCookies() {
+		Map<String, List<String>> result = this.cookies;
 
 		if (result == null) {
 			getLock().lock();
@@ -512,7 +514,7 @@ public final class Request {
 				result = this.cookies;
 
 				if (result == null) {
-					Set<String> cookieHeaderValues = getHeaderValues("Cookie").orElse(Set.of());
+					List<String> cookieHeaderValues = getHeaderValues("Cookie").orElse(List.of());
 					result = cookieHeaderValues.isEmpty()
 							? Map.of()
 							: Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(Map.of("Cookie", cookieHeaderValues)));
@@ -539,8 +541,8 @@ public final class Request {
 	 * @return the request's query parameters
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getQueryParameters() {
-		Map<String, Set<String>> result = this.queryParameters;
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getQueryParameters() {
+		Map<String, List<String>> result = this.queryParameters;
 
 		if (result == null && this.lazyQueryParameters) {
 			getLock().lock();
@@ -571,10 +573,12 @@ public final class Request {
 	 * Use {@link #getFormParameter(String)} for a convenience method to access form parameter values when only one is expected.
 	 *
 	 * @return the request's form parameters
+	 * @throws IllegalRequestBodyException if the raw body is invalid for its selected charset
+	 * @throws IllegalRequestException if a form component contains malformed percent-encoding or text invalid for its selected charset
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getFormParameters() {
-		Map<String, Set<String>> result = this.formParameters;
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getFormParameters() {
+		Map<String, List<String>> result = this.formParameters;
 
 		if (result == null) {
 			getLock().lock();
@@ -672,7 +676,7 @@ public final class Request {
 	 * @return the request's headers
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers.asMap();
 	}
 
@@ -731,11 +735,11 @@ public final class Request {
 	 * @return the request's multipart fields, or the empty map if none are present
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> getMultipartFields() {
+	public Map<@NonNull String, @NonNull List<@NonNull MultipartField>> getMultipartFields() {
 		if (!isMultipart())
 			return Map.of();
 
-		Map<String, Set<MultipartField>> result = this.multipartFields;
+		Map<String, List<MultipartField>> result = this.multipartFields;
 
 		if (result == null) {
 			getLock().lock();
@@ -743,7 +747,7 @@ public final class Request {
 				result = this.multipartFields;
 
 				if (result == null) {
-					result = Collections.unmodifiableMap(getMultipartParser().extractMultipartFields(this));
+					result = Utilities.immutableValueLists(getMultipartParser().extractMultipartFields(this), false);
 					this.multipartFields = result;
 				}
 			} finally {
@@ -812,15 +816,18 @@ public final class Request {
 	}
 
 	/**
-	 * Convenience method that provides the {@link #getBody()} bytes as a {@link String} encoded using the client-specified character set per {@link #getCharset()}.
+	 * Convenience method that provides the {@link #getBody()} bytes as a {@link String} decoded using the client-specified character set per {@link #getCharset()}.
 	 * <p>
-	 * If no character set is specified, {@link StandardCharsets#UTF_8} is used to perform the encoding.
+	 * If no character set is specified, {@link StandardCharsets#UTF_8} is used to perform the decoding.
+	 * Malformed or unmappable byte sequences are rejected without substituting replacement characters.
+	 * Use {@link #getBody()} when the payload is binary or requires application-defined decoding.
 	 * <p>
 	 * This method will lazily convert the raw bytes as specified by {@link #getBody()} to an instance of {@link String} when first invoked.  The {@link String} representation is then cached and re-used for subsequent invocations.
 	 * <p>
 	 * This method is threadsafe.
 	 *
 	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
+	 * @throws IllegalRequestBodyException if the body cannot be decoded using its selected charset
 	 */
 	@NonNull
 	public Optional<@NonNull String> getBodyAsString() {
@@ -834,7 +841,7 @@ public final class Request {
 				result = this.bodyAsString;
 
 				if (result == null) {
-					result = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
+					result = RequestTextDecoder.decodeBody(this.body, getCharset().orElse(DEFAULT_CHARSET));
 					this.bodyAsString = result;
 				}
 			} finally {
@@ -892,7 +899,7 @@ public final class Request {
 				result = this.locales;
 
 				if (result == null) {
-					Set<String> acceptLanguageHeaderValues = getHeaderValues("Accept-Language").orElse(null);
+					List<String> acceptLanguageHeaderValues = getHeaderValues("Accept-Language").orElse(null);
 
 					if (acceptLanguageHeaderValues != null && !acceptLanguageHeaderValues.isEmpty()) {
 						// Support data spread across multiple header lines, which spec allows
@@ -942,7 +949,7 @@ public final class Request {
 				result = this.languageRanges;
 
 				if (result == null) {
-					Set<String> acceptLanguageHeaderValues = getHeaderValues("Accept-Language").orElse(null);
+					List<String> acceptLanguageHeaderValues = getHeaderValues("Accept-Language").orElse(null);
 
 					if (acceptLanguageHeaderValues != null && !acceptLanguageHeaderValues.isEmpty()) {
 						// Support data spread across multiple header lines, which spec allows
@@ -999,7 +1006,7 @@ public final class Request {
 				result = this.mediaRanges;
 
 				if (result == null) {
-					Set<String> acceptHeaderValues = getHeaderValues("Accept").orElse(null);
+					List<String> acceptHeaderValues = getHeaderValues("Accept").orElse(null);
 
 					if (acceptHeaderValues != null && !acceptHeaderValues.isEmpty()) {
 						// Support data spread across multiple header lines, which spec allows
@@ -1045,7 +1052,7 @@ public final class Request {
 		requireNonNull(name);
 
 		try {
-			Map<String, Set<String>> queryParameters = this.queryParameters;
+			Map<String, List<String>> queryParameters = this.queryParameters;
 
 			if (queryParameters == null && this.lazyQueryParameters)
 				return singleValueForName(name, Utilities.extractQueryParameterValuesFromQuery(requireNonNull(this.rawQueryForLazyParameters), name, QueryFormat.RFC_3986_STRICT, DEFAULT_CHARSET).orElse(null));
@@ -1053,7 +1060,7 @@ public final class Request {
 			return singleValueForName(name, getQueryParameters());
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
-			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			String valuesAsString = format("[%s]", ((List<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
 			throw new IllegalQueryParameterException(
 					"Multiple values specified for a query parameter (but expected a single value).",
 					name, valuesAsString);
@@ -1081,7 +1088,7 @@ public final class Request {
 			return singleValueForName(name, getFormParameters());
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
-			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			String valuesAsString = format("[%s]", ((List<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
 			throw new IllegalFormParameterException(
 					"Multiple values specified for a form parameter (but expected a single value).",
 					name, valuesAsString);
@@ -1109,7 +1116,7 @@ public final class Request {
 			return singleValueForName(name, getHeaderValues(name).orElse(null));
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
-			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			String valuesAsString = format("[%s]", ((List<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
 			throw new IllegalRequestHeaderException(
 					"Multiple values specified for a request header (but expected a single value).",
 					name, valuesAsString);
@@ -1117,7 +1124,7 @@ public final class Request {
 	}
 
 	@NonNull
-	Optional<Set<@NonNull String>> getHeaderValues(@NonNull String name) {
+	Optional<List<@NonNull String>> getHeaderValues(@NonNull String name) {
 		requireNonNull(name);
 		return this.headers.get(name);
 	}
@@ -1143,7 +1150,7 @@ public final class Request {
 			return singleValueForName(name, getCookies());
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
-			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			String valuesAsString = format("[%s]", ((List<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
 			throw new IllegalRequestCookieException(
 					"Multiple values specified for a request cookie (but expected a single value).",
 					name, valuesAsString);
@@ -1195,11 +1202,11 @@ public final class Request {
 
 	@NonNull
 	private <T> Optional<T> singleValueForName(@NonNull String name,
-																						 @Nullable Map<String, Set<T>> valuesByName) throws MultipleValuesException {
+																						 @Nullable Map<String, List<T>> valuesByName) throws MultipleValuesException {
 		if (valuesByName == null)
 			return Optional.empty();
 
-		Set<T> values = valuesByName.get(name);
+		List<T> values = valuesByName.get(name);
 
 		if (values == null)
 			return Optional.empty();
@@ -1212,7 +1219,7 @@ public final class Request {
 
 	@NonNull
 	private <T> Optional<T> singleValueForName(@NonNull String name,
-																						 @Nullable Set<T> values) throws MultipleValuesException {
+																						 @Nullable List<T> values) throws MultipleValuesException {
 		requireNonNull(name);
 
 		if (values == null)
@@ -1242,7 +1249,7 @@ public final class Request {
 		if (origin == null)
 			return Optional.empty();
 
-		Set<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method").orElse(Set.of());
+		List<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method").orElse(List.of());
 		HttpMethod accessControlRequestMethod = null;
 
 		for (String headerValue : accessControlRequestMethodHeaderValues) {
@@ -1259,7 +1266,7 @@ public final class Request {
 		if (accessControlRequestMethod == null)
 			return Optional.empty();
 
-		Set<String> accessControlRequestHeaders = headers.get("Access-Control-Request-Headers").orElse(Set.of())
+		Set<String> accessControlRequestHeaders = headers.get("Access-Control-Request-Headers").orElse(List.of())
 				.stream()
 				.flatMap(value -> Arrays.stream(value.split(",")))
 				.map(Utilities::trimAggressivelyToEmpty)
@@ -1276,7 +1283,7 @@ public final class Request {
 		requireNonNull(headers);
 		requireNonNull(name);
 
-		Set<String> values = headers.get(name).orElse(null);
+		List<String> values = headers.get(name).orElse(null);
 
 		if (values == null || values.isEmpty())
 			return Optional.empty();
@@ -1288,38 +1295,37 @@ public final class Request {
 	private static Optional<TraceContext> extractTraceContext(@NonNull RequestHeaders headers) {
 		requireNonNull(headers);
 
-		// Physical request headers preserve duplicate traceparent values. Map-backed request construction
-		// uses Set values, so identical duplicates are already collapsed by the time parsing runs.
+		// Preserve duplicate traceparent occurrences for both physical and map-backed requests.
 		return TraceContext.fromHeaderValues(headers.values("traceparent"), headers.values("tracestate"));
 	}
 
 	private interface RequestHeaders {
 		@NonNull
-		Optional<Set<@NonNull String>> get(@NonNull String name);
+		Optional<List<@NonNull String>> get(@NonNull String name);
 
 		@NonNull
 		List<@NonNull String> values(@NonNull String name);
 
 		@NonNull
-		Map<@NonNull String, @NonNull Set<@NonNull String>> asMap();
+		Map<@NonNull String, @NonNull List<@NonNull String>> asMap();
 	}
 
 	@ThreadSafe
 	private static final class MapRequestHeaders implements RequestHeaders {
 		@NonNull
-		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 
-		private MapRequestHeaders(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		private MapRequestHeaders(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			if (headers == null || headers.isEmpty()) {
 				this.headers = Map.of();
 			} else {
-				this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(headers));
+				this.headers = Utilities.immutableValueLists(headers, true);
 			}
 		}
 
 		@Override
 		@NonNull
-		public Optional<Set<@NonNull String>> get(@NonNull String name) {
+		public Optional<List<@NonNull String>> get(@NonNull String name) {
 			requireNonNull(name);
 			return Optional.ofNullable(this.headers.get(name));
 		}
@@ -1329,7 +1335,7 @@ public final class Request {
 		public List<@NonNull String> values(@NonNull String name) {
 			requireNonNull(name);
 
-			Set<String> values = this.headers.get(name);
+			List<String> values = this.headers.get(name);
 
 			if (values == null || values.isEmpty())
 				return List.of();
@@ -1339,7 +1345,7 @@ public final class Request {
 
 		@Override
 		@NonNull
-		public Map<@NonNull String, @NonNull Set<@NonNull String>> asMap() {
+		public Map<@NonNull String, @NonNull List<@NonNull String>> asMap() {
 			return this.headers;
 		}
 	}
@@ -1349,25 +1355,25 @@ public final class Request {
 		@NonNull
 		private final List<@NonNull Header> headers;
 		@Nullable
-		private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> materializedHeaders;
+		private volatile Map<@NonNull String, @NonNull List<@NonNull String>> materializedHeaders;
 
 		private MicrohttpRequestHeaders(@Nullable List<@NonNull Header> headers) {
-			this.headers = headers == null ? List.of() : headers;
+			this.headers = headers == null ? List.of() : List.copyOf(headers);
 		}
 
 		@Override
 		@NonNull
-		public Optional<Set<@NonNull String>> get(@NonNull String name) {
+		public Optional<List<@NonNull String>> get(@NonNull String name) {
 			requireNonNull(name);
 
-			Set<String> matchingValues = null;
+			List<String> matchingValues = null;
 
 			for (Header header : this.headers) {
 				if (header == null || !name.equalsIgnoreCase(trimAggressivelyToEmpty(header.name())))
 					continue;
 
 				if (matchingValues == null)
-					matchingValues = new LinkedHashSet<>();
+					matchingValues = new ArrayList<>();
 
 				Utilities.addParsedHeaderValues(matchingValues, header.name(), header.value());
 			}
@@ -1375,7 +1381,7 @@ public final class Request {
 			if (matchingValues == null || matchingValues.isEmpty())
 				return Optional.empty();
 
-			return Optional.of(Collections.unmodifiableSet(matchingValues));
+			return Optional.of(Collections.unmodifiableList(matchingValues));
 		}
 
 		@Override
@@ -1402,11 +1408,11 @@ public final class Request {
 
 		@Override
 		@NonNull
-		public Map<@NonNull String, @NonNull Set<@NonNull String>> asMap() {
-			Map<String, Set<String>> result = this.materializedHeaders;
+		public Map<@NonNull String, @NonNull List<@NonNull String>> asMap() {
+			Map<String, List<String>> result = this.materializedHeaders;
 
 			if (result == null) {
-				Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+				Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 
 				for (Header header : this.headers) {
 					if (header == null)
@@ -1415,7 +1421,7 @@ public final class Request {
 					Utilities.addParsedHeader(headers, header.name(), header.value());
 				}
 
-				Utilities.freezeStringValueSets(headers);
+				Utilities.freezeStringValueLists(headers);
 				result = Collections.unmodifiableMap(headers);
 				this.materializedHeaders = result;
 			}
@@ -1427,20 +1433,20 @@ public final class Request {
 	@NotThreadSafe
 	private static class MultipleValuesException extends Exception {
 		@NonNull
-		private final Set<?> values;
+		private final List<?> values;
 
 		private MultipleValuesException(@NonNull String name,
-																@NonNull Set<?> values) {
+																@NonNull List<?> values) {
 			super(format("Expected a single value but found %d values.", values.size()));
 
 			requireNonNull(name);
 			requireNonNull(values);
 
-			this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
+			this.values = Collections.unmodifiableList(new ArrayList<>(values));
 		}
 
 		@NonNull
-		public Set<?> getValues() {
+		public List<?> getValues() {
 			return this.values;
 		}
 	}
@@ -1465,7 +1471,7 @@ public final class Request {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@Nullable
 		private List<@NonNull Header> microhttpHeaders;
 		@Nullable
@@ -1546,7 +1552,7 @@ public final class Request {
 		 * @return this builder
 		 */
 		@NonNull
-		public RawBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public RawBuilder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.headers = headers;
 			this.microhttpHeaders = null;
 			return this;
@@ -1656,9 +1662,9 @@ public final class Request {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@Nullable
 		private TraceContext traceContext;
 		@NonNull
@@ -1751,7 +1757,7 @@ public final class Request {
 		 * @return this builder
 		 */
 		@NonNull
-		public PathBuilder queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
+		public PathBuilder queryParameters(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters) {
 			this.queryParameters = queryParameters;
 			return this;
 		}
@@ -1763,7 +1769,7 @@ public final class Request {
 		 * @return this builder
 		 */
 		@NonNull
-		public PathBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public PathBuilder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -1921,7 +1927,7 @@ public final class Request {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
+		public Copier queryParameters(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters) {
 			this.builder.queryParameters(queryParameters);
 			this.queryParametersModified = true;
 			// Clear preserved raw query since decoded query parameters changed
@@ -1940,11 +1946,10 @@ public final class Request {
 		@NonNull
 		public Copier queryParameters(
 				@NonNull Consumer<@NonNull Map<@NonNull String,
-						@NonNull Set<@NonNull String>>> queryParametersConsumer) {
+						@NonNull List<@NonNull String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
 
-			if (this.builder.queryParameters == null)
-				this.builder.queryParameters(new LinkedHashMap<>());
+			this.builder.queryParameters(Utilities.mutableValueLists(this.builder.queryParameters, false));
 
 			queryParametersConsumer.accept(this.builder.queryParameters);
 			this.queryParametersModified = true;
@@ -1960,7 +1965,7 @@ public final class Request {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public Copier headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			this.headersModified = true;
 			return this;
@@ -2004,11 +2009,10 @@ public final class Request {
 		@NonNull
 		public Copier headers(
 				@NonNull Consumer<@NonNull Map<@NonNull String,
-						@NonNull Set<@NonNull String>>> headersConsumer) {
+						@NonNull List<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
-			if (this.builder.headers == null)
-				this.builder.headers(new LinkedCaseInsensitiveMap<>());
+			this.builder.headers(Utilities.mutableValueLists(this.builder.headers, true));
 
 			headersConsumer.accept(this.builder.headers);
 			this.headersModified = true;
@@ -2046,7 +2050,7 @@ public final class Request {
 		@NonNull
 		public Request finish() {
 			if (this.queryParametersModified) {
-				Map<String, Set<String>> queryParameters = this.builder.queryParameters;
+				Map<String, List<String>> queryParameters = this.builder.queryParameters;
 
 				if (queryParameters == null || queryParameters.isEmpty()) {
 					this.builder.rawQuery(null);
@@ -2062,23 +2066,23 @@ public final class Request {
 		}
 
 		@NonNull
-		private static Map<@NonNull String, @NonNull Set<@NonNull String>> mutableLinkedCopy(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName) {
+		private static Map<@NonNull String, @NonNull List<@NonNull String>> mutableLinkedCopy(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> valuesByName) {
 			requireNonNull(valuesByName);
 
-			Map<String, Set<String>> copy = new LinkedHashMap<>();
-			for (Map.Entry<String, Set<String>> entry : valuesByName.entrySet())
-				copy.put(entry.getKey(), entry.getValue() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(entry.getValue()));
+			Map<String, List<String>> copy = new LinkedHashMap<>();
+			for (Map.Entry<String, List<String>> entry : valuesByName.entrySet())
+				copy.put(entry.getKey(), entry.getValue() == null ? new ArrayList<>() : new ArrayList<>(entry.getValue()));
 
 			return copy;
 		}
 
 		@NonNull
-		private static Map<@NonNull String, @NonNull Set<@NonNull String>> mutableCaseInsensitiveCopy(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName) {
+		private static Map<@NonNull String, @NonNull List<@NonNull String>> mutableCaseInsensitiveCopy(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> valuesByName) {
 			requireNonNull(valuesByName);
 
-			Map<String, Set<String>> copy = new LinkedCaseInsensitiveMap<>();
-			for (Map.Entry<String, Set<String>> entry : valuesByName.entrySet())
-				copy.put(entry.getKey(), entry.getValue() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(entry.getValue()));
+			Map<String, List<String>> copy = new LinkedCaseInsensitiveMap<>();
+			for (Map.Entry<String, List<String>> entry : valuesByName.entrySet())
+				copy.put(entry.getKey(), entry.getValue() == null ? new ArrayList<>() : new ArrayList<>(entry.getValue()));
 
 			return copy;
 		}

@@ -155,7 +155,7 @@ public class MetricsCollectorTests {
 				.body(new byte[]{1, 2, 3})
 				.build();
 		Request substitutedRequest = request.copy()
-				.headers(Map.of("X-Substituted", Set.of("true")))
+				.headers(Map.of("X-Substituted", List.of("true")))
 				.finish();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
 				.body(new byte[]{9, 8})
@@ -178,7 +178,7 @@ public class MetricsCollectorTests {
 				.body(new byte[]{1, 2, 3})
 				.build();
 		Request replacementRequest = Request.withPath(HttpMethod.POST, "/widgets/123")
-				.headers(Map.of("X-Replaced", Set.of("true")))
+				.headers(Map.of("X-Replaced", List.of("true")))
 				.build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
 				.body(new byte[]{9, 8})

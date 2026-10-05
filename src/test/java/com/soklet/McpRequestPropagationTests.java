@@ -163,7 +163,7 @@ class McpRequestPropagationTests {
 
 	private static Request requestWithHttpTraceparent() {
 		return Request.withPath(HttpMethod.POST, "/mcp")
-				.headers(Map.of("traceparent", Set.of(HTTP_TRACEPARENT)))
+				.headers(Map.of("traceparent", List.of(HTTP_TRACEPARENT)))
 				.build();
 	}
 

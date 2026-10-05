@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -57,8 +58,8 @@ import static java.util.Objects.requireNonNull;
  *     : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
  *
  *   // To be a good citizen, set the Content-Type header
- *   Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
- *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+ *   Map<String, List<String>> headers = new HashMap<>(response.getHeaders());
+ *   headers.put("Content-Type", List.of("application/json;charset=UTF-8"));
  *
  *   // Tell Soklet: "OK - here is the final response data to send"
  *   return MarshaledResponse.withResponse(response)
@@ -109,8 +110,8 @@ import static java.util.Objects.requireNonNull;
  *     .getBytes(StandardCharsets.UTF_8);
  *
  *   // Specify our headers
- *   Map<String, Set<String>> headers = new HashMap<>();
- *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+ *   Map<String, List<String>> headers = new HashMap<>();
+ *   headers.put("Content-Type", List.of("application/json;charset=UTF-8"));
  *
  *   return MarshaledResponse.withStatusCode(statusCode)
  *     .headers(headers)

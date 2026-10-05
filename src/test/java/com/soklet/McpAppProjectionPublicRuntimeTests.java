@@ -339,13 +339,13 @@ class McpAppProjectionPublicRuntimeTests {
 				+ "\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"" + PROTOCOL
 				+ "\",\"io.modelcontextprotocol/clientCapabilities\":" + capabilities + "}"
 				+ (toolName == null ? "" : ",\"name\":\"" + toolName + "\",\"arguments\":{}") + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>(Map.of(
-				"Host", Set.of("127.0.0.1:0"), "Authorization", Set.of("Bearer " + caller),
-				"Content-Type", Set.of("application/json"), "Accept", Set.of("application/json, text/event-stream"),
-				"MCP-Protocol-Version", Set.of(PROTOCOL), "Mcp-Method", Set.of(method),
-				"Accept-Language", Set.of(language)));
+		Map<String, List<String>> headers = new LinkedHashMap<>(Map.of(
+				"Host", List.of("127.0.0.1:0"), "Authorization", List.of("Bearer " + caller),
+				"Content-Type", List.of("application/json"), "Accept", List.of("application/json, text/event-stream"),
+				"MCP-Protocol-Version", List.of(PROTOCOL), "Mcp-Method", List.of(method),
+				"Accept-Language", List.of(language)));
 		if (toolName != null)
-			headers.put("Mcp-Name", Set.of(toolName));
+			headers.put("Mcp-Name", List.of(toolName));
 		return Request.withPath(HttpMethod.POST, PATH).headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}

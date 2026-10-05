@@ -41,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -182,11 +183,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 				}
 			}
 
-			Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(response.getHeaders());
+			Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>(response.getHeaders());
 
 			// If no Content-Type specified, supply a default
 			if (!headers.containsKey("Content-Type"))
-				headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
+				headers.put("Content-Type", List.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 
 			MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(response.getStatusCode())
 					.headers(headers)
@@ -218,7 +219,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Integer statusCode = 404;
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
-					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+					.headers(Map.of("Content-Type", List.of(format("text/plain; charset=%s", getCharset().name()))))
 					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
@@ -249,9 +250,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			Integer statusCode = 405;
 
-			Map<String, Set<String>> headers = new LinkedHashMap<>();
-			headers.put("Allow", allowedHttpMethodsAsStrings);
-			headers.put("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())));
+			Map<String, List<String>> headers = new LinkedHashMap<>();
+			headers.put("Allow", List.copyOf(allowedHttpMethodsAsStrings));
+			headers.put("Content-Type", List.of(format("text/plain; charset=%s", getCharset().name())));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(headers)
@@ -283,7 +284,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Integer statusCode = 413;
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
-					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+					.headers(Map.of("Content-Type", List.of(format("text/plain; charset=%s", getCharset().name()))))
 					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
@@ -311,8 +312,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of(
-							"Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())),
-							"Connection", Set.of("close") // Important for load shedding
+							"Content-Type", List.of(format("text/plain; charset=%s", getCharset().name())),
+							"Connection", List.of("close") // Important for load shedding
 					))
 					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
@@ -343,7 +344,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.collect(Collectors.toSet()));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(204)
-					.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
+					.headers(Map.of("Allow", List.copyOf(allowedHttpMethodsAsStrings)))
 					.build();
 		}
 
@@ -371,7 +372,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.collect(Collectors.toSet()));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
+					.headers(Map.of("Allow", List.copyOf(allowedHttpMethodsAsStrings)))
 					.build();
 		}
 
@@ -407,7 +408,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 				// A HEAD can never write a response body, but we explicitly set Content-Length so the client knows
 				// how long the GET response would have been.
 				responseCopier.headers((mutableHeaders) ->
-						mutableHeaders.put("Content-Length", Set.of(String.valueOf(getMethodMarshaledResponse.getBodyLength()))));
+						mutableHeaders.put("Content-Length", List.of(String.valueOf(getMethodMarshaledResponse.getBodyLength()))));
 			}
 
 			marshaledResponse = responseCopier.finish();
@@ -437,7 +438,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Integer statusCode = throwable instanceof BadRequestException ? 400 : 500;
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
-					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+					.headers(Map.of("Content-Type", List.of(format("text/plain; charset=%s", getCharset().name()))))
 					.body(format("HTTP %s: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
@@ -465,7 +466,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			marshaledResponse = corsPreflightAllowedHandler.handle(request, corsPreflight, corsPreflightResponse);
 		} else {
 			Integer statusCode = 204;
-			Map<String, Set<String>> headers = new LinkedHashMap<>();
+			Map<String, List<String>> headers = new LinkedHashMap<>();
 
 			Boolean accessControlAllowCredentials = corsPreflightResponse.getAccessControlAllowCredentials().orElse(null);
 
@@ -475,25 +476,25 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					accessControlAllowCredentials
 			);
 
-			headers.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
+			headers.put("Access-Control-Allow-Origin", List.of(normalizedAccessControlAllowOrigin));
 
 			if (Boolean.TRUE.equals(accessControlAllowCredentials))
-				headers.put("Access-Control-Allow-Credentials", Set.of("true"));
+				headers.put("Access-Control-Allow-Credentials", List.of("true"));
 
 			// Always add Vary: Origin for specific origins (not "*").
 			// For preflight, also vary on inputs that affect the decision.
 			if (!"*".equals(normalizedAccessControlAllowOrigin)) {
-				Set<String> vary = new LinkedHashSet<>(headers.getOrDefault("Vary", new LinkedHashSet<>()));
+				Set<String> vary = new LinkedHashSet<>(headers.getOrDefault("Vary", List.of()));
 				vary.add("Origin");
 				vary.add("Access-Control-Request-Method");
 				vary.add("Access-Control-Request-Headers");
-				headers.put("Vary", vary);
+				headers.put("Vary", List.copyOf(vary));
 			}
 
 			Set<String> accessControlAllowHeaders = corsPreflightResponse.getAccessControlAllowHeaders();
 
 			if (!accessControlAllowHeaders.isEmpty())
-				headers.put("Access-Control-Allow-Headers", new LinkedHashSet<>(accessControlAllowHeaders));
+				headers.put("Access-Control-Allow-Headers", List.copyOf(accessControlAllowHeaders));
 
 			Set<String> allowMethodStrings = new LinkedHashSet<>();
 
@@ -501,12 +502,12 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 				allowMethodStrings.add(httpMethod.name());
 
 			if (!allowMethodStrings.isEmpty())
-				headers.put("Access-Control-Allow-Methods", allowMethodStrings);
+				headers.put("Access-Control-Allow-Methods", List.copyOf(allowMethodStrings));
 
 			Duration accessControlMaxAge = corsPreflightResponse.getAccessControlMaxAge().orElse(null);
 
 			if (accessControlMaxAge != null && !accessControlMaxAge.isNegative() && !accessControlMaxAge.isZero())
-				headers.put("Access-Control-Max-Age", Set.of(Long.toString(accessControlMaxAge.toSeconds())));
+				headers.put("Access-Control-Max-Age", List.of(Long.toString(accessControlMaxAge.toSeconds())));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(headers)
@@ -536,7 +537,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Integer statusCode = 403;
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
-					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+					.headers(Map.of("Content-Type", List.of(format("text/plain; charset=%s", getCharset().name()))))
 					.body(format("HTTP %s: %s (CORS preflight rejected)", statusCode,
 							StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
@@ -567,7 +568,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			finalMarshaledResponse = corsAllowedHandler.handle(request, cors, corsResponse, marshaledResponse);
 		} else {
 			// Mutate a copy of the downstream headers
-			Map<String, Set<String>> mutableHeaders = new LinkedHashMap<>(marshaledResponse.getHeaders());
+			Map<String, List<String>> mutableHeaders = new LinkedHashMap<>(marshaledResponse.getHeaders());
 
 			Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
 
@@ -577,23 +578,23 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					accessControlAllowCredentials
 			);
 
-			mutableHeaders.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
+			mutableHeaders.put("Access-Control-Allow-Origin", List.of(normalizedAccessControlAllowOrigin));
 
 			// Either "true" or omit entirely
 			if (Boolean.TRUE.equals(accessControlAllowCredentials))
-				mutableHeaders.put("Access-Control-Allow-Credentials", Set.of("true"));
+				mutableHeaders.put("Access-Control-Allow-Credentials", List.of("true"));
 
 			// Always add Vary: Origin for specific origins (not "*"), and preserve any existing Vary values
 			if (!"*".equals(normalizedAccessControlAllowOrigin)) {
-				Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", new LinkedHashSet<>()));
+				Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", List.of()));
 				vary.add("Origin");
-				mutableHeaders.put("Vary", vary);
+				mutableHeaders.put("Vary", List.copyOf(vary));
 			}
 
 			Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
 
 			if (!accessControlExposeHeaders.isEmpty())
-				mutableHeaders.put("Access-Control-Expose-Headers", new LinkedHashSet<>(accessControlExposeHeaders));
+				mutableHeaders.put("Access-Control-Expose-Headers", List.copyOf(accessControlExposeHeaders));
 
 			finalMarshaledResponse = marshaledResponse.copy()
 					.headers(mutableHeaders)

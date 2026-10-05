@@ -23,6 +23,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -220,10 +221,10 @@ class McpLocalizationRenderingRuntimeTests {
 		assertTrue(capture.body().contains("FR:"), capture.body());
 		assertEquals(200, capture.statusCode());
 		assertEquals(Map.of(
-				"Cache-Control", Set.of("no-store"),
-				"Content-Type", Set.of("application/json"),
-				"Vary", Set.of("Accept-Language"),
-				"Content-Language", Set.of("fr")), capture.headers());
+				"Cache-Control", List.of("no-store"),
+				"Content-Type", List.of("application/json"),
+				"Vary", List.of("Accept-Language"),
+				"Content-Language", List.of("fr")), capture.headers());
 	}
 
 	@Test
@@ -416,7 +417,7 @@ class McpLocalizationRenderingRuntimeTests {
 				"Each concurrent response must create its own context.");
 	}
 
-	private record Capture(int statusCode, Map<String, Set<String>> headers,
+	private record Capture(int statusCode, Map<String, List<String>> headers,
 			String body, McpRequestOutcome outcome) {}
 
 	private static Capture capture(McpEndpoint endpoint, McpLocalizer localizer,
@@ -585,15 +586,15 @@ class McpLocalizationRenderingRuntimeTests {
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 
 		if (!acceptLanguage.isEmpty())
-			headers.put("Accept-Language", acceptLanguage);
+			headers.put("Accept-Language", List.copyOf(acceptLanguage));
 
 		return Request.withPath(HttpMethod.POST, path)
 				.headers(headers)
@@ -652,15 +653,15 @@ class McpLocalizationRenderingRuntimeTests {
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of("server/discover"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of("server/discover"));
 
 		if (!acceptLanguageValues.isEmpty())
-			headers.put("Accept-Language", acceptLanguageValues);
+			headers.put("Accept-Language", List.copyOf(acceptLanguageValues));
 
 		return Request.withPath(HttpMethod.POST, WIRE_PATH)
 				.headers(headers)

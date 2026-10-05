@@ -238,20 +238,20 @@ public class McpSimulationPublicApiTests {
 				method.getGenericReturnType());
 		Assertions.assertEquals(Map.class, map.getRawType());
 		Assertions.assertEquals(String.class, map.getActualTypeArguments()[0]);
-		ParameterizedType set = Assertions.assertInstanceOf(ParameterizedType.class,
+		ParameterizedType list = Assertions.assertInstanceOf(ParameterizedType.class,
 				map.getActualTypeArguments()[1]);
-		Assertions.assertEquals(Set.class, set.getRawType());
+		Assertions.assertEquals(List.class, list.getRawType());
 		Assertions.assertArrayEquals(new Object[]{String.class},
-				set.getActualTypeArguments());
+				list.getActualTypeArguments());
 
 		AnnotatedParameterizedType annotatedMap = Assertions.assertInstanceOf(
 				AnnotatedParameterizedType.class, method.getAnnotatedReturnType());
 		AnnotatedType[] mapArguments = annotatedMap.getAnnotatedActualTypeArguments();
 		Assertions.assertTrue(mapArguments[0].isAnnotationPresent(NonNull.class));
 		Assertions.assertTrue(mapArguments[1].isAnnotationPresent(NonNull.class));
-		AnnotatedParameterizedType annotatedSet = Assertions.assertInstanceOf(
+		AnnotatedParameterizedType annotatedList = Assertions.assertInstanceOf(
 				AnnotatedParameterizedType.class, mapArguments[1]);
-		Assertions.assertTrue(annotatedSet.getAnnotatedActualTypeArguments()[0]
+		Assertions.assertTrue(annotatedList.getAnnotatedActualTypeArguments()[0]
 				.isAnnotationPresent(NonNull.class));
 	}
 

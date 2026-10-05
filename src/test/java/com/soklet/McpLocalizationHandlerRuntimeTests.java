@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -334,17 +335,17 @@ class McpLocalizationHandlerRuntimeTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
 				+ paramsSuffix + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		if (!acceptLanguage.isEmpty())
-			headers.put("Accept-Language", acceptLanguage);
+			headers.put("Accept-Language", List.copyOf(acceptLanguage));
 
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)

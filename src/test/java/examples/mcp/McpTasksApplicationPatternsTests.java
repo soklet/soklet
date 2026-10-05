@@ -214,14 +214,14 @@ public class McpTasksApplicationPatternsTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{"
 				+ "\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}}}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
-		headers.put("Mcp-Name", Set.of(operationName));
-		headers.put("X-Test-Tenant", Set.of(tenant));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
+		headers.put("Mcp-Name", List.of(operationName));
+		headers.put("X-Test-Tenant", List.of(tenant));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

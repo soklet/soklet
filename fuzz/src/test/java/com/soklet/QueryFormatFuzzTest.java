@@ -20,6 +20,7 @@ import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.soklet.exception.IllegalRequestException;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
@@ -49,10 +50,10 @@ public class QueryFormatFuzzTest {
 		}
 	}
 
-	private static void consume(Map<String, Set<String>> values) {
+	private static void consume(Map<String, List<String>> values) {
 		int observed = values.size();
 
-		for (Map.Entry<String, Set<String>> entry : values.entrySet()) {
+		for (Map.Entry<String, List<String>> entry : values.entrySet()) {
 			observed += entry.getKey().length();
 
 			for (String value : entry.getValue())

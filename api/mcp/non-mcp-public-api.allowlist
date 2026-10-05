@@ -29,6 +29,9 @@ com.soklet.MultipartField$Copier
 com.soklet.ResidualActivityEvidence
 com.soklet.ResidualActivityType
 com.soklet.ResourcePathDeclaration$Component
+com.soklet.Response
+com.soklet.Response$Builder
+com.soklet.Response$Copier
 com.soklet.ResponseCompressionCodec
 com.soklet.ResponseCompressionPlan
 com.soklet.ResponseCompressor
@@ -62,6 +65,7 @@ com.soklet.SokletStartupException
 com.soklet.SokletStatus
 com.soklet.SokletUnexpectedTerminationException
 com.soklet.SseClientInitializer
+com.soklet.SseHandshakeResult$Accepted
 com.soklet.SseHandshakeResult$Accepted$Builder
 com.soklet.SseRequestResult$HandshakeAccepted
 com.soklet.SseServer

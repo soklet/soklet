@@ -139,8 +139,8 @@ public class App {
 
     return Response.withStatusCode(200)
       .body(locale.getDisplayName(systemLocale))
-      .headers(Map.of("Content-Language", Set.of(contentLanguage)))
-      .cookies(Set.of(
+      .headers(Map.of("Content-Language", List.of(contentLanguage)))
+      .cookies(List.of(
         ResponseCookie.withName("lastRequest")
           .value(Instant.now().toString())
           .httpOnly(true)
@@ -387,31 +387,31 @@ public void example(Request request /* param name is arbitrary */) {
   // If not specified, UTF-8 is assumed
   Optional<String> bodyAsString = request.getBodyAsString();
   // Query parameter values by name
-  Map<String, Set<String>> queryParameters = request.getQueryParameters();
+  Map<String, List<String>> queryParameters = request.getQueryParameters();
   // Convenience for a query parameter when at most one value is expected;
   // throws IllegalQueryParameterException if multiple values are present
   Optional<String> queryParameter = request.getQueryParameter("test");
   // Header values by name (names are case-insensitive)
-  Map<String, Set<String>> headers = request.getHeaders();
+  Map<String, List<String>> headers = request.getHeaders();
   // Convenience for a header when at most one value is expected
   // (case-insensitive name); throws if multiple values are present
   Optional<String> header = request.getHeader("Accept-Language");
   // Parsed W3C trace context from traceparent/tracestate, if present
   Optional<TraceContext> traceContext = request.getTraceContext();
   // Request cookies by case-sensitive cookie name
-  Map<String, Set<String>> cookies = request.getCookies();
+  Map<String, List<String>> cookies = request.getCookies();
   // Convenience for a cookie when at most one value is expected;
   // throws IllegalRequestCookieException if multiple values are present
   Optional<String> cookie = request.getCookie("cookie-name");
   // Form parameters by name (application/x-www-form-urlencoded)
-  Map<String, Set<String>> fps = request.getFormParameters();
+  Map<String, List<String>> fps = request.getFormParameters();
   // Convenience for a form parameter when at most one value is expected;
   // throws IllegalFormParameterException if multiple values are present
   Optional<String> fp = request.getFormParameter("fp-name");
   // Is this a multipart request?
   boolean multipart = request.isMultipart();
   // Multipart fields by name
-  Map<String, Set<MultipartField>> mpfs = request.getMultipartFields();
+  Map<String, List<MultipartField>> mpfs = request.getMultipartFields();
   // Convenience for a multipart name when at most one field is expected;
   // throws IllegalMultipartFieldException if multiple fields are present
   Optional<MultipartField> mpf = request.getMultipartField("file-input");
@@ -536,8 +536,8 @@ ResourceMethodHandler resourceMethodHandler = (
     : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
   // To be a good citizen, set the Content-Type header
-  Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
-  headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+  Map<String, List<String>> headers = new HashMap<>(response.getHeaders());
+  headers.put("Content-Type", List.of("application/json;charset=UTF-8"));
 
   // Tell Soklet: "OK - here is the final response data to send"
   return MarshaledResponse.withResponse(response)
@@ -582,8 +582,8 @@ ThrowableHandler throwableHandler = (
     .getBytes(StandardCharsets.UTF_8);
 
   // Specify our headers
-  Map<String, Set<String>> headers = new HashMap<>();
-  headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+  Map<String, List<String>> headers = new HashMap<>();
+  headers.put("Content-Type", List.of("application/json;charset=UTF-8"));
 
   return MarshaledResponse.withStatusCode(statusCode)
     .headers(headers)
@@ -615,7 +615,7 @@ public MarshaledResponse exampleImage() {
   return MarshaledResponse.withStatusCode(200)
     .body(imageFile)
     .headers(Map.of(
-      "Content-Type", Set.of("image/png")
+      "Content-Type", List.of("image/png")
     ))
     .build();
 }
@@ -648,8 +648,8 @@ Plans can wrap Soklet's lazy compression supplier with an application-owned cach
 public MarshaledResponse tokens(TokenService tokenService) {
   return MarshaledResponse.withStatusCode(200)
     .headers(Map.of(
-      "Content-Type", Set.of("text/plain; charset=UTF-8"),
-      "Cache-Control", Set.of("no-transform")
+      "Content-Type", List.of("text/plain; charset=UTF-8"),
+      "Cache-Control", List.of("no-transform")
     ))
     .stream(responseStream -> {
       CancelationToken cancelationToken = responseStream.getCancelationToken();
@@ -1614,7 +1614,7 @@ SokletConfig config = SokletConfig.withHttpServer(
 
     // Set a special header on the response via mutable copy
     response = response.copy().headers((mutableHeaders) -> {
-      mutableHeaders.put("X-Powered-By", Set.of("Soklet"));
+      mutableHeaders.put("X-Powered-By", List.of("Soklet"));
     }).finish();
 
     // Step 2: Send the finalized response over the wire
@@ -1780,8 +1780,8 @@ public class ReverseResource {
     Instant lastRequest = Instant.now();
 
     return Response.withStatusCode(200)
-      .headers(Map.of("X-Largest", Set.of(String.valueOf(largest))))
-      .cookies(Set.of(
+      .headers(Map.of("X-Largest", List.of(String.valueOf(largest))))
+      .cookies(List.of(
         ResponseCookie.with("lastRequest", lastRequest.toString()).build()
       ))
       .body(reverse(numbers))
@@ -1939,7 +1939,7 @@ public void basicIntegrationTest() {
   SokletSimulator.run(applicationConfig, simulator -> {
     // Construct a request
     Request request = Request.withPath(HttpMethod.GET, "/hello")
-      .queryParameters(Map.of("name", Set.of("Mark")))
+      .queryParameters(Map.of("name", List.of("Mark")))
       .build();
 
     // Perform the request and get a handle to the response
@@ -3581,7 +3581,7 @@ public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) 
     return MarshaledResponse.fromStatusCode(204);
 
   return MarshaledResponse.withStatusCode(200)
-    .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+    .headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
     .body(body.getBytes(StandardCharsets.UTF_8))
     .build();
 }

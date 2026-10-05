@@ -129,7 +129,7 @@ public class AdvancedTests {
 
 						// Simulate SSE connection
 						Request request = Request.withPath(HttpMethod.GET, "/events")
-								.headers(Map.of("Accept", Set.of("text/event-stream")))
+								.headers(Map.of("Accept", List.of("text/event-stream")))
 								.build();
 
 						// In a real scenario, this would be an actual HTTP connection
@@ -219,15 +219,15 @@ public class AdvancedTests {
 		};
 
 		try {
-			Map<String, Set<String>> cookies = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(cookieHeaders));
+			Map<String, List<String>> cookies = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(cookieHeaders));
 
 			// Verify parsing doesn't crash
 			Assertions.assertNotNull(cookies, "Cookie parsing returned null");
 
 			// For quoted values, verify quotes are properly handled
-			for (Map.Entry<String, Set<String>> entry : cookies.entrySet()) {
+			for (Map.Entry<String, List<String>> entry : cookies.entrySet()) {
 				String name = entry.getKey();
-				Set<String> values = entry.getValue();
+				List<String> values = entry.getValue();
 
 				for (String value : values) {
 					// Value should not contain unescaped quotes
@@ -254,7 +254,7 @@ public class AdvancedTests {
 				"sessionid=abc123; Path=/; Domain=.evil.com; admin=true"
 		};
 
-		Map<String, Set<String>> cookies = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(injectionAttempts));
+		Map<String, List<String>> cookies = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(injectionAttempts));
 
 		// Verify no extra cookies were injected
 		Assertions.assertTrue(
@@ -297,7 +297,7 @@ public class AdvancedTests {
 						"--" + boundary + "--";
 
 				Request request = Request.withPath(HttpMethod.POST, "/upload")
-						.headers(Map.of("Content-Type", Set.of(contentType)))
+						.headers(Map.of("Content-Type", List.of(contentType)))
 						.body(body.getBytes(StandardCharsets.UTF_8))
 						.build();
 
@@ -305,7 +305,7 @@ public class AdvancedTests {
 				MultipartParser parser = DefaultMultipartParser.defaultInstance();
 
 				try {
-					Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+					Map<String, List<MultipartField>> fields = parser.extractMultipartFields(request);
 
 					// If parsing succeeds, verify the boundary was sanitized
 					Assertions.assertTrue(
@@ -338,7 +338,7 @@ public class AdvancedTests {
 		body.append("--").append(boundary).append("--");
 
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(body.toString().getBytes(StandardCharsets.UTF_8))
 				.build();
 
@@ -346,7 +346,7 @@ public class AdvancedTests {
 
 		long startTime = System.currentTimeMillis();
 		try {
-			Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+			Map<String, List<MultipartField>> fields = parser.extractMultipartFields(request);
 			long endTime = System.currentTimeMillis();
 
 			// Parsing should complete in reasonable time
@@ -382,7 +382,7 @@ public class AdvancedTests {
 		for (String injection : injectionAttempts) {
 			Assertions.assertThrows(IllegalArgumentException.class, () -> {
 				Response.withStatusCode(200)
-						.headers(Map.of("X-Custom", Set.of(injection)))
+						.headers(Map.of("X-Custom", List.of(injection)))
 						.build();
 			}, format("Expected header value '%s' to be caught by sanitizer", injection));
 		}
@@ -603,8 +603,8 @@ public class AdvancedTests {
 				try {
 					latch.await();
 					// Concurrent modifications to builder
-					builder.headers(Map.of("Thread-" + threadId, Set.of("value-" + threadId)));
-					builder.queryParameters(Map.of("param" + threadId, Set.of("val" + threadId)));
+					builder.headers(Map.of("Thread-" + threadId, List.of("value-" + threadId)));
+					builder.queryParameters(Map.of("param" + threadId, List.of("val" + threadId)));
 				} catch (Exception e) {
 					// Expected - builder is not thread-safe
 					builderIsThreadSafe.set(false);
@@ -618,7 +618,7 @@ public class AdvancedTests {
 
 		// Now test that built Request is immutable and thread-safe
 		Request request = Request.withPath(HttpMethod.POST, "/immutable")
-				.headers(Map.of("X-Test", Set.of("value")))
+				.headers(Map.of("X-Test", List.of("value")))
 				.body("test".getBytes())
 				.build();
 
@@ -1297,8 +1297,8 @@ public class AdvancedTests {
 		// Test for algorithmic complexity attacks
 
 		// Test 1: Many headers with same name
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		Set<String> values = new HashSet<>();
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		List<String> values = new ArrayList<>();
 		for (int i = 0; i < 10000; i++) {
 			values.add("value" + i);
 		}
@@ -1313,9 +1313,9 @@ public class AdvancedTests {
 		Assertions.assertTrue(duration < 1000, "Header processing too slow: " + duration + "ms");
 
 		// Test 2: Many query parameters
-		Map<String, Set<String>> queryParams = new LinkedHashMap<>();
+		Map<String, List<String>> queryParams = new LinkedHashMap<>();
 		for (int i = 0; i < 1000; i++) {
-			queryParams.put("param" + i, Set.of("value" + i));
+			queryParams.put("param" + i, List.of("value" + i));
 		}
 
 		start = System.currentTimeMillis();
@@ -1701,7 +1701,7 @@ public class AdvancedTests {
 		ResponseMarshaler customMarshaler = ResponseMarshaler.builder()
 				.serviceUnavailableHandler((request, resourceMethod) ->
 						MarshaledResponse.withStatusCode(503)
-								.headers(Map.of("X-Soklet-Overload", Set.of("true")))
+								.headers(Map.of("X-Soklet-Overload", List.of("true")))
 								.body("Custom Overload Message".getBytes(StandardCharsets.UTF_8))
 								.build()
 				)

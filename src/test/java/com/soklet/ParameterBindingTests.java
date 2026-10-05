@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -86,7 +87,7 @@ public class ParameterBindingTests {
 			// Header case-insensitivity
 			HttpRequestResult h = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/param/header")
-							.headers(Map.of("X-NUM", Set.of("21")))
+							.headers(Map.of("X-NUM", List.of("21")))
 							.build());
 			Assertions.assertEquals(200, h.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("42", new String(h.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
@@ -94,7 +95,7 @@ public class ParameterBindingTests {
 			// Cookie binding
 			HttpRequestResult c = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/param/cookie")
-							.headers(Map.of("Cookie", Set.of("session=abc123")))
+							.headers(Map.of("Cookie", List.of("session=abc123")))
 							.build());
 			Assertions.assertEquals(200, c.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("abc123", new String(c.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
@@ -107,7 +108,7 @@ public class ParameterBindingTests {
 				// Request body conversion to LocalDate
 				HttpRequestResult b = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/param/body-date")
-							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+							.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 							.body("2025-09-21".getBytes(StandardCharsets.UTF_8))
 							.build());
 				Assertions.assertEquals(200, b.getMarshaledResponse().getStatusCode());
@@ -116,7 +117,7 @@ public class ParameterBindingTests {
 				// Bad body conversion -> 400
 				HttpRequestResult b2 = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/param/body-int")
-							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+							.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 							.body("not-an-int".getBytes(StandardCharsets.UTF_8))
 							.build());
 				Assertions.assertEquals(400, b2.getMarshaledResponse().getStatusCode());
@@ -137,7 +138,7 @@ public class ParameterBindingTests {
 
 			HttpRequestResult bodyObjectResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/param/body-object")
-							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+							.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 							.body("payload".getBytes(StandardCharsets.UTF_8))
 							.build());
 			Assertions.assertEquals(200, bodyObjectResult.getMarshaledResponse().getStatusCode());

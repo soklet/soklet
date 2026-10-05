@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.ArrayList;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -153,7 +154,7 @@ public class McpSimulatorEveryOperationTests {
 						response.getBodyType());
 				Assertions.assertArrayEquals(new byte[0],
 						response.getBody().orElseThrow());
-				Assertions.assertEquals(Map.of("Cache-Control", Set.of("no-store")),
+				Assertions.assertEquals(Map.of("Cache-Control", List.of("no-store")),
 						response.getHeaders());
 				Assertions.assertEquals(List.of("Cache-Control"),
 						List.copyOf(response.getHeaders().keySet()));
@@ -265,8 +266,8 @@ public class McpSimulatorEveryOperationTests {
 
 		Assertions.assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 		Assertions.assertEquals(Map.of(
-				"Cache-Control", Set.of("no-store"),
-				"Content-Type", Set.of(JSON_MEDIA_TYPE)), response.getHeaders());
+				"Cache-Control", List.of("no-store"),
+				"Content-Type", List.of(JSON_MEDIA_TYPE)), response.getHeaders());
 		Assertions.assertEquals(List.of("Cache-Control", "Content-Type"),
 				List.copyOf(response.getHeaders().keySet()));
 		byte[] body = response.getBody().orElseThrow();
@@ -346,9 +347,9 @@ public class McpSimulatorEveryOperationTests {
 				response.getBodyType());
 		Assertions.assertTrue(response.getBody().isEmpty());
 		Assertions.assertEquals(Map.of(
-				"Content-Type", Set.of("text/event-stream"),
-				"Cache-Control", Set.of("no-store"),
-				"X-Accel-Buffering", Set.of("no")), response.getHeaders());
+				"Content-Type", List.of("text/event-stream"),
+				"Cache-Control", List.of("no-store"),
+				"X-Accel-Buffering", List.of("no")), response.getHeaders());
 		Assertions.assertEquals(List.of(
 				"Content-Type", "Cache-Control", "X-Accel-Buffering"),
 				List.copyOf(response.getHeaders().keySet()));
@@ -415,10 +416,10 @@ public class McpSimulatorEveryOperationTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
 				+ operation.paramsSuffix() + "}}";
-		Map<String, Set<String>> headers = baseHeaders();
-		headers.put("Mcp-Method", Set.of(operation.method()));
+		Map<String, List<String>> headers = baseHeaders();
+		headers.put("Mcp-Method", List.of(operation.method()));
 		if (operation.operationName() != null)
-			headers.put("Mcp-Name", Set.of(operation.operationName()));
+			headers.put("Mcp-Name", List.of(operation.operationName()));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
@@ -437,12 +438,12 @@ public class McpSimulatorEveryOperationTests {
 	}
 
 	@NonNull
-	private static Map<String, Set<String>> baseHeaders() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
-		headers.put("Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
+	private static Map<String, List<String>> baseHeaders() {
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
+		headers.put("Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
 		return headers;
 	}
 

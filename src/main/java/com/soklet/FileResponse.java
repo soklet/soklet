@@ -31,8 +31,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -77,7 +78,7 @@ final class FileResponse {
 	@Nullable
 	private final String cacheControl;
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 	@NonNull
 	private final Boolean rangeRequests;
 	@Nullable
@@ -126,20 +127,20 @@ final class FileResponse {
 					: ByteRangeSelection.fromHeaderValue(null, fileLength);
 
 			if (rangeSelection.getType() == ByteRangeSelectionType.UNSATISFIABLE)
-				return bodylessResponse(416, Map.of("Content-Range", Set.of("bytes */" + fileLength)));
+				return bodylessResponse(416, Map.of("Content-Range", List.of("bytes */" + fileLength)));
 
 			if (rangeSelection.getType() == ByteRangeSelectionType.SATISFIABLE) {
 				ByteRange range = rangeSelection.getRange().orElseThrow();
 				return response(206, Map.of(
-								"Accept-Ranges", Set.of("bytes"),
-								"Content-Range", Set.of(range.toContentRangeHeaderValue(fileLength))
+								"Accept-Ranges", List.of("bytes"),
+								"Content-Range", List.of(range.toContentRangeHeaderValue(fileLength))
 						),
 						new MarshaledResponseBody.File(getPath(), range.getStart(), range.getLength()));
 			}
 		}
 
-		Map<String, Set<String>> rangeHeaders = getRangeRequests()
-				? Map.of("Accept-Ranges", Set.of("bytes"))
+		Map<String, List<String>> rangeHeaders = getRangeRequests()
+				? Map.of("Accept-Ranges", List.of("bytes"))
 				: Map.of();
 
 		return response(200, rangeHeaders, new MarshaledResponseBody.File(getPath(), 0L, fileLength));
@@ -176,7 +177,7 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	private Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
@@ -268,7 +269,7 @@ final class FileResponse {
 
 	@NonNull
 	private MarshaledResponse bodylessResponse(@NonNull Integer statusCode,
-																						 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> protocolHeaders) {
+																						 @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> protocolHeaders) {
 		requireNonNull(statusCode);
 		requireNonNull(protocolHeaders);
 		return response(statusCode, protocolHeaders, null);
@@ -276,12 +277,12 @@ final class FileResponse {
 
 	@NonNull
 	private MarshaledResponse response(@NonNull Integer statusCode,
-																		 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> protocolHeaders,
+																		 @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> protocolHeaders,
 																		 @Nullable MarshaledResponseBody body) {
 		requireNonNull(statusCode);
 		requireNonNull(protocolHeaders);
 
-		Map<String, Set<String>> headers = headers(protocolHeaders, body != null);
+		Map<String, List<String>> headers = headers(protocolHeaders, body != null);
 		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(statusCode)
 				.headers(headers);
 
@@ -292,47 +293,47 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private Map<@NonNull String, @NonNull Set<@NonNull String>> headers(
-			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> protocolHeaders,
+	private Map<@NonNull String, @NonNull List<@NonNull String>> headers(
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> protocolHeaders,
 			@NonNull Boolean includeRepresentationHeaders) {
 		requireNonNull(protocolHeaders);
 		requireNonNull(includeRepresentationHeaders);
 
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 		headers.putAll(getHeaders());
 
 		if (includeRepresentationHeaders && getContentType() != null)
-			headers.put("Content-Type", Set.of(getContentType()));
+			headers.put("Content-Type", List.of(getContentType()));
 
 		if (includeRepresentationHeaders && getContentEncoding() != null)
-			headers.put("Content-Encoding", Set.of(getContentEncoding()));
+			headers.put("Content-Encoding", List.of(getContentEncoding()));
 
-		getCacheControl().ifPresent(cacheControl -> headers.put("Cache-Control", Set.of(cacheControl)));
-		getEntityTag().ifPresent(entityTag -> headers.put("ETag", Set.of(entityTag.toHeaderValue())));
-		getLastModified().ifPresent(lastModified -> headers.put("Last-Modified", Set.of(HttpDate.toHeaderValue(lastModified))));
+		getCacheControl().ifPresent(cacheControl -> headers.put("Cache-Control", List.of(cacheControl)));
+		getEntityTag().ifPresent(entityTag -> headers.put("ETag", List.of(entityTag.toHeaderValue())));
+		getLastModified().ifPresent(lastModified -> headers.put("Last-Modified", List.of(HttpDate.toHeaderValue(lastModified))));
 		headers.putAll(protocolHeaders);
 
 		return headers;
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> copyHeaders(
-			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> copyHeaders(
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
-		Map<String, Set<String>> copiedHeaders = new LinkedHashMap<>();
+		Map<String, List<String>> copiedHeaders = new LinkedHashMap<>();
 
-		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
+		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
 			String headerName = requireNonNull(entry.getKey());
-			Set<String> copiedHeaderValues = new LinkedHashSet<>(requireNonNull(entry.getValue()));
+			List<String> copiedHeaderValues = new ArrayList<>(requireNonNull(entry.getValue()));
 			copiedHeaderValues.forEach(value -> requireNonNull(value, format("Header '%s' includes a null value.", headerName)));
-			copiedHeaders.put(headerName, Collections.unmodifiableSet(copiedHeaderValues));
+			copiedHeaders.put(headerName, Collections.unmodifiableList(copiedHeaderValues));
 		}
 
 		return Collections.unmodifiableMap(copiedHeaders);
 	}
 
-	static void rejectControlledHeaderConflicts(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	static void rejectControlledHeaderConflicts(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 			@NonNull String source) {
 		requireNonNull(headers);
 		requireNonNull(source);
@@ -402,7 +403,7 @@ final class FileResponse {
 		@Nullable
 		private String cacheControl;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@Nullable
 		private Boolean rangeRequests;
 		@Nullable
@@ -444,7 +445,7 @@ final class FileResponse {
 		}
 
 		@NonNull
-		Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		Builder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}

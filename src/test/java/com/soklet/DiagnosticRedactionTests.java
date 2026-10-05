@@ -19,6 +19,7 @@ package com.soklet;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
@@ -99,8 +100,8 @@ class DiagnosticRedactionTests {
 		String headerValue = "header-value-secret-7a912fe4";
 		String body = "body-secret-7a912fe4";
 		Response response = Response.withStatusCode(201)
-				.cookies(Set.of(ResponseCookie.with(cookieName, cookieValue).build()))
-				.headers(Map.of(headerName, Set.of(headerValue)))
+				.cookies(List.of(ResponseCookie.with(cookieName, cookieValue).build()))
+				.headers(Map.of(headerName, List.of(headerValue)))
 				.body(body)
 				.build();
 
@@ -149,11 +150,11 @@ class DiagnosticRedactionTests {
 		String origin = "https://origin-secret-7a912fe4.example";
 		String requestedHeader = "X-Header-Secret-7a912fe4";
 		Cors cors = Cors.fromHeaders(HttpMethod.GET,
-				Map.of("Origin", Set.of(origin))).orElseThrow();
+				Map.of("Origin", List.of(origin))).orElseThrow();
 		CorsPreflight preflight = CorsPreflight.fromHeaders(Map.of(
-				"Origin", Set.of(origin),
-				"Access-Control-Request-Method", Set.of("PATCH"),
-				"Access-Control-Request-Headers", Set.of(requestedHeader)))
+				"Origin", List.of(origin),
+				"Access-Control-Request-Method", List.of("PATCH"),
+				"Access-Control-Request-Headers", List.of(requestedHeader)))
 				.orElseThrow();
 		Request request = Request.withPath(HttpMethod.OPTIONS, "/cors").build();
 		CorsResponse response = CorsAuthorizer.acceptAllInstance()

@@ -105,27 +105,27 @@ public final class EndToEndHttpBenchmark {
 			OutputMode.SCALAR, outputResponse(OutputMode.SCALAR),
 			OutputMode.MIXED, outputResponse(OutputMode.MIXED));
 	private static final MarshaledResponse PLAINTEXT_RESPONSE = MarshaledResponse.withStatusCode(200)
-			.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+			.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 			.body(ascii("hello, soklet\n"))
 			.build();
 	private static final MarshaledResponse JSON_RESPONSE = MarshaledResponse.withStatusCode(200)
-			.headers(Map.of("Content-Type", Set.of("application/json; charset=UTF-8")))
+			.headers(Map.of("Content-Type", List.of("application/json; charset=UTF-8")))
 			.body(JSON_BODY)
 			.build();
 	private static final MarshaledResponse STREAMING_RESPONSE = MarshaledResponse.withStatusCode(200)
-			.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+			.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 			.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream ->
 					responseStream.write(STREAMING_BODY)))
 			.build();
 	private static final MarshaledResponse BULK_STREAMING_RESPONSE = MarshaledResponse.withStatusCode(200)
-			.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+			.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 			.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 				for (byte[] write : BULK_WRITES)
 					responseStream.write(write);
 			}))
 			.build();
 	private static final MarshaledResponse PACED_STREAMING_RESPONSE = MarshaledResponse.withStatusCode(200)
-			.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+			.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 			.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 				for (byte[] write : PACED_WRITES) {
 					Thread.sleep(PACED_DELAY_MILLIS);
@@ -134,7 +134,7 @@ public final class EndToEndHttpBenchmark {
 			}))
 			.build();
 	private static final MarshaledResponse BAD_REQUEST_RESPONSE = MarshaledResponse.withStatusCode(400)
-			.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+			.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 			.body(ascii("bad request\n"))
 			.build();
 
@@ -797,7 +797,7 @@ public final class EndToEndHttpBenchmark {
 
 	private static MarshaledResponse outputResponse(OutputMode mode) {
 		return MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 				.stream(responseStream -> writeOutput(mode, responseStream)).build();
 	}
 

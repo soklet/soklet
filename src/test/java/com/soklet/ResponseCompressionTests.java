@@ -65,15 +65,15 @@ public class ResponseCompressionTests {
 		Request request = requestAccepting("gzip");
 		MarshaledResponse first = response(body).copy()
 				.headers(headers -> {
-					headers.put("ETag", Set.of("\"content-version\""));
-					headers.put("Vary", Set.of("Origin"));
-					headers.put("X-Request-Id", Set.of("first"));
+					headers.put("ETag", List.of("\"content-version\""));
+					headers.put("Vary", List.of("Origin"));
+					headers.put("X-Request-Id", List.of("first"));
 				})
-				.cookies(Set.of(ResponseCookie.with("session", "first").build()))
+				.cookies(List.of(ResponseCookie.with("session", "first").build()))
 				.finish();
 		MarshaledResponse second = first.copy()
-				.headers(headers -> headers.put("X-Request-Id", Set.of("second")))
-				.cookies(Set.of(ResponseCookie.with("session", "second").build()))
+				.headers(headers -> headers.put("X-Request-Id", List.of("second")))
+				.cookies(List.of(ResponseCookie.with("session", "second").build()))
 				.finish();
 
 		MicrohttpResponse firstResult = server.toMicrohttpResponse(request, null, first);
@@ -114,7 +114,7 @@ public class ResponseCompressionTests {
 					return compressedBodySupplier.get();
 				}));
 		MarshaledResponse response = response(original).copy()
-				.headers(headers -> headers.put("ETag", Set.of("\"v1\"")))
+				.headers(headers -> headers.put("ETag", List.of("\"v1\"")))
 				.finish();
 
 		List<String> accepted = List.of("x-test", "X-TEST;q=0.5", "*;q=0.8", "gzip;q=1, x-test;q=0.5");
@@ -225,10 +225,10 @@ public class ResponseCompressionTests {
 				ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()));
 		MarshaledResponse original = response("private data".getBytes(StandardCharsets.UTF_8)).copy()
 				.headers(headers -> {
-					headers.put("Access-Control-Allow-Origin", Set.of("https://client.example"));
-					headers.put("Access-Control-Allow-Credentials", Set.of("true"));
-					headers.put("Cache-Control", Set.of("private, no-store"));
-					headers.put("Vary", Set.of("Origin"));
+					headers.put("Access-Control-Allow-Origin", List.of("https://client.example"));
+					headers.put("Access-Control-Allow-Credentials", List.of("true"));
+					headers.put("Cache-Control", List.of("private, no-store"));
+					headers.put("Vary", List.of("Origin"));
 				})
 				.finish();
 
@@ -257,9 +257,9 @@ public class ResponseCompressionTests {
 				MarshaledResponse.withStatusCode(204).build(),
 				MarshaledResponse.withStatusCode(206).body(body).build(),
 				MarshaledResponse.withStatusCode(304).build(),
-				response(body).copy().headers(Map.of("Content-Encoding", Set.of("br"))).finish(),
-				response(body).copy().headers(Map.of("Content-Range", Set.of("bytes 0-3/4"))).finish(),
-				response(body).copy().headers(Map.of("Transfer-Encoding", Set.of("chunked"))).finish());
+				response(body).copy().headers(Map.of("Content-Encoding", List.of("br"))).finish(),
+				response(body).copy().headers(Map.of("Content-Range", List.of("bytes 0-3/4"))).finish(),
+				response(body).copy().headers(Map.of("Transfer-Encoding", List.of("chunked"))).finish());
 		for (MarshaledResponse response : excluded)
 			Assertions.assertDoesNotThrow(() -> server.toMicrohttpResponse(requestAccepting("gzip"), null, response));
 		Assertions.assertDoesNotThrow(() -> server.toMicrohttpResponse(response(body)));
@@ -308,12 +308,12 @@ public class ResponseCompressionTests {
 
 	private static Request requestAccepting(String contentEncoding) {
 		return Request.withPath(HttpMethod.GET, "/compression")
-				.headers(Map.of("Accept-Encoding", Set.of(contentEncoding))).build();
+				.headers(Map.of("Accept-Encoding", List.of(contentEncoding))).build();
 	}
 
 	private static MarshaledResponse response(byte[] body) {
 		return MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain"), "Content-Length", Set.of(Integer.toString(body.length))))
+				.headers(Map.of("Content-Type", List.of("text/plain"), "Content-Length", List.of(Integer.toString(body.length))))
 				.body(body).build();
 	}
 

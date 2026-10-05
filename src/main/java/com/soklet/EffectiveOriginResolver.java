@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -49,7 +50,7 @@ import static java.util.Objects.requireNonNull;
 @NotThreadSafe
 public final class EffectiveOriginResolver {
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 	@NonNull
 	private final TrustPolicy trustPolicy;
 	@Nullable
@@ -67,7 +68,7 @@ public final class EffectiveOriginResolver {
 	 * @return the resolver
 	 */
 	@NonNull
-	public static EffectiveOriginResolver withHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	public static EffectiveOriginResolver withHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 																										@NonNull TrustPolicy trustPolicy) {
 		requireNonNull(headers);
 		requireNonNull(trustPolicy);
@@ -90,9 +91,9 @@ public final class EffectiveOriginResolver {
 		return resolver;
 	}
 
-	private EffectiveOriginResolver(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	private EffectiveOriginResolver(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 																	@NonNull TrustPolicy trustPolicy) {
-		this.headers = new LinkedCaseInsensitiveMap<>(headers);
+		this.headers = Utilities.immutableValueLists(headers, true);
 		this.trustPolicy = trustPolicy;
 	}
 
@@ -167,7 +168,7 @@ public final class EffectiveOriginResolver {
 	}
 
 	@NonNull
-	Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 

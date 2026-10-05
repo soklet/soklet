@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -75,7 +76,7 @@ class UnparsedRequestTransportTests {
 		String explicitDate = "Thu, 01 Jan 1970 00:00:00 GMT";
 		for (boolean explicit : List.of(false, true)) {
 			MarshaledResponse response = MarshaledResponse.withStatusCode(400)
-					.headers(explicit ? Map.of("dAtE", Set.of(explicitDate)) : Map.of()).build();
+					.headers(explicit ? Map.of("dAtE", List.of(explicitDate)) : Map.of()).build();
 			String wire = new String((byte[]) serializer.invoke(server, response), StandardCharsets.ISO_8859_1);
 			List<String> values = wire.substring(0, wire.indexOf("\r\n\r\n")).lines()
 					.filter(line -> line.regionMatches(true, 0, "Date:", 0, 5))
@@ -165,7 +166,7 @@ class UnparsedRequestTransportTests {
 						.unparsedRequestHandler(request -> {
 							marshaledRejections.incrementAndGet();
 							return MarshaledResponse.withStatusCode(431)
-									.headers(Map.of("X-Unparsed-Reason", Set.of(request.getReason().name())))
+									.headers(Map.of("X-Unparsed-Reason", List.of(request.getReason().name())))
 									.build();
 						})
 						.build())
@@ -241,18 +242,18 @@ class UnparsedRequestTransportTests {
 							.getBytes(StandardCharsets.US_ASCII);
 					return MarshaledResponse.withStatusCode(498)
 							.headers(Map.of(
-									"Connection", Set.of("keep-alive, X-Hop"),
-									"Content-Length", Set.of("999"),
-									"Keep-Alive", Set.of("timeout=5"),
-									"Transfer-Encoding", Set.of("chunked"),
-									"X-Hop", Set.of("secret"),
-									"X-Unparsed-Reason", Set.of(request.getReason().name())))
+									"Connection", List.of("keep-alive, X-Hop"),
+									"Content-Length", List.of("999"),
+									"Keep-Alive", List.of("timeout=5"),
+									"Transfer-Encoding", List.of("chunked"),
+									"X-Hop", List.of("secret"),
+									"X-Unparsed-Reason", List.of(request.getReason().name())))
 							.body(body)
 							.build();
 				})
 				.postProcessor(response -> response.copy()
 						.headers(headers -> headers.put(
-								"X-Postprocessed", Set.of("true")))
+								"X-Postprocessed", List.of("true")))
 						.finish())
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)

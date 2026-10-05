@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -312,13 +313,13 @@ class McpLocalizationMrtrRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{\"elicitation\":{\"url\":{}}}}"
 				+ ",\"name\":\"" + TOOL + "\",\"arguments\":{}"
 				+ additionalParameters + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of("tools/call"));
-		headers.put("Mcp-Name", Set.of(TOOL));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of("tools/call"));
+		headers.put("Mcp-Name", List.of(TOOL));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

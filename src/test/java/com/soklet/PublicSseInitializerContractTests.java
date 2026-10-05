@@ -18,6 +18,7 @@ package com.soklet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -72,7 +73,7 @@ public class PublicSseInitializerContractTests {
 		SseClientInitializer initializer = sseUnicaster -> {};
 		Object context = new Object();
 		SseHandshakeResult.Accepted.Builder builder = SseHandshakeResult.Accepted.builder()
-				.headers(Map.of("X-Test", Set.of("value"))).clientContext(context).clientInitializer(initializer);
+				.headers(Map.of("X-Test", List.of("value"))).clientContext(context).clientInitializer(initializer);
 		SseHandshakeResult.Accepted first = builder.build();
 		SseHandshakeResult.Accepted cleared = builder.clientInitializer(null).build();
 		Assertions.assertSame(initializer, first.getClientInitializer().orElseThrow());

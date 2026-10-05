@@ -693,11 +693,11 @@ class SimulatorConfigDerivationTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
 		Request request = Request.withPath(HttpMethod.POST, "/added")
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of("application/json; charset=UTF-8"),
-						"Accept", Set.of("application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of("2026-07-28"),
-						"Mcp-Method", Set.of("server/discover")))
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of("application/json; charset=UTF-8"),
+						"Accept", List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of("2026-07-28"),
+						"Mcp-Method", List.of("server/discover")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 		SokletSimulator.run(simulatorConfig, simulator -> {

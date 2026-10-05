@@ -134,7 +134,7 @@ public class UtilitiesTests {
 	public void responseRejectsNonAsciiHeaderName() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				Response.withStatusCode(200)
-						.headers(Map.of("X-\u00C4", Set.of("1")))
+						.headers(Map.of("X-\u00C4", List.of("1")))
 						.build());
 	}
 
@@ -142,7 +142,7 @@ public class UtilitiesTests {
 	public void responseRejectsNonLatin1HeaderValue() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				Response.withStatusCode(200)
-						.headers(Map.of("X-Test", Set.of("\u2713")))
+						.headers(Map.of("X-Test", List.of("\u2713")))
 						.build());
 	}
 
@@ -152,65 +152,65 @@ public class UtilitiesTests {
 		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("www.soklet.com")
+				"Host", List.of("www.soklet.com")
 		)).orElse(null);
 		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("www.soklet.com:443")
+				"Host", List.of("www.soklet.com:443")
 		)).orElse(null);
 		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Forwarded", Set.of("for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89")
+				"Forwarded", List.of("for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89")
 		)).orElse(null);
 		assertEquals("https://example.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("www.soklet.com"),
-				"X-Forwarded-Proto", Set.of("https")
+				"Host", List.of("www.soklet.com"),
+				"X-Forwarded-Proto", List.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("www.soklet.com"),
-				"X-Forwarded-Proto", Set.of("https")
+				"Host", List.of("www.soklet.com"),
+				"X-Forwarded-Proto", List.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"X-Forwarded-Host", Set.of("www.soklet.com"),
-				"X-Forwarded-Protocol", Set.of("https")
+				"X-Forwarded-Host", List.of("www.soklet.com"),
+				"X-Forwarded-Protocol", List.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("internal.soklet.local"),
-				"X-Forwarded-Host", Set.of("www.soklet.com"),
-				"X-Forwarded-Proto", Set.of("https")
+				"Host", List.of("internal.soklet.local"),
+				"X-Forwarded-Host", List.of("www.soklet.com"),
+				"X-Forwarded-Proto", List.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Forwarded host should override Host header");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"host", Set.of("www.soklet.com"),
-				"x-forwarded-proto", Set.of("https")
+				"host", List.of("www.soklet.com"),
+				"x-forwarded-proto", List.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Header names should be treated as case-insensitive");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
-				"Host", Set.of("www.soklet.com"),
-				"X-Forwarded-Proto", Set.of("https"),
-				"X-Forwarded-Port", Set.of("-1")
+				"Host", List.of("www.soklet.com"),
+				"X-Forwarded-Proto", List.of("https"),
+				"X-Forwarded-Port", List.of("-1")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Invalid ports should be ignored");
 	}
 
 	@Test
 	public void effectiveOriginFromHeaders_respectsTrustPolicy() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"Host", Set.of("internal.soklet.local"),
-				"X-Forwarded-Host", Set.of("public.soklet.com"),
-				"X-Forwarded-Proto", Set.of("https")
+		Map<String, List<String>> headers = Map.of(
+				"Host", List.of("internal.soklet.local"),
+				"X-Forwarded-Host", List.of("public.soklet.com"),
+				"X-Forwarded-Proto", List.of("https")
 		);
 
 		InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("203.0.113.10"), 1234);
@@ -235,8 +235,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveOriginFromHeaders_originFallbackHonorsSettings() {
-		Map<String, Set<String>> headers = Map.of(
-				"Origin", Set.of("https://api.example.com:8443")
+		Map<String, List<String>> headers = Map.of(
+				"Origin", List.of("https://api.example.com:8443")
 		);
 
 		assertEquals(Optional.empty(),
@@ -251,8 +251,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_respectsTrustPolicy() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.10")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10")
 		);
 		InetSocketAddress remoteAddress = remoteAddress("203.0.113.10");
 
@@ -276,8 +276,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_requiresAllowlistForAllowlistPolicy() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.10")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10")
 		);
 
 		assertThrows(IllegalStateException.class, () ->
@@ -288,8 +288,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_usesRightmostUntrustedForwardedForAddress() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.10, 10.0.0.2, 10.0.0.3")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10, 10.0.0.2, 10.0.0.3")
 		);
 
 		assertEquals(Optional.of(address("198.51.100.10")),
@@ -304,8 +304,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_doesNotTrustSpoofedLeftmostForwardedForAddress() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.10, 203.0.113.99, 10.0.0.2")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10, 203.0.113.99, 10.0.0.2")
 		);
 
 		assertEquals(Optional.of(address("203.0.113.99")),
@@ -319,8 +319,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_returnsLeftmostAddressWhenAllForwardedForAddressesAreTrusted() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("10.0.0.1, 10.0.0.2")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("10.0.0.1, 10.0.0.2")
 		);
 
 		assertEquals(Optional.of(address("10.0.0.1")),
@@ -335,9 +335,9 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_prefersForwardedForOverXForwardedFor() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"Forwarded", Set.of("for=198.51.100.20; proto=https; host=example.com"),
-				"X-Forwarded-For", Set.of("198.51.100.30")
+		Map<String, List<String>> headers = Map.of(
+				"Forwarded", List.of("for=198.51.100.20; proto=https; host=example.com"),
+				"X-Forwarded-For", List.of("198.51.100.30")
 		);
 
 		assertEquals(Optional.of(address("198.51.100.20")),
@@ -347,9 +347,9 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_fallsBackToXForwardedForWhenForwardedForIsInvalid() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"Forwarded", Set.of("for=unknown; proto=https; host=example.com, for=_hidden"),
-				"X-Forwarded-For", Set.of("198.51.100.30")
+		Map<String, List<String>> headers = Map.of(
+				"Forwarded", List.of("for=unknown; proto=https; host=example.com, for=_hidden"),
+				"X-Forwarded-For", List.of("198.51.100.30")
 		);
 
 		assertEquals(Optional.of(address("198.51.100.30")),
@@ -359,8 +359,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_parsesQuotedBracketedIpv6ForwardedForWithPort() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"Forwarded", Set.of("for=\"[2001:db8::1]:8443\"; proto=https; host=example.com")
+		Map<String, List<String>> headers = Map.of(
+				"Forwarded", List.of("for=\"[2001:db8::1]:8443\"; proto=https; host=example.com")
 		);
 
 		assertEquals(Optional.of(address("2001:db8::1")),
@@ -370,8 +370,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_skipsUnknownObfuscatedAndMalformedValues() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("unknown, _hidden, not-a-host, 198.51.100.40:1234")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("unknown, _hidden, not-a-host, 198.51.100.40:1234")
 		);
 
 		assertEquals(Optional.of(address("198.51.100.40")),
@@ -381,10 +381,10 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_combinesRepeatedForwardedForHeaderValuesBeforeTrustWalk() throws Exception {
-		Set<String> forwardedForHeaders = new LinkedHashSet<>();
+		List<String> forwardedForHeaders = new ArrayList<>();
 		forwardedForHeaders.add("198.51.100.10");
 		forwardedForHeaders.add("10.0.0.2, 10.0.0.3");
-		Map<String, Set<String>> headers = Map.of("X-Forwarded-For", forwardedForHeaders);
+		Map<String, List<String>> headers = Map.of("X-Forwarded-For", forwardedForHeaders);
 
 		assertEquals(Optional.of(address("198.51.100.10")),
 				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
@@ -398,8 +398,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_trustAllUsesLeftmostForwardedForAddress() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.11, 203.0.113.11")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.11, 203.0.113.11")
 		);
 
 		assertEquals(Optional.of(address("198.51.100.11")),
@@ -419,9 +419,9 @@ public class UtilitiesTests {
 	@Test
 	public void effectiveClientIpFromHeaders_rejectsNonIpv6TokensBeforeFallback()
 			throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"Forwarded", Set.of("for=\"[v1.example]\""),
-				"X-Forwarded-For", Set.of(".::1"));
+		Map<String, List<String>> headers = Map.of(
+				"Forwarded", List.of("for=\"[v1.example]\""),
+				"X-Forwarded-For", List.of(".::1"));
 
 		assertEquals(Optional.of(address("203.0.113.50")),
 				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
@@ -431,8 +431,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void effectiveClientIpFromHeaders_unresolvedRemoteAddressDoesNotTrustForwardedHeaders() throws Exception {
-		Map<String, Set<String>> headers = Map.of(
-				"X-Forwarded-For", Set.of("198.51.100.10")
+		Map<String, List<String>> headers = Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10")
 		);
 
 		assertEquals(Optional.empty(),
@@ -504,36 +504,36 @@ public class UtilitiesTests {
 
 	@Test
 	public void plusIsPreservedInRfc3986Queries() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C++", QueryFormat.RFC_3986_STRICT);
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C++", QueryFormat.RFC_3986_STRICT);
 		// Desired (URL semantics): "+" is literal, not a space
-		assertEquals(Set.of("C++"), qp.get("q"));
+		assertEquals(List.of("C++"), qp.get("q"));
 	}
 
 	@Test
 	public void percentEncodedPlusIsPreservedInRfc3986Queries() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C%2B%2B", QueryFormat.RFC_3986_STRICT);
-		assertEquals(Set.of("C++"), qp.get("q"));
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C%2B%2B", QueryFormat.RFC_3986_STRICT);
+		assertEquals(List.of("C++"), qp.get("q"));
 	}
 
 	@Test
 	public void plusInFormBodyIsSpace() {
 		// Form semantics (x-www-form-urlencoded) *do* translate '+' to space:
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery("q=C+Sharp", QueryFormat.X_WWW_FORM_URLENCODED);
-		assertEquals(Set.of("C Sharp"), qp.get("q"));
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromQuery("q=C+Sharp", QueryFormat.X_WWW_FORM_URLENCODED);
+		assertEquals(List.of("C Sharp"), qp.get("q"));
 	}
 
 	@Test
 	public void emptyValueInRfc3986QueryIsPreserved() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=", QueryFormat.RFC_3986_STRICT);
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=", QueryFormat.RFC_3986_STRICT);
 		assertTrue(qp.containsKey("a"), "Parameter name should exist");
-		assertEquals(Set.of(""), qp.get("a"), "Empty value should be preserved");
+		assertEquals(List.of(""), qp.get("a"), "Empty value should be preserved");
 	}
 
 	@Test
 	public void emptyValueInFormIsPreserved() {
-		Map<String, Set<String>> form = Utilities.extractQueryParametersFromQuery("x=", QueryFormat.X_WWW_FORM_URLENCODED);
+		Map<String, List<String>> form = Utilities.extractQueryParametersFromQuery("x=", QueryFormat.X_WWW_FORM_URLENCODED);
 		assertTrue(form.containsKey("x"));
-		assertEquals(Set.of(""), form.get("x"));
+		assertEquals(List.of(""), form.get("x"));
 	}
 
 	@Test
@@ -550,15 +550,15 @@ public class UtilitiesTests {
 
 	@Test
 	void cacheControl_singleLineCommaSeparated_equals_multiLine() {
-		Map<String, Set<String>> a = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> a = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache, no-store"
 		));
-		Map<String, Set<String>> b = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> b = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache",
 				"Cache-Control: no-store"
 		));
 
-		Map<String, Set<String>> expected = Map.of("cache-control", Set.of("no-cache", "no-store"));
+		Map<String, List<String>> expected = Map.of("cache-control", List.of("no-cache", "no-store"));
 
 		assertEquals(expected, a);
 		assertEquals(expected, b);
@@ -566,45 +566,43 @@ public class UtilitiesTests {
 
 	@Test
 	void cacheControl_unfolds_obsFold_continuations() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache,",
 				"  no-store"
 		));
 
-		assertEquals(Set.of("no-cache", "no-store"), m.get("cache-control"));
+		assertEquals(List.of("no-cache", "no-store"), m.get("cache-control"));
 	}
 
 	@Test
-	void accept_isCommaSplit_deduped_preservingInsertionOrder() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+	void accept_isCommaSplit_preservingRepeatedValuesAndOrder() {
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Accept: text/html, application/json, text/html  "
 		));
 
-		assertEquals(Set.of("text/html", "application/json"), m.get("accept"));
-		// insertion order check (LinkedHashSet)
-		assertEquals(List.of("text/html", "application/json"), setToList(m.get("accept")));
-	}
+		assertEquals(List.of("text/html", "application/json", "text/html"), m.get("accept"));
+			}
 
 	@Test
-	void vary_mergesAcrossLines_and_dedupes_caseInsensitiveNames() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+	void vary_mergesCaseInsensitiveNamesAndPreservesRepeatedValues() {
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Vary: Accept-Encoding",
 				"vary: Accept-Encoding, Accept",
-				"VARY: Accept" // duplicates should collapse
+				"VARY: Accept" // repeated values remain visible
 		));
 
-		assertEquals(Set.of("Accept-Encoding", "Accept"), m.get("vary"));
+		assertEquals(List.of("Accept-Encoding", "Accept-Encoding", "Accept", "Accept"), m.get("vary"));
 		assertEquals(1, m.size(), "vary entries should merge despite case differences");
 	}
 
 	@Test
 	void setCookie_isNotCommaSplit_andMultipleLinesAreSeparateValues() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Set-Cookie: a=b; Path=/; HttpOnly; Secure",
 				"Set-Cookie: session=xyz; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
 		));
 
-		Set<String> values = m.get("set-cookie");
+		List<String> values = m.get("set-cookie");
 		assertNotNull(values);
 		assertEquals(2, values.size(), "Each Set-Cookie line should remain intact");
 
@@ -614,11 +612,11 @@ public class UtilitiesTests {
 
 	@Test
 	void quoted_commas_doNotSplit_values_for_joinable_headers() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Warning: 299 - \"Deprecated, will be removed soon\""
 		));
 
-		Set<String> values = m.get("warning");
+		List<String> values = m.get("warning");
 		assertNotNull(values);
 		assertEquals(1, values.size());
 		assertTrue(values.iterator().next().contains("\"Deprecated, will be removed soon\""));
@@ -626,12 +624,12 @@ public class UtilitiesTests {
 
 	@Test
 	void quoted_escapes_are_respected_inside_quotes() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Warning: 199 example \"quote: \\\"inside\\\"\" , 299 example2 \"ok\""
 		));
 
 		// Two Warning values separated by a real comma outside quotes
-		Set<String> values = m.get("warning");
+		List<String> values = m.get("warning");
 		assertNotNull(values);
 		assertEquals(2, values.size());
 		assertTrue(values.stream().anyMatch(v -> v.contains("quote: \\\"inside\\\"")));
@@ -639,39 +637,39 @@ public class UtilitiesTests {
 
 	@Test
 	void whitespace_isTrimmed_and_emptyValuesIgnored() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control:   no-cache   ",
 				"Cache-Control:    ,   ,   no-store   "  // empties ignored
 		));
-		assertEquals(Set.of("no-cache", "no-store"), m.get("cache-control"));
+		assertEquals(List.of("no-cache", "no-store"), m.get("cache-control"));
 	}
 
 	@Test
 	void malformedLinesAreSkipped_gracefully() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"X-JustNameNoColon",
 				" : value",
 				"Good: value"
 		));
-		assertEquals(Set.of("value"), m.get("good"));
+		assertEquals(List.of("value"), m.get("good"));
 		assertEquals(1, m.size());
 	}
 
 	@Test
 	void connection_and_transferEncoding_are_joinable() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
+		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Connection: keep-alive, Upgrade",
 				"Transfer-Encoding: chunked, gzip"
 		));
-		assertEquals(Set.of("keep-alive", "Upgrade"), m.get("connection"));
-		assertEquals(Set.of("chunked", "gzip"), m.get("transfer-encoding"));
+		assertEquals(List.of("keep-alive", "Upgrade"), m.get("connection"));
+		assertEquals(List.of("chunked", "gzip"), m.get("transfer-encoding"));
 	}
 
 	@Test
 	public void hostAndProto_ipv6WithPort_isRecognized() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("[2001:db8::1]:8080"));
-		headers.put("X-Forwarded-Proto", Set.of("https"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("[2001:db8::1]:8080"));
+		headers.put("X-Forwarded-Proto", List.of("https"));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -680,8 +678,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwarded_ipv6WithPort_isRecognized() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"[2001:db8::1]:8443\"; proto=https"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=\"[2001:db8::1]\"; host=\"[2001:db8::1]:8443\"; proto=https"));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -690,8 +688,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void origin_ipv6WithPort_isRecognized() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Origin", Set.of("http://[2001:db8::1]:12345"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Origin", List.of("http://[2001:db8::1]:12345"));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -700,10 +698,10 @@ public class UtilitiesTests {
 
 	@Test
 	public void origin_doesNotOverrideHostWhenMismatch() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("api.example.com"));
-		headers.put("X-Forwarded-Proto", Set.of("https"));
-		headers.put("Origin", Set.of("https://evil.example.net"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("api.example.com"));
+		headers.put("X-Forwarded-Proto", List.of("https"));
+		headers.put("Origin", List.of("https://evil.example.net"));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -712,9 +710,9 @@ public class UtilitiesTests {
 
 	@Test
 	public void origin_fillsSchemeAndPortWhenHostMatches() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("api.example.com"));
-		headers.put("Origin", Set.of("https://api.example.com:8443"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("api.example.com"));
+		headers.put("Origin", List.of("https://api.example.com:8443"));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -723,8 +721,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedQuotedValues_areHandled() {
-		Map<String, Set<String>> headers = Map.of(
-				"Forwarded", Set.of("for=203.0.113.60; proto=\"https\"; host=\"example.com:443\"")
+		Map<String, List<String>> headers = Map.of(
+				"Forwarded", List.of("for=203.0.113.60; proto=\"https\"; host=\"example.com:443\"")
 		);
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
@@ -734,8 +732,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHostValidation_rejectsSpoofedForwardedHost() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"public.example.com evil.example\""));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=203.0.113.60; proto=https; host=\"public.example.com evil.example\""));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isEmpty(), "Invalid Forwarded host must not become the effective origin");
@@ -743,9 +741,9 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHostValidation_rejectsSpoofedForwardedHostAndFallsBackToHost() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("internal.soklet.local"));
-		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"public.example.com\r\nX-Evil: yes\""));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("internal.soklet.local"));
+		headers.put("Forwarded", List.of("for=203.0.113.60; proto=https; host=\"public.example.com\r\nX-Evil: yes\""));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
@@ -754,10 +752,10 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHostValidation_rejectsSpoofedXForwardedHostAndFallsBackToHost() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("internal.soklet.local"));
-		headers.put("X-Forwarded-Host", Set.of("public.example.com\tbad"));
-		headers.put("X-Forwarded-Proto", Set.of("https"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("internal.soklet.local"));
+		headers.put("X-Forwarded-Host", List.of("public.example.com\tbad"));
+		headers.put("X-Forwarded-Proto", List.of("https"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
@@ -766,8 +764,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHostValidation_rejectsInvalidForwardedPorts() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"example.com:99999\""));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=203.0.113.60; proto=https; host=\"example.com:99999\""));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isEmpty(), "Invalid Forwarded host ports must not be ignored into a host-only origin");
@@ -775,8 +773,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHostValidation_rejectsUnbracketedIpv6() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=2001:db8::1"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=203.0.113.60; proto=https; host=2001:db8::1"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isEmpty(), "Unbracketed IPv6 host values must not become the effective origin");
@@ -784,11 +782,11 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHeaderLists_useFirstEntry() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Host", Set.of("internal.soklet.local"));
-		headers.put("X-Forwarded-Host", Set.of("public.soklet.com, internal.soklet.local"));
-		headers.put("X-Forwarded-Proto", Set.of("https, http"));
-		headers.put("X-Forwarded-Port", Set.of("8443, 8080"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Host", List.of("internal.soklet.local"));
+		headers.put("X-Forwarded-Host", List.of("public.soklet.com, internal.soklet.local"));
+		headers.put("X-Forwarded-Proto", List.of("https, http"));
+		headers.put("X-Forwarded-Port", List.of("8443, 8080"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
@@ -797,8 +795,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHeaderLists_skipIncompleteEntries() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=203.0.113.60, for=203.0.113.61; proto=https; host=example.com:8443"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=203.0.113.60, for=203.0.113.61; proto=https; host=example.com:8443"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
@@ -807,8 +805,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHeaderLists_supportMultipleHeaderValues() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		Set<String> forwardedValues = new LinkedHashSet<>();
+		Map<String, List<String>> headers = new HashMap<>();
+		List<String> forwardedValues = new ArrayList<>();
 		forwardedValues.add("for=203.0.113.60");
 		forwardedValues.add("for=203.0.113.61; proto=https; host=example.com");
 		headers.put("Forwarded", forwardedValues);
@@ -820,8 +818,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHeaderLists_doNotMixEntries() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("host=example.com, proto=https"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("host=example.com, proto=https"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isEmpty(), "Forwarded entries should not be mixed");
@@ -829,8 +827,8 @@ public class UtilitiesTests {
 
 	@Test
 	public void forwardedHeaderQuotedSemicolons_areHandled() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=\"abc;def\"; host=example.com; proto=https"));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=\"abc;def\"; host=example.com; proto=https"));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
@@ -843,32 +841,32 @@ public class UtilitiesTests {
 				"Cache-Control: no-cache, no-store",
 				"Warning: \"c,omma inside quotes\", 199 Misc"
 		);
-		Map<String, Set<String>> parsed = Utilities.extractHeadersFromRawHeaderLines(lines);
-		Assertions.assertEquals(Set.of("no-cache", "no-store"), parsed.get("cache-control"));
+		Map<String, List<String>> parsed = Utilities.extractHeadersFromRawHeaderLines(lines);
+		Assertions.assertEquals(List.of("no-cache", "no-store"), parsed.get("cache-control"));
 	}
 
 	@Test
 	public void contentType_parsesMediaTypeAndCharset() {
-		Map<String, Set<String>> h = Map.of("Content-Type", Set.of("text/html; charset=\"UTF-8\""));
+		Map<String, List<String>> h = Map.of("Content-Type", List.of("text/html; charset=\"UTF-8\""));
 		Assertions.assertEquals(Optional.of("text/html"), Utilities.extractContentTypeFromHeaders(h));
 		Assertions.assertEquals(Optional.of(StandardCharsets.UTF_8), Utilities.extractCharsetFromHeaders(h));
 	}
 
 	@Test
 	public void cookieParsing_handlesQuotedAndEscaped() {
-		Map<String, Set<String>> h = Map.of("Cookie", Set.of("a=\"b\\\";c\"; d=%20; e=; f=\"\""));
-		Map<String, Set<String>> cookies = Utilities.extractCookiesFromHeaders(h);
-		Assertions.assertEquals(Set.of("b\";c"), cookies.get("a"));
-		Assertions.assertEquals(Set.of(" "), cookies.get("d"));
+		Map<String, List<String>> h = Map.of("Cookie", List.of("a=\"b\\\";c\"; d=%20; e=; f=\"\""));
+		Map<String, List<String>> cookies = Utilities.extractCookiesFromHeaders(h);
+		Assertions.assertEquals(List.of("b\";c"), cookies.get("a"));
+		Assertions.assertEquals(List.of(" "), cookies.get("d"));
 		// TODO: Should we preserve empty cookies?
-		// Assertions.assertEquals(Set.of(""), cookies.get("e"));
-		Assertions.assertEquals(Set.of(""), cookies.get("f"));
+		// Assertions.assertEquals(List.of(""), cookies.get("e"));
+		Assertions.assertEquals(List.of(""), cookies.get("f"));
 	}
 
 	@Test
 	public void quotedForwarded_isUnquotedAndParsed() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"example.com:8443\"; proto=\"https\""));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("for=\"[2001:db8::1]\"; host=\"example.com:8443\"; proto=\"https\""));
 
 		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
@@ -896,14 +894,14 @@ public class UtilitiesTests {
 				),
 				new ArrayList<>(headers.get("Set-Cookie"))
 		);
-		assertEquals(Set.of("first second-line"), headers.get("X-Foo"));
+		assertEquals(List.of("first second-line"), headers.get("X-Foo"));
 	}
 
 	@Test
 	void quotedCommasAreNotSplit() {
 		var raw = List.of("Cache-Control: foo=\"a,b\", bar=c");
 		var headers = Utilities.extractHeadersFromRawHeaderLines(raw);
-		assertEquals(Set.of("foo=\"a,b\"", "bar=c"), headers.get("Cache-Control"));
+		assertEquals(List.of("foo=\"a,b\"", "bar=c"), headers.get("Cache-Control"));
 	}
 
 	@Test
@@ -941,9 +939,9 @@ public class UtilitiesTests {
 		var m = Utilities.extractQueryParametersFromQuery(
 				q, QueryFormat.X_WWW_FORM_URLENCODED);
 
-		assertEquals(Set.of("a b+ "), m.get("a"));  // '+' -> space; %2B -> '+'; %20 -> space
-		assertEquals(Set.of(""), m.get("empty"));   // empty preserved
-		assertEquals(Set.of("✓"), m.get("name"));   // UTF-8 percent-decoding
+		assertEquals(List.of("a b+ "), m.get("a"));  // '+' -> space; %2B -> '+'; %20 -> space
+		assertEquals(List.of(""), m.get("empty"));   // empty preserved
+		assertEquals(List.of("✓"), m.get("name"));   // UTF-8 percent-decoding
 	}
 
 	@Test
@@ -951,44 +949,44 @@ public class UtilitiesTests {
 		var q = "a=a+b%2B%20";
 		var m = Utilities.extractQueryParametersFromQuery(q, QueryFormat.RFC_3986_STRICT);
 
-		assertEquals(Set.of("a+b+ "), m.get("a")); // '+' stays '+'
+		assertEquals(List.of("a+b+ "), m.get("a")); // '+' stays '+'
 	}
 
 	@Test
 	void parsesQuotedAndEscapedCookieValues_andPercentDecoding() {
-		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("Cookie", Set.of(
+		var headers = new LinkedHashMap<String, List<String>>();
+		headers.put("Cookie", List.of(
 				"a=1; b=\"two;three\"; c=\"a\\\"b\\\\c\"; d=%E2%9C%93"
 		));
 
 		var cookies = Utilities.extractCookiesFromHeaders(headers);
-		assertEquals(Set.of("1"), cookies.get("a"));
-		assertEquals(Set.of("two;three"), cookies.get("b"));
-		assertEquals(Set.of("a\"b\\c"), cookies.get("c"));
-		assertEquals(Set.of("✓"), cookies.get("d"));
+		assertEquals(List.of("1"), cookies.get("a"));
+		assertEquals(List.of("two;three"), cookies.get("b"));
+		assertEquals(List.of("a\"b\\c"), cookies.get("c"));
+		assertEquals(List.of("✓"), cookies.get("d"));
 	}
 
 	@Test
 	void literalCookiePercentSignsArePreservedAlongsideEncodedValues() {
-		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("Cookie", Set.of("session=%ZZ; percent=100%; short=%A; mixed=%25%ZZ; neighbor=ok; encoded=%E2%9C%93"));
+		var headers = new LinkedHashMap<String, List<String>>();
+		headers.put("Cookie", List.of("session=%ZZ; percent=100%; short=%A; mixed=%25%ZZ; neighbor=ok; encoded=%E2%9C%93"));
 
 		var cookies = Utilities.extractCookiesFromHeaders(headers);
-		assertEquals(Set.of("%ZZ"), cookies.get("session"));
-		assertEquals(Set.of("100%"), cookies.get("percent"));
-		assertEquals(Set.of("%A"), cookies.get("short"));
-		assertEquals(Set.of("%%ZZ"), cookies.get("mixed"));
-		assertEquals(Set.of("ok"), cookies.get("neighbor"));
-		assertEquals(Set.of("✓"), cookies.get("encoded"));
+		assertEquals(List.of("%ZZ"), cookies.get("session"));
+		assertEquals(List.of("100%"), cookies.get("percent"));
+		assertEquals(List.of("%A"), cookies.get("short"));
+		assertEquals(List.of("%%ZZ"), cookies.get("mixed"));
+		assertEquals(List.of("ok"), cookies.get("neighbor"));
+		assertEquals(List.of("✓"), cookies.get("encoded"));
 	}
 
 	@Test
 	void rawUnicodeCookieValuesArePreserved() {
-		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("Cookie", Set.of("emoji=🍪"));
+		var headers = new LinkedHashMap<String, List<String>>();
+		headers.put("Cookie", List.of("emoji=🍪"));
 
 		var cookies = Utilities.extractCookiesFromHeaders(headers);
-		assertEquals(Set.of("🍪"), cookies.get("emoji"));
+		assertEquals(List.of("🍪"), cookies.get("emoji"));
 	}
 
 	@Test
@@ -1015,21 +1013,21 @@ public class UtilitiesTests {
 	@Test
 	void queryParamsAreUrlDecoded_andPlusBecomesSpace() {
 		String url = "https://example.com/p?q=First+Last&x=%2F";
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryFormat.X_WWW_FORM_URLENCODED);
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryFormat.X_WWW_FORM_URLENCODED);
 
-		assertEquals(Set.of("First Last"), qp.get("q"));
-		assertEquals(Set.of("/"), qp.get("x"));
+		assertEquals(List.of("First Last"), qp.get("q"));
+		assertEquals(List.of("/"), qp.get("x"));
 	}
 
 	@Test
 	void cookieHeaderNameIsCaseInsensitive_and_AllowsEqualsInValue() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("COOKIE", Set.of("token=abc==; theme=dark"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("COOKIE", List.of("token=abc==; theme=dark"));
 
-		Map<String, Set<String>> cookies = Utilities.extractCookiesFromHeaders(headers);
+		Map<String, List<String>> cookies = Utilities.extractCookiesFromHeaders(headers);
 
-		assertEquals(Set.of("abc=="), cookies.get("token"), "should keep trailing == in value");
-		assertEquals(Set.of("dark"), cookies.get("theme"));
+		assertEquals(List.of("abc=="), cookies.get("token"), "should keep trailing == in value");
+		assertEquals(List.of("dark"), cookies.get("theme"));
 	}
 
 	@Test
@@ -1042,8 +1040,8 @@ public class UtilitiesTests {
 
 	@Test
 	void forwardedHeaderQuotedValuesProduceCleanPrefix() {
-		Map<String, Set<String>> headers = new HashMap<>();
-		headers.put("Forwarded", Set.of("proto=\"https\";host=\"www.example.com\""));
+		Map<String, List<String>> headers = new HashMap<>();
+		headers.put("Forwarded", List.of("proto=\"https\";host=\"www.example.com\""));
 
 		assertEquals(
 				Optional.of("https://www.example.com"),
@@ -1051,7 +1049,7 @@ public class UtilitiesTests {
 		);
 	}
 
-	private static Optional<String> extractEffectiveOrigin(Map<String, Set<String>> headers) {
+	private static Optional<String> extractEffectiveOrigin(Map<String, List<String>> headers) {
 		return EffectiveOriginResolver.withHeaders(
 				headers,
 				EffectiveOriginResolver.TrustPolicy.TRUST_ALL

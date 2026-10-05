@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -68,15 +69,15 @@ public class CorsTests {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://example.com"),
-									"Access-Control-Request-Method", Set.of("GET"),
-									"Access-Control-Request-Headers", Set.of("X-Foo, X-Bar")
+									"Origin", List.of("https://example.com"),
+									"Access-Control-Request-Method", List.of("GET"),
+									"Access-Control-Request-Headers", List.of("X-Foo, X-Bar")
 							))
 							.build()
 			);
 
 			Assertions.assertEquals(204, requestResult.getMarshaledResponse().getStatusCode());
-			Map<String, Set<String>> headers = requestResult.getMarshaledResponse().getHeaders();
+			Map<String, List<String>> headers = requestResult.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Access-Control-Allow-Origin"), "missing ACAO");
 			// With AllOrigins authorizer most implementations return "*"
 			Assertions.assertTrue(headers.get("Access-Control-Allow-Origin").iterator().next().length() > 0);
@@ -98,8 +99,8 @@ public class CorsTests {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://malicious.net"),
-									"Access-Control-Request-Method", Set.of("POST")
+									"Origin", List.of("https://malicious.net"),
+									"Access-Control-Request-Method", List.of("POST")
 							))
 							.build()
 			);
@@ -121,7 +122,7 @@ public class CorsTests {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://app.example")
+									"Origin", List.of("https://app.example")
 							))
 							.build()
 			);
@@ -129,7 +130,7 @@ public class CorsTests {
 			Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			String body = new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8);
 			Assertions.assertEquals("ok", body);
-			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
+			Map<String, List<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Access-Control-Allow-Origin"), "CORS header not present");
 		});
 	}
@@ -143,8 +144,8 @@ public class CorsTests {
 
 	@Test
 	void corsFromHeaders_shouldTreatOriginCaseInsensitively() {
-		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("origin", Set.of("https://example.com")); // lowercase
+		var headers = new LinkedHashMap<String, List<String>>();
+		headers.put("origin", List.of("https://example.com")); // lowercase
 
 		var cors = Cors.fromHeaders(HttpMethod.GET, headers);
 		Assertions.assertTrue(cors.isPresent(),
@@ -153,9 +154,9 @@ public class CorsTests {
 
 	@Test
 	void corsPreflightFromHeaders_shouldTreatOriginCaseInsensitively() {
-		var headers = new LinkedHashMap<String, Set<String>>();
-		headers.put("origin", Set.of("https://example.com"));
-		headers.put("access-control-request-method", Set.of("POST"));
+		var headers = new LinkedHashMap<String, List<String>>();
+		headers.put("origin", List.of("https://example.com"));
+		headers.put("access-control-request-method", List.of("POST"));
 
 		var preflight = CorsPreflight.fromHeaders(headers);
 		Assertions.assertTrue(preflight.isPresent(),
@@ -171,8 +172,8 @@ public class CorsTests {
 			HttpRequestResult allowed = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://good.example"),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of("https://good.example"),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build());
 			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
@@ -180,8 +181,8 @@ public class CorsTests {
 			HttpRequestResult denied = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://evil.example"),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of("https://evil.example"),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build());
 			Assertions.assertEquals(403, denied.getMarshaledResponse().getStatusCode());
@@ -197,20 +198,20 @@ public class CorsTests {
 			HttpRequestResult preflight = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://good.example"),
-									"Access-Control-Request-Method", Set.of("GET"),
-									"Access-Control-Request-Headers", Set.of("Authorization, X-Token")
+									"Origin", List.of("https://good.example"),
+									"Access-Control-Request-Method", List.of("GET"),
+									"Access-Control-Request-Headers", List.of("Authorization, X-Token")
 							))
 							.build());
 
 			var resp = preflight.getMarshaledResponse();
 			Assertions.assertEquals(204, resp.getStatusCode());
 
-			Map<String, Set<String>> headers = resp.getHeaders();
-			Assertions.assertEquals(Set.of("Authorization", "X-Token"), headers.get("Access-Control-Allow-Headers"));
-			Assertions.assertEquals(Set.of("600"), headers.get("Access-Control-Max-Age")); // 10 minutes
+			Map<String, List<String>> headers = resp.getHeaders();
+			Assertions.assertEquals(Set.of("Authorization", "X-Token"), Set.copyOf(headers.get("Access-Control-Allow-Headers")));
+			Assertions.assertEquals(List.of("600"), headers.get("Access-Control-Max-Age")); // 10 minutes
 			// Vary should include Origin (marshaler adds this when normalizing "*" + credentials)
-			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+			Assertions.assertTrue(headers.getOrDefault("Vary", List.of()).contains("Origin"));
 		});
 	}
 
@@ -222,16 +223,16 @@ public class CorsTests {
 				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
-							.headers(Map.of("Origin", Set.of("https://good.example")))
+							.headers(Map.of("Origin", List.of("https://good.example")))
 							.build());
 
 			var resp = result.getMarshaledResponse();
 			Assertions.assertEquals(200, resp.getStatusCode());
 
-			Map<String, Set<String>> headers = resp.getHeaders();
-			Assertions.assertEquals(Set.of("https://good.example"), headers.get("Access-Control-Allow-Origin"));
+			Map<String, List<String>> headers = resp.getHeaders();
+			Assertions.assertEquals(List.of("https://good.example"), headers.get("Access-Control-Allow-Origin"));
 			Assertions.assertEquals(null, headers.get("Access-Control-Allow-Credentials"));
-			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+			Assertions.assertTrue(headers.getOrDefault("Vary", List.of()).contains("Origin"));
 		});
 	}
 
@@ -244,36 +245,36 @@ public class CorsTests {
 			HttpRequestResult preflight = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("https://any.example"),
-									"Access-Control-Request-Method", Set.of("GET"),
-									"Access-Control-Request-Headers", Set.of("Authorization")
+									"Origin", List.of("https://any.example"),
+									"Access-Control-Request-Method", List.of("GET"),
+									"Access-Control-Request-Headers", List.of("Authorization")
 							))
 							.build());
 
 			var resp = preflight.getMarshaledResponse();
 			Assertions.assertEquals(204, resp.getStatusCode());
 
-			Map<String, Set<String>> headers = resp.getHeaders();
+			Map<String, List<String>> headers = resp.getHeaders();
 
 			// With credentials enabled, marshaler echoes the concrete Origin and adds Vary: Origin
-			Assertions.assertEquals(Set.of("https://any.example"), headers.get("Access-Control-Allow-Origin"));
-			Assertions.assertEquals(Set.of("true"), headers.get("Access-Control-Allow-Credentials"));
-			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+			Assertions.assertEquals(List.of("https://any.example"), headers.get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(List.of("true"), headers.get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(headers.getOrDefault("Vary", List.of()).contains("Origin"));
 
 			// Still reflects requested headers
-			Assertions.assertEquals(Set.of("Authorization"), headers.get("Access-Control-Allow-Headers"));
+			Assertions.assertEquals(List.of("Authorization"), headers.get("Access-Control-Allow-Headers"));
 
 			// If you set a Max-Age in the authorizer, you can assert it here too (e.g., "600")
-			// Assertions.assertEquals(Set.of("600"), headers.get("Access-Control-Max-Age"));
+			// Assertions.assertEquals(List.of("600"), headers.get("Access-Control-Max-Age"));
 		});
 	}
 
 	@Test
 	public void corspreflight_fromHeaders_parses_plural_headers_with_commas() {
-		Map<String, Set<String>> headers = Map.of(
-				"Origin", Set.of("https://good.example"),
-				"Access-Control-Request-Method", Set.of("GET"),
-				"Access-Control-Request-Headers", Set.of("X-Alpha, X-Beta , Authorization")
+		Map<String, List<String>> headers = Map.of(
+				"Origin", List.of("https://good.example"),
+				"Access-Control-Request-Method", List.of("GET"),
+				"Access-Control-Request-Headers", List.of("X-Alpha, X-Beta , Authorization")
 		);
 
 		CorsPreflight preflight = CorsPreflight.fromHeaders(headers).orElseThrow();
@@ -294,17 +295,17 @@ public class CorsTests {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of(GOOD),
-									"Access-Control-Request-Method", Set.of("GET"),
-									"Access-Control-Request-Headers", Set.of("Authorization")
+									"Origin", List.of(GOOD),
+									"Access-Control-Request-Method", List.of("GET"),
+									"Access-Control-Request-Headers", List.of("Authorization")
 							))
 							.build()
 			);
 
 			var resp = result.getMarshaledResponse();
 			Assertions.assertEquals(204, resp.getStatusCode());
-			Assertions.assertEquals(Set.of(GOOD), resp.getHeaders().get("Access-Control-Allow-Origin"));
-			Assertions.assertEquals(Set.of("true"), resp.getHeaders().get("Access-Control-Allow-Credentials"));
+			Assertions.assertEquals(List.of(GOOD), resp.getHeaders().get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(List.of("true"), resp.getHeaders().get("Access-Control-Allow-Credentials"));
 		});
 	}
 
@@ -317,8 +318,8 @@ public class CorsTests {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of(GOOD),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of(GOOD),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build()
 			);
@@ -328,9 +329,9 @@ public class CorsTests {
 
 			// If the marshaler includes the header when false, it should be "false".
 			// If it omits the header, that’s also acceptable. Just ensure it’s not "true".
-			Map<String, Set<String>> headers = resp.getHeaders();
+			Map<String, List<String>> headers = resp.getHeaders();
 			if (headers.containsKey("Access-Control-Allow-Credentials")) {
-				Assertions.assertEquals(Set.of("false"), headers.get("Access-Control-Allow-Credentials"));
+				Assertions.assertEquals(List.of("false"), headers.get("Access-Control-Allow-Credentials"));
 			}
 		});
 	}
@@ -344,8 +345,8 @@ public class CorsTests {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of(GOOD),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of(GOOD),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build()
 			);
@@ -368,9 +369,9 @@ public class CorsTests {
 				}))
 				.build(), simulator -> {
 			// Mix case + whitespace to ensure normalization (toLowerCase + trim) occurs
-			var headers = new LinkedHashMap<String, Set<String>>();
-			headers.put("Origin", Set.of("  HTTPS://GOOD.EXAMPLE  "));
-			headers.put("Access-Control-Request-Method", Set.of("GET"));
+			var headers = new LinkedHashMap<String, List<String>>();
+			headers.put("Origin", List.of("  HTTPS://GOOD.EXAMPLE  "));
+			headers.put("Access-Control-Request-Method", List.of("GET"));
 
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello").headers(headers).build()
@@ -394,21 +395,21 @@ public class CorsTests {
 			var ok = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of(GOOD),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of(GOOD),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build());
 			Assertions.assertEquals(204, ok.getMarshaledResponse().getStatusCode());
 			var headers = ok.getMarshaledResponse().getHeaders();
 			if (headers.containsKey("Access-Control-Allow-Credentials")) {
-				Assertions.assertEquals(Set.of("false"), headers.get("Access-Control-Allow-Credentials"));
+				Assertions.assertEquals(List.of("false"), headers.get("Access-Control-Allow-Credentials"));
 			}
 
 			var denied = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of(EVIL),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of(EVIL),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build());
 			Assertions.assertEquals(403, denied.getMarshaledResponse().getStatusCode());
@@ -423,7 +424,7 @@ public class CorsTests {
 				.build(), simulator -> {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
-							.headers(Map.of("Origin", Set.of(GOOD)))
+							.headers(Map.of("Origin", List.of(GOOD)))
 							.build()
 			);
 
@@ -431,9 +432,9 @@ public class CorsTests {
 			Assertions.assertEquals(200, resp.getStatusCode());
 			Assertions.assertEquals("ok", new String(resp.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
-			Map<String, Set<String>> headers = resp.getHeaders();
-			Assertions.assertEquals(Set.of(GOOD), headers.get("Access-Control-Allow-Origin"));
-			Assertions.assertEquals(Set.of("true"), headers.get("Access-Control-Allow-Credentials"));
+			Map<String, List<String>> headers = resp.getHeaders();
+			Assertions.assertEquals(List.of(GOOD), headers.get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(List.of("true"), headers.get("Access-Control-Allow-Credentials"));
 		});
 	}
 
@@ -445,16 +446,16 @@ public class CorsTests {
 				.build(), simulator -> {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
-							.headers(Map.of("Origin", Set.of(GOOD)))
+							.headers(Map.of("Origin", List.of(GOOD)))
 							.build()
 			);
 
 			var resp = result.getMarshaledResponse();
 			Assertions.assertEquals(200, resp.getStatusCode());
 
-			Map<String, Set<String>> headers = resp.getHeaders();
+			Map<String, List<String>> headers = resp.getHeaders();
 			if (headers.containsKey("Access-Control-Allow-Credentials")) {
-				Assertions.assertEquals(Set.of("false"), headers.get("Access-Control-Allow-Credentials"));
+				Assertions.assertEquals(List.of("false"), headers.get("Access-Control-Allow-Credentials"));
 			}
 		});
 	}
@@ -468,8 +469,8 @@ public class CorsTests {
 			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
-									"Origin", Set.of("null"),
-									"Access-Control-Request-Method", Set.of("GET")
+									"Origin", List.of("null"),
+									"Access-Control-Request-Method", List.of("GET")
 							))
 							.build()
 			);

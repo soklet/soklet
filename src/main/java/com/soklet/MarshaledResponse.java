@@ -32,13 +32,11 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -73,9 +71,9 @@ public final class MarshaledResponse {
 	@NonNull
 	private final Integer statusCode;
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 	@NonNull
-	private final Set<@NonNull ResponseCookie> cookies;
+	private final List<@NonNull ResponseCookie> cookies;
 	@Nullable
 	private final MarshaledResponseBody body;
 	@Nullable
@@ -187,8 +185,7 @@ public final class MarshaledResponse {
 
 		this.statusCode = builder.statusCode;
 		this.headers = immutableHeaders(builder.headers);
-		this.cookies = builder.cookies == null ? Set.of()
-				: Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
+		this.cookies = builder.cookies == null ? List.of() : List.copyOf(builder.cookies);
 		this.body = builder.body;
 		this.streamingResponseBody = builder.streamingResponseBody;
 
@@ -228,66 +225,46 @@ public final class MarshaledResponse {
 	/**
 	 * The HTTP headers to write for this response.
 	 * <p>
-	 * Soklet writes one header line per value. If order matters, provide either a {@link java.util.SortedSet} or
-	 * {@link java.util.LinkedHashSet} to preserve the desired ordering; otherwise values are naturally sorted for consistency.
+	 * Soklet writes one header line per value, preserving list order and repeated values.
 	 * <p>
-	 * The returned map and its value sets are immutable snapshots.
+	 * The returned map and its value lists are immutable snapshots.
 	 *
 	 * @return the headers to write
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
 	/**
 	 * The HTTP cookies to write for this response.
 	 * <p>
-	 * The returned set is an immutable snapshot.
+	 * The returned list is an immutable snapshot and preserves cookie order and repeated cookies.
 	 *
 	 * @return the cookies to write
 	 */
 	@NonNull
-	public Set<@NonNull ResponseCookie> getCookies() {
+	public List<@NonNull ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> immutableHeaders(
-			@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> immutableHeaders(
+			@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		if (headers == null || headers.isEmpty())
 			return Map.of();
 
-		Map<String, Set<String>> copiedHeaders = new LinkedCaseInsensitiveMap<>(headers.size());
+		Map<String, List<String>> copiedHeaders = Utilities.immutableValueLists(headers, true);
 
-		for (Entry<String, Set<String>> entry : headers.entrySet()) {
-			String headerName = requireNonNull(entry.getKey());
-			Set<String> headerValues = requireNonNull(entry.getValue());
-
-			for (String headerValue : headerValues)
-				Utilities.validateHeaderNameAndValue(headerName, requireNonNull(headerValue));
-
-			Set<String> copiedHeaderValues;
-			if (headerValues instanceof SortedSet<?>) {
-				copiedHeaderValues = immutableSortedCopy(headerValues);
-			} else if (headerValues.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
-				copiedHeaderValues = Collections.unmodifiableSet(new LinkedHashSet<>(headerValues));
-			} else {
-				copiedHeaderValues = Collections.unmodifiableSortedSet(new TreeSet<>(headerValues));
-			}
-
-			copiedHeaders.put(headerName, copiedHeaderValues);
+		for (Entry<String, List<String>> entry : copiedHeaders.entrySet()) {
+			String headerName = entry.getKey();
+			for (String headerValue : entry.getValue())
+				Utilities.validateHeaderNameAndValue(headerName, headerValue);
 		}
 
-		return Collections.unmodifiableMap(copiedHeaders);
+		return copiedHeaders;
 	}
 
-	@NonNull
-	@SuppressWarnings("unchecked")
-	private static SortedSet<@NonNull String> immutableSortedCopy(@NonNull Set<@NonNull String> values) {
-		SortedSet<String> sortedValues = (SortedSet<String>) values;
-		return Collections.unmodifiableSortedSet(new TreeSet<>(sortedValues));
-	}
 
 	/**
 	 * The finalized HTTP response body to write, if available.
@@ -372,9 +349,9 @@ public final class MarshaledResponse {
 		@NonNull
 		private Integer statusCode;
 		@Nullable
-		private Set<@NonNull ResponseCookie> cookies;
+		private List<@NonNull ResponseCookie> cookies;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@Nullable
 		private MarshaledResponseBody body;
 		@Nullable
@@ -395,11 +372,11 @@ public final class MarshaledResponse {
 		/**
 		 * Replaces the configured response cookies.
 		 *
-		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @param cookies cookies to write, or {@code null} or an empty list to configure no cookies
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
+		public Builder cookies(@Nullable List<@NonNull ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -411,7 +388,7 @@ public final class MarshaledResponse {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public Builder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -675,7 +652,7 @@ public final class MarshaledResponse {
 		 * @return this builder
 		 */
 		@NonNull
-		public FileBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public FileBuilder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
@@ -721,8 +698,8 @@ public final class MarshaledResponse {
 			requireNonNull(marshaledResponse);
 
 			this.builder = new Builder(marshaledResponse.getStatusCode())
-					.headers(new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders()))
-					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()));
+					.headers(Utilities.mutableValueLists(marshaledResponse.getHeaders(), true))
+					.cookies(new ArrayList<>(marshaledResponse.getCookies()));
 
 			marshaledResponse.getBody().ifPresent(this.builder::body);
 			marshaledResponse.getStreamingResponseBody().ifPresent(this.builder::streamingResponseBody);
@@ -742,7 +719,7 @@ public final class MarshaledResponse {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier headers(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public Copier headers(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
@@ -759,11 +736,10 @@ public final class MarshaledResponse {
 		@NonNull
 		public Copier headers(
 				@NonNull Consumer<@NonNull Map<@NonNull String,
-						@NonNull Set<@NonNull String>>> headersConsumer) {
+						@NonNull List<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
-			if (this.builder.headers == null)
-				this.builder.headers(new LinkedCaseInsensitiveMap<>());
+			this.builder.headers(Utilities.mutableValueLists(this.builder.headers, true));
 
 			headersConsumer.accept(this.builder.headers);
 			return this;
@@ -772,11 +748,11 @@ public final class MarshaledResponse {
 		/**
 		 * Replaces the copied response cookies.
 		 *
-		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @param cookies cookies to write, or {@code null} or an empty list to configure no cookies
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
+		public Copier cookies(@Nullable List<@NonNull ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
@@ -784,20 +760,19 @@ public final class MarshaledResponse {
 		/**
 		 * Mutates the currently configured response cookies in place.
 		 * <p>
-		 * The consumer may add, remove, or clear cookies. If no cookie set is configured, the consumer receives a new
-		 * mutable, empty set.
+		 * The consumer may add, remove, or clear cookies. If no cookie list is configured, the consumer receives a new
+		 * mutable, empty list.
 		 *
 		 * @param cookiesConsumer consumer that mutates the response cookies
 		 * @return this copier
 		 */
 		@NonNull
 		public Copier cookies(
-				@NonNull Consumer<@NonNull Set<@NonNull ResponseCookie>>
+				@NonNull Consumer<@NonNull List<@NonNull ResponseCookie>>
 						cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
-			if (this.builder.cookies == null)
-				this.builder.cookies(new LinkedHashSet<>());
+			this.builder.cookies(new ArrayList<>(this.builder.cookies == null ? List.of() : this.builder.cookies));
 
 			cookiesConsumer.accept(this.builder.cookies);
 			return this;

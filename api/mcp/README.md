@@ -3330,3 +3330,28 @@ cross-cutting members. Phase 4 SHA-256 is
 Other signature inventories, their owner partitions, and the 718-record
 released incompatibility ledger are unchanged. This API amendment does not
 establish named-host refresh/reconnect or exact-candidate release qualification.
+
+
+## HTTP occurrence list API amendment
+
+HTTP query/form/cookie/header values and multipart groups now use `List` values;
+response cookies also use `List`. Builders, copiers, utilities, header resolvers,
+and SSE handshake metadata follow the same contract. Duplicate occurrences and
+per-name order are preserved, and scalar request access rejects more than one
+occurrence, including identical values. See [the migration guide](../../MIGRATING_TO_4_0.md#http-values-preserve-every-occurrence).
+
+The released comparison adds exactly 48 reviewed collection incompatibilities,
+for 766 records. No existing incompatibility record is removed or changed.
+The current ledger SHA-256 is `f7326a2e8a009980dfce72c9f6e3cabc49e8323890720d9e85a6459120e8bf67`.
+
+The only MCP signature change is `McpSimulationResponse.getHeaders()`:
+`Map<String, Set<String>>` becomes `Map<String, List<String>>`. Phase 6 retains
+456 signatures, SHA-256 `8f26beb8e68243983c12ebd1275771ecbc22cd3ff8de4b691c243db65bfbad25`.
+Its reviewed nested nullability digest is
+`50925b7abaf348e197d4ea42ec10ba798b1ef4ad5923c2d2ccd8324bc11a54c6`.
+The other three signature snapshots and MCP owner inventories remain unchanged.
+The non-MCP allowlist adds existing `Response`, its builder/copier, and
+`SseHandshakeResult.Accepted`, whose changed collection signatures now appear
+in the comparison report; it contains 90 owners, for 393 reviewed owners in total.
+Genuine policy and capability sets remain sets. This amendment is a source/API review and
+does not establish immutable candidate qualification.

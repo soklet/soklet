@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
@@ -223,8 +224,8 @@ public class SokletTests {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withRawUrl(HttpMethod.POST, "/multipart-upload?upload_progress_id=12344")
 							.headers(Map.of(
-									"Content-Type", Set.of("multipart/form-data; boundary=----WebKitFormBoundary59MIY6fOE42AL48U"),
-									"Content-Length", Set.of(String.valueOf(requestBody.length))
+									"Content-Type", List.of("multipart/form-data; boundary=----WebKitFormBoundary59MIY6fOE42AL48U"),
+									"Content-Length", List.of(String.valueOf(requestBody.length))
 							))
 							.body(requestBody)
 							.build());
@@ -490,8 +491,8 @@ public class SokletTests {
 
 	@Test
 	public void verifyHeaderValidation() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("X-Test", Set.of("ok\r\nInjected-Header: yes"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("X-Test", List.of("ok\r\nInjected-Header: yes"));
 
 		assertThrows(IllegalArgumentException.class, () ->
 				Response.withStatusCode(200)
@@ -506,16 +507,16 @@ public class SokletTests {
 
 	@Test
 	void plusBecomesSpace_percent2BBecomesPlus() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery(
+		Map<String, List<String>> qp = Utilities.extractQueryParametersFromQuery(
 				"q=a+b%2B", QueryFormat.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
-		assertEquals(Set.of("a b+"), qp.get("q"));
+		assertEquals(List.of("a b+"), qp.get("q"));
 	}
 
 
 	@Test
 	public void multipleHeaderLinesAreMergedForLocales() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Accept-Language", new LinkedHashSet<>(List.of(
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept-Language", new ArrayList<>(List.of(
 				"en-US;q=0.5",
 				"fr-CA;q=1.0"
 		)));
@@ -533,7 +534,7 @@ public class SokletTests {
 
 	@Test
 	public void wildcardAcceptLanguageReturnsNoLocales() {
-		Map<String, Set<String>> headers = Map.of("Accept-Language", Set.of("*"));
+		Map<String, List<String>> headers = Map.of("Accept-Language", List.of("*"));
 
 		Request req = Request.withPath(HttpMethod.GET, "/").headers(headers).build();
 
@@ -542,8 +543,8 @@ public class SokletTests {
 
 	@Test
 	public void multipleHeaderLinesAreMergedForLanguageRanges() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Accept-Language", new LinkedHashSet<>(List.of(
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept-Language", new ArrayList<>(List.of(
 				"en-US;q=0.4",
 				"fr-CA;q=1.0"
 		)));
@@ -560,8 +561,8 @@ public class SokletTests {
 
 	@Test
 	public void multipleHeaderLinesAreMergedForMediaRanges() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Accept", new LinkedHashSet<>(List.of(
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept", new ArrayList<>(List.of(
 				"text/html;q=0.5",
 				"application/json"
 		)));
@@ -586,7 +587,7 @@ public class SokletTests {
 
 	@Test
 	public void mediaRangesAreCachedAfterFirstInvocation() {
-		Map<String, Set<String>> headers = Map.of("Accept", Set.of("text/html, application/json;q=0.2"));
+		Map<String, List<String>> headers = Map.of("Accept", List.of("text/html, application/json;q=0.2"));
 
 		Request req = Request.withPath(HttpMethod.GET, "/").headers(headers).build();
 
@@ -638,7 +639,7 @@ public class SokletTests {
 
 			Request request = Request.withPath(HttpMethod.POST, "/upload")
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
-					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=")))
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=")))
 					.build();
 
 			// Trigger lazy-load of multipart parser
@@ -658,7 +659,7 @@ public class SokletTests {
 
 			Request request = Request.withPath(HttpMethod.POST, "/upload")
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
-					.headers(Map.of("Content-Type", Set.of("multipart/form-data"))) // No boundary at all
+					.headers(Map.of("Content-Type", List.of("multipart/form-data"))) // No boundary at all
 					.build();
 
 			// Trigger lazy-load of multipart parser
@@ -679,7 +680,7 @@ public class SokletTests {
 
 			Request request = Request.withPath(HttpMethod.POST, "/upload")
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
-					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=   ")))
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=   ")))
 					.build();
 
 			// Trigger lazy-load of multipart parser
@@ -698,7 +699,7 @@ public class SokletTests {
 
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
 				.body(requestBody.getBytes(StandardCharsets.UTF_8))
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.build();
 
 		// Act & Assert: Valid boundary should work correctly
@@ -724,7 +725,7 @@ public class SokletTests {
 		// Boundary is quoted in Content-Type header
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
 				.body(requestBody.getBytes(StandardCharsets.UTF_8))
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=\"" + boundary + "\"")))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=\"" + boundary + "\"")))
 				.build();
 
 		// Act & Assert: Quoted boundary should be handled correctly
@@ -891,7 +892,7 @@ public class SokletTests {
 			Assertions.assertEquals(400, queryRequestResult.getMarshaledResponse().getStatusCode(), "Unexpected status code for query test");
 
 			Request headerRequest = Request.withPath(HttpMethod.GET, "/header")
-					.headers(Map.of("singleOnly", Set.of("one", "two")))
+					.headers(Map.of("singleOnly", List.of("one", "two")))
 					.build();
 
 			HttpRequestResult headerRequestResult = simulator.performHttpRequest(headerRequest);

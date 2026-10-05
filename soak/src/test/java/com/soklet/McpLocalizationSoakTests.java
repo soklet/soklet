@@ -356,14 +356,14 @@ class McpLocalizationSoakTests {
 				+ additionalParameters + "}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
+						"Host", List.of(LOOPBACK + ":0"),
 						"Content-Type",
-						Set.of("application/json; charset=UTF-8"),
+						List.of("application/json; charset=UTF-8"),
 						"Accept",
-						Set.of("application/json, text/event-stream"),
-						"Accept-Language", Set.of("fr-CA, en;q=0.8"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of(method)))
+						List.of("application/json, text/event-stream"),
+						"Accept-Language", List.of("fr-CA, en;q=0.8"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of(method)))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}

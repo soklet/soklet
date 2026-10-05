@@ -495,14 +495,14 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{" + metadata
 				+ "\"progressToken\":\"" + requestId + "-progress\"}" + parameters + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of("127.0.0.1:0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(revision));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of("127.0.0.1:0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(revision));
+		headers.put("Mcp-Method", List.of(method));
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		McpSimulation simulation = simulator.startMcpRequest(Request
 				.withPath(HttpMethod.POST, "/resources/mcp")
 				.headers(headers)

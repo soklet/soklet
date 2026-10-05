@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
+import java.util.ArrayList;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -39,70 +41,70 @@ public class ConditionalRequestsTests {
 
 	@Test
 	public void validatorHeadersIncludeSuppliedValidators() {
-		Map<String, Set<String>> headers = ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED);
+		Map<String, List<String>> headers = ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED);
 
-		Assertions.assertEquals(Set.of("\"v1\""), headers.get("ETag"));
-		Assertions.assertEquals(Set.of(LAST_MODIFIED_HEADER_VALUE), headers.get("Last-Modified"));
-		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("Cache-Control", Set.of("no-cache")));
+		Assertions.assertEquals(List.of("\"v1\""), headers.get("ETag"));
+		Assertions.assertEquals(List.of(LAST_MODIFIED_HEADER_VALUE), headers.get("Last-Modified"));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("Cache-Control", List.of("no-cache")));
 	}
 
 	@Test
 	public void validatorHeadersCanIncludeExtraMetadataHeaders() {
-		Map<String, Set<String>> headers = ConditionalRequests.validatorHeaders(
+		Map<String, List<String>> headers = ConditionalRequests.validatorHeaders(
 				ENTITY_TAG,
 				LAST_MODIFIED,
 				Map.of(
-						"Cache-Control", Set.of("private, max-age=60"),
-						"Vary", Set.of("Accept-Language")
+						"Cache-Control", List.of("private, max-age=60"),
+						"Vary", List.of("Accept-Language")
 				)
 		);
 
-		Assertions.assertEquals(Set.of("\"v1\""), headers.get("ETag"));
-		Assertions.assertEquals(Set.of(LAST_MODIFIED_HEADER_VALUE), headers.get("Last-Modified"));
-		Assertions.assertEquals(Set.of("private, max-age=60"), headers.get("Cache-Control"));
-		Assertions.assertEquals(Set.of("Accept-Language"), headers.get("Vary"));
-		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", Set.of("value")));
+		Assertions.assertEquals(List.of("\"v1\""), headers.get("ETag"));
+		Assertions.assertEquals(List.of(LAST_MODIFIED_HEADER_VALUE), headers.get("Last-Modified"));
+		Assertions.assertEquals(List.of("private, max-age=60"), headers.get("Cache-Control"));
+		Assertions.assertEquals(List.of("Accept-Language"), headers.get("Vary"));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", List.of("value")));
 	}
 
 	@Test
 	public void validatorHeadersRejectControlledExtraHeaderNames() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", Set.of("\"bad\""))));
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", List.of("\"bad\""))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", Set.of(LAST_MODIFIED_HEADER_VALUE))));
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", List.of(LAST_MODIFIED_HEADER_VALUE))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", Set.of("application/json"))));
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", List.of("application/json"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", Set.of("0"))));
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", List.of("0"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", Set.of("chunked"))));
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", List.of("chunked"))));
 	}
 
 	@Test
 	public void ifNoneMatchWeakMatchForGetReturnsNotModified() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of("W/\"v1\"")
+				"If-None-Match", List.of("W/\"v1\"")
 		));
-		Map<String, Set<String>> extraHeaders = Map.of(
-				"Cache-Control", Set.of("private, max-age=60"),
-				"Vary", Set.of("Accept-Language")
+		Map<String, List<String>> extraHeaders = Map.of(
+				"Cache-Control", List.of("private, max-age=60"),
+				"Vary", List.of("Accept-Language")
 		);
 
 		Response response = ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, extraHeaders).orElseThrow();
 
 		Assertions.assertEquals(304, response.getStatusCode());
 		Assertions.assertEquals(Optional.empty(), response.getBody());
-		Assertions.assertEquals(Set.of("\"v1\""), response.getHeaders().get("ETag"));
-		Assertions.assertEquals(Set.of(LAST_MODIFIED_HEADER_VALUE), response.getHeaders().get("Last-Modified"));
-		Assertions.assertEquals(Set.of("private, max-age=60"), response.getHeaders().get("Cache-Control"));
-		Assertions.assertEquals(Set.of("Accept-Language"), response.getHeaders().get("Vary"));
+		Assertions.assertEquals(List.of("\"v1\""), response.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of(LAST_MODIFIED_HEADER_VALUE), response.getHeaders().get("Last-Modified"));
+		Assertions.assertEquals(List.of("private, max-age=60"), response.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(List.of("Accept-Language"), response.getHeaders().get("Vary"));
 		Assertions.assertFalse(response.getHeaders().containsKey("Content-Type"));
 	}
 
 	@Test
 	public void ifNoneMatchWeakMatchForMutatingMethodReturnsPreconditionFailed() {
 		Request request = request(HttpMethod.PUT, Map.of(
-				"If-None-Match", Set.of("W/\"v1\"")
+				"If-None-Match", List.of("W/\"v1\"")
 		));
 
 		Response response = ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow();
@@ -114,13 +116,13 @@ public class ConditionalRequestsTests {
 	@Test
 	public void ifMatchUsesStrongComparison() {
 		Request staleRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("\"other\"")
+				"If-Match", List.of("\"other\"")
 		));
 		Request weakRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("W/\"v1\"")
+				"If-Match", List.of("W/\"v1\"")
 		));
 		Request matchingRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("\"v1\"")
+				"If-Match", List.of("\"v1\"")
 		));
 
 		Assertions.assertEquals(412, ConditionalRequests.responseFor(staleRequest, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
@@ -131,7 +133,7 @@ public class ConditionalRequestsTests {
 	@Test
 	public void ifUnmodifiedSinceCanFailPrecondition() {
 		Request request = request(HttpMethod.PUT, Map.of(
-				"If-Unmodified-Since", Set.of("Mon, 04 May 2026 01:02:02 GMT")
+				"If-Unmodified-Since", List.of("Mon, 04 May 2026 01:02:02 GMT")
 		));
 
 		Response response = ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow();
@@ -142,7 +144,7 @@ public class ConditionalRequestsTests {
 	@Test
 	public void ifModifiedSinceCanReturnNotModifiedForGet() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-Modified-Since", Set.of(LAST_MODIFIED_HEADER_VALUE)
+				"If-Modified-Since", List.of(LAST_MODIFIED_HEADER_VALUE)
 		));
 
 		Response response = ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow();
@@ -153,12 +155,12 @@ public class ConditionalRequestsTests {
 	@Test
 	public void entityTagPreconditionsTakePrecedenceOverDatePreconditions() {
 		Request ifMatchRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("\"v1\""),
-				"If-Unmodified-Since", Set.of("Mon, 04 May 2026 01:02:02 GMT")
+				"If-Match", List.of("\"v1\""),
+				"If-Unmodified-Since", List.of("Mon, 04 May 2026 01:02:02 GMT")
 		));
 		Request ifNoneMatchRequest = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of("\"other\""),
-				"If-Modified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")
+				"If-None-Match", List.of("\"other\""),
+				"If-Modified-Since", List.of("Mon, 04 May 2026 01:02:04 GMT")
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(ifMatchRequest, ENTITY_TAG, LAST_MODIFIED));
@@ -168,13 +170,13 @@ public class ConditionalRequestsTests {
 	@Test
 	public void wildcardEntityTagConditionsAssumeRepresentationExists() {
 		Request ifMatchRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("*")
+				"If-Match", List.of("*")
 		));
 		Request getIfNoneMatchRequest = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of("*")
+				"If-None-Match", List.of("*")
 		));
 		Request putIfNoneMatchRequest = request(HttpMethod.PUT, Map.of(
-				"If-None-Match", Set.of("*")
+				"If-None-Match", List.of("*")
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(ifMatchRequest, null, null));
@@ -185,7 +187,7 @@ public class ConditionalRequestsTests {
 	@Test
 	public void malformedDateConditionalHeadersAreIgnored() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-Modified-Since", Set.of("not a date")
+				"If-Modified-Since", List.of("not a date")
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
@@ -194,8 +196,8 @@ public class ConditionalRequestsTests {
 	@Test
 	public void malformedIfMatchFailsClosed() {
 		Request request = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of("\"unterminated"),
-				"If-Unmodified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")
+				"If-Match", List.of("\"unterminated"),
+				"If-Unmodified-Since", List.of("Mon, 04 May 2026 01:02:04 GMT")
 		));
 
 		Assertions.assertEquals(412, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
@@ -204,7 +206,7 @@ public class ConditionalRequestsTests {
 	@Test
 	public void malformedIfNoneMatchFailsClosedForUnsafeMethods() {
 		Request request = request(HttpMethod.PUT, Map.of(
-				"If-None-Match", Set.of("\"unterminated")
+				"If-None-Match", List.of("\"unterminated")
 		));
 
 		Assertions.assertEquals(412, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
@@ -213,8 +215,8 @@ public class ConditionalRequestsTests {
 	@Test
 	public void malformedIfNoneMatchForGetSuppressesDateConditionals() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of("\"unterminated"),
-				"If-Modified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")
+				"If-None-Match", List.of("\"unterminated"),
+				"If-Modified-Since", List.of("Mon, 04 May 2026 01:02:04 GMT")
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
@@ -222,7 +224,7 @@ public class ConditionalRequestsTests {
 
 	@Test
 	public void repeatedEntityTagHeaderValuesAreEvaluatedAsOneConditionList() {
-		Set<String> headerValues = new LinkedHashSet<>();
+		List<String> headerValues = new ArrayList<>();
 		headerValues.add("\"other\"");
 		headerValues.add("\"v1\"");
 		Request request = request(HttpMethod.GET, Map.of(
@@ -240,7 +242,7 @@ public class ConditionalRequestsTests {
 				.mapToObj(index -> "\"v" + index + "\"")
 				.collect(Collectors.joining(","));
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of(headerValue)
+				"If-None-Match", List.of(headerValue)
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
@@ -252,10 +254,10 @@ public class ConditionalRequestsTests {
 				.mapToObj(index -> "\"v" + index + "\"")
 				.collect(Collectors.joining(","));
 		Request ifMatchRequest = request(HttpMethod.PUT, Map.of(
-				"If-Match", Set.of(headerValue)
+				"If-Match", List.of(headerValue)
 		));
 		Request ifNoneMatchRequest = request(HttpMethod.PUT, Map.of(
-				"If-None-Match", Set.of(headerValue)
+				"If-None-Match", List.of(headerValue)
 		));
 
 		Assertions.assertEquals(412, ConditionalRequests.responseFor(ifMatchRequest, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
@@ -265,23 +267,23 @@ public class ConditionalRequestsTests {
 	@Test
 	public void extraHeadersRejectControlledHeaderNames() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-None-Match", Set.of("\"v1\"")
+				"If-None-Match", List.of("\"v1\"")
 		));
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", Set.of("\"bad\""))));
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", List.of("\"bad\""))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", Set.of(LAST_MODIFIED_HEADER_VALUE))));
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", List.of(LAST_MODIFIED_HEADER_VALUE))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", Set.of("application/json"))));
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", List.of("application/json"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", Set.of("0"))));
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", List.of("0"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", Set.of("chunked"))));
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", List.of("chunked"))));
 	}
 
 	private static Request request(HttpMethod httpMethod,
-																 Map<String, Set<String>> headers) {
+																 Map<String, List<String>> headers) {
 		return Request.withPath(httpMethod, "/conditional")
 				.headers(headers)
 				.build();

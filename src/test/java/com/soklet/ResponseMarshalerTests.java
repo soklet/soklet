@@ -200,16 +200,16 @@ class ResponseMarshalerTests {
 				.unparsedRequestHandler(request -> {
 					receivedRequest.set(request);
 					return MarshaledResponse.withStatusCode(418)
-							.headers(Map.of("X-Handler", Set.of("true")))
+							.headers(Map.of("X-Handler", List.of("true")))
 							.body("custom".getBytes(StandardCharsets.UTF_8))
 							.build();
 				})
 				.postProcessor(response -> {
 					postProcessCount.incrementAndGet();
-					Assertions.assertEquals(Set.of("true"),
+					Assertions.assertEquals(List.of("true"),
 							response.getHeaders().get("X-Handler"));
 					return response.copy().headers(headers ->
-							headers.put("X-Postprocessed", Set.of("true")))
+							headers.put("X-Postprocessed", List.of("true")))
 							.finish();
 				})
 				.build();
@@ -223,7 +223,7 @@ class ResponseMarshalerTests {
 		Assertions.assertSame(request, receivedRequest.get());
 		Assertions.assertEquals(1, postProcessCount.get());
 		Assertions.assertEquals(418, response.getStatusCode());
-		Assertions.assertEquals(Set.of("true"),
+		Assertions.assertEquals(List.of("true"),
 				response.getHeaders().get("X-Postprocessed"));
 		Assertions.assertArrayEquals("custom".getBytes(StandardCharsets.UTF_8),
 				((MarshaledResponseBody.Bytes) response.getBody()

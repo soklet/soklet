@@ -571,9 +571,9 @@ public class McpLegacyProgressPublicRuntimeTests {
 
 	private static Request simulationRequest(McpProtocolVersion version, String method,
 			String params, String idJson, String tokenJson) {
-		return Request.withPath(HttpMethod.POST, PATH).headers(Map.of("Host", Set.of(HOST + ":0"),
-				"Content-Type", Set.of("application/json"), "Accept", Set.of("application/json, text/event-stream"),
-				"MCP-Protocol-Version", Set.of(version.getWireValue())))
+		return Request.withPath(HttpMethod.POST, PATH).headers(Map.of("Host", List.of(HOST + ":0"),
+				"Content-Type", List.of("application/json"), "Accept", List.of("application/json, text/event-stream"),
+				"MCP-Protocol-Version", List.of(version.getWireValue())))
 				.body(body(method, params, idJson, tokenJson).getBytes(StandardCharsets.UTF_8)).build();
 	}
 

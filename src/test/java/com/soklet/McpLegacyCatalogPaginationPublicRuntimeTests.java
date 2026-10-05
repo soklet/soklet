@@ -477,11 +477,11 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 					+ "\"io.modelcontextprotocol/clientCapabilities\":{}}" + (params.isEmpty() ? "" : "," + params);
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"list\",\"method\":" + quote(kind.method)
 				+ (params.isEmpty() ? "" : ",\"params\":{" + params + "}") + "}";
-		Map<String, Set<String>> headers = new HashMap<>(Map.of(
-				"Host", Set.of(HOST + ":0"), "Content-Type", Set.of("application/json"),
-				"Accept", Set.of("application/json, text/event-stream"),
-				"MCP-Protocol-Version", Set.of(version.getWireValue()), "Accept-Language", Set.of(locale)));
-		if (version == McpProtocolVersion.V2026_07_28) headers.put("Mcp-Method", Set.of(kind.method));
+		Map<String, List<String>> headers = new HashMap<>(Map.of(
+				"Host", List.of(HOST + ":0"), "Content-Type", List.of("application/json"),
+				"Accept", List.of("application/json, text/event-stream"),
+				"MCP-Protocol-Version", List.of(version.getWireValue()), "Accept-Language", List.of(locale)));
+		if (version == McpProtocolVersion.V2026_07_28) headers.put("Mcp-Method", List.of(kind.method));
 		return Request.withPath(HttpMethod.POST, path).headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}

@@ -20,6 +20,7 @@ import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.soklet.exception.IllegalRequestBodyException;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.io.UncheckedIOException;
 import java.util.Map;
 import java.util.Set;
@@ -30,8 +31,8 @@ import java.util.Set;
 @ThreadSafe
 public class DefaultMultipartParserFuzzTest {
 	private static final String BOUNDARY = "----SokletFuzzBoundary";
-	private static final Map<String, Set<String>> HEADERS = Map.of(
-			"Content-Type", Set.of("multipart/form-data; boundary=" + BOUNDARY));
+	private static final Map<String, List<String>> HEADERS = Map.of(
+			"Content-Type", List.of("multipart/form-data; boundary=" + BOUNDARY));
 	private static volatile int sink;
 
 	@FuzzTest(maxDuration = "2m")
@@ -42,7 +43,7 @@ public class DefaultMultipartParserFuzzTest {
 				.build();
 
 		try {
-			Map<String, Set<MultipartField>> fields = DefaultMultipartParser.defaultInstance()
+			Map<String, List<MultipartField>> fields = DefaultMultipartParser.defaultInstance()
 					.extractMultipartFields(request);
 			consume(fields);
 		} catch (IllegalRequestBodyException | UncheckedIOException expected) {
@@ -50,10 +51,10 @@ public class DefaultMultipartParserFuzzTest {
 		}
 	}
 
-	private static void consume(Map<String, Set<MultipartField>> fields) {
+	private static void consume(Map<String, List<MultipartField>> fields) {
 		int observed = 0;
 
-		for (Map.Entry<String, Set<MultipartField>> entry : fields.entrySet()) {
+		for (Map.Entry<String, List<MultipartField>> entry : fields.entrySet()) {
 			observed += entry.getKey().length();
 
 			for (MultipartField field : entry.getValue()) {

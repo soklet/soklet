@@ -320,16 +320,16 @@ public final class AppsFixtureContractTest {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"apps-contract\",\"method\":\"" + method
 				+ "\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"" + PROTOCOL
 				+ "\",\"io.modelcontextprotocol/clientCapabilities\":" + capabilities + "}" + parameters + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>(Map.of(
-				"Host", Set.of("127.0.0.1:0"), "Authorization", Set.of("Bearer " + token),
-				"Content-Type", Set.of("application/json"), "Accept", Set.of("application/json, text/event-stream"),
-				"MCP-Protocol-Version", Set.of(PROTOCOL), "Mcp-Method", Set.of(method),
+		Map<String, List<String>> headers = new LinkedHashMap<>(Map.of(
+				"Host", List.of("127.0.0.1:0"), "Authorization", List.of("Bearer " + token),
+				"Content-Type", List.of("application/json"), "Accept", List.of("application/json, text/event-stream"),
+				"MCP-Protocol-Version", List.of(PROTOCOL), "Mcp-Method", List.of(method),
 				// Intentionally contradict the admitted identity: this must not select the locale.
-				"Accept-Language", Set.of("de-DE")));
+				"Accept-Language", List.of("de-DE")));
 		if (method.equals("tools/call"))
-			headers.put("Mcp-Name", Set.of(stringField("{" + parameters.substring(1) + "}", "name")));
+			headers.put("Mcp-Name", List.of(stringField("{" + parameters.substring(1) + "}", "name")));
 		else if (method.equals("resources/read"))
-			headers.put("Mcp-Name", Set.of(stringField("{" + parameters.substring(1) + "}", "uri")));
+			headers.put("Mcp-Name", List.of(stringField("{" + parameters.substring(1) + "}", "uri")));
 		Request request = Request.withPath(HttpMethod.POST, AppsFixture.PATH).headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 		try (McpSimulation simulation = simulator.startMcpRequest(request)) {

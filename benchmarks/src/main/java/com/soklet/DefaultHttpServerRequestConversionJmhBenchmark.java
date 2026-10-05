@@ -49,7 +49,7 @@ import static java.lang.String.format;
 @Fork(3)
 public class DefaultHttpServerRequestConversionJmhBenchmark {
 	@Benchmark
-	public Map<String, Set<String>> rawHeaderRoundTrip(RequestState state) {
+	public Map<String, List<String>> rawHeaderRoundTrip(RequestState state) {
 		List<String> rawHeaderLines = state.request.headers().stream()
 				.map(header -> format("%s: %s", header.name(), header.value() == null ? "" : header.value()))
 				.collect(Collectors.toList());
@@ -57,7 +57,7 @@ public class DefaultHttpServerRequestConversionJmhBenchmark {
 	}
 
 	@Benchmark
-	public Map<String, Set<String>> parsedHeaderDirect(RequestState state) {
+	public Map<String, List<String>> parsedHeaderDirect(RequestState state) {
 		return state.server.headersFromMicrohttpRequest(state.request);
 	}
 

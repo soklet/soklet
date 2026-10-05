@@ -307,14 +307,14 @@ public class McpSimulationLifecyclePhaseTests {
 	}
 
 	private static Request request(String body, String method, String name) {
-		Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 		if (name != null)
-			headers.put("Mcp-Name", Set.of(name));
+			headers.put("Mcp-Name", List.of(name));
 		return Request.withPath(HttpMethod.POST, "/mcp")
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();

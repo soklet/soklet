@@ -214,7 +214,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 	@NonNull
 	private static List<@NonNull String> acceptLanguageValues(
 			@NonNull Request request) {
-		java.util.Set<String> values = requireNonNull(request)
+		java.util.List<String> values = requireNonNull(request)
 				.getHeaders().get("Accept-Language");
 		return values == null ? List.of() : List.copyOf(values);
 	}

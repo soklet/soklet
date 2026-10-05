@@ -118,7 +118,7 @@ public class McpSimulationCaptureRuntimeTests {
 		McpSimulationResponse response = capture.runtime().awaitResponse(Duration.ZERO).orElseThrow();
 		Assertions.assertEquals(200, response.getStatusCode());
 		Assertions.assertEquals(McpSimulationBodyType.SSE, response.getBodyType());
-		Assertions.assertEquals(Set.of("text/event-stream"), response.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("text/event-stream"), response.getHeaders().get("Content-Type"));
 		capture.listener().assertTermination(StreamTerminationReason.COMPLETED, McpStreamTerminationReason.REQUEST_CANCELED);
 		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
 		capture.runtime().didFinishRequest(McpRequestOutcome.COMPLETE, List.of());
@@ -269,7 +269,7 @@ public class McpSimulationCaptureRuntimeTests {
 				Duration.ZERO).orElseThrow();
 		Assertions.assertEquals(McpSimulationBodyType.SSE,
 				response.getBodyType());
-		Assertions.assertEquals(Set.of("published"),
+		Assertions.assertEquals(List.of("published"),
 				response.getHeaders().get("X-Pre-Response"));
 		capture.listener().assertTermination(
 				StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED,
@@ -353,7 +353,7 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(List.of("exact", "second"),
 				new ArrayList<>(exactResponse.getHeaders().get("X-Mode")));
 		Assertions.assertThrows(UnsupportedOperationException.class,
-				() -> exactResponse.getHeaders().put("X-Mutation", Set.of("x")));
+				() -> exactResponse.getHeaders().put("X-Mutation", List.of("x")));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> exactResponse.getHeaders().get("X-Mode").add("mutation"));
 		byte[] returnedBody = exactResponse.getBody().orElseThrow();
@@ -375,7 +375,7 @@ public class McpSimulationCaptureRuntimeTests {
 		McpSimulationResponse overflowResponse = overflow.awaitResponse(
 				Duration.ZERO).orElseThrow();
 		Assertions.assertEquals(207, overflowResponse.getStatusCode());
-		Assertions.assertEquals(Map.of("X-Mode", Set.of("overflow")),
+		Assertions.assertEquals(Map.of("X-Mode", List.of("overflow")),
 				overflowResponse.getHeaders());
 		Assertions.assertEquals(McpSimulationBodyType.JSON,
 				overflowResponse.getBodyType());

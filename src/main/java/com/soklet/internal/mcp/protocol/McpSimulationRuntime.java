@@ -34,6 +34,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -632,19 +633,19 @@ final class McpSimulationRuntime implements McpSimulation,
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> headers(
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> headers(
 			@NonNull List<@NonNull Header> headers) {
-		Map<String, LinkedHashSet<String>> mutable = new LinkedHashMap<>();
+		Map<String, List<String>> mutable = new LinkedHashMap<>();
 		for (Header header : List.copyOf(requireNonNull(headers))) {
 			String matchingName = mutable.keySet().stream()
 					.filter(name -> name.equalsIgnoreCase(header.name()))
 					.findFirst().orElse(header.name());
-			mutable.computeIfAbsent(matchingName, ignored -> new LinkedHashSet<>())
+			mutable.computeIfAbsent(matchingName, ignored -> new ArrayList<>())
 					.add(header.value());
 		}
-		Map<String, Set<String>> immutable = new LinkedHashMap<>();
+		Map<String, List<String>> immutable = new LinkedHashMap<>();
 		mutable.forEach((name, values) -> immutable.put(name,
-				Collections.unmodifiableSet(new LinkedHashSet<>(values))));
+				List.copyOf(values)));
 		return Collections.unmodifiableMap(immutable);
 	}
 
@@ -673,13 +674,13 @@ final class McpSimulationRuntime implements McpSimulation,
 	private static final class DefaultResponse implements McpSimulationResponse {
 		private final int statusCode;
 		@NonNull
-		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@NonNull
 		private final McpSimulationBodyType bodyType;
 		private final byte @Nullable [] body;
 
 		private DefaultResponse(int statusCode,
-				@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+				@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 				@NonNull McpSimulationBodyType bodyType,
 				byte @Nullable [] body) {
 			if (statusCode < 100 || statusCode > 599)
@@ -699,7 +700,7 @@ final class McpSimulationRuntime implements McpSimulation,
 
 		@Override
 		@NonNull
-		public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+		public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 

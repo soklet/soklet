@@ -36,7 +36,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -122,26 +122,26 @@ public class ResponseWritePathJmhBenchmark {
 	public static class ResponseState {
 		private final DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).build();
 		private final byte[] jsonBody = ascii("{\"ok\":true}");
-		private final Map<String, Set<String>> byteArrayHeaders = Map.of(
-				"Content-Type", Set.of("application/json"),
-				"Cache-Control", Set.of("no-cache", "no-transform"),
-				"X-Request-Id", Set.of("benchmark-response"));
-		private final Map<String, Set<String>> manyHeaders = Map.of(
-				"Content-Type", Set.of("application/json"),
-				"Cache-Control", Set.of("no-cache", "no-transform"),
-				"Vary", Set.of("Origin", "Accept-Encoding"),
-				"X-Request-Id", Set.of("benchmark-response"),
-				"X-Tenant-Id", Set.of("tenant-a"),
-				"X-Feature", Set.of("fast-path"),
-				"X-Trace-Flags", Set.of("sampled"),
-				"X-Response-Mode", Set.of("benchmark"));
+		private final Map<String, List<String>> byteArrayHeaders = Map.of(
+				"Content-Type", List.of("application/json"),
+				"Cache-Control", List.of("no-cache", "no-transform"),
+				"X-Request-Id", List.of("benchmark-response"));
+		private final Map<String, List<String>> manyHeaders = Map.of(
+				"Content-Type", List.of("application/json"),
+				"Cache-Control", List.of("no-cache", "no-transform"),
+				"Vary", List.of("Origin", "Accept-Encoding"),
+				"X-Request-Id", List.of("benchmark-response"),
+				"X-Tenant-Id", List.of("tenant-a"),
+				"X-Feature", List.of("fast-path"),
+				"X-Trace-Flags", List.of("sampled"),
+				"X-Response-Mode", List.of("benchmark"));
 		private final MarshaledResponse byteArrayResponse = MarshaledResponse.withStatusCode(200)
 				.headers(this.byteArrayHeaders)
 				.body(this.jsonBody)
 				.build();
 		private final MarshaledResponse byteArrayResponseWithCookies = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("application/json")))
-				.cookies(new LinkedHashSet<>(List.of(
+				.headers(Map.of("Content-Type", List.of("application/json")))
+				.cookies(new ArrayList<>(List.of(
 						ResponseCookie.withName("session").value("abc123").httpOnly(true).secure(true).build(),
 						ResponseCookie.withName("theme").value("light").path("/").build())))
 				.body(this.jsonBody)
@@ -163,15 +163,15 @@ public class ResponseWritePathJmhBenchmark {
 			Files.write(this.file, fileBytes);
 			this.fileChannel = FileChannel.open(this.file, READ);
 			this.fileResponse = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.body(this.file)
 					.build();
 			this.fileChannelResponse = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.body(this.fileChannel, 0L, Long.valueOf(fileBytes.length), false)
 					.build();
 			this.byteBufferResponse = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.body(ByteBuffer.wrap(fileBytes))
 					.build();
 		}

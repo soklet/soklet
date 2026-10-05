@@ -20,10 +20,10 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static com.soklet.Utilities.trimAggressivelyToNull;
@@ -76,11 +76,11 @@ public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 	 */
 	@NonNull
 	public static Optional<@NonNull Cors> fromHeaders(@NonNull HttpMethod httpMethod,
-																					 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+																					 @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);
 
-		Set<String> originHeaderValues = headers.entrySet().stream()
+		List<String> originHeaderValues = headers.entrySet().stream()
 				.filter(e -> e.getKey() != null && "origin".equalsIgnoreCase(trimAggressivelyToEmpty(e.getKey())))
 				.map(Map.Entry::getValue)
 				.filter(Objects::nonNull)

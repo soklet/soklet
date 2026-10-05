@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -366,7 +367,7 @@ public class HttpSoakTests {
 		@GET("/large")
 		public Response large() {
 			return Response.withStatusCode(200)
-					.headers(java.util.Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(java.util.Map.of("Content-Type", List.of("application/octet-stream")))
 					.body(LARGE_BODY)
 					.build();
 		}

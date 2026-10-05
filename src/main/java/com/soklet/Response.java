@@ -23,12 +23,12 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -47,7 +47,7 @@ import static java.util.Objects.requireNonNull;
  * </ul>
  * Convenience instance factories are also available via {@link #fromStatusCode(Integer)} and {@link #fromRedirect(RedirectType, String)}.
  * <p>
- * For performance, header collections are shallow-copied and not defensively deep-copied. Treat returned collections as immutable.
+ * Header and cookie collections are immutable snapshots, including the lists of header values.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -58,9 +58,9 @@ public final class Response {
 	@NonNull
 	private final Integer statusCode;
 	@NonNull
-	private final Set<@NonNull ResponseCookie> cookies;
+	private final List<@NonNull ResponseCookie> cookies;
 	@NonNull
-	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+	private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 	@Nullable
 	private final Object body;
 
@@ -118,28 +118,23 @@ public final class Response {
 	private Response(@NonNull Builder builder) {
 		requireNonNull(builder);
 
-		Map<String, Set<String>> headers = builder.headers == null
-				? new LinkedCaseInsensitiveMap<>()
-				: new LinkedCaseInsensitiveMap<>(builder.headers);
+		Map<String, List<String>> headers = Utilities.mutableValueLists(builder.headers, true);
 
 		if (builder.location != null && !headers.containsKey("Location"))
-			headers.put("Location", Set.of(builder.location));
+			headers.put("Location", List.of(builder.location));
 
 		// Verify headers are legal
-		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+		for (Entry<String, List<String>> entry : headers.entrySet()) {
 			String headerName = entry.getKey();
-			Set<String> headerValues = entry.getValue();
+			List<String> headerValues = entry.getValue();
 
 			for (String headerValue : headerValues)
 				Utilities.validateHeaderNameAndValue(headerName, headerValue);
 		}
 
-		Set<ResponseCookie> cookies = builder.cookies == null
-				? Collections.emptySet()
-				: new LinkedHashSet<>(builder.cookies);
-
+		headers.replaceAll((name, values) -> List.copyOf(values));
 		this.statusCode = builder.statusCode;
-		this.cookies = Collections.unmodifiableSet(cookies);
+		this.cookies = builder.cookies == null ? List.of() : List.copyOf(builder.cookies);
 		this.headers = Collections.unmodifiableMap(headers);
 		this.body = builder.body;
 	}
@@ -203,7 +198,7 @@ public final class Response {
 	 * @return the cookies to write to the response
 	 */
 	@NonNull
-	public Set<@NonNull ResponseCookie> getCookies() {
+	public List<@NonNull ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -211,15 +206,14 @@ public final class Response {
 	 * The headers to be written to the client for this response.
 	 * <p>
 	 * The keys are the header names and the values are header values. Soklet writes one header line per value.
-	 * If order matters, provide either a {@link java.util.SortedSet} or {@link java.util.LinkedHashSet} to preserve
-	 * the desired ordering; otherwise values are naturally sorted for consistency.
+	 * Header values are written in list order, including repeated values. The map and its lists are immutable snapshots.
 	 * <p>
 	 * <em>Note that response headers have case-insensitive names per the HTTP spec.</em>
 	 *
 	 * @return the headers to write to the response
 	 */
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+	public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
@@ -250,9 +244,9 @@ public final class Response {
 		@Nullable
 		private String location;
 		@Nullable
-		private Set<@NonNull ResponseCookie> cookies;
+		private List<@NonNull ResponseCookie> cookies;
 		@Nullable
-		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@Nullable
 		private Object body;
 
@@ -295,11 +289,11 @@ public final class Response {
 		/**
 		 * Replaces the configured response cookies.
 		 *
-		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @param cookies cookies to write, or {@code null} or an empty list to configure no cookies
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
+		public Builder cookies(@Nullable List<@NonNull ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -313,7 +307,7 @@ public final class Response {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public Builder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -352,8 +346,8 @@ public final class Response {
 			requireNonNull(response);
 
 			this.builder = new Builder(response.getStatusCode())
-					.headers(new LinkedCaseInsensitiveMap<>(response.getHeaders()))
-					.cookies(new LinkedHashSet<>(response.getCookies()))
+					.headers(Utilities.mutableValueLists(response.getHeaders(), true))
+					.cookies(new ArrayList<>(response.getCookies()))
 					.body(response.getBody().orElse(null));
 		}
 
@@ -371,7 +365,7 @@ public final class Response {
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		public Copier headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
@@ -387,11 +381,10 @@ public final class Response {
 		@NonNull
 		public Copier headers(
 				@NonNull Consumer<@NonNull Map<@NonNull String,
-						@NonNull Set<@NonNull String>>> headersConsumer) {
+						@NonNull List<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
-			if (this.builder.headers == null)
-				this.builder.headers(new LinkedCaseInsensitiveMap<>());
+			this.builder.headers(Utilities.mutableValueLists(this.builder.headers, true));
 
 			headersConsumer.accept(this.builder.headers);
 			return this;
@@ -400,11 +393,11 @@ public final class Response {
 		/**
 		 * Replaces the copied response cookies.
 		 *
-		 * @param cookies cookies to write, or {@code null} or an empty set to configure no cookies
+		 * @param cookies cookies to write, or {@code null} or an empty list to configure no cookies
 		 * @return this copier
 		 */
 		@NonNull
-		public Copier cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
+		public Copier cookies(@Nullable List<@NonNull ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
@@ -412,19 +405,18 @@ public final class Response {
 		/**
 		 * Mutates the copied response cookies in place.
 		 * <p>
-		 * The consumer receives a mutable empty set if the copied response currently has no cookies, and may add, remove, or clear entries.
+		 * The consumer receives a mutable empty list if the copied response currently has no cookies, and may add, remove, or clear entries.
 		 *
 		 * @param cookiesConsumer performs mutations on the copied response cookies
 		 * @return this copier
 		 */
 		@NonNull
 		public Copier cookies(
-				@NonNull Consumer<@NonNull Set<@NonNull ResponseCookie>>
+				@NonNull Consumer<@NonNull List<@NonNull ResponseCookie>>
 						cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
-			if (this.builder.cookies == null)
-				this.builder.cookies(new LinkedHashSet<>());
+			this.builder.cookies(new ArrayList<>(this.builder.cookies == null ? List.of() : this.builder.cookies));
 
 			cookiesConsumer.accept(this.builder.cookies);
 			return this;

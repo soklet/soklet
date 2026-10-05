@@ -93,7 +93,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"d01b32d03135ec2ac075723f6327fc7ebad0145cb71a24727cdb2fe82066b4dc";
+			"50925b7abaf348e197d4ea42ec10ba798b1ef4ad5923c2d2ccd8324bc11a54c6";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",

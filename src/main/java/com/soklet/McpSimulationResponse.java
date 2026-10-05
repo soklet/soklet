@@ -21,7 +21,7 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.List;
 
 /**
  * Immutable response-head and bounded nonstreaming-body projection.
@@ -42,7 +42,7 @@ public interface McpSimulationResponse {
 	 * @return immutable response headers
 	 */
 	@NonNull
-	Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders();
+	Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders();
 
 	/** @return the captured response-body type */
 	@NonNull

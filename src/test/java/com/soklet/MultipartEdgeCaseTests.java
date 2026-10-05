@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
@@ -54,7 +55,7 @@ public class MultipartEdgeCaseTests {
 				}).build(), simulator -> {
 			for (String entity : Set.of("&#1114112;", "&#-1;", "&#55296;", "&#0;", "&#13;", "&#x110000;")) {
 				Request request = Request.withPath(HttpMethod.POST, "/upload")
-						.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=entity")))
+						.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=entity")))
 						.body(multipartBodyWithContentDisposition("entity",
 								"form-data; name=\"a\"; filename=\"secret" + entity + ".txt\""))
 						.build();
@@ -75,9 +76,9 @@ public class MultipartEdgeCaseTests {
 		String part = "--entity\r\nContent-Disposition: form-data; name=\"a\"; "
 				+ "filename=\"a&#8239;&#x1F36A;.txt\"\r\n\r\nx\r\n";
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=entity")))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=entity")))
 				.body((part + part + "--entity--\r\n").getBytes(StandardCharsets.US_ASCII)).build();
-		Set<MultipartField> fields = request.getMultipartFields().get("a");
+		List<MultipartField> fields = request.getMultipartFields().get("a");
 		Assertions.assertEquals(2, fields.size(), "Identical uploaded parts must not be silently collapsed");
 		for (MultipartField field : fields)
 			Assertions.assertEquals(Optional.of("a\u202f🍪.txt"), field.getFilename());
@@ -184,8 +185,8 @@ public class MultipartEdgeCaseTests {
 			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload")
 							.headers(Map.of(
-									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
-									"Content-Length", Set.of(String.valueOf(body.length))
+									"Content-Type", List.of("multipart/form-data; boundary=----AaB03x"),
+									"Content-Length", List.of(String.valueOf(body.length))
 							))
 							.body(body)
 							.build());
@@ -198,7 +199,7 @@ public class MultipartEdgeCaseTests {
 		String boundary = "----AaB03x-truncated";
 		byte[] body = truncatedMultipartBody(boundary);
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of(
+				.headers(Map.of("Content-Type", List.of(
 						"multipart/form-data; boundary=" + boundary)))
 				.body(body)
 				.build();
@@ -236,8 +237,8 @@ public class MultipartEdgeCaseTests {
 			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload-optional")
 							.headers(Map.of(
-									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
-									"Content-Length", Set.of(String.valueOf(body.length))
+									"Content-Type", List.of("multipart/form-data; boundary=----AaB03x"),
+									"Content-Length", List.of(String.valueOf(body.length))
 							))
 							.body(body)
 							.build());
@@ -259,8 +260,8 @@ public class MultipartEdgeCaseTests {
 			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload-commas")
 							.headers(Map.of(
-									"Content-Type", Set.of("multipart/form-data; boundary=" + boundary),
-									"Content-Length", Set.of(String.valueOf(body.length))
+									"Content-Type", List.of("multipart/form-data; boundary=" + boundary),
+									"Content-Length", List.of(String.valueOf(body.length))
 							))
 							.body(body)
 							.build());
@@ -272,7 +273,7 @@ public class MultipartEdgeCaseTests {
 	public void quoted_boundary_allows_interior_but_not_trailing_space() {
 		String interiorSpaceBoundary = "AaB 03x";
 		Request interiorSpaceRequest = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of(
+				.headers(Map.of("Content-Type", List.of(
 						"multipart/form-data; boundary=\"" + interiorSpaceBoundary + "\"")))
 				.body(multipartBody(interiorSpaceBoundary))
 				.build();
@@ -282,7 +283,7 @@ public class MultipartEdgeCaseTests {
 
 		String trailingSpaceBoundary = "AaB03x ";
 		Request trailingSpaceRequest = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of(
+				.headers(Map.of("Content-Type", List.of(
 						"multipart/form-data; boundary=\"" + trailingSpaceBoundary + "\"")))
 				.body(multipartBody(trailingSpaceBoundary))
 				.build();
@@ -299,15 +300,15 @@ public class MultipartEdgeCaseTests {
 		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
 
 		Request withinLimit = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(multipartBodyWithFieldCount(boundary, 1_000))
 				.build();
 
-		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(withinLimit);
+		Map<String, List<MultipartField>> fields = parser.extractMultipartFields(withinLimit);
 		Assertions.assertEquals(1_000, fields.size());
 
 		Request overLimit = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(multipartBodyWithFieldCount(boundary, 1_001))
 				.build();
 
@@ -322,11 +323,11 @@ public class MultipartEdgeCaseTests {
 		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
 
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(multipartBodyWithUnnamedPartBeforeNamedPart(boundary))
 				.build();
 
-		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+		Map<String, List<MultipartField>> fields = parser.extractMultipartFields(request);
 		Assertions.assertEquals(Set.of("a"), fields.keySet());
 		Assertions.assertEquals("1", fields.get("a").iterator().next().getDataAsString().orElseThrow());
 	}
@@ -337,7 +338,7 @@ public class MultipartEdgeCaseTests {
 		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
 
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(multipartBodyWithUnnamedFieldCount(boundary, 1_001))
 				.build();
 
@@ -353,11 +354,11 @@ public class MultipartEdgeCaseTests {
 		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
 
 		Request request = Request.withPath(HttpMethod.POST, "/upload")
-				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=" + boundary)))
 				.body(multipartBodyWithContentDisposition(boundary, "form-data; name=\"" + malformedName + "\""))
 				.build();
 
-		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+		Map<String, List<MultipartField>> fields = parser.extractMultipartFields(request);
 		Assertions.assertEquals(Set.of(malformedName), fields.keySet());
 		Assertions.assertEquals("1", fields.get(malformedName).iterator().next().getDataAsString().orElseThrow());
 	}

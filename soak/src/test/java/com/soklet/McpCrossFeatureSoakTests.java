@@ -1033,14 +1033,14 @@ public class McpCrossFeatureSoakTests {
 				progressToken, inputResponsesJson, requestState);
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
+						"Host", List.of(LOOPBACK + ":0"),
 						"Content-Type",
-						Set.of("application/json; charset=UTF-8"),
+						List.of("application/json; charset=UTF-8"),
 						"Accept",
-						Set.of("application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("tools/call"),
-						"Mcp-Name", Set.of(toolName)))
+						List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("tools/call"),
+						"Mcp-Name", List.of(toolName)))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -1053,13 +1053,13 @@ public class McpCrossFeatureSoakTests {
 				+ jsonString(resourceUri.toString()) + "]}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
+						"Host", List.of(LOOPBACK + ":0"),
 						"Content-Type",
-						Set.of("application/json; charset=UTF-8"),
+						List.of("application/json; charset=UTF-8"),
 						"Accept",
-						Set.of("application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("subscriptions/listen")))
+						List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("subscriptions/listen")))
 				.body(subscriptionBody(id, notifications)
 						.getBytes(StandardCharsets.UTF_8))
 				.build();

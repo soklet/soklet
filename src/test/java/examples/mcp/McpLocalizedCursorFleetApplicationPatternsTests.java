@@ -433,15 +433,15 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				+ cursorField + "}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(
 								"application/json; charset=UTF-8"),
-						"Accept", Set.of(
+						"Accept", List.of(
 								"application/json, text/event-stream"),
-						"Accept-Language", Set.of(acceptLanguage),
-						"Authorization", Set.of("Bearer " + principal),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("resources/list")))
+						"Accept-Language", List.of(acceptLanguage),
+						"Authorization", List.of("Bearer " + principal),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("resources/list")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -463,12 +463,12 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 					capture.body());
 	}
 
-	private static Set<String> headerValues(Map<String, Set<String>> headers,
+	private static List<String> headerValues(Map<String, List<String>> headers,
 			String name) {
 		return headers.entrySet().stream()
 				.filter(entry -> entry.getKey().equalsIgnoreCase(name))
 				.map(Map.Entry::getValue)
-				.findFirst().orElse(Set.of());
+				.findFirst().orElse(List.of());
 	}
 
 	private static void assertNeutralCursorFailure(Capture capture) {
@@ -599,7 +599,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				"cursor-k2", active));
 	}
 
-	private record Capture(int statusCode, Map<String, Set<String>> headers,
+	private record Capture(int statusCode, Map<String, List<String>> headers,
 			String body) {
 		private Capture {
 			headers = Map.copyOf(headers);

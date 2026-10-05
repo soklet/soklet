@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -42,7 +43,7 @@ public class OptionsTests {
 				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.OPTIONS, "/echo").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
-			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
+			Map<String, List<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");
 			String allow = String.join(",", headers.get("Allow"));
 			Assertions.assertTrue(allow.contains("GET"));
@@ -62,7 +63,7 @@ public class OptionsTests {
 				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.OPTIONS, "/submit").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
-			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
+			Map<String, List<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");
 			String allow = String.join(",", headers.get("Allow"));
 			Assertions.assertTrue(allow.contains("POST"));

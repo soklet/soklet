@@ -9462,15 +9462,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private Request toSokletRequest(@NonNull MicrohttpRequest request,
 			@NonNull HttpMethod httpMethod) {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		Map<String, List<String>> headers = new LinkedHashMap<>();
 		for (Header header : request.headers()) {
 			String matchingName = headers.keySet().stream()
 					.filter(name -> name.equalsIgnoreCase(header.name()))
 					.findFirst().orElse(header.name());
-			Set<String> values = new LinkedHashSet<>(
-					headers.getOrDefault(matchingName, Set.of()));
+			List<String> values = new ArrayList<>(
+					headers.getOrDefault(matchingName, List.of()));
 			values.add(header.value());
-			headers.put(matchingName, Collections.unmodifiableSet(values));
+			headers.put(matchingName, List.copyOf(values));
 		}
 
 		return Request.withRawUrl(httpMethod, request.uri())

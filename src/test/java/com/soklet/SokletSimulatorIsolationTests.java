@@ -1632,14 +1632,14 @@ public class SokletSimulatorIsolationTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 				+ "\"name\":\"" + toolName + "\",\"arguments\":{}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":" + port));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of("tools/call"));
-		headers.put("Mcp-Name", Set.of(toolName));
-		origin.ifPresent(value -> headers.put("Origin", Set.of(value)));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":" + port));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of("tools/call"));
+		headers.put("Mcp-Name", List.of(toolName));
+		origin.ifPresent(value -> headers.put("Origin", List.of(value)));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

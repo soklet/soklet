@@ -92,7 +92,7 @@ public class IntegrationTests {
 		// A route that just returns all cookie names it sees
 		@GET("/cookie-echo")
 		public String cookieEcho(@NonNull Request request) {
-			Map<String, Set<String>> cookies = request.getCookies();
+			Map<String, List<String>> cookies = request.getCookies();
 			return cookies.keySet().stream().sorted().collect(Collectors.joining(","));
 		}
 
@@ -141,8 +141,8 @@ public class IntegrationTests {
 		@GET("/multivalued-headers")
 		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
-					.headers(Map.of("multi", Set.of("one", "two")))
-					.cookies(Set.of(
+					.headers(Map.of("multi", List.of("one", "two")))
+					.cookies(List.of(
 							ResponseCookie.with("a", "b").build(),
 							ResponseCookie.with("a", "c").build()
 					))
@@ -775,7 +775,7 @@ public class IntegrationTests {
 		@GET("/large")
 		public MarshaledResponse large() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.body(LARGE_RESPONSE_BODY)
 					.build();
 		}
@@ -784,8 +784,8 @@ public class IntegrationTests {
 		public MarshaledResponse varyLarge() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of(
-							"Content-Type", Set.of("text/plain; charset=UTF-8"),
-							"Vary", Set.of("Origin")))
+							"Content-Type", List.of("text/plain; charset=UTF-8"),
+							"Vary", List.of("Origin")))
 					.body(LARGE_RESPONSE_BODY)
 					.build();
 		}
@@ -794,8 +794,8 @@ public class IntegrationTests {
 		public MarshaledResponse encoded() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of(
-							"Content-Encoding", Set.of("br"),
-							"Content-Type", Set.of("application/octet-stream")))
+							"Content-Encoding", List.of("br"),
+							"Content-Type", List.of("application/octet-stream")))
 					.body(LARGE_RESPONSE_BODY)
 					.build();
 		}
@@ -803,7 +803,7 @@ public class IntegrationTests {
 		@GET("/streamed")
 		public MarshaledResponse streamed() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain")))
+					.headers(Map.of("Content-Type", List.of("text/plain")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> responseStream.write(LARGE_RESPONSE_BODY)))
 					.build();
 		}
@@ -822,8 +822,8 @@ public class IntegrationTests {
 
 		@GET("/cookie-value")
 		public String cookieValue(@NonNull Request request, @NonNull @QueryParameter String name) {
-			Map<String, Set<String>> cookies = request.getCookies();
-			Set<String> values = cookies.getOrDefault(name, Collections.emptySet());
+			Map<String, List<String>> cookies = request.getCookies();
+			List<String> values = cookies.getOrDefault(name, Collections.emptyList());
 			return values.stream().sorted().collect(Collectors.joining("|"));
 		}
 	}
@@ -834,7 +834,7 @@ public class IntegrationTests {
 		public MarshaledResponse file() {
 			return MarshaledResponse.withStatusCode(200)
 					.body(fileResponsePath)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.build();
 		}
 	}
@@ -849,7 +849,7 @@ public class IntegrationTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.body(buffer)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.build();
 		}
 	}
@@ -1084,7 +1084,7 @@ public class IntegrationTests {
 		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
 				.headHandler((request, marshaledResponse) -> marshaledResponse.copy()
 						.withoutBody()
-						.headers(headers -> headers.put("Content-Length", Set.of(Long.toString(marshaledResponse.getBodyLength()))))
+						.headers(headers -> headers.put("Content-Length", List.of(Long.toString(marshaledResponse.getBodyLength()))))
 						.finish())
 				.build();
 		assertHeadCompressionPlansOriginalBody(responseMarshaler);
@@ -1130,7 +1130,7 @@ public class IntegrationTests {
 
 	private static MarshaledResponse bodylessHeadReplacement(int statusCode) {
 		return MarshaledResponse.withStatusCode(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain"), "X-Replacement", Set.of("yes")))
+				.headers(Map.of("Content-Type", List.of("text/plain"), "X-Replacement", List.of("yes")))
 				.build();
 	}
 
@@ -1234,7 +1234,7 @@ public class IntegrationTests {
 					planCalls.incrementAndGet();
 					Assertions.assertArrayEquals(replacementBody,
 							((MarshaledResponseBody.Bytes) marshaledResponse.getBody().orElseThrow()).getBytes());
-					Assertions.assertEquals(Set.of("yes"), marshaledResponse.getHeaders().get("X-Modified"));
+					Assertions.assertEquals(List.of("yes"), marshaledResponse.getHeaders().get("X-Modified"));
 					return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance(), compressedBodySupplier -> {
 						providerCalls.incrementAndGet();
 						return compressedBodySupplier.get();
@@ -1247,8 +1247,8 @@ public class IntegrationTests {
 				MarshaledResponse response = responseGenerator.apply(request);
 				responseWriter.accept(response.copy().body(replacementBody)
 						.headers(headers -> {
-							headers.put("Content-Length", Set.of(Integer.toString(replacementBody.length)));
-							headers.put("X-Modified", Set.of("yes"));
+							headers.put("Content-Length", List.of(Integer.toString(replacementBody.length)));
+							headers.put("X-Modified", List.of("yes"));
 						}).finish());
 			}
 		};
@@ -1958,7 +1958,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
 				.contentTooLargeHandler((request, resourceMethod) -> MarshaledResponse.withStatusCode(413)
-						.headers(Map.of("Content-Type", Set.of("text/plain")))
+						.headers(Map.of("Content-Type", List.of("text/plain")))
 						.body(("custom|" + request.isContentTooLarge() + "|" + request.getBody().isEmpty() + "|"
 								+ request.getEncodedBodySizeInBytes())
 								.getBytes(StandardCharsets.UTF_8))

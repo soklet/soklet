@@ -25,6 +25,7 @@ import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -91,7 +92,7 @@ public class SseLastEventIdTests {
 		@SseEventSource("/sse/{id}")
 		public SseHandshakeResult sse(@NonNull Request request,
 															 @NonNull SseServer sseServer) {
-			String last = request.getHeaders().getOrDefault("Last-Event-ID", Set.of()).stream().findFirst().orElse("none");
+			String last = request.getHeaders().getOrDefault("Last-Event-ID", List.of()).stream().findFirst().orElse("none");
 
 			// Wait a bit and then broadcast
 			new Thread(() -> {

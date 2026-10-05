@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.ArrayList;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -97,7 +98,7 @@ public class McpNotificationPublicRuntimeTests {
 				new InboundCase("accepted-cancellation",
 						"notifications/cancelled",
 						"{\"requestId\":\"missing-target\"}", 202,
-						Map.of("Cache-Control", Set.of("no-store"))),
+						Map.of("Cache-Control", List.of("no-store"))),
 				new InboundCase("request-shaped-tools-notification",
 						"tools/call",
 						"{\"_meta\":{"
@@ -106,19 +107,19 @@ public class McpNotificationPublicRuntimeTests {
 								+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 								+ "\"name\":\"must-not-run\",\"arguments\":{}}",
 						400,
-						Map.of("Cache-Control", Set.of("no-store"))),
+						Map.of("Cache-Control", List.of("no-store"))),
 				new InboundCase("unsupported-notification",
 						"vendor.example/future-notification", null, 400,
-						Map.of("Cache-Control", Set.of("no-store"))),
+						Map.of("Cache-Control", List.of("no-store"))),
 				new InboundCase("admission-rejected",
 						"vendor.example/admission-notification", null, 401,
-						Map.of("Cache-Control", Set.of("no-store"),
-								"WWW-Authenticate", Set.of(
+						Map.of("Cache-Control", List.of("no-store"),
+								"WWW-Authenticate", List.of(
 										"Bearer realm=soklet-mcp"))),
 				new InboundCase("rate-limited",
 						"vendor.example/rate-notification", null, 429,
-						Map.of("Cache-Control", Set.of("no-store"),
-								"Retry-After", Set.of("1"))));
+						Map.of("Cache-Control", List.of("no-store"),
+								"Retry-After", List.of("1"))));
 
 		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
 				.configureMcpServer(builder ->
@@ -362,11 +363,11 @@ public class McpNotificationPublicRuntimeTests {
 				+ testCase.method() + "\""
 				+ (testCase.params() == null ? ""
 						: ",\"params\":" + testCase.params()) + "}";
-		Map<String, Set<String>> headers = baseHeaders();
-		headers.put("Mcp-Method", Set.of(testCase.method()));
+		Map<String, List<String>> headers = baseHeaders();
+		headers.put("Mcp-Method", List.of(testCase.method()));
 		if (testCase.method().equals("tools/call"))
-			headers.put("Mcp-Name", Set.of("must-not-run"));
-		headers.put("X-Notification-Case", Set.of(testCase.name()));
+			headers.put("Mcp-Name", List.of("must-not-run"));
+		headers.put("X-Notification-Case", List.of(testCase.name()));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
@@ -382,9 +383,9 @@ public class McpNotificationPublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{},"
 				+ "\"progressToken\":\"opaque-progress-token\"},"
 				+ "\"name\":\"emit-progress\",\"arguments\":{}}}";
-		Map<String, Set<String>> headers = baseHeaders();
-		headers.put("Mcp-Method", Set.of("tools/call"));
-		headers.put("Mcp-Name", Set.of("emit-progress"));
+		Map<String, List<String>> headers = baseHeaders();
+		headers.put("Mcp-Method", List.of("tools/call"));
+		headers.put("Mcp-Name", List.of("emit-progress"));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
@@ -399,8 +400,8 @@ public class McpNotificationPublicRuntimeTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 				+ "\"notifications\":{\"resourcesListChanged\":true}}}";
-		Map<String, Set<String>> headers = baseHeaders();
-		headers.put("Mcp-Method", Set.of("subscriptions/listen"));
+		Map<String, List<String>> headers = baseHeaders();
+		headers.put("Mcp-Method", List.of("subscriptions/listen"));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
@@ -408,12 +409,12 @@ public class McpNotificationPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Map<String, Set<String>> baseHeaders() {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
-		headers.put("Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
+	private static Map<String, List<String>> baseHeaders() {
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
+		headers.put("Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
 		return headers;
 	}
 
@@ -434,9 +435,9 @@ public class McpNotificationPublicRuntimeTests {
 				"X-Accel-Buffering"),
 				List.copyOf(response.getHeaders().keySet()));
 		Assertions.assertEquals(Map.of(
-				"Content-Type", Set.of("text/event-stream"),
-				"Cache-Control", Set.of("no-store"),
-				"X-Accel-Buffering", Set.of("no")), response.getHeaders());
+				"Content-Type", List.of("text/event-stream"),
+				"Cache-Control", List.of("no-store"),
+				"X-Accel-Buffering", List.of("no")), response.getHeaders());
 		Assertions.assertEquals(McpSimulationBodyType.SSE,
 				response.getBodyType());
 		Assertions.assertTrue(response.getBody().isEmpty());
@@ -544,7 +545,7 @@ public class McpNotificationPublicRuntimeTests {
 
 	private record InboundCase(@NonNull String name, @NonNull String method,
 			String params, int expectedStatus,
-			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>>
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>>
 					expectedHeaders) {
 		private InboundCase {
 			expectedHeaders = Map.copyOf(expectedHeaders);

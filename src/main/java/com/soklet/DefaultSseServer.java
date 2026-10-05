@@ -58,15 +58,12 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -2588,7 +2585,7 @@ final class DefaultSseServer implements SseServer {
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 		SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
-		boolean hasDate = !marshaledResponse.getHeaders().getOrDefault("Date", Set.of()).isEmpty();
+		boolean hasDate = !marshaledResponse.getHeaders().getOrDefault("Date", List.of()).isEmpty();
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
@@ -2615,7 +2612,7 @@ final class DefaultSseServer implements SseServer {
 				printWriter.print("HTTP/1.1 200 OK\r\n");
 
 					// Write headers, ignoring illegal ones
-					for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+					for (Entry<String, List<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 						String headerName = entry.getKey();
 
 						if (headerName == null)
@@ -2625,7 +2622,7 @@ final class DefaultSseServer implements SseServer {
 						throw new IllegalArgumentException(format("You may not specify the '%s' header for %s.%s responses",
 								headerName, SseHandshakeResult.class.getSimpleName(), SseHandshakeResult.Accepted.class.getSimpleName()));
 
-						Set<String> values = entry.getValue();
+						List<String> values = entry.getValue();
 						if (values == null || values.isEmpty())
 							continue;
 
@@ -2660,7 +2657,7 @@ final class DefaultSseServer implements SseServer {
 				boolean hasContentLength = false;
 				boolean hasTransferEncoding = false;
 
-					for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+					for (Entry<String, List<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 						String headerName = entry.getKey();
 
 						if (headerName == null)
@@ -2674,7 +2671,7 @@ final class DefaultSseServer implements SseServer {
 					if (lowercaseHeaderName.equals("transfer-encoding"))
 						hasTransferEncoding = true;
 
-						Set<String> headerValues = entry.getValue();
+						List<String> headerValues = entry.getValue();
 						if (headerValues == null || headerValues.isEmpty())
 							continue;
 
@@ -2718,27 +2715,8 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private static List<String> normalizeHeaderValues(@NonNull Set<String> values) {
-		requireNonNull(values);
-
-		if (values.isEmpty())
-			return List.of();
-
-		List<String> normalizedValues;
-
-		if (values instanceof SortedSet || values instanceof LinkedHashSet
-				|| values.spliterator().hasCharacteristics(java.util.Spliterator.ORDERED)) {
-			normalizedValues = new ArrayList<>(values.size());
-			for (String value : values)
-				normalizedValues.add(value == null ? "" : value);
-		} else {
-			SortedSet<String> sortedValues = new TreeSet<>();
-			for (String value : values)
-				sortedValues.add(value == null ? "" : value);
-			normalizedValues = new ArrayList<>(sortedValues);
-		}
-
-		return normalizedValues;
+	private static List<String> normalizeHeaderValues(@NonNull List<String> values) {
+		return List.copyOf(requireNonNull(values));
 	}
 
 	@NonNull
@@ -3427,7 +3405,7 @@ final class DefaultSseServer implements SseServer {
 		if (!HostHeaderValidator.isValidHostHeaderValue(hostHeaderValue))
 			throw new IllegalRequestException("Invalid Host header value");
 
-		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
+		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
 		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).remoteAddress(remoteAddress).build();
 	}
@@ -3515,7 +3493,7 @@ final class DefaultSseServer implements SseServer {
 	protected void validateNoRequestBodyHeaders(@NonNull Request request) {
 		requireNonNull(request);
 
-		Map<String, Set<String>> headers = request.getHeaders();
+		Map<String, List<String>> headers = request.getHeaders();
 		for (String headerName : headers.keySet()) {
 			if (headerName == null)
 				continue;
@@ -3525,12 +3503,12 @@ final class DefaultSseServer implements SseServer {
 			}
 		}
 
-		Set<String> transferEncodingValues = headers.get("Transfer-Encoding");
+		List<String> transferEncodingValues = headers.get("Transfer-Encoding");
 
 		if (transferEncodingValues != null && !transferEncodingValues.isEmpty())
 			throw new IllegalRequestException("Transfer-Encoding is not allowed for Server-Sent Event requests");
 
-		Set<String> contentLengthValues = headers.get("Content-Length");
+		List<String> contentLengthValues = headers.get("Content-Length");
 
 		if (contentLengthValues != null && !contentLengthValues.isEmpty()) {
 			if (contentLengthValues.size() != 1)
@@ -3879,7 +3857,7 @@ final class DefaultSseServer implements SseServer {
 			cursor = lineEndIndex + lineSeparatorLength;
 		}
 
-		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
+		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
 
 		return Optional.of(Request.withRawUrl(httpMethod, rawUri)
 				.idGenerator(getIdGenerator())

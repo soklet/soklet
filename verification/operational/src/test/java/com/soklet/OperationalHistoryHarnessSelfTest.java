@@ -275,7 +275,7 @@ public final class OperationalHistoryHarnessSelfTest {
         "resource growth must clamp only negative deltas");
 
     String json = OperationalHistoryHarness.Json.canonical(Map.of(
-        "z", Set.of(),
+        "z", List.of(),
         "a", Map.of("text", "line\nvalue", "number", 3)));
     require(json.equals("""
         {

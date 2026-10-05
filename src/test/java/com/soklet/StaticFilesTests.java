@@ -86,8 +86,8 @@ public class StaticFilesTests {
 			for (EntityTag entityTag : List.of(EntityTag.fromStrongValue(value), EntityTag.fromWeakValue(value))) {
 				String header = entityTag.toHeaderValue();
 				Assertions.assertEquals(entityTag, EntityTag.fromHeaderValue(header).orElseThrow());
-				Assertions.assertEquals(Set.of(header), MarshaledResponse.withStatusCode(200)
-						.headers(Map.of("ETag", Set.of(header))).build().getHeaders().get("ETag"));
+				Assertions.assertEquals(List.of(header), MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("ETag", List.of(header))).build().getHeaders().get("ETag"));
 			}
 		}
 	}
@@ -169,17 +169,17 @@ public class StaticFilesTests {
 				.build();
 
 		Assertions.assertEquals(200, fullResponse.getStatusCode());
-		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), fullResponse.getHeaders().get("Content-Type"));
-		Assertions.assertEquals(Set.of("gzip"), fullResponse.getHeaders().get("Content-Encoding"));
-		Assertions.assertEquals(Set.of("\"v1\""), fullResponse.getHeaders().get("ETag"));
-		Assertions.assertEquals(Set.of("Mon, 04 May 2026 01:02:03 GMT"), fullResponse.getHeaders().get("Last-Modified"));
-		Assertions.assertEquals(Set.of("bytes"), fullResponse.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), fullResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("gzip"), fullResponse.getHeaders().get("Content-Encoding"));
+		Assertions.assertEquals(List.of("\"v1\""), fullResponse.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of("Mon, 04 May 2026 01:02:03 GMT"), fullResponse.getHeaders().get("Last-Modified"));
+		Assertions.assertEquals(List.of("bytes"), fullResponse.getHeaders().get("Accept-Ranges"));
 		MarshaledResponseBody.File fullBody = (MarshaledResponseBody.File) fullResponse.getBody().orElseThrow();
 		Assertions.assertEquals(Long.valueOf(0), fullBody.getOffset());
 		Assertions.assertEquals(Long.valueOf(6), fullBody.getCount());
 
 		Request rangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("Range", Set.of("bytes=2-4")))
+				.headers(Map.of("Range", List.of("bytes=2-4")))
 				.build();
 		MarshaledResponse rangeResponse = MarshaledResponse.withFile(file, rangeRequest)
 				.contentType("text/plain; charset=UTF-8")
@@ -189,8 +189,8 @@ public class StaticFilesTests {
 				.cacheControl("public, max-age=60")
 				.build();
 		Assertions.assertEquals(206, rangeResponse.getStatusCode());
-		Assertions.assertEquals(Set.of("gzip"), rangeResponse.getHeaders().get("Content-Encoding"));
-		Assertions.assertEquals(Set.of("bytes 2-4/6"), rangeResponse.getHeaders().get("Content-Range"));
+		Assertions.assertEquals(List.of("gzip"), rangeResponse.getHeaders().get("Content-Encoding"));
+		Assertions.assertEquals(List.of("bytes 2-4/6"), rangeResponse.getHeaders().get("Content-Range"));
 		MarshaledResponseBody.File rangeBody = (MarshaledResponseBody.File) rangeResponse.getBody().orElseThrow();
 		Assertions.assertEquals(Long.valueOf(2), rangeBody.getOffset());
 		Assertions.assertEquals(Long.valueOf(3), rangeBody.getCount());
@@ -203,7 +203,7 @@ public class StaticFilesTests {
 
 		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class, () ->
 				MarshaledResponse.withFile(file, Request.fromPath(HttpMethod.GET, "/example.txt"))
-						.headers(Map.of("Content-Encoding", Set.of("gzip")))
+						.headers(Map.of("Content-Encoding", List.of("gzip")))
 						.build());
 		Assertions.assertTrue(exception.getMessage().contains("Header 'Content-Encoding' is controlled by file responses"));
 	}
@@ -214,7 +214,7 @@ public class StaticFilesTests {
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
 		Request notModifiedRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-None-Match", Set.of("W/\"v1\"")))
+				.headers(Map.of("If-None-Match", List.of("W/\"v1\"")))
 				.build();
 		MarshaledResponse notModifiedResponse = fileBuilder(file, notModifiedRequest).build();
 		Assertions.assertEquals(304, notModifiedResponse.getStatusCode());
@@ -222,72 +222,72 @@ public class StaticFilesTests {
 		Assertions.assertFalse(notModifiedResponse.getHeaders().containsKey("Content-Type"));
 
 		Request ifMatchWildcardRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-Match", Set.of("*")))
+				.headers(Map.of("If-Match", List.of("*")))
 				.build();
 		Assertions.assertEquals(200, fileBuilder(file, ifMatchWildcardRequest).build().getStatusCode());
 
 		Request ifNoneMatchWildcardRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-None-Match", Set.of("*")))
+				.headers(Map.of("If-None-Match", List.of("*")))
 				.build();
 		Assertions.assertEquals(304, fileBuilder(file, ifNoneMatchWildcardRequest).build().getStatusCode());
 
 		Request modifiedSinceFutureRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-Modified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")))
+				.headers(Map.of("If-Modified-Since", List.of("Mon, 04 May 2026 01:02:04 GMT")))
 				.build();
 		Assertions.assertEquals(304, fileBuilder(file, modifiedSinceFutureRequest).build().getStatusCode());
 
 		Request modifiedSincePastRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-Modified-Since", Set.of("Mon, 04 May 2026 01:02:02 GMT")))
+				.headers(Map.of("If-Modified-Since", List.of("Mon, 04 May 2026 01:02:02 GMT")))
 				.build();
 		Assertions.assertEquals(200, fileBuilder(file, modifiedSincePastRequest).build().getStatusCode());
 
 		Request failedPreconditionRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-Match", Set.of("\"other\"")))
+				.headers(Map.of("If-Match", List.of("\"other\"")))
 				.build();
 		MarshaledResponse failedPreconditionResponse = fileBuilder(file, failedPreconditionRequest).build();
 		Assertions.assertEquals(412, failedPreconditionResponse.getStatusCode());
 		Assertions.assertTrue(failedPreconditionResponse.getBody().isEmpty());
 
 		Request failedHeadPreconditionRequest = Request.withPath(HttpMethod.HEAD, "/example.txt")
-				.headers(Map.of("If-Match", Set.of("\"other\"")))
+				.headers(Map.of("If-Match", List.of("\"other\"")))
 				.build();
 		MarshaledResponse failedHeadPreconditionResponse = fileBuilder(file, failedHeadPreconditionRequest).build();
 		Assertions.assertEquals(412, failedHeadPreconditionResponse.getStatusCode());
 		Assertions.assertTrue(failedHeadPreconditionResponse.getBody().isEmpty());
 		MarshaledResponse marshaledFailedHeadPreconditionResponse = DefaultResponseMarshaler.defaultInstance().forHead(failedHeadPreconditionRequest, failedHeadPreconditionResponse);
 		Assertions.assertTrue(marshaledFailedHeadPreconditionResponse.getBody().isEmpty());
-		Assertions.assertEquals(Set.of("0"), marshaledFailedHeadPreconditionResponse.getHeaders().get("Content-Length"));
+		Assertions.assertEquals(List.of("0"), marshaledFailedHeadPreconditionResponse.getHeaders().get("Content-Length"));
 
 		Request headRequest = Request.fromPath(HttpMethod.HEAD, "/example.txt");
 		MarshaledResponse headGetEquivalent = fileBuilder(file, headRequest).build();
 		Assertions.assertEquals(200, headGetEquivalent.getStatusCode());
-		Assertions.assertEquals(Set.of("bytes"), headGetEquivalent.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("bytes"), headGetEquivalent.getHeaders().get("Accept-Ranges"));
 		Assertions.assertEquals(Long.valueOf(6), headGetEquivalent.getBodyLength());
 
 		MarshaledResponse marshaledHeadResponse = DefaultResponseMarshaler.defaultInstance().forHead(headRequest, headGetEquivalent);
 		Assertions.assertTrue(marshaledHeadResponse.getBody().isEmpty());
-		Assertions.assertEquals(Set.of("6"), marshaledHeadResponse.getHeaders().get("Content-Length"));
-		Assertions.assertEquals(Set.of("bytes"), marshaledHeadResponse.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("6"), marshaledHeadResponse.getHeaders().get("Content-Length"));
+		Assertions.assertEquals(List.of("bytes"), marshaledHeadResponse.getHeaders().get("Accept-Ranges"));
 
 		Request headRangeRequest = Request.withPath(HttpMethod.HEAD, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("\"v1\"")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("\"v1\"")
 				))
 				.build();
 		MarshaledResponse headGetEquivalentResponse = fileBuilder(file, headRangeRequest).build();
 		Assertions.assertEquals(200, headGetEquivalentResponse.getStatusCode());
 		Assertions.assertFalse(headGetEquivalentResponse.getHeaders().containsKey("Content-Range"));
-		Assertions.assertEquals(Set.of("bytes"), headGetEquivalentResponse.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("bytes"), headGetEquivalentResponse.getHeaders().get("Accept-Ranges"));
 		Assertions.assertEquals(Long.valueOf(6), headGetEquivalentResponse.getBodyLength());
 
 		MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(headRangeRequest, headGetEquivalentResponse);
 		Assertions.assertTrue(headResponse.getBody().isEmpty());
 		Assertions.assertEquals(200, headResponse.getStatusCode());
-		Assertions.assertEquals(Set.of("6"), headResponse.getHeaders().get("Content-Length"));
+		Assertions.assertEquals(List.of("6"), headResponse.getHeaders().get("Content-Length"));
 
 		Request unsatisfiableRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("Range", Set.of("bytes=20-30")))
+				.headers(Map.of("Range", List.of("bytes=20-30")))
 				.build();
 		MarshaledResponse unsatisfiableRangeResponse = fileBuilder(file, unsatisfiableRangeRequest).build();
 		Assertions.assertEquals(416, unsatisfiableRangeResponse.getStatusCode());
@@ -301,16 +301,16 @@ public class StaticFilesTests {
 
 		Request matchingStrongEntityTagRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("\"v1\"")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("\"v1\"")
 				))
 				.build();
 		Assertions.assertEquals(206, fileBuilder(file, matchingStrongEntityTagRequest).build().getStatusCode());
 
 		Request matchingWeakEntityTagRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("W/\"v1\"")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("W/\"v1\"")
 				))
 				.build();
 		MarshaledResponse weakEntityTagResponse = fileBuilder(file, matchingWeakEntityTagRequest).build();
@@ -319,16 +319,16 @@ public class StaticFilesTests {
 
 		Request matchingDateRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("Mon, 04 May 2026 01:02:03 GMT")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("Mon, 04 May 2026 01:02:03 GMT")
 				))
 				.build();
 		Assertions.assertEquals(206, fileBuilder(file, matchingDateRequest).build().getStatusCode());
 
 		Request nonmatchingDateRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("Mon, 04 May 2026 01:02:02 GMT")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("Mon, 04 May 2026 01:02:02 GMT")
 				))
 				.build();
 		MarshaledResponse nonmatchingDateResponse = fileBuilder(file, nonmatchingDateRequest).build();
@@ -337,8 +337,8 @@ public class StaticFilesTests {
 
 		Request ifRangeWithoutResponseValidatorRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=2-4"),
-						"If-Range", Set.of("\"v1\"")
+						"Range", List.of("bytes=2-4"),
+						"If-Range", List.of("\"v1\"")
 				))
 				.build();
 		Assertions.assertEquals(200, MarshaledResponse.withFile(file, ifRangeWithoutResponseValidatorRequest).build().getStatusCode());
@@ -350,7 +350,7 @@ public class StaticFilesTests {
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
 		Request repeatedIfNoneMatchRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-None-Match", Set.of("\"other\"", "\"v1\"")))
+				.headers(Map.of("If-None-Match", List.of("\"other\"", "\"v1\"")))
 				.build();
 		Assertions.assertEquals(304, MarshaledResponse.withFile(file, repeatedIfNoneMatchRequest)
 				.entityTag(EntityTag.fromStrongValue("v1"))
@@ -358,7 +358,7 @@ public class StaticFilesTests {
 				.getStatusCode());
 
 		Request repeatedRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("Range", Set.of("bytes=0-1", "bytes=2-3")))
+				.headers(Map.of("Range", List.of("bytes=0-1", "bytes=2-3")))
 				.build();
 		MarshaledResponse repeatedRangeResponse = MarshaledResponse.withFile(file, repeatedRangeRequest)
 				.entityTag(EntityTag.fromStrongValue("v1"))
@@ -418,7 +418,7 @@ public class StaticFilesTests {
 						: "no-cache"))
 				.headersResolver((path, attributes) -> {
 					resolvedPath.set(path);
-					return Map.of("X-Static", Set.of(path.getFileName().toString()));
+					return Map.of("X-Static", List.of(path.getFileName().toString()));
 				})
 				.rangeRequestsResolver((path, attributes) -> path.getFileName().toString().endsWith(".js"))
 				.mimeTypeResolver((path) -> path.getFileName().toString().endsWith(".bin")
@@ -428,13 +428,13 @@ public class StaticFilesTests {
 
 		MarshaledResponse indexResponse = staticFiles.marshaledResponseFor("", Request.fromPath(HttpMethod.GET, "/assets/")).orElseThrow();
 		Assertions.assertTrue(Files.isSameFile(indexHtml, resolvedPath.get()));
-		Assertions.assertEquals(Set.of("no-cache"), indexResponse.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(List.of("no-cache"), indexResponse.getHeaders().get("Cache-Control"));
 		Assertions.assertFalse(indexResponse.getHeaders().containsKey("Accept-Ranges"));
-		Assertions.assertEquals(Set.of("index.html"), indexResponse.getHeaders().get("X-Static"));
+		Assertions.assertEquals(List.of("index.html"), indexResponse.getHeaders().get("X-Static"));
 
 		MarshaledResponse appResponse = staticFiles.marshaledResponseFor("app.js", Request.fromPath(HttpMethod.GET, "/assets/app.js")).orElseThrow();
-		Assertions.assertEquals(Set.of("public, max-age=31536000, immutable"), appResponse.getHeaders().get("Cache-Control"));
-		Assertions.assertEquals(Set.of("bytes"), appResponse.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(List.of("public, max-age=31536000, immutable"), appResponse.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(List.of("bytes"), appResponse.getHeaders().get("Accept-Ranges"));
 	}
 
 	@Test
@@ -448,7 +448,7 @@ public class StaticFilesTests {
 
 		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir).build();
 		MarshaledResponse textResponse = defaultStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), textResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), textResponse.getHeaders().get("Content-Type"));
 		MarshaledResponse unknownResponse = defaultStaticFiles.marshaledResponseFor("example.unknown", Request.fromPath(HttpMethod.GET, "/example.unknown")).orElseThrow();
 		Assertions.assertFalse(unknownResponse.getHeaders().containsKey("Content-Type"));
 
@@ -462,7 +462,7 @@ public class StaticFilesTests {
 				.mimeTypeResolver((path) -> Optional.of("application/x-example"))
 				.build();
 		MarshaledResponse customResponse = customStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("application/x-example"), customResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("application/x-example"), customResponse.getHeaders().get("Content-Type"));
 
 		MimeTypeResolver defaultMimeTypeResolver = MimeTypeResolver.defaultInstance();
 		StaticFiles extendedStaticFiles = StaticFiles.withRoot(tempDir)
@@ -471,9 +471,9 @@ public class StaticFilesTests {
 						: defaultMimeTypeResolver.contentTypeFor(path))
 				.build();
 		MarshaledResponse extendedCustomResponse = extendedStaticFiles.marshaledResponseFor("example.foo", Request.fromPath(HttpMethod.GET, "/example.foo")).orElseThrow();
-		Assertions.assertEquals(Set.of("application/x-foo"), extendedCustomResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("application/x-foo"), extendedCustomResponse.getHeaders().get("Content-Type"));
 		MarshaledResponse extendedTextResponse = extendedStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), extendedTextResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), extendedTextResponse.getHeaders().get("Content-Type"));
 	}
 
 	@Test
@@ -544,13 +544,13 @@ public class StaticFilesTests {
 			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
 			MarshaledResponse response = staticFiles.marshaledResponseFor(file.getFileName().toString(), Request.fromPath(HttpMethod.GET, "/" + file.getFileName())).orElseThrow();
-			Assertions.assertEquals(Set.of(entry.getValue()), response.getHeaders().get("Content-Type"), extension);
+			Assertions.assertEquals(List.of(entry.getValue()), response.getHeaders().get("Content-Type"), extension);
 		}
 
 		Path uppercaseFile = tempDir.resolve("example.JSON");
 		Files.writeString(uppercaseFile, "{}", StandardCharsets.UTF_8);
 		MarshaledResponse uppercaseResponse = staticFiles.marshaledResponseFor("example.JSON", Request.fromPath(HttpMethod.GET, "/example.JSON")).orElseThrow();
-		Assertions.assertEquals(Set.of("application/json; charset=UTF-8"), uppercaseResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(List.of("application/json; charset=UTF-8"), uppercaseResponse.getHeaders().get("Content-Type"));
 	}
 
 	@Test
@@ -589,7 +589,7 @@ public class StaticFilesTests {
 				.build();
 
 		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\""), response.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\""), response.getHeaders().get("ETag"));
 
 		MarshaledResponse secondResponse = StaticFiles.withRoot(tempDir)
 				.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
@@ -599,10 +599,10 @@ public class StaticFilesTests {
 		Assertions.assertEquals(response.getHeaders().get("ETag"), secondResponse.getHeaders().get("ETag"));
 
 		MarshaledResponse emptyResponse = staticFiles.marshaledResponseFor("empty.txt", Request.fromPath(HttpMethod.GET, "/empty.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("\"sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""), emptyResponse.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of("\"sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""), emptyResponse.getHeaders().get("ETag"));
 
 		MarshaledResponse largeResponse = staticFiles.marshaledResponseFor("large.txt", Request.fromPath(HttpMethod.GET, "/large.txt")).orElseThrow();
-		Assertions.assertEquals(Set.of("\"sha256-0598aa54768194ade580b9806ac98ace43a0310aeceae95762f62491625eee52\""), largeResponse.getHeaders().get("ETag"));
+		Assertions.assertEquals(List.of("\"sha256-0598aa54768194ade580b9806ac98ace43a0310aeceae95762f62491625eee52\""), largeResponse.getHeaders().get("ETag"));
 
 		Files.writeString(file, "abcdefg", StandardCharsets.UTF_8);
 		MarshaledResponse changedResponse = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
@@ -614,13 +614,13 @@ public class StaticFilesTests {
 		Assertions.assertEquals(304, staticFiles.marshaledResponseFor("example.txt", notModifiedRequest).orElseThrow().getStatusCode());
 
 		Request failedPreconditionRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-Match", Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")))
+				.headers(Map.of("If-Match", List.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")))
 				.build();
 		Assertions.assertEquals(412, staticFiles.marshaledResponseFor("example.txt", failedPreconditionRequest).orElseThrow().getStatusCode());
 
 		Request ifRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=0-2"),
+						"Range", List.of("bytes=0-2"),
 						"If-Range", changedResponse.getHeaders().get("ETag")
 				))
 				.build();
@@ -628,8 +628,8 @@ public class StaticFilesTests {
 
 		Request nonmatchingIfRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
 				.headers(Map.of(
-						"Range", Set.of("bytes=0-2"),
-						"If-Range", Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")
+						"Range", List.of("bytes=0-2"),
+						"If-Range", List.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")
 				))
 				.build();
 		MarshaledResponse nonmatchingIfRangeResponse = staticFiles.marshaledResponseFor("example.txt", nonmatchingIfRangeRequest).orElseThrow();
@@ -725,7 +725,7 @@ public class StaticFilesTests {
 					})
 					.headersResolver((path, attributes) -> {
 						headersInvocations.incrementAndGet();
-						return Map.of("X-Test", Set.of("true"));
+						return Map.of("X-Test", List.of("true"));
 					})
 					.rangeRequestsResolver((path, attributes) -> {
 						rangeInvocations.incrementAndGet();
@@ -878,7 +878,7 @@ public class StaticFilesTests {
 				})
 				.headersResolver((path, attributes) -> {
 					headerInvocations.incrementAndGet();
-					return Map.of("X-Test", Set.of("true"));
+					return Map.of("X-Test", List.of("true"));
 				})
 				.build();
 		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
@@ -902,10 +902,10 @@ public class StaticFilesTests {
 		for (String name : List.of("content-length", "Content-Range", "aCcEpT-rAnGeS", "Content-Type",
 				"Content-Encoding", "Cache-Control", "eTAG", "Last-Modified", "Transfer-Encoding")) {
 			IllegalArgumentException factoryFailure = Assertions.assertThrows(IllegalArgumentException.class,
-					() -> StaticFiles.HeadersResolver.fromHeaders(Map.of(name, Set.of("value"))));
+					() -> StaticFiles.HeadersResolver.fromHeaders(Map.of(name, List.of("value"))));
 			Assertions.assertTrue(factoryFailure.getMessage().contains("StaticFiles.HeadersResolver"));
 			StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir)
-					.headersResolver((path, attributes) -> Map.of(name, Set.of("value"))).build();
+					.headersResolver((path, attributes) -> Map.of(name, List.of("value"))).build();
 			IllegalArgumentException callbackFailure = Assertions.assertThrows(IllegalArgumentException.class,
 					() -> conflictingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
 			Assertions.assertTrue(callbackFailure.getMessage().contains("StaticFiles.HeadersResolver"));
@@ -920,7 +920,7 @@ public class StaticFilesTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				StaticFiles.CacheControlResolver.fromValue(" "));
 
-		LinkedHashSet<String> headerValues = new LinkedHashSet<>();
+		ArrayList<String> headerValues = new ArrayList<>();
 		headerValues.add(null);
 		Assertions.assertThrows(NullPointerException.class, () ->
 				StaticFiles.HeadersResolver.fromHeaders(Map.of("X-Test", headerValues)));
@@ -981,7 +981,7 @@ public class StaticFilesTests {
 			acceptedHeader.append(",\"v").append(i).append("\"");
 
 		Request acceptedRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-None-Match", Set.of(acceptedHeader.toString())))
+				.headers(Map.of("If-None-Match", List.of(acceptedHeader.toString())))
 				.build();
 		Assertions.assertEquals(304, MarshaledResponse.withFile(file, acceptedRequest)
 				.entityTag(EntityTag.fromStrongValue("v1"))
@@ -991,7 +991,7 @@ public class StaticFilesTests {
 		StringBuilder rejectedHeader = new StringBuilder(acceptedHeader);
 		rejectedHeader.append(",\"v256\"");
 		Request rejectedRequest = Request.withPath(HttpMethod.GET, "/example.txt")
-				.headers(Map.of("If-None-Match", Set.of(rejectedHeader.toString())))
+				.headers(Map.of("If-None-Match", List.of(rejectedHeader.toString())))
 				.build();
 		Assertions.assertEquals(200, MarshaledResponse.withFile(file, rejectedRequest)
 				.entityTag(EntityTag.fromStrongValue("v1"))
@@ -1036,14 +1036,14 @@ public class StaticFilesTests {
 		SokletSimulator.run(simulatorConfig, simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/assets/app.js"));
 			Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals(Set.of("public, max-age=31536000, immutable"), result.getMarshaledResponse().getHeaders().get("Cache-Control"));
-			Assertions.assertEquals(Set.of("bytes"), result.getMarshaledResponse().getHeaders().get("Accept-Ranges"));
+			Assertions.assertEquals(List.of("public, max-age=31536000, immutable"), result.getMarshaledResponse().getHeaders().get("Cache-Control"));
+			Assertions.assertEquals(List.of("bytes"), result.getMarshaledResponse().getHeaders().get("Accept-Ranges"));
 
 			HttpRequestResult headResult = simulator.performHttpRequest(Request.fromPath(HttpMethod.HEAD, "/assets/app.js"));
 			Assertions.assertEquals(200, headResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertTrue(headResult.getMarshaledResponse().getBody().isEmpty());
-			Assertions.assertEquals(Set.of(appJsLength), headResult.getMarshaledResponse().getHeaders().get("Content-Length"));
-			Assertions.assertEquals(Set.of("bytes"), headResult.getMarshaledResponse().getHeaders().get("Accept-Ranges"));
+			Assertions.assertEquals(List.of(appJsLength), headResult.getMarshaledResponse().getHeaders().get("Content-Length"));
+			Assertions.assertEquals(List.of("bytes"), headResult.getMarshaledResponse().getHeaders().get("Accept-Ranges"));
 		});
 	}
 

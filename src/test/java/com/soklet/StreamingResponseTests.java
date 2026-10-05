@@ -538,7 +538,7 @@ public class StreamingResponseTests {
 		@GET("/writer")
 		public MarshaledResponse writer() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						responseStream.write("hello ".getBytes(StandardCharsets.UTF_8));
 						responseStream.flush();
@@ -550,7 +550,7 @@ public class StreamingResponseTests {
 		@GET("/input-stream")
 		public MarshaledResponse inputStream() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromInputStream(() ->
 							new ByteArrayInputStream("input stream".getBytes(StandardCharsets.UTF_8))))
 					.build();
@@ -578,7 +578,7 @@ public class StreamingResponseTests {
 			});
 
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromPublisher(publisher))
 					.build();
 		}
@@ -586,7 +586,7 @@ public class StreamingResponseTests {
 		@GET("/context-request")
 		public MarshaledResponse contextRequest(@NonNull Request request) {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						boolean sameRequest = request.getId().equals(responseStream.getRequest().getId());
 						responseStream.write((sameRequest ? "same" : "missing").getBytes(StandardCharsets.UTF_8));
@@ -597,7 +597,7 @@ public class StreamingResponseTests {
 		@GET("/interrupt")
 		public MarshaledResponse interrupt() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						throw new InterruptedException("simulated interrupt");
 					}))
@@ -607,7 +607,7 @@ public class StreamingResponseTests {
 		@GET("/cancel-callback-failure")
 		public MarshaledResponse cancelCallbackFailure() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						// Keep this callback registered for the response lifetime. Closing an
 						// unclaimed registration here can legitimately suppress async delivery.
@@ -630,7 +630,7 @@ public class StreamingResponseTests {
 		public MarshaledResponse sealDuringStream() {
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type",
-							Set.of("text/plain; charset=UTF-8")))
+							List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromWriter(responseStream -> {
 						responseStream.getCancelationToken().onCancel(() -> {
 							throw new IllegalStateException(
@@ -657,7 +657,7 @@ public class StreamingResponseTests {
 		@GET("/blocking-input-stream")
 		public MarshaledResponse blockingInputStream() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.streamingResponseBody(StreamingResponseBody.fromInputStream(() ->
 							new BlockingInputStream(inputStreamClosedLatch)))
 					.build();
@@ -666,7 +666,7 @@ public class StreamingResponseTests {
 		@GET("/blocking-reader")
 		public MarshaledResponse blockingReader() {
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8")))
 					.streamingResponseBody(StreamingResponseBody.fromReader(() ->
 									new BlockingReader(readerClosedLatch),
 							StandardCharsets.UTF_8))
@@ -695,7 +695,7 @@ public class StreamingResponseTests {
 			});
 
 			return MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", List.of("application/octet-stream")))
 					.streamingResponseBody(StreamingResponseBody.fromPublisher(publisher))
 					.build();
 		}

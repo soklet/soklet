@@ -127,11 +127,11 @@ public class McpSimulatorPublicRuntimeTests {
 
 		Request observed = admittedRequest.get();
 		Assertions.assertNotNull(observed);
-		Assertions.assertEquals(Set.of(LOOPBACK + ":0"),
+		Assertions.assertEquals(List.of(LOOPBACK + ":0"),
 				observed.getHeaders().get("Host"));
-		Assertions.assertEquals(Set.of(origin),
+		Assertions.assertEquals(List.of(origin),
 				observed.getHeaders().get("Origin"));
-		Assertions.assertEquals(Set.of("canary-value"),
+		Assertions.assertEquals(List.of("canary-value"),
 				observed.getHeaders().get("X-Simulator-Canary"));
 		Assertions.assertArrayEquals(request.getBody().orElseThrow(),
 				observed.getBody().orElseThrow());
@@ -293,7 +293,7 @@ public class McpSimulatorPublicRuntimeTests {
 					Optional.empty()));
 			McpSimulationResponse rejectedResponse = awaitResponse(rejected);
 			Assertions.assertEquals(401, rejectedResponse.getStatusCode());
-			Assertions.assertEquals(Set.of("Bearer realm=soklet-mcp-simulator"),
+			Assertions.assertEquals(List.of("Bearer realm=soklet-mcp-simulator"),
 					rejectedResponse.getHeaders().get("WWW-Authenticate"));
 			String rejectedBody = new String(
 					rejectedResponse.getBody().orElseThrow(), StandardCharsets.UTF_8);
@@ -1339,16 +1339,16 @@ public class McpSimulatorPublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}"
 				+ progress + "},\"name\":\"" + toolName
 				+ "\",\"arguments\":{}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		Map<String, List<String>> headers = new LinkedHashMap<>();
 		if (host != null)
-			headers.put("Host", Set.of(host));
-		headers.put("Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
-		headers.put("Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of("tools/call"));
-		headers.put("Mcp-Name", Set.of(toolName));
-		headers.put("X-Simulator-Canary", Set.of("canary-value"));
-		origin.ifPresent(value -> headers.put("Origin", Set.of(value)));
+			headers.put("Host", List.of(host));
+		headers.put("Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
+		headers.put("Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of("tools/call"));
+		headers.put("Mcp-Name", List.of(toolName));
+		headers.put("X-Simulator-Canary", List.of("canary-value"));
+		origin.ifPresent(value -> headers.put("Origin", List.of(value)));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
@@ -1364,11 +1364,11 @@ public class McpSimulatorPublicRuntimeTests {
 				+ "\"notifications\":{\"resourcesListChanged\":true}}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
-						"Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("subscriptions/listen")))
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
+						"Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("subscriptions/listen")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -1384,12 +1384,12 @@ public class McpSimulatorPublicRuntimeTests {
 				+ "\"requestState\":\"" + requestState + "\"}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
-						"Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("tools/call"),
-						"Mcp-Name", Set.of(toolName)))
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
+						"Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("tools/call"),
+						"Mcp-Name", List.of(toolName)))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
@@ -1397,11 +1397,11 @@ public class McpSimulatorPublicRuntimeTests {
 	private static Request malformedRequest(@NonNull String body) {
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
-						"Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of("server/discover")))
+						"Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
+						"Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of("server/discover")))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}

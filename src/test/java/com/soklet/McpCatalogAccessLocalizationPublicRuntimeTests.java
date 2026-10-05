@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -357,14 +358,14 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
 		return Request.withPath(HttpMethod.POST, WIRE_PATH)
 				.headers(Map.of(
-						"Host", Set.of(LOOPBACK + ":0"),
-						"Authorization", Set.of("Bearer " + tenant),
-						"Content-Type", Set.of(
+						"Host", List.of(LOOPBACK + ":0"),
+						"Authorization", List.of("Bearer " + tenant),
+						"Content-Type", List.of(
 								"application/json; charset=UTF-8"),
-						"Accept", Set.of("application/json, text/event-stream"),
-						"Accept-Language", Set.of("fr"),
-						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
-						"Mcp-Method", Set.of(method)))
+						"Accept", List.of("application/json, text/event-stream"),
+						"Accept-Language", List.of("fr"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of(method)))
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();
 	}

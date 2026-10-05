@@ -43,7 +43,7 @@ class McpPrivacyBoundaryInternalTests {
 		Request request = Request.withRawUrl(HttpMethod.POST,
 				"/" + SECRET + "?query=" + SECRET)
 				.id(SECRET)
-				.headers(Map.of("Authorization", Set.of("Bearer " + SECRET)))
+				.headers(Map.of("Authorization", List.of("Bearer " + SECRET)))
 				.build();
 		McpJsonObject secretJson = new McpJsonObject(
 				Map.of(SECRET, new McpJsonString(SECRET)));

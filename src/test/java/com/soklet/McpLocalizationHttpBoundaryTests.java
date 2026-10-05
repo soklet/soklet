@@ -96,7 +96,7 @@ class McpLocalizationHttpBoundaryTests {
 				request("tools/call", "vary-error", "missing.tool",
 						",\"name\":\"missing.tool\",\"arguments\":{}",
 						Set.of(), null));
-		assertEquals(Set.of("Accept-Language"),
+		assertEquals(List.of("Accept-Language"),
 				localizedError.headers().get("Vary"), localizedError.toString());
 
 		// The same request without a localizer carries no Vary at all.
@@ -114,7 +114,7 @@ class McpLocalizationHttpBoundaryTests {
 				request("server/discover", "early-cors", null, "", Set.of(),
 						"https://rejected.example"));
 		assertEquals(403, corsRejection.statusCode());
-		assertEquals(Set.of("Accept-Language"),
+		assertEquals(List.of("Accept-Language"),
 				corsRejection.headers().get("Vary"), corsRejection.toString());
 	}
 
@@ -125,7 +125,7 @@ class McpLocalizationHttpBoundaryTests {
 						"https://cors.example"));
 
 		assertEquals(200, capture.statusCode(), capture.body());
-		assertEquals(Set.of("Origin, Accept-Language"),
+		assertEquals(List.of("Origin, Accept-Language"),
 				capture.headers().get("Vary"), capture.headers().toString());
 	}
 
@@ -143,7 +143,7 @@ class McpLocalizationHttpBoundaryTests {
 				context -> McpAdmissionDecision.rejected(wildcard));
 
 		assertEquals(403, wildcardCapture.statusCode());
-		assertEquals(Set.of("*"), wildcardCapture.headers().get("Vary"),
+		assertEquals(List.of("*"), wildcardCapture.headers().get("Vary"),
 				wildcardCapture.headers().toString());
 
 		McpAdmissionRejection duplicateTokens = McpAdmissionRejection
@@ -159,7 +159,7 @@ class McpLocalizationHttpBoundaryTests {
 				context -> McpAdmissionDecision.rejected(duplicateTokens));
 
 		assertEquals(403, normalizedCapture.statusCode());
-		assertEquals(Set.of("Origin, Accept-Language, X-Tenant"),
+		assertEquals(List.of("Origin, Accept-Language, X-Tenant"),
 				normalizedCapture.headers().get("Vary"),
 				normalizedCapture.headers().toString());
 	}
@@ -203,7 +203,7 @@ class McpLocalizationHttpBoundaryTests {
 				.build();
 	}
 
-	private record Capture(int statusCode, Map<String, Set<String>> headers,
+	private record Capture(int statusCode, Map<String, List<String>> headers,
 			String body) {}
 
 	private static Capture capture(McpLocalizer localizer,
@@ -340,19 +340,19 @@ class McpLocalizationHttpBoundaryTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
 				+ paramsSuffix + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		if (!acceptLanguage.isEmpty())
-			headers.put("Accept-Language", acceptLanguage);
+			headers.put("Accept-Language", List.copyOf(acceptLanguage));
 		if (origin != null)
-			headers.put("Origin", Set.of(origin));
+			headers.put("Origin", List.of(origin));
 
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)

@@ -35,6 +35,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
@@ -46,7 +47,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
@@ -250,15 +250,15 @@ public final class Utilities {
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
-	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
 	 * @param query       a raw query string such as {@code "a=1&b=2&c=%20"}
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
-	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
+	 * @return a map of parameter names to their ordered values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if percent-encoding is malformed, decoded bytes are invalid for UTF-8, or literal text contains unpaired surrogates
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
 																																																		@NonNull QueryFormat queryFormat) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
@@ -273,16 +273,16 @@ public final class Utilities {
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
-	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
 	 * @param query       a raw query string such as {@code "a=1&b=2&c=%20"}
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @param charset     the charset to use when decoding percent-escapes
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
-	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
+	 * @return a map of parameter names to their ordered values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if percent-encoding is malformed, decoded bytes are invalid for the selected charset, or literal text contains unpaired surrogates
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
 																																																		@NonNull QueryFormat queryFormat,
 																																																		@NonNull Charset charset) {
 		requireNonNull(query);
@@ -295,7 +295,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	static Optional<Set<@NonNull String>> extractQueryParameterValuesFromQuery(@NonNull String query,
+	static Optional<List<@NonNull String>> extractQueryParameterValuesFromQuery(@NonNull String query,
 																																						 @NonNull String name,
 																																						 @NonNull QueryFormat queryFormat,
 																																						 @NonNull Charset charset) {
@@ -310,7 +310,7 @@ public final class Utilities {
 			return Optional.empty();
 
 		String singleValue = null;
-		Set<String> values = null;
+		List<String> values = null;
 		boolean matched = false;
 		int pairStart = 0;
 
@@ -342,7 +342,7 @@ public final class Utilities {
 							matched = true;
 						} else {
 							if (values == null) {
-								values = new LinkedHashSet<>();
+								values = new ArrayList<>();
 								values.add(singleValue);
 							}
 
@@ -362,9 +362,9 @@ public final class Utilities {
 			return Optional.empty();
 
 		if (values == null)
-			return Optional.of(Set.of(singleValue));
+			return Optional.of(List.of(singleValue));
 
-		return Optional.of(Collections.unmodifiableSet(values));
+		return Optional.of(Collections.unmodifiableList(values));
 	}
 
 	/**
@@ -374,15 +374,15 @@ public final class Utilities {
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
-	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
 	 * @param url         a relative or absolute URL/URI string
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
-	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
+	 * @return a map of parameter names to their ordered values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if percent-encoding is malformed, decoded bytes are invalid for UTF-8, or literal text contains unpaired surrogates
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
 																																																	@NonNull QueryFormat queryFormat) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
@@ -397,16 +397,16 @@ public final class Utilities {
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
-	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
 	 * @param url         a relative or absolute URL/URI string
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @param charset     the charset to use when decoding percent-escapes
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
-	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
+	 * @return a map of parameter names to their ordered values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if percent-encoding is malformed, decoded bytes are invalid for the selected charset, or literal text contains unpaired surrogates
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
 																																																	@NonNull QueryFormat queryFormat,
 																																																	@NonNull Charset charset) {
 		requireNonNull(url);
@@ -426,7 +426,7 @@ public final class Utilities {
 		if (query == null)
 			return Map.of();
 
-		Map<String, Set<String>> queryParameters = new LinkedHashMap<>();
+		Map<String, List<String>> queryParameters = new LinkedHashMap<>();
 		for (String pair : query.split("&", -1)) {
 			if (pair.isEmpty())
 				continue;
@@ -448,8 +448,8 @@ public final class Utilities {
 			addStringValue(queryParameters, name, value);
 		}
 
-		freezeStringValueSets(queryParameters);
-		return queryParameters;
+		freezeStringValueLists(queryParameters);
+		return Collections.unmodifiableMap(queryParameters);
 	}
 
 	/**
@@ -478,13 +478,18 @@ public final class Utilities {
 	 */
 	@NonNull
 	private static String percentDecode(@NonNull String s, @NonNull Charset charset) {
+		return percentDecode(s, charset, true);
+	}
+
+	@NonNull
+	private static String percentDecode(@NonNull String s, @NonNull Charset charset, boolean decodedValueRequired) {
 		requireNonNull(s);
 		requireNonNull(charset);
 
 		if (s.isEmpty())
 			return "";
 
-		StringBuilder sb = new StringBuilder(s.length());
+		StringBuilder sb = decodedValueRequired ? new StringBuilder(s.length()) : null;
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 
 		for (int i = 0; i < s.length(); ) {
@@ -508,37 +513,36 @@ public final class Utilities {
 					j += 3;
 				}
 
-				sb.append(new String(bytes.toByteArray(), charset));
+				try {
+					String decoded = RequestTextDecoder.decode(bytes.toByteArray(), charset);
+					if (sb != null)
+						sb.append(decoded);
+				} catch (CharacterCodingException ignored) {
+					throw new IllegalRequestException("Invalid character encoding in URL component.");
+				}
 				i = j;
 				continue;
 			}
 
-			// Non-'%' char: append it as-is.
-			// This preserves surrogate pairs naturally as the loop hits both chars.
-			sb.append(c);
+			if (Character.isSurrogate(c)) {
+				if (!Character.isHighSurrogate(c) || i + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(i + 1)))
+					throw new IllegalRequestException("Invalid Unicode in URL component.");
+				if (sb != null)
+					sb.append(c).append(s.charAt(i + 1));
+				i += 2;
+				continue;
+			}
+			if (sb != null)
+				sb.append(c);
 			i++;
 		}
 
-		return sb.toString();
+		return sb == null ? "" : sb.toString();
 	}
 
 	static void validatePercentEncodingInUrlComponent(@NonNull String urlComponent) {
-		requireNonNull(urlComponent);
-
-		for (int i = 0; i < urlComponent.length(); i++) {
-			if (urlComponent.charAt(i) != '%')
-				continue;
-
-			if (i + 2 >= urlComponent.length())
-				throw new IllegalRequestException("Invalid percent-encoding in URL component");
-
-			int hi = hex(urlComponent.charAt(i + 1));
-			int lo = hex(urlComponent.charAt(i + 2));
-			if (hi < 0 || lo < 0)
-				throw new IllegalRequestException("Invalid percent-encoding in URL component");
-
-			i += 2;
-		}
+		// Validate all values before a lazy accessor can select just one parameter.
+		percentDecode(urlComponent, StandardCharsets.UTF_8, false);
 	}
 
 	private static int hex(char c) {
@@ -556,26 +560,27 @@ public final class Utilities {
 	 * <ul>
 	 *   <li>Components are split on {@code ';'} unless inside a quoted string.</li>
 	 *   <li>Quoted values have surrounding quotes removed and common backslash escapes unescaped.</li>
-	 *   <li>Percent-escapes are decoded as UTF-8. {@code '+'} is <strong>not</strong> treated specially.</li>
+	 *   <li>Percent-escapes are decoded strictly as UTF-8. {@code '+'} is <strong>not</strong> treated specially; malformed percent-escapes are preserved as literal text.</li>
 	 * </ul>
-	 * Multiple occurrences of the same cookie name are collected into a {@link Set} in insertion order.
+	 * Multiple occurrences of the same cookie name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
 	 * @param headers request headers as a multimap of header name to values (must be non-{@code null})
-	 * @return a map of cookie name to distinct values; empty if no valid cookies are present
+	 * @return a map of cookie name to ordered values; empty if no valid cookies are present
+	 * @throws IllegalRequestException if a cookie value contains invalid UTF-8 bytes or unpaired surrogates
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractCookiesFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractCookiesFromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Cookie *names* must be case-sensitive; keep LinkedHashMap (NOT case-insensitive)
-		Map<String, Set<String>> cookies = new LinkedHashMap<>();
+		Map<String, List<String>> cookies = new LinkedHashMap<>();
 
-		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+		for (Entry<String, List<String>> entry : headers.entrySet()) {
 			String headerName = entry.getKey();
 			if (headerName == null || !"cookie".equalsIgnoreCase(headerName.trim()))
 				continue;
 
-			Set<String> values = entry.getValue();
+			List<String> values = entry.getValue();
 			if (values == null) continue;
 
 			for (String headerValue : values) {
@@ -605,15 +610,15 @@ public final class Utilities {
 						cookieValue = percentDecodeCookieValue(unquoted);
 					}
 
-					cookies.putIfAbsent(cookieName, Set.of());
+					cookies.putIfAbsent(cookieName, List.of());
 					if (cookieValue != null)
 						addStringValue(cookies, cookieName, cookieValue);
 				}
 			}
 		}
 
-		freezeStringValueSets(cookies);
-		return cookies;
+		freezeStringValueLists(cookies);
+		return Collections.unmodifiableMap(cookies);
 	}
 
 	/**
@@ -644,6 +649,8 @@ public final class Utilities {
 				rawCharacter = cookieValue.substring(i, i + 2);
 				i += 2;
 			} else {
+				if (Character.isSurrogate(c))
+					throw new IllegalRequestException("Invalid Unicode in cookie value.");
 				rawCharacter = Character.toString(c);
 				i++;
 			}
@@ -652,7 +659,11 @@ public final class Utilities {
 			out.write(encoded, 0, encoded.length);
 		}
 
-		return out.toString(StandardCharsets.UTF_8);
+		try {
+			return RequestTextDecoder.decode(out.toByteArray(), StandardCharsets.UTF_8);
+		} catch (CharacterCodingException ignored) {
+			throw new IllegalRequestException("Invalid character encoding in cookie value.");
+		}
 	}
 
 	/**
@@ -892,7 +903,7 @@ public final class Utilities {
 	 * @return the encoded query string, or the empty string if no parameters
 	 */
 	@NonNull
-	public static String encodeQueryParameters(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters,
+	public static String encodeQueryParameters(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters,
 																						 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryParameters);
 		requireNonNull(queryFormat);
@@ -903,7 +914,7 @@ public final class Utilities {
 		StringBuilder sb = new StringBuilder();
 		boolean first = true;
 
-		for (Entry<String, Set<String>> entry : queryParameters.entrySet()) {
+		for (Entry<String, List<String>> entry : queryParameters.entrySet()) {
 			String encodedName = encodeQueryComponent(entry.getKey(), queryFormat);
 
 			for (String value : entry.getValue()) {
@@ -1059,7 +1070,7 @@ public final class Utilities {
 	}
 
 	@Nullable
-	private static String firstHeaderValue(@Nullable Set<String> headerValues) {
+	private static String firstHeaderValue(@Nullable List<String> headerValues) {
 		if (headerValues == null || headerValues.isEmpty())
 			return null;
 
@@ -1141,7 +1152,7 @@ public final class Utilities {
 					EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST));
 		}
 
-		Map<String, Set<String>> headers = effectiveOriginResolver.getHeaders();
+		Map<String, List<String>> headers = effectiveOriginResolver.getHeaders();
 		boolean trustForwardedHeaders = shouldTrustForwardedHeaders(effectiveOriginResolver);
 		Boolean configuredAllowOriginFallback = effectiveOriginResolver.getAllowOriginFallback();
 		boolean allowOriginFallback = configuredAllowOriginFallback != null
@@ -1166,7 +1177,7 @@ public final class Utilities {
 
 		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
 		if (trustForwardedHeaders) {
-			Set<String> forwardedHeaders = headers.get("Forwarded");
+			List<String> forwardedHeaders = headers.get("Forwarded");
 			if (forwardedHeaders != null) {
 				forwardedHeaderLoop:
 				for (String forwardedHeader : forwardedHeaders) {
@@ -1496,9 +1507,9 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static List<@NonNull InetAddress> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	private static List<@NonNull InetAddress> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
-		Set<String> forwardedHeaders = headers.get("Forwarded");
+		List<String> forwardedHeaders = headers.get("Forwarded");
 
 		if (forwardedHeaders == null || forwardedHeaders.isEmpty())
 			return List.of();
@@ -1539,9 +1550,9 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static List<@NonNull InetAddress> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	private static List<@NonNull InetAddress> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
-		Set<String> xForwardedForHeaders = headers.get("X-Forwarded-For");
+		List<String> xForwardedForHeaders = headers.get("X-Forwarded-For");
 
 		if (xForwardedForHeaders == null || xForwardedForHeaders.isEmpty())
 			return List.of();
@@ -1711,10 +1722,10 @@ public final class Utilities {
 	 * @see #extractContentTypeFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<@NonNull String> extractContentTypeFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<@NonNull String> extractContentTypeFromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
-		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
+		List<String> contentTypeHeaderValues = headers.get("Content-Type");
 
 		if (contentTypeHeaderValues == null || contentTypeHeaderValues.size() == 0)
 			return Optional.empty();
@@ -1761,10 +1772,10 @@ public final class Utilities {
 	 * @see #extractCharsetFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<@NonNull Charset> extractCharsetFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<@NonNull Charset> extractCharsetFromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
-		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
+		List<String> contentTypeHeaderValues = headers.get("Content-Type");
 
 		if (contentTypeHeaderValues == null || contentTypeHeaderValues.size() == 0)
 			return Optional.empty();
@@ -2027,7 +2038,7 @@ public final class Utilities {
 	);
 
 	/**
-	 * Given a list of raw HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into distinct values where permitted according to RFC 7230/9110.
+	 * Given a list of raw HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into individual values where permitted according to RFC 7230/9110.
 	 * <p>
 	 * For example, given these raw header lines:
 	 * <pre>{@code List<String> lines = List.of(
@@ -2053,14 +2064,14 @@ public final class Utilities {
 	 * @return a normalized mapping of header name keys to values
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractHeadersFromRawHeaderLines(@NonNull List<@NonNull String> rawHeaderLines) {
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractHeadersFromRawHeaderLines(@NonNull List<@NonNull String> rawHeaderLines) {
 		requireNonNull(rawHeaderLines);
 
 		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations
 		List<String> lines = unfold(rawHeaderLines);
 
 		// 2) Parse into map
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 
 		for (String raw : lines) {
 			String line = trimAggressivelyToNull(raw);
@@ -2076,11 +2087,11 @@ public final class Utilities {
 			addParsedHeader(headers, line.substring(0, idx), line.substring(idx + 1));
 		}
 
-		freezeStringValueSets(headers);
-		return headers;
+		freezeStringValueLists(headers);
+		return Collections.unmodifiableMap(headers);
 	}
 
-	static void addParsedHeader(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+	static void addParsedHeader(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
 															@Nullable String name,
 															@Nullable String value) {
 		requireNonNull(headers);
@@ -2101,7 +2112,7 @@ public final class Utilities {
 		}
 	}
 
-	static void addParsedHeaderValues(@NonNull Set<@NonNull String> values,
+	static void addParsedHeaderValues(@NonNull List<@NonNull String> values,
 																		@Nullable String name,
 																		@Nullable String value) {
 		requireNonNull(values);
@@ -2124,45 +2135,65 @@ public final class Utilities {
 		}
 	}
 
-	static void freezeStringValueSets(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName) {
+	static void freezeStringValueLists(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> valuesByName) {
 		requireNonNull(valuesByName);
 
-		for (Entry<String, Set<String>> entry : valuesByName.entrySet()) {
-			Set<String> values = entry.getValue();
+		for (Entry<String, List<String>> entry : valuesByName.entrySet()) {
+			List<String> values = entry.getValue();
 
 			if (values == null || values.isEmpty()) {
-				entry.setValue(Set.of());
-			} else if (values instanceof LinkedHashSet) {
-				entry.setValue(Collections.unmodifiableSet(values));
+				entry.setValue(List.of());
+			} else {
+				entry.setValue(List.copyOf(values));
 			}
 		}
 	}
 
-	private static void addStringValue(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName,
+	private static void addStringValue(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> valuesByName,
 																		 @NonNull String name,
 																		 @NonNull String value) {
 		requireNonNull(valuesByName);
 		requireNonNull(name);
 		requireNonNull(value);
 
-		Set<String> values = valuesByName.get(name);
+		List<String> values = valuesByName.get(name);
 
 		if (values == null || values.isEmpty()) {
-			valuesByName.put(name, Set.of(value));
+			valuesByName.put(name, List.of(value));
 			return;
 		}
 
-		if (values.contains(value))
-			return;
-
-		if (values instanceof LinkedHashSet) {
+		if (values instanceof ArrayList) {
 			values.add(value);
 			return;
 		}
 
-		Set<String> promotedValues = new LinkedHashSet<>(values);
+		List<String> promotedValues = new ArrayList<>(values);
 		promotedValues.add(value);
 		valuesByName.put(name, promotedValues);
+	}
+
+	@NonNull
+	static <T> Map<@NonNull String, @NonNull List<T>> immutableValueLists(
+			@Nullable Map<@NonNull String, @NonNull List<T>> valuesByName, boolean caseInsensitive) {
+		Map<String, List<T>> copy = mutableValueLists(valuesByName, caseInsensitive);
+		copy.replaceAll((name, values) -> List.copyOf(values));
+		return Collections.unmodifiableMap(copy);
+	}
+
+	@NonNull
+	static <T> Map<@NonNull String, @NonNull List<T>> mutableValueLists(
+			@Nullable Map<@NonNull String, @NonNull List<T>> valuesByName, boolean caseInsensitive) {
+		Map<String, List<T>> copy = caseInsensitive ? new LinkedCaseInsensitiveMap<>() : new LinkedHashMap<>();
+		if (valuesByName == null || valuesByName.isEmpty())
+			return copy;
+
+		for (Entry<String, List<T>> entry : valuesByName.entrySet()) {
+			String name = requireNonNull(entry.getKey());
+			List<T> values = requireNonNull(entry.getValue());
+			copy.computeIfAbsent(name, ignored -> new ArrayList<>()).addAll(values);
+		}
+		return copy;
 	}
 
 	/**

@@ -21,9 +21,10 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -99,9 +100,9 @@ public final class ConditionalRequests {
 	public static Optional<@NonNull Response> responseFor(@NonNull Request request,
 																						 @Nullable EntityTag entityTag,
 																						 @Nullable Instant lastModified,
-																						 @Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+																						 @Nullable Map<@NonNull String, @NonNull List<@NonNull String>> extraHeaders) {
 		requireNonNull(request);
-		Map<String, Set<String>> copiedExtraHeaders = copyExtraHeaders(extraHeaders);
+		Map<String, List<String>> copiedExtraHeaders = copyExtraHeaders(extraHeaders);
 		Instant truncatedLastModified = lastModified == null ? null : ConditionalRequestEvaluator.truncateToSeconds(lastModified);
 		ConditionalRequestEvaluator.PreconditionOutcome preconditionOutcome = ConditionalRequestEvaluator.evaluate(
 				ConditionalRequestEvaluator.RequestContext.fromRequest(request),
@@ -125,7 +126,7 @@ public final class ConditionalRequests {
 	 * @return immutable {@code ETag} and {@code Last-Modified} headers for the supplied validators
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> validatorHeaders(@Nullable EntityTag entityTag,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> validatorHeaders(@Nullable EntityTag entityTag,
 																																										 @Nullable Instant lastModified) {
 		return validatorHeadersFor(entityTag, lastModified == null ? null : ConditionalRequestEvaluator.truncateToSeconds(lastModified));
 	}
@@ -142,9 +143,9 @@ public final class ConditionalRequests {
 	 * @return immutable combined headers
 	 */
 	@NonNull
-	public static Map<@NonNull String, @NonNull Set<@NonNull String>> validatorHeaders(@Nullable EntityTag entityTag,
+	public static Map<@NonNull String, @NonNull List<@NonNull String>> validatorHeaders(@Nullable EntityTag entityTag,
 																																										 @Nullable Instant lastModified,
-																																										 @Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+																																										 @Nullable Map<@NonNull String, @NonNull List<@NonNull String>> extraHeaders) {
 		return responseHeaders(
 				entityTag,
 				lastModified == null ? null : ConditionalRequestEvaluator.truncateToSeconds(lastModified),
@@ -156,7 +157,7 @@ public final class ConditionalRequests {
 	private static Response bodylessResponse(@NonNull Integer statusCode,
 																					 @Nullable EntityTag entityTag,
 																					 @Nullable Instant lastModified,
-																					 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+																					 @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> extraHeaders) {
 		requireNonNull(statusCode);
 		requireNonNull(extraHeaders);
 
@@ -166,48 +167,48 @@ public final class ConditionalRequests {
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> responseHeaders(@Nullable EntityTag entityTag,
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> responseHeaders(@Nullable EntityTag entityTag,
 																																										 @Nullable Instant lastModified,
-																																										 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+																																										 @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> extraHeaders) {
 		requireNonNull(extraHeaders);
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 		headers.putAll(validatorHeadersFor(entityTag, lastModified));
 		headers.putAll(extraHeaders);
 		return Collections.unmodifiableMap(headers);
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> validatorHeadersFor(@Nullable EntityTag entityTag,
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> validatorHeadersFor(@Nullable EntityTag entityTag,
 																																												@Nullable Instant truncatedLastModified) {
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 
 		if (entityTag != null)
-			headers.put("ETag", Set.of(entityTag.toHeaderValue()));
+			headers.put("ETag", List.of(entityTag.toHeaderValue()));
 
 		if (truncatedLastModified != null)
-			headers.put("Last-Modified", Set.of(HttpDate.toHeaderValue(truncatedLastModified)));
+			headers.put("Last-Modified", List.of(HttpDate.toHeaderValue(truncatedLastModified)));
 
 		return Collections.unmodifiableMap(headers);
 	}
 
 	@NonNull
-	private static Map<@NonNull String, @NonNull Set<@NonNull String>> copyExtraHeaders(
-			@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+	private static Map<@NonNull String, @NonNull List<@NonNull String>> copyExtraHeaders(
+			@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> extraHeaders) {
 		if (extraHeaders == null || extraHeaders.isEmpty())
 			return Map.of();
 
-		Map<String, Set<String>> copiedHeaders = new LinkedCaseInsensitiveMap<>();
+		Map<String, List<String>> copiedHeaders = new LinkedCaseInsensitiveMap<>();
 
-		for (Map.Entry<String, Set<String>> entry : extraHeaders.entrySet()) {
+		for (Map.Entry<String, List<String>> entry : Utilities.immutableValueLists(extraHeaders, true).entrySet()) {
 			String headerName = requireNonNull(entry.getKey());
 			rejectControlledExtraHeader(headerName);
 
-			Set<String> copiedHeaderValues = new LinkedHashSet<>(requireNonNull(entry.getValue()));
+			List<String> copiedHeaderValues = new ArrayList<>(requireNonNull(entry.getValue()));
 			copiedHeaderValues.forEach(value -> {
 				requireNonNull(value, format("Header '%s' includes a null value.", headerName));
 				Utilities.validateHeaderNameAndValue(headerName, value);
 			});
-			copiedHeaders.put(headerName, Collections.unmodifiableSet(copiedHeaderValues));
+			copiedHeaders.put(headerName, List.copyOf(copiedHeaderValues));
 		}
 
 		return Collections.unmodifiableMap(copiedHeaders);

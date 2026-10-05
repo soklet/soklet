@@ -19,8 +19,8 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
@@ -68,7 +68,7 @@ final class DefaultResponseCompressor implements ResponseCompressor {
 	private Boolean hasCompressibleContentType(@NonNull MarshaledResponse response) {
 		requireNonNull(response);
 
-		for (Entry<String, Set<String>> entry : response.getHeaders().entrySet()) {
+		for (Entry<String, List<String>> entry : response.getHeaders().entrySet()) {
 			if (!"Content-Type".equalsIgnoreCase(entry.getKey()))
 				continue;
 

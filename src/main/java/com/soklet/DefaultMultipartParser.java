@@ -36,16 +36,18 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnsupportedCharsetException;
 import java.text.ParseException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.List;
 
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
@@ -103,7 +105,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 	@Override
 	@NonNull
-	public Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request) {
+	public Map<@NonNull String, @NonNull List<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request) {
 		byte[] requestBody = request.getBody().orElse(null);
 
 		if (requestBody == null)
@@ -149,7 +151,7 @@ final class DefaultMultipartParser implements MultipartParser {
 							+ "Allowed characters are: A-Z, a-z, 0-9, space, and '()+_,-./:=?; "
 							+ "the final character must not be a space.");
 
-		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
+		Map<String, List<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 
 		try (ByteArrayInputStream input = new ByteArrayInputStream(requestBody)) {
 			MultipartStream multipartStream = new MultipartStream(input, boundary.getBytes(StandardCharsets.UTF_8), progressNotifier);
@@ -205,10 +207,10 @@ final class DefaultMultipartParser implements MultipartParser {
 						.charset(charset)
 						.build();
 
-				Set<MultipartField> multipartFields = multipartFieldsByName.get(name);
+				List<MultipartField> multipartFields = multipartFieldsByName.get(name);
 
 				if (multipartFields == null) {
-					multipartFields = new LinkedHashSet<>();
+					multipartFields = new ArrayList<>();
 					multipartFieldsByName.put(name, multipartFields);
 				}
 
@@ -223,7 +225,17 @@ final class DefaultMultipartParser implements MultipartParser {
 			throw new UncheckedIOException(e);
 		}
 
-		return multipartFieldsByName;
+		return Utilities.immutableValueLists(multipartFieldsByName, false);
+	}
+
+	private static String decodeMultipartText(byte[] bytes, String charsetName) throws UnsupportedEncodingException {
+		Charset charset;
+		try {
+			charset = Charset.forName(charsetName);
+		} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
+			throw new UnsupportedEncodingException("Unsupported multipart text encoding.");
+		}
+		return RequestTextDecoder.decodeBody(bytes, charset);
 	}
 
 	// The code below is sourced from Selenium.
@@ -1257,12 +1269,12 @@ final class DefaultMultipartParser implements MultipartParser {
 			String headers;
 			if (headerEncoding != null) {
 				try {
-					headers = baos.toString(headerEncoding);
+					headers = decodeMultipartText(baos.toByteArray(), headerEncoding);
 				} catch (final UnsupportedEncodingException e) {
-					headers = baos.toString(StandardCharsets.UTF_8);
+					headers = RequestTextDecoder.decodeBody(baos.toByteArray(), StandardCharsets.UTF_8);
 				}
 			} else {
-				headers = baos.toString(StandardCharsets.UTF_8);
+				headers = RequestTextDecoder.decodeBody(baos.toByteArray(), StandardCharsets.UTF_8);
 			}
 
 			return headers;
@@ -2040,7 +2052,7 @@ final class DefaultMultipartParser implements MultipartParser {
 				return encodedText;
 			}
 			final var bytes = fromHex(encodedText.substring(langDelimitEnd + 1));
-			return new String(bytes, getJavaCharset(mimeCharset));
+			return decodeMultipartText(bytes, getJavaCharset(mimeCharset));
 		}
 
 		/**
@@ -2316,7 +2328,7 @@ final class DefaultMultipartParser implements MultipartParser {
 				}
 				// get the decoded byte data and convert into a string.
 				final var decodedData = out.toByteArray();
-				return new String(decodedData, javaCharset(charset));
+				return decodeMultipartText(decodedData, javaCharset(charset));
 			} catch (final IllegalArgumentException e) {
 				final var parseException = new ParseException("Invalid RFC 2047 Base64 encoded-word: " + word, encodingPos + 1);
 				parseException.initCause(e);

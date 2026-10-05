@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -47,7 +48,7 @@ import java.util.function.Consumer;
  *     simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
- *       .queryParameters(Map.of("name", Set.of("Mark")))
+ *       .queryParameters(Map.of("name", List.of("Mark")))
  *       .build();
  *
  *     // Perform the request and get a handle to the result
@@ -60,7 +61,7 @@ import java.util.function.Consumer;
  *
  *     // Now, create a request for an SSE Event Source...
  *     Request eventSourceRequest = Request.withPath(HttpMethod.GET, "/sse-test")
- *         .queryParameters(Map.of("signingToken", Set.of("xxx")))
+ *         .queryParameters(Map.of("signingToken", List.of("xxx")))
  *         .build();
  *
  *     // ...and perform it and get a handle to the result.

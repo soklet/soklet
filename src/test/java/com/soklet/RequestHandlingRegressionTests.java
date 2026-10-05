@@ -56,8 +56,8 @@ public class RequestHandlingRegressionTests {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.HEAD)
 								.headers(headers -> {
-									headers.put("Origin", Set.of(ORIGIN));
-									headers.put("X-Wrapped", Set.of("true"));
+									headers.put("Origin", List.of(ORIGIN));
+									headers.put("X-Wrapped", List.of("true"));
 								})
 								.finish();
 
@@ -84,8 +84,8 @@ public class RequestHandlingRegressionTests {
 			MarshaledResponse response = result.getMarshaledResponse();
 			assertEquals(Integer.valueOf(200), response.getStatusCode());
 			Assertions.assertTrue(response.getBody().isEmpty(), "HEAD response should not include a body");
-			assertEquals(Set.of("5"), response.getHeaders().get("Content-Length"));
-			assertEquals(Set.of(ORIGIN), response.getHeaders().get("Access-Control-Allow-Origin"));
+			assertEquals(List.of("5"), response.getHeaders().get("Content-Length"));
+			assertEquals(List.of(ORIGIN), response.getHeaders().get("Access-Control-Allow-Origin"));
 		});
 	}
 
@@ -102,7 +102,7 @@ public class RequestHandlingRegressionTests {
 					Request.withPath(HttpMethod.GET, "/content-type").build());
 
 			assertEquals(Integer.valueOf(200), result.getMarshaledResponse().getStatusCode());
-			assertEquals(Set.of("application/custom"),
+			assertEquals(List.of("application/custom"),
 					result.getMarshaledResponse().getHeaders().get("Content-Type"));
 		});
 	}
@@ -235,30 +235,30 @@ public class RequestHandlingRegressionTests {
 				.build(), simulator -> {
 			HttpRequestResult cacheHitResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/conditional")
-							.headers(Map.of("If-None-Match", Set.of("W/\"account-7\"")))
+							.headers(Map.of("If-None-Match", List.of("W/\"account-7\"")))
 							.build());
 			assertEquals(Integer.valueOf(304), cacheHitResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertTrue(cacheHitResult.getMarshaledResponse().getBody().isEmpty());
-			assertEquals(Set.of("\"account-7\""), cacheHitResult.getMarshaledResponse().getHeaders().get("ETag"));
-			assertEquals(Set.of("private, max-age=60"), cacheHitResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
+			assertEquals(List.of("\"account-7\""), cacheHitResult.getMarshaledResponse().getHeaders().get("ETag"));
+			assertEquals(List.of("private, max-age=60"), cacheHitResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
 
 			HttpRequestResult normalGetResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/conditional").build());
 			assertEquals(Integer.valueOf(200), normalGetResult.getMarshaledResponse().getStatusCode());
-			assertEquals(Set.of("\"account-7\""), normalGetResult.getMarshaledResponse().getHeaders().get("ETag"));
-			assertEquals(Set.of("private, max-age=60"), normalGetResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
+			assertEquals(List.of("\"account-7\""), normalGetResult.getMarshaledResponse().getHeaders().get("ETag"));
+			assertEquals(List.of("private, max-age=60"), normalGetResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
 			assertEquals("account", normalGetResult.getResponse().orElseThrow().getBody().orElseThrow());
 
 			HttpRequestResult failedUpdateResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.PUT, "/conditional")
-							.headers(Map.of("If-Match", Set.of("\"account-6\"")))
+							.headers(Map.of("If-Match", List.of("\"account-6\"")))
 							.build());
 			assertEquals(Integer.valueOf(412), failedUpdateResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertTrue(failedUpdateResult.getMarshaledResponse().getBody().isEmpty());
 
 			HttpRequestResult successfulUpdateResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.PUT, "/conditional")
-							.headers(Map.of("If-Match", Set.of("\"account-7\"")))
+							.headers(Map.of("If-Match", List.of("\"account-7\"")))
 							.build());
 			assertEquals(Integer.valueOf(204), successfulUpdateResult.getMarshaledResponse().getStatusCode());
 		});
@@ -277,7 +277,7 @@ public class RequestHandlingRegressionTests {
 		@GET("/content-type")
 		public Response contentType() {
 			return Response.withStatusCode(200)
-					.headers(Map.of("content-type", Set.of("application/custom")))
+					.headers(Map.of("content-type", List.of("application/custom")))
 					.body("ok")
 					.build();
 		}
@@ -313,8 +313,8 @@ public class RequestHandlingRegressionTests {
 	public static class ConditionalResource {
 		private static final EntityTag ENTITY_TAG = EntityTag.fromStrongValue("account-7");
 		private static final Instant LAST_MODIFIED = Instant.parse("2026-05-04T01:02:03Z");
-		private static final Map<String, Set<String>> CACHE_HEADERS = Map.of(
-				"Cache-Control", Set.of("private, max-age=60")
+		private static final Map<String, List<String>> CACHE_HEADERS = Map.of(
+				"Cache-Control", List.of("private, max-age=60")
 		);
 
 		@GET("/conditional")

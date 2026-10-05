@@ -146,15 +146,15 @@ class HeaderLocaleTests {
 
 		EntityTag entityTag = EntityTag.fromStrongValue("v1");
 		Request notModified = Request.withRawUrl(HttpMethod.GET, "/locale")
-				.headers(Map.of("if-none-match", Set.of("\"v1\""))).build();
+				.headers(Map.of("if-none-match", List.of("\"v1\""))).build();
 		Assertions.assertEquals(304, ConditionalRequests.responseFor(notModified, entityTag, null)
 				.orElseThrow().getStatusCode());
 		Request stale = Request.withRawUrl(HttpMethod.PUT, "/locale")
-				.headers(Map.of("if-match", Set.of("\"old\""))).build();
+				.headers(Map.of("if-match", List.of("\"old\""))).build();
 		Assertions.assertEquals(412, ConditionalRequests.responseFor(stale, entityTag, null)
 				.orElseThrow().getStatusCode());
 		Request matching = Request.withRawUrl(HttpMethod.PUT, "/locale")
-				.headers(Map.of("if-match", Set.of("\"v1\""))).build();
+				.headers(Map.of("if-match", List.of("\"v1\""))).build();
 		Assertions.assertTrue(ConditionalRequests.responseFor(matching, entityTag, null).isEmpty());
 	}
 
@@ -166,23 +166,23 @@ class HeaderLocaleTests {
 				() -> {
 					MarshaledResponse partial = MarshaledResponse.withFile(file, rangeRequest("bytes=2-4")).build();
 					Assertions.assertEquals(206, partial.getStatusCode());
-					Assertions.assertEquals(Set.of("bytes 2-4/6"), partial.getHeaders().get("Content-Range"));
+					Assertions.assertEquals(List.of("bytes 2-4/6"), partial.getHeaders().get("Content-Range"));
 				},
 				() -> {
 					MarshaledResponse unsatisfiable = MarshaledResponse.withFile(file, rangeRequest("bytes=9-10")).build();
 					Assertions.assertEquals(416, unsatisfiable.getStatusCode());
-					Assertions.assertEquals(Set.of("bytes */6"), unsatisfiable.getHeaders().get("Content-Range"));
+					Assertions.assertEquals(List.of("bytes */6"), unsatisfiable.getHeaders().get("Content-Range"));
 				},
 				() -> {
 					MarshaledResponse response = requireNonNull(LocaleResource.staticFiles)
 							.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/static")).orElseThrow();
 					Assertions.assertEquals(200, response.getStatusCode());
-					Assertions.assertEquals(Set.of(FILE_ENTITY_TAG), response.getHeaders().get("ETag"));
+					Assertions.assertEquals(List.of(FILE_ENTITY_TAG), response.getHeaders().get("ETag"));
 				});
 	}
 
 	private static @NonNull Request rangeRequest(@NonNull String range) {
-		return Request.withPath(HttpMethod.GET, "/file").headers(Map.of("Range", Set.of(range))).build();
+		return Request.withPath(HttpMethod.GET, "/file").headers(Map.of("Range", List.of(range))).build();
 	}
 
 	private static void assertCookieValues() {
@@ -228,10 +228,10 @@ class HeaderLocaleTests {
 		ResponseMarshaler marshaler = ResponseMarshaler.builder()
 				.throwableHandler((request, throwable, resourceMethod) -> MarshaledResponse
 						.withStatusCode(request.getRawPath().equals("/sse/unknown") ? 599 : 400)
-						.body(REJECTION_BYTES).cookies(Set.of(cookie())).build())
+						.body(REJECTION_BYTES).cookies(List.of(cookie())).build())
 				.serviceUnavailableHandler((request, resourceMethod) -> MarshaledResponse.withStatusCode(503)
-						.headers(Map.of("Content-Length", Set.of("10")))
-						.body(REJECTION_BYTES).cookies(Set.of(cookie())).build())
+						.headers(Map.of("Content-Length", List.of("10")))
+						.body(REJECTION_BYTES).cookies(List.of(cookie())).build())
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).host("127.0.0.1").build())
 				.sseServer(SseServer.withPort(port).host("127.0.0.1")
@@ -361,7 +361,7 @@ class HeaderLocaleTests {
 
 		@GET("/cookie")
 		public @NonNull Response cookieResponse() {
-			return Response.withStatusCode(200).cookies(Set.of(cookie())).body("cookie").build();
+			return Response.withStatusCode(200).cookies(List.of(cookie())).body("cookie").build();
 		}
 	}
 
@@ -369,12 +369,12 @@ class HeaderLocaleTests {
 		@SseEventSource("/sse/reject")
 		public @NonNull SseHandshakeResult reject() {
 			return SseHandshakeResult.rejectWithResponse(Response.withStatusCode(403)
-					.cookies(Set.of(cookie())).body(REJECTION_BODY).build());
+					.cookies(List.of(cookie())).body(REJECTION_BODY).build());
 		}
 
 		@SseEventSource("/sse/accepted")
 		public @NonNull SseHandshakeResult accept() {
-			return SseHandshakeResult.Accepted.builder().cookies(Set.of(cookie())).build();
+			return SseHandshakeResult.Accepted.builder().cookies(List.of(cookie())).build();
 		}
 	}
 }

@@ -290,10 +290,10 @@ public class McpLegacyCompletionPublicRuntimeTests {
 			for (McpProtocolVersion version : LEGACY)
 				for (boolean prompt : List.of(true, false)) {
 					Request request = Request.withPath(HttpMethod.POST, PATH)
-							.headers(Map.of("Host", Set.of(HOST + ":0"),
-									"Content-Type", Set.of("application/json"),
-									"Accept", Set.of("application/json, text/event-stream"),
-									"MCP-Protocol-Version", Set.of(version.getWireValue())))
+							.headers(Map.of("Host", List.of(HOST + ":0"),
+									"Content-Type", List.of("application/json"),
+									"Accept", List.of("application/json, text/event-stream"),
+									"MCP-Protocol-Version", List.of(version.getWireValue())))
 							.body(body(version, "completion/complete", params(prompt,
 									prompt ? "wire" : uriTemplate("wire"), "value", " λ", null), "wire")
 									.getBytes(StandardCharsets.UTF_8)).build();

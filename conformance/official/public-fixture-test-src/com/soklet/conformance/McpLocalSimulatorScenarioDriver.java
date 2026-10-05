@@ -557,7 +557,7 @@ public final class McpLocalSimulatorScenarioDriver {
 				"server/discover", null, "", EMPTY_CAPABILITIES, "", LOOPBACK + ":0",
 				"http://" + LOOPBACK + ":0", Map.of()));
 		assertSuccess(accepted, id + "-accepted", "\"supportedVersions\":[");
-		assertEquals(Set.of("http://" + LOOPBACK + ":0"),
+		assertEquals(List.of("http://" + LOOPBACK + ":0"),
 				header(accepted.headers(), "Access-Control-Allow-Origin"),
 				"Accepted Origin response header");
 	}
@@ -588,7 +588,7 @@ public final class McpLocalSimulatorScenarioDriver {
 		assertSuccess(valid, id + "-valid", "\"tools\":[");
 		JsonExchange mismatch = json(simulator, request(id + "-mismatch",
 				"tools/list", null, "", EMPTY_CAPABILITIES, "", LOOPBACK + ":0", null,
-				Map.of("Mcp-Method", Set.of("prompts/list"))));
+				Map.of("Mcp-Method", List.of("prompts/list"))));
 		assertError(mismatch, 400, -32020, id + "-mismatch");
 	}
 
@@ -596,12 +596,12 @@ public final class McpLocalSimulatorScenarioDriver {
 		JsonExchange valid = json(simulator, toolRequest(id + "-valid",
 				"test_custom_header", "{\"value\":\"header-value\"}",
 				EMPTY_CAPABILITIES, "",
-				Map.of("Mcp-Param-Value", Set.of("header-value"))));
+				Map.of("Mcp-Param-Value", List.of("header-value"))));
 		assertSuccess(valid, id + "-valid", "Custom header accepted.");
 		JsonExchange mismatch = json(simulator, toolRequest(id + "-mismatch",
 				"test_custom_header", "{\"value\":\"body-value\"}",
 				EMPTY_CAPABILITIES, "",
-				Map.of("Mcp-Param-Value", Set.of("header-value"))));
+				Map.of("Mcp-Param-Value", List.of("header-value"))));
 		assertError(mismatch, 400, -32020, id + "-mismatch");
 	}
 
@@ -739,7 +739,7 @@ public final class McpLocalSimulatorScenarioDriver {
 
 	private static Request toolRequest(String id, String tool, String arguments,
 			String capabilities, String trailingParameters,
-			Map<String, Set<String>> extraHeaders) {
+			Map<String, List<String>> extraHeaders) {
 		return request(id, "tools/call", tool,
 				",\"name\":\"" + tool + "\",\"arguments\":" + arguments
 						+ trailingParameters,
@@ -756,24 +756,24 @@ public final class McpLocalSimulatorScenarioDriver {
 
 	private static Request request(String id, String method, String operationName,
 			String parameterSuffix, String capabilities, String metaSuffix,
-			String host, String origin, Map<String, Set<String>> extraHeaders) {
+			String host, String origin, Map<String, List<String>> extraHeaders) {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
 				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":" + capabilities
 				+ metaSuffix + "}" + parameterSuffix + "}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		Map<String, List<String>> headers = new LinkedHashMap<>();
 		if (host != null)
-			headers.put("Host", Set.of(host));
-		headers.put("Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
-		headers.put("Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of(method));
+			headers.put("Host", List.of(host));
+		headers.put("Content-Type", List.of(JSON_MEDIA_TYPE + "; charset=UTF-8"));
+		headers.put("Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of(method));
 		if (operationName != null)
-			headers.put("Mcp-Name", Set.of(operationName));
+			headers.put("Mcp-Name", List.of(operationName));
 		if (origin != null)
-			headers.put("Origin", Set.of(origin));
+			headers.put("Origin", List.of(origin));
 		headers.putAll(extraHeaders);
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
@@ -810,9 +810,9 @@ public final class McpLocalSimulatorScenarioDriver {
 		assertEquals(McpSimulationBodyType.JSON, exchange.bodyType(),
 				"Expected JSON response body type");
 		assertTrue(exchange.bodyPresent(), "Expected captured JSON response body");
-		assertEquals(Set.of("no-store"), header(exchange.headers(), "Cache-Control"),
+		assertEquals(List.of("no-store"), header(exchange.headers(), "Cache-Control"),
 				"JSON Cache-Control header");
-		assertEquals(Set.of(JSON_MEDIA_TYPE),
+		assertEquals(List.of(JSON_MEDIA_TYPE),
 				header(exchange.headers(), "Content-Type"),
 				"JSON Content-Type header");
 		return new JsonExchange(exchange.status(), exchange.body(),
@@ -919,12 +919,12 @@ public final class McpLocalSimulatorScenarioDriver {
 		return frame;
 	}
 
-	private static Set<String> header(Map<String, Set<String>> headers,
+	private static List<String> header(Map<String, List<String>> headers,
 			String name) {
-		for (Map.Entry<String, Set<String>> entry : headers.entrySet())
+		for (Map.Entry<String, List<String>> entry : headers.entrySet())
 			if (entry.getKey().equalsIgnoreCase(name))
 				return entry.getValue();
-		return Set.of();
+		return List.of();
 	}
 
 	private static void assertStopped(McpServer server) {
@@ -986,11 +986,11 @@ public final class McpLocalSimulatorScenarioDriver {
 	}
 
 	private record FixedExchange(int status, McpSimulationBodyType bodyType,
-			boolean bodyPresent, String body, Map<String, Set<String>> headers) {
+			boolean bodyPresent, String body, Map<String, List<String>> headers) {
 	}
 
 	private record JsonExchange(int status, String body,
-			Map<String, Set<String>> headers) {
+			Map<String, List<String>> headers) {
 	}
 
 	private static final class RecordingLifecycle implements LifecycleObserver {

@@ -76,9 +76,9 @@ class McpLocalizationSubscriptionRuntimeTests {
 		List<String> frames = subscribeAndDrain(localizer, 2, authorizations,
 				response -> {
 					contextsAtResponse.set(contexts.get());
-					assertEquals(Set.of("fr"),
+					assertEquals(List.of("fr"),
 							response.getHeaders().get("Content-Language"));
-					assertEquals(Set.of("Accept-Language"),
+					assertEquals(List.of("Accept-Language"),
 							response.getHeaders().get("Vary"));
 				});
 
@@ -108,7 +108,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 				.build();
 
 		List<String> frames = subscribeAndDrain(localizer, 2, response ->
-				assertEquals(Set.of("en"),
+				assertEquals(List.of("en"),
 						response.getHeaders().get("Content-Language")));
 
 		String terminal = frames.get(frames.size() - 1);
@@ -298,12 +298,12 @@ class McpLocalizationSubscriptionRuntimeTests {
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 				+ "\"notifications\":{\"resourcesListChanged\":true}}}";
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-		headers.put("Host", Set.of(LOOPBACK + ":0"));
-		headers.put("Content-Type", Set.of("application/json; charset=UTF-8"));
-		headers.put("Accept", Set.of("application/json, text/event-stream"));
-		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
-		headers.put("Mcp-Method", Set.of("subscriptions/listen"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("Host", List.of(LOOPBACK + ":0"));
+		headers.put("Content-Type", List.of("application/json; charset=UTF-8"));
+		headers.put("Accept", List.of("application/json, text/event-stream"));
+		headers.put("MCP-Protocol-Version", List.of(PROTOCOL_VERSION));
+		headers.put("Mcp-Method", List.of("subscriptions/listen"));
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))

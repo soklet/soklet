@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.ArrayList;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -235,7 +236,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			List<List<String>> forwardedHeaderOrders) {
 		return context -> {
 			requests.add(context.getRequest());
-			Set<String> forwardedHeaders = context.getRequest().getHeaders()
+			List<String> forwardedHeaders = context.getRequest().getHeaders()
 					.get("X-Forwarded-For");
 			forwardedHeaderOrders.add(forwardedHeaders == null
 					? List.of() : List.copyOf(forwardedHeaders));

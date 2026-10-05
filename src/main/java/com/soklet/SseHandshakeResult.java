@@ -22,12 +22,10 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
+import java.util.List;
 import java.util.function.Function;
 
 import static java.lang.String.format;
@@ -173,9 +171,9 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		@NotThreadSafe
 		public static final class Builder {
 			@Nullable
-			private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+			private Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 			@Nullable
-			private Set<@NonNull ResponseCookie> cookies;
+			private List<@NonNull ResponseCookie> cookies;
 			@Nullable
 			private Object clientContext;
 			@Nullable
@@ -199,7 +197,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+			public Builder headers(@Nullable Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 				this.headers = headers;
 				return this;
 			}
@@ -207,11 +205,11 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			/**
 			 * Replaces the custom response cookies to be sent with the handshake.
 			 *
-			 * @param cookies custom response cookies to send, or {@code null} or an empty set to configure no custom cookies
+			 * @param cookies custom response cookies to send, or {@code null} or an empty list to configure no custom cookies
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
+			public Builder cookies(@Nullable List<@NonNull ResponseCookie> cookies) {
 				this.cookies = cookies;
 				return this;
 			}
@@ -272,9 +270,9 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		}
 
 		@NonNull
-		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		private final Map<@NonNull String, @NonNull List<@NonNull String>> headers;
 		@NonNull
-		private final Set<@NonNull ResponseCookie> cookies;
+		private final List<@NonNull ResponseCookie> cookies;
 		@Nullable
 		private final Object clientContext;
 		@Nullable
@@ -284,8 +282,8 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 			requireNonNull(builder);
 
 			// Defensive copies
-			Map<String, Set<String>> headers = builder.headers == null ? Map.of() : Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
-			Set<ResponseCookie> cookies = builder.cookies == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
+			Map<String, List<String>> headers = Utilities.immutableValueLists(builder.headers, true);
+			List<ResponseCookie> cookies = builder.cookies == null ? List.of() : List.copyOf(builder.cookies);
 
 			this.headers = headers;
 			this.cookies = cookies;
@@ -299,7 +297,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 * @return the headers explicitly specified when this handshake was accepted
 		 */
 		@NonNull
-		public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
+		public Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 
@@ -309,7 +307,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 		 * @return the cookies explicitly specified when this handshake was accepted
 		 */
 		@NonNull
-		public Set<@NonNull ResponseCookie> getCookies() {
+		public List<@NonNull ResponseCookie> getCookies() {
 			return this.cookies;
 		}
 

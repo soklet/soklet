@@ -189,11 +189,11 @@ public class McpCompletionWireParityTests {
 			assertTrue(simulator.getMcpServer().orElseThrow().getDiagnostics()
 					.getBoundAddress().isEmpty());
 			Request request = Request.withPath(HttpMethod.POST, "/mcp")
-					.headers(Map.of("Host", Set.of(HOST + ":0"),
-							"Content-Type", Set.of("application/json"),
-							"Accept", Set.of("application/json, text/event-stream"),
-							"MCP-Protocol-Version", Set.of(VERSION),
-							"Mcp-Method", Set.of("completion/complete")))
+					.headers(Map.of("Host", List.of(HOST + ":0"),
+							"Content-Type", List.of("application/json"),
+							"Accept", List.of("application/json, text/event-stream"),
+							"MCP-Protocol-Version", List.of(VERSION),
+							"Mcp-Method", List.of("completion/complete")))
 					.body(body(prompt, name).getBytes(StandardCharsets.UTF_8)).build();
 			McpSimulation simulation = simulator.startMcpRequest(request);
 			try {

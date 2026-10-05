@@ -53,7 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
@@ -457,10 +456,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "query parameter";
 		String parameterName = extractParameterName(resourceMethod, parameter, queryParameter, queryParameter.name());
-		Set<String> values = request.getQueryParameters().get(parameterName);
+		List<String> values = request.getQueryParameters().get(parameterName);
 
 		if (values == null)
-			values = Set.of();
+			values = List.of();
 
 		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(queryParameter.optional())
@@ -487,10 +486,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "form parameter";
 		String parameterName = extractParameterName(resourceMethod, parameter, formParameter, formParameter.name());
-		Set<String> values = request.getFormParameters().get(parameterName);
+		List<String> values = request.getFormParameters().get(parameterName);
 
 		if (values == null)
-			values = Set.of();
+			values = List.of();
 
 		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(formParameter.optional())
@@ -517,10 +516,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "request header";
 		String parameterName = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.name());
-		Set<String> values = request.getHeaderValues(parameterName).orElse(null);
+		List<String> values = request.getHeaderValues(parameterName).orElse(null);
 
 		if (values == null)
-			values = Set.of();
+			values = List.of();
 
 		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(requestHeader.optional())
@@ -547,10 +546,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "request cookie";
 		String parameterName = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.name());
-		Set<String> values = request.getCookies().get(parameterName);
+		List<String> values = request.getCookies().get(parameterName);
 
 		if (values == null)
-			values = Set.of();
+			values = List.of();
 
 		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(requestCookie.optional())
@@ -580,11 +579,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		List<@Nullable String> values = new ArrayList<>();
 		List<@NonNull MultipartField> valuesMetadata = new ArrayList<>();
 
-		for (Map.Entry<String, Set<MultipartField>> entry : request.getMultipartFields().entrySet()) {
+		for (Map.Entry<String, List<MultipartField>> entry : request.getMultipartFields().entrySet()) {
 			String multipartName = entry.getKey();
 
 			if (parameterName.equals(multipartName)) {
-				Set<MultipartField> multipartFields = entry.getValue();
+				List<MultipartField> multipartFields = entry.getValue();
 
 				for (MultipartField matchingMultipartField : multipartFields) {
 					values.add(matchingMultipartField.getDataAsString().orElse(null));

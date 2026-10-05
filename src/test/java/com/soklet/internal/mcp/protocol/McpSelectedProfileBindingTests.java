@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.lang.reflect.Proxy;
 import java.net.URI;
@@ -592,11 +593,11 @@ public class McpSelectedProfileBindingTests {
 				+ "\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
 		return Request.withPath(HttpMethod.POST, "/mcp")
 				.headers(Map.of(
-						"Host", Set.of("127.0.0.1:0"),
-						"Content-Type", Set.of("application/json; charset=UTF-8"),
-						"Accept", Set.of("application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of(revision),
-						"Mcp-Method", Set.of("server/discover")))
+						"Host", List.of("127.0.0.1:0"),
+						"Content-Type", List.of("application/json; charset=UTF-8"),
+						"Accept", List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of(revision),
+						"Mcp-Method", List.of("server/discover")))
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 

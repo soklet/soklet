@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.ArrayList;
 import java.net.URI;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -574,7 +575,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	}
 
 	private static Request withBearer(Request request, String bearerValue) {
-		return request.copy().headers(headers -> headers.put("Authorization", Set.of(bearerValue))).finish();
+		return request.copy().headers(headers -> headers.put("Authorization", List.of(bearerValue))).finish();
 	}
 	private static McpJsonObject bearerSubscribe(Simulator simulator, McpProtocolVersion version, String id, String token) throws InterruptedException {
 		try (McpSimulation call = simulator.startMcpRequest(withBearer(request(HttpMethod.POST, version, id,
@@ -761,11 +762,11 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	}
 
 	private static Request request(HttpMethod method, McpProtocolVersion version, String id, String body, String mirroredMethod) {
-		Map<String, Set<String>> headers = new LinkedHashMap<>();
-			headers.put("Host", Set.of("127.0.0.1:0")); headers.put("Accept", Set.of("application/json, text/event-stream"));
-			headers.put("Content-Type", Set.of("application/json")); headers.put("MCP-Protocol-Version", Set.of(version.getWireValue()));
-			if (id != null) headers.put("Mcp-Session-Id", Set.of(id));
-			if (mirroredMethod != null) headers.put("Mcp-Method", Set.of(mirroredMethod));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+			headers.put("Host", List.of("127.0.0.1:0")); headers.put("Accept", List.of("application/json, text/event-stream"));
+			headers.put("Content-Type", List.of("application/json")); headers.put("MCP-Protocol-Version", List.of(version.getWireValue()));
+			if (id != null) headers.put("Mcp-Session-Id", List.of(id));
+			if (mirroredMethod != null) headers.put("Mcp-Method", List.of(mirroredMethod));
 		return Request.withPath(method, "/mcp").headers(headers).body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 

@@ -203,10 +203,10 @@ public class McpAppResourceRuntimeTests {
 
 	private static String read(Simulator simulator, int expectedStatus) {
 		McpSimulation simulation = simulator.startMcpRequest(Request.withPath(HttpMethod.POST, "/mcp")
-				.headers(Map.of("Host", Set.of(HOST + ":0"), "Content-Type", Set.of("application/json"),
-						"Accept", Set.of("application/json, text/event-stream"),
-						"MCP-Protocol-Version", Set.of("2026-07-28"), "Mcp-Method", Set.of("resources/read"),
-						"Mcp-Name", Set.of(URI_VALUE.toString())))
+				.headers(Map.of("Host", List.of(HOST + ":0"), "Content-Type", List.of("application/json"),
+						"Accept", List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of("2026-07-28"), "Mcp-Method", List.of("resources/read"),
+						"Mcp-Name", List.of(URI_VALUE.toString())))
 				.body(body().getBytes(StandardCharsets.UTF_8)).build());
 		try {
 			McpSimulationResponse response = simulation.awaitResponse(WAIT).orElseThrow();
