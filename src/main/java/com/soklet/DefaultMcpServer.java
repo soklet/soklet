@@ -2129,8 +2129,9 @@ final class DefaultMcpServer implements McpServer {
 			McpJsonRpcError error = exception.getError();
 			return ToolInvocationResult.jsonRpcError(error.getCode(),
 					error.getMessage(), error.getData());
-		} catch (McpInvalidToolArgumentsException
-				| McpTaskOriginBoundaryException exception) {
+		} catch (McpInvalidToolArgumentsException exception) {
+			return invalidToolArgumentsResult(tool, invocation);
+		} catch (McpTaskOriginBoundaryException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
 
@@ -2145,8 +2146,9 @@ final class DefaultMcpServer implements McpServer {
 			McpTaskOrigin taskOrigin;
 			try {
 				taskOrigin = defaultTaskCreationContext.getTaskOrigin();
-			} catch (McpInvalidToolArgumentsException
-					| McpTaskOriginBoundaryException exception) {
+			} catch (McpInvalidToolArgumentsException exception) {
+				return invalidToolArgumentsResult(tool, invocation);
+			} catch (McpTaskOriginBoundaryException exception) {
 				return ToolInvocationResult.invalidInput();
 			}
 			String taskId = taskCreatedResult.getTaskId();
@@ -2175,7 +2177,31 @@ final class DefaultMcpServer implements McpServer {
 		if (!(completeResult.getPayload() instanceof McpToolOutput))
 			throw new IllegalArgumentException(
 					"An MCP tool handler must return tool output.");
-		McpCompleteResult sanitizedResult = sanitizeToolResult(requestContext,
+		return completeToolResult(tool, invocation, completeResult);
+	}
+
+	@NonNull
+	private ToolInvocationResult invalidToolArgumentsResult(
+			@NonNull McpToolRegistration<?> tool,
+			@NonNull ToolInvocation invocation) {
+		if (invocation.requestContext().getProtocolVersion()
+				== McpProtocolVersion.V2025_06_18)
+			return ToolInvocationResult.invalidInput();
+		// November and modern revisions expose input-validation failures to
+		// the model as tool results. Neither raw values nor exception details
+		// belong in framework-generated feedback. Retain the normal sanitizer
+		// and output-budget boundaries, including for interceptor-created tasks.
+		return completeToolResult(tool, invocation,
+				McpCompleteResult.fromToolErrorText(
+						"Arguments do not match the tool's inputSchema."));
+	}
+
+	@NonNull
+	private ToolInvocationResult completeToolResult(
+			@NonNull McpToolRegistration<?> tool,
+			@NonNull ToolInvocation invocation,
+			@NonNull McpCompleteResult completeResult) {
+		McpCompleteResult sanitizedResult = sanitizeToolResult(invocation.requestContext(),
 				tool.getName(), invocation.rawArguments(), completeResult);
 		McpToolOutput sanitizedOutput =
 				(McpToolOutput) sanitizedResult.getPayload();

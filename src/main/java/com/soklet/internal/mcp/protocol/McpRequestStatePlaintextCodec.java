@@ -20,7 +20,6 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
@@ -274,25 +273,24 @@ final class McpRequestStatePlaintextCodec {
 	}
 
 	@NonNull
-	private static BigInteger requireInteger(
+	private static BigDecimal requireNumber(
 			@NonNull Map<String, McpJsonValue> fields,
 			@NonNull String fieldName) {
 		McpJsonValue value = requireField(fields, fieldName);
 		if (!(value instanceof McpJsonNumber number))
 			throw invalidPlaintext();
-		BigDecimal decimal = number.value();
-		try {
-			return decimal.toBigIntegerExact();
-		} catch (ArithmeticException exception) {
-			throw invalidPlaintext();
-		}
+		return number.value();
 	}
 
 	private static int requireInt(
 			@NonNull Map<String, McpJsonValue> fields,
 			@NonNull String fieldName) {
+		BigDecimal decimal = requireNumber(fields, fieldName);
+		if (decimal.compareTo(BigDecimal.valueOf(Integer.MIN_VALUE)) < 0
+				|| decimal.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0)
+			throw invalidPlaintext();
 		try {
-			return requireInteger(fields, fieldName).intValueExact();
+			return decimal.intValueExact();
 		} catch (ArithmeticException exception) {
 			throw invalidPlaintext();
 		}
@@ -301,8 +299,12 @@ final class McpRequestStatePlaintextCodec {
 	private static long requireLong(
 			@NonNull Map<String, McpJsonValue> fields,
 			@NonNull String fieldName) {
+		BigDecimal decimal = requireNumber(fields, fieldName);
+		if (decimal.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) < 0
+				|| decimal.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0)
+			throw invalidPlaintext();
 		try {
-			return requireInteger(fields, fieldName).longValueExact();
+			return decimal.longValueExact();
 		} catch (ArithmeticException exception) {
 			throw invalidPlaintext();
 		}

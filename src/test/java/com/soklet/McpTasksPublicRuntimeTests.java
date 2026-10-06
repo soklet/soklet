@@ -699,12 +699,13 @@ public class McpTasksPublicRuntimeTests {
 							+ "\"method\":\"tools/call\",\"params\":{"
 							+ taskMetadata(true) + ",\"name\":"
 							+ "\"tasks.typed-interceptor\",\"arguments\":{}}}");
-			assertNoStore(response, 400);
-			Assertions.assertEquals(
-					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-invalid\","
-							+ "\"error\":{\"code\":-32602,"
-							+ "\"message\":\"Invalid params\"}}",
-					response.body());
+			assertNoStore(response, 200);
+			Assertions.assertTrue(response.body().contains("\"id\":\"typed-invalid\""), response.body());
+			Assertions.assertTrue(response.body().contains("\"resultType\":\"complete\""), response.body());
+			Assertions.assertTrue(response.body().contains("\"isError\":true"), response.body());
+			Assertions.assertTrue(response.body().contains(
+					"\"text\":\"Arguments do not match the tool's inputSchema.\""), response.body());
+			Assertions.assertFalse(response.body().contains("\"error\""), response.body());
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, taskManager.findInvocations.get(),
 					"A task lookup must not precede typed argument validation.");

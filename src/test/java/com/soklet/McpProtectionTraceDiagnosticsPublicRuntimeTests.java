@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -80,6 +81,72 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 		assertSecurityDiagnostics(development.getDiagnostics(),
 				McpProtectionMode.DEVELOPMENT_EPHEMERAL, false,
 				Optional.empty(), Optional.empty());
+	}
+
+	@Test
+	public void fleetDiagnosticsDistinguishExactProtectionBytesAndConvergeAfterRemoval()
+			throws Exception {
+		byte[] shortKey = keyMaterial(1);
+		byte[] longKey = Arrays.copyOf(shortKey, 65);
+		longKey[64] = 1;
+		for (byte[][] materials : List.<byte[][]>of(
+				new byte[][]{shortKey, Arrays.copyOf(shortKey, 33)},
+				new byte[][]{longKey,
+						MessageDigest.getInstance("SHA-256").digest(longKey)})) {
+			for (boolean verificationOnly : List.of(false, true)) {
+				McpProtectionKey firstKey = McpProtectionKey.fromIdAndBytes(
+						"same-id", materials[0]);
+				McpProtectionKey secondKey = McpProtectionKey.fromIdAndBytes(
+						"same-id", materials[1]);
+				McpProtectionKeyring firstRing = verificationOnly
+						? McpProtectionKeyring.withActiveKey(protectionKey("active", 96))
+								.addVerificationKey(firstKey).build()
+						: McpProtectionKeyring.withActiveKey(firstKey).build();
+				McpProtectionKeyring secondRing = verificationOnly
+						? McpProtectionKeyring.withActiveKey(protectionKey("active", 96))
+								.addVerificationKey(secondKey).build()
+						: McpProtectionKeyring.withActiveKey(secondKey).build();
+				McpServer first = serverBuilder("first")
+						.protectionConfig(McpProtectionConfig.withKeyring(firstRing).build())
+						.traceCorrelationKey(traceKey("trace", 160)).build();
+				McpServer second = serverBuilder("second")
+						.protectionConfig(McpProtectionConfig.withKeyring(secondRing).build())
+						.traceCorrelationKey(traceKey("trace", 160)).build();
+				McpServerDiagnostics retained = first.getDiagnostics();
+				McpProtectionKeyringSnapshot initial = first.getProtectionKeyringManager()
+						.getKeyringSnapshot().orElseThrow();
+				Assertions.assertEquals("v2", initial.getFingerprint().getVersion());
+				Assertions.assertEquals("soklet-mcp-protection-v1",
+						initial.getFingerprint().getProfile());
+				Assertions.assertEquals(Optional.of(initial.getFingerprint()),
+						retained.getProtectionKeyringFingerprint());
+				Assertions.assertNotEquals(initial,
+						second.getProtectionKeyringManager().getKeyringSnapshot().orElseThrow());
+				Assertions.assertNotEquals(retained.getProtectionKeyringFingerprint(),
+						second.getDiagnostics().getProtectionKeyringFingerprint());
+				Assertions.assertEquals(retained.getTraceCorrelationFingerprint(),
+						second.getDiagnostics().getTraceCorrelationFingerprint());
+
+				McpProtectionKey commonKey = protectionKey("common", 64);
+				first.getProtectionKeyringManager().rotateActiveKey(commonKey);
+				second.getProtectionKeyringManager().rotateActiveKey(commonKey);
+				Assertions.assertNotEquals(protectionFingerprint(first),
+						protectionFingerprint(second));
+				Assertions.assertTrue(first.getProtectionKeyringManager()
+						.removeVerificationKey("same-id"));
+				Assertions.assertTrue(second.getProtectionKeyringManager()
+						.removeVerificationKey("same-id"));
+				Assertions.assertEquals(first.getProtectionKeyringManager()
+						.getKeyringSnapshot(), second.getProtectionKeyringManager()
+						.getKeyringSnapshot());
+				Assertions.assertEquals(protectionFingerprint(first),
+						protectionFingerprint(second));
+				Assertions.assertEquals(Optional.of(initial.getFingerprint()),
+						retained.getProtectionKeyringFingerprint());
+				Assertions.assertEquals(retained.getTraceCorrelationFingerprint(),
+						first.getDiagnostics().getTraceCorrelationFingerprint());
+			}
+		}
 	}
 
 	@Test

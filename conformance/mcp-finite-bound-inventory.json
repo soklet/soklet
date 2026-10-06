@@ -1679,8 +1679,8 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredPerPrincipalCapRejectsWithoutDisturbingAndRecovers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredQueueContainsBackpressureAndReleasesTheFullCap",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#malformedRecognizedFilterFieldsFailBeforeAdmission",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#admittedOwnerFanoutSurvivesBusyProjectionWorkers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#oneOwnerJobCoalescesQueuedAndRunningTaskGenerations",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#oneSubscriberOverflowCannotRejectAnUnrelatedSubscriber",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#rejectionAndInactiveCompletionDrainOwnerState",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#resetReleasesTaskIdentitiesAndFencesOutstandingWorkers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#uniqueTaskIdsRetainFirstEventOrderInOneOwnerSlot",
@@ -1747,6 +1747,13 @@
       ],
       "sourceOwners": [
         {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#MAXIMUM_PENDING_MCP_METRIC_EVENTS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_PENDING_MCP_METRIC_EVENTS",
+          "owner": "com.soklet.DefaultMcpServer"
+        },
+        {
           "file": "src/main/java/com/soklet/McpInMemoryTaskManager.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpInMemoryTaskManager.java#com.soklet.McpInMemoryTaskManager#DEFAULT_MAXIMUM_RETAINED_TASKS",
           "matcherRuleId": "FINITE-MATCH-001",
@@ -1772,13 +1779,6 @@
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY",
-          "matcherRuleId": "FINITE-MATCH-001",
-          "member": "MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
         {
@@ -1919,6 +1919,12 @@
           "value": "32"
         },
         {
+          "accounting": "pending provisional metric identities awaiting bounded asynchronous delivery",
+          "key": "queue.metric-events.pending",
+          "unit": "EVENTS",
+          "value": "4096"
+        },
+        {
           "accounting": "queued protocol requests",
           "key": "queue.protocol-capacity",
           "unit": "TASKS",
@@ -1967,16 +1973,16 @@
           "value": "1024"
         },
         {
-          "accounting": "queued task-notification projection subscriptions; each subscription has at most one queued or running owner job, and effective global capacity is the lesser of this ceiling and protocol request-queue capacity",
-          "key": "queue.task-notification-projection-capacity",
-          "unit": "SUBSCRIPTIONS",
-          "value": "128"
-        },
-        {
           "accounting": "task-notification projection workers; effective concurrency is the lesser of this ceiling and protocol concurrency minus one",
           "key": "queue.task-notification-projection-concurrency",
           "unit": "WORKERS",
           "value": "4"
+        },
+        {
+          "accounting": "four projection owner slots per default maximum admitted modern connection plus four legacy maintenance slots; runtime derives this from the configured connection bound",
+          "key": "queue.task-notification-projection-owner-capacity.default",
+          "unit": "OWNERS",
+          "value": "32772"
         }
       ]
     },
@@ -2083,6 +2089,7 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionOwnerPolicyTests.java#owner_worker_and_queue_bounds_survive_stop_and_keep_ignoring_callbacks_physically_owned",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#all_32_active_call_slots_do_not_prevent_an_admitted_cancel_notification",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#bounded_recreation_churn_keeps_canceled_workers_charged_and_releases_every_residual_reference",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#controlReservationsAreBoundedAcrossSessionsOwnersAndRetiredPhysicalWork",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionStoreTests.java#owner_evidence_pressure_reclaims_multiple_eligible_records_without_evicting_a_physical_worker"
       ],
       "category": "QUEUE_STREAM",
@@ -2164,6 +2171,20 @@
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution"
         },
         {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_LEGACY_CONTROL_BODY_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_LEGACY_CONTROL_BODY_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyUriGrantControl#MAXIMUM_CONSECUTIVE_AUTHORIZATION_FAILURES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CONSECUTIVE_AUTHORIZATION_FAILURES",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyUriGrantControl"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_ACTIVE_CALLS_PER_SESSION",
           "matcherRuleId": "FINITE-MATCH-001",
@@ -2175,6 +2196,27 @@
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_ANONYMOUS_SESSIONS",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_ANONYMOUS_SESSIONS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_CONTROL_CALLS_GLOBAL",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CONTROL_CALLS_GLOBAL",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_CONTROL_CALLS_PER_OWNER",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CONTROL_CALLS_PER_OWNER",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore#MAXIMUM_CONTROL_CALLS_PER_SESSION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_CONTROL_CALLS_PER_SESSION",
           "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore"
         },
         {
@@ -2214,9 +2256,23 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumControlRequestBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumControlRequestBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
           "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumGlobalEvidenceBytes",
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumGlobalEvidenceBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumGlobalTransientBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumGlobalTransientBytes",
           "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
         },
         {
@@ -2228,9 +2284,23 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumOwnerTransientBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumOwnerTransientBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
           "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumSessionEvidenceBytes",
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumSessionEvidenceBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java#com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config#maximumSessionTransientBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSessionTransientBytes",
           "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore.Config"
         },
         {
@@ -2274,6 +2344,36 @@
           "key": "session.maximum-anonymous-sessions",
           "unit": "SESSIONS",
           "value": "64"
+        },
+        {
+          "accounting": "consecutive legacy URI grant authorization failures before termination",
+          "key": "session.maximum-consecutive-authorization-failures",
+          "unit": "FAILURES",
+          "value": "3"
+        },
+        {
+          "accounting": "compact legacy control request body ceiling",
+          "key": "session.maximum-control-body-bytes",
+          "unit": "BYTES",
+          "value": "16384"
+        },
+        {
+          "accounting": "physical control reservations across the server",
+          "key": "session.maximum-control-calls-global",
+          "unit": "CALLS",
+          "value": "64"
+        },
+        {
+          "accounting": "physical control reservations across sessions sharing one owner",
+          "key": "session.maximum-control-calls-per-owner",
+          "unit": "CALLS",
+          "value": "8"
+        },
+        {
+          "accounting": "physical control reservations in one session, including retired unfinished work",
+          "key": "session.maximum-control-calls-per-session",
+          "unit": "CALLS",
+          "value": "4"
         },
         {
           "accounting": "logical GETs per verified session; replaced physical bodies remain independently charged",
@@ -2503,7 +2603,7 @@
       "id": "FINITE-QUEUE-STREAM-006",
       "name": "Guarded legacy GET encoded notification queues",
       "positiveTests": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#catalog_dirty_state_coalesces_until_fresh_list_and_resynthesizes_after_a_get_gap",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacySessionGrantStoreTests.java#catalog_dirty_state_coalesces_until_fresh_list_without_replaying_on_reconnect",
         "src/test/java/com/soklet/internal/mcp/transport/McpGuardedOutboundChannelTests.java#full_write_releases_once_and_clean_completion_keeps_exact_old_wire_bytes"
       ],
       "sourceOwners": [
@@ -3438,13 +3538,17 @@
       "boundaryTests": [
         "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReaderTests.java#classFileReadAcceptsExactByteBoundaryAndRejectsOneOver",
         "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReaderTests.java#enforcesConstantAndNameLimitsWithoutInitializingEnum",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderNumericLimitTests.java#aggregateBudgetIsChargedBeforeConversionAndResetsForEachBinding",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderNumericLimitTests.java#arrayMapAndNestedRecordUseTheSameAggregateBudget",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderNumericLimitTests.java#fixedWidthIntegersCheckTheirRangesBeforeExpansion",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderNumericLimitTests.java#oversizedIntegersFailBeforeExpansionIncludingExtremeScales",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java#bindingLimitsHaveExactNodeDepthAndContainerBoundaries",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java#cyclesMutationAndImpossibleContainerSizesFailBeforeUnboundedWork",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCoreTests.java#descriptorFailuresAreContainedAndPathsUseStablePointerEscaping"
       ],
       "category": "TYPED_BINDING",
       "deterministicFailure": {
-        "contract": "Typed conversion fails with a sanitized binding error before bounded container or record scratch allocation.",
+        "contract": "Typed conversion fails with a sanitized binding error before bounded container or record scratch allocation, or before integer expansion that exceeds the per-value or aggregate conversion limit.",
         "stage": "TYPED_BINDING"
       },
       "enforcementOwners": [
@@ -3457,6 +3561,7 @@
       "id": "FINITE-TYPED-BINDING-001",
       "name": "Intrinsic typed JSON binding bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderNumericLimitTests.java#expandedIntegerLengthCountsTheSignAndHasAnExactBoundary",
         "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java#recordRoundTripUsesExactStringsOptionalsAndImmutableCollections"
       ],
       "sourceOwners": [
@@ -3476,6 +3581,13 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_NESTING_DEPTH",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_SUPPORTED_NESTING_DEPTH",
@@ -3486,6 +3598,13 @@
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_NODE_COUNT",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_SUPPORTED_NODE_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS",
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
         },
         {
@@ -3504,6 +3623,13 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumExpandedIntegerLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumExpandedIntegerLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
           "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumNestingDepth",
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumNestingDepth",
@@ -3514,6 +3640,13 @@
           "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumNodeCount",
           "matcherRuleId": "FINITE-MATCH-002",
           "member": "maximumNodeCount",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumTotalExpandedIntegerLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumTotalExpandedIntegerLengthInCharacters",
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
         }
       ],
@@ -3555,6 +3688,18 @@
           "value": "16777216"
         },
         {
+          "accounting": "expanded decimal digits plus the optional minus sign of one converted integer",
+          "key": "binding.expanded-integer-characters.hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        },
+        {
+          "accounting": "expanded decimal digits plus the optional minus sign of one converted integer",
+          "key": "binding.expanded-integer-characters.production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        },
+        {
           "accounting": "JSON/Java values per conversion",
           "key": "binding.nodes.hard",
           "unit": "NODES",
@@ -3565,6 +3710,18 @@
           "key": "binding.nodes.production",
           "unit": "NODES",
           "value": "100000"
+        },
+        {
+          "accounting": "sum of expanded integer characters across one JSON-to-Java binding, including repeated values",
+          "key": "binding.total-expanded-integer-characters.hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "4194304"
+        },
+        {
+          "accounting": "sum of expanded integer characters across one JSON-to-Java binding, including repeated values",
+          "key": "binding.total-expanded-integer-characters.production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "4194304"
         }
       ]
     },

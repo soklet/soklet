@@ -28593,9 +28593,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#McpTypedJsonBindingLimits(int,int,int)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#McpTypedJsonBindingLimits(int,int,int,int,int)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "McpTypedJsonBindingLimits(int,int,int)",
+          "member": "McpTypedJsonBindingLimits(int,int,int,int,int)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
           "sink": "Diagnostic.recordConstructor"
@@ -28605,6 +28605,15 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumContainerEntryCount()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "maximumContainerEntryCount()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumExpandedIntegerLengthInCharacters()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumExpandedIntegerLengthInCharacters()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
           "sink": "Diagnostic.recordAccessor"
@@ -28623,6 +28632,15 @@
           "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumNodeCount()->Diagnostic.recordAccessor@1",
           "matcherRuleId": "PRIV-MATCH-008",
           "member": "maximumNodeCount()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
+          "sink": "Diagnostic.recordAccessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumTotalExpandedIntegerLengthInCharacters()->Diagnostic.recordAccessor@1",
+          "matcherRuleId": "PRIV-MATCH-008",
+          "member": "maximumTotalExpandedIntegerLengthInCharacters()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
           "sink": "Diagnostic.recordAccessor"
@@ -36248,6 +36266,24 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#completeToolResult(McpToolRegistration<?>,ToolInvocation,McpCompleteResult)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "completeToolResult(McpToolRegistration<?>,ToolInvocation,McpCompleteResult)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#completeToolResult(McpToolRegistration<?>,ToolInvocation,McpCompleteResult)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "completeToolResult(McpToolRegistration<?>,ToolInvocation,McpCompleteResult)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#contentBlockToJson(McpContentBlock)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "contentBlockToJson(McpContentBlock)",
@@ -36396,24 +36432,6 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "invokeTool(McpToolRegistration<A>,ToolInvocation)",
           "occurrence": 3,
-          "owner": "com.soklet.DefaultMcpServer",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeTool(McpToolRegistration<A>,ToolInvocation)->Throwable.IllegalArgumentException@4",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeTool(McpToolRegistration<A>,ToolInvocation)",
-          "occurrence": 4,
-          "owner": "com.soklet.DefaultMcpServer",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#invokeTool(McpToolRegistration<A>,ToolInvocation)->Throwable.IllegalArgumentException@5",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeTool(McpToolRegistration<A>,ToolInvocation)",
-          "occurrence": 5,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalArgumentException"
         },
@@ -49694,9 +49712,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBinder.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBinder.java#com.soklet.internal.mcp.schema.McpTypedJsonBinder#readScalar(McpJsonValue,McpTypedJsonBindingNode.Scalar,McpTypedSchemaPath)->Throwable.AssertionError@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBinder.java#com.soklet.internal.mcp.schema.McpTypedJsonBinder#readScalar(McpJsonValue,McpTypedJsonBindingNode.Scalar,McpTypedSchemaPath,ConversionContext)->Throwable.AssertionError@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "readScalar(McpJsonValue,McpTypedJsonBindingNode.Scalar,McpTypedSchemaPath)",
+          "member": "readScalar(McpJsonValue,McpTypedJsonBindingNode.Scalar,McpTypedSchemaPath,ConversionContext)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBinder",
           "sink": "Throwable.AssertionError"

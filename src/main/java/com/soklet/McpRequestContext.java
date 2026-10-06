@@ -128,6 +128,17 @@ public interface McpRequestContext {
 	 * Returns verified framework-protected JSON state supplied with a
 	 * multi-round-trip retry.
 	 *
+	 * <p>Numbers use the protected-state canonical form: trailing decimal
+	 * zeros are removed and every zero has scale zero. The original
+	 * {@link java.math.BigDecimal} scale and spelling are not preserved. For
+	 * example, {@code 100} returns as {@code 1E+2}, {@code 1.50} as {@code 1.5},
+	 * and {@code 0.0} as {@code 0}. {@link McpJsonNumber} equality and hashing
+	 * remain numeric. Use exact numeric conversion or
+	 * {@link java.math.BigDecimal#compareTo(java.math.BigDecimal)} for numbers;
+	 * represent identifiers and scale-sensitive text as JSON strings.
+	 * {@link java.math.BigDecimal#toPlainString()} avoids exponent notation but
+	 * does not restore the original decimal scale.
+	 *
 	 * @return verified framework-protected state, or empty when absent
 	 */
 	@NonNull

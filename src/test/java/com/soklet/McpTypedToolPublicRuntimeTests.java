@@ -314,10 +314,14 @@ public class McpTypedToolPublicRuntimeTests {
 					request("invalid-1", "tools/call", ",\"name\":\""
 							+ TOOL_NAME + "\",\"arguments\":{\"query\":\"missing list\"}"),
 					"tools/call", TOOL_NAME);
-			assertError(invalidResponse, 400, -32602, "invalid-1");
+			assertSuccess(invalidResponse, "invalid-1");
+			assertContains(invalidResponse.body(), "\"isError\":true");
+			assertContains(invalidResponse.body(),
+					"\"text\":\"Arguments do not match the tool's inputSchema.\"");
 			Assertions.assertEquals(List.of("admission:" + TOOL_NAME,
 					"request:" + TOOL_NAME, "tool:" + TOOL_NAME,
-					"interceptor-before:" + TOOL_NAME), stages);
+					"interceptor-before:" + TOOL_NAME,
+					"sanitizer:" + TOOL_NAME), stages);
 			Assertions.assertEquals(1, handlerInvocations.get());
 
 			stages.clear();

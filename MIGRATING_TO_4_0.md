@@ -171,6 +171,22 @@ Loops should collect values first. Required resource-output contents and
 subscription notification sets remain nonempty. Resource-descriptor/link
 `addIcon(...)` and `McpJsonArray.Builder.add(...)` are unchanged.
 
+### Protection-keyring fingerprint version
+
+The production keyring's diagnostic fingerprint now uses encoding `v2`.
+`McpProtectionKeyringFingerprint.VERSION` and `getVersion()` report `v2`;
+`getProfile()` still reports `soklet-mcp-protection-v1`. The earlier diagnostic
+construction could equate distinct raw keys even when sealed state could not
+move between their servers. The corrected construction includes exact raw
+bytes for active and verification-only keys.
+
+Update any stored diagnostic baselines, and compare version, profile, and
+value together. Different fingerprint versions are incomparable; finish the
+software rollout before relying on fingerprints to approve fleet key rotation.
+The fingerprint correction requires no secret rotation and changes neither
+request-state encryption nor trace-correlation fingerprints or tokens. Public
+signatures are unchanged.
+
 ### Strict request text decoding
 
 Malformed request text is rejected rather than converted to replacement
@@ -991,6 +1007,22 @@ Generated resources must survive shading and packaging.
 
 The processor rejects unsupported or ambiguous method/record shapes at build
 time. This can surface errors that 3.5.1 deferred until runtime.
+
+## MCP JSON number equality and protected state
+
+`McpJsonNumber.equals(...)` and `hashCode()` now use numeric value regardless
+of decimal scale: `1`, `1.0` and `1E+0` are equal. This also applies to numeric
+leaves inside JSON objects and arrays and to their use as hash collection keys.
+`getValue()` retains the supplied `BigDecimal` and scale for ordinary JSON
+values. Check the decimal explicitly if scale is part of your application data.
+
+Framework-protected request state returns canonical numbers on retries:
+`100` becomes `1E+2`, `1.50` becomes `1.5`, and `0.0` becomes `0`.
+The numeric value and JSON-value equality/hash contract survive the round trip;
+the original number spelling and scale do not. Use exact numeric conversions
+or `compareTo`. Store identifiers and exact decimal text as JSON strings.
+`toPlainString()` avoids exponent notation without restoring the original
+scale. The protected-state encoding and sealing profile are unchanged.
 
 ## Legacy MCP POST progress
 

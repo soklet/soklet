@@ -368,6 +368,17 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					}
 					Assertions.assertEquals(4, providedInstances.get());
 					Assertions.assertEquals(4, handlerInterceptorInvocations.get());
+					HttpResponse<String> invalidInput = sendToolCall(port, "needle",
+							toolCallBody("annotated-invalid-input").replace("\"limit\":3",
+									"\"limit\":\"private-invalid-limit\""));
+					Assertions.assertEquals(200, invalidInput.statusCode(), invalidInput.body());
+					Assertions.assertTrue(invalidInput.body().contains("\"isError\":true"), invalidInput.body());
+					Assertions.assertTrue(invalidInput.body().contains(
+							"\"text\":\"Arguments do not match the tool's inputSchema.\""), invalidInput.body());
+					Assertions.assertFalse(invalidInput.body().contains("private-invalid-limit"), invalidInput.body());
+					Assertions.assertEquals(4, providedInstances.get(),
+							"Invalid arguments must not resolve the annotated handler instance.");
+					Assertions.assertEquals(5, handlerInterceptorInvocations.get());
 				} finally {
 					soklet.close();
 				}

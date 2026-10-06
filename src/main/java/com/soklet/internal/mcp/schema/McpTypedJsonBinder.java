@@ -93,7 +93,7 @@ final class McpTypedJsonBinder {
 			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
 					McpTypedJsonBindingException.Reason.NULL_VALUE, path);
 		if (node instanceof McpTypedJsonBindingNode.Scalar scalar)
-			return readScalar(value, scalar, path);
+			return readScalar(value, scalar, path, context);
 		if (node instanceof McpTypedJsonBindingNode.Enumeration enumeration)
 			return readEnumeration(value, enumeration, path);
 		if (node instanceof McpTypedJsonBindingNode.ArrayValue array)
@@ -111,7 +111,7 @@ final class McpTypedJsonBinder {
 	@NonNull
 	private Object readScalar(@NonNull McpJsonValue value,
 			McpTypedJsonBindingNode.@NonNull Scalar binding,
-			@NonNull McpTypedSchemaPath path) {
+			@NonNull McpTypedSchemaPath path, @NonNull ConversionContext context) {
 		if (binding.scalar() == McpTypedSchemaScalar.BOOLEAN) {
 			if (!(value instanceof McpJsonBoolean booleanValue))
 				throw jsonType(path);
@@ -127,15 +127,16 @@ final class McpTypedJsonBinder {
 
 		BigDecimal decimal = number.value();
 		return switch (binding.scalar()) {
-			case BYTE -> boundedInteger(decimal, McpTypedSchemaScalar.BYTE, path)
+			case BYTE -> integral(decimal, McpTypedSchemaScalar.BYTE, path, context)
 					.byteValue();
-			case SHORT -> boundedInteger(decimal, McpTypedSchemaScalar.SHORT, path)
+			case SHORT -> integral(decimal, McpTypedSchemaScalar.SHORT, path, context)
 					.shortValue();
-			case INT -> boundedInteger(decimal, McpTypedSchemaScalar.INT, path)
+			case INT -> integral(decimal, McpTypedSchemaScalar.INT, path, context)
 					.intValue();
-			case LONG -> boundedInteger(decimal, McpTypedSchemaScalar.LONG, path)
+			case LONG -> integral(decimal, McpTypedSchemaScalar.LONG, path, context)
 					.longValue();
-			case BIG_INTEGER -> integral(decimal, path);
+			case BIG_INTEGER -> integral(decimal, McpTypedSchemaScalar.BIG_INTEGER,
+					path, context);
 			case FLOAT -> finiteFloat(decimal, path);
 			case DOUBLE -> finiteDouble(decimal, path);
 			case BIG_DECIMAL -> decimal;
@@ -145,27 +146,38 @@ final class McpTypedJsonBinder {
 	}
 
 	@NonNull
-	private BigInteger boundedInteger(@NonNull BigDecimal value,
+	private BigInteger integral(@NonNull BigDecimal value,
 			@NonNull McpTypedSchemaScalar scalar,
-			@NonNull McpTypedSchemaPath path) {
-		BigInteger integer = integral(value, path);
-		BigInteger minimum = scalar.minimum().orElseThrow().toBigIntegerExact();
-		BigInteger maximum = scalar.maximum().orElseThrow().toBigIntegerExact();
-		if (integer.compareTo(minimum) < 0 || integer.compareTo(maximum) > 0)
+			@NonNull McpTypedSchemaPath path, @NonNull ConversionContext context) {
+		if (value.signum() == 0) {
+			context.chargeIntegerLength(1, path);
+			return BigInteger.ZERO;
+		}
+
+		// Negative scales are already integral. In particular, do not expand a
+		// compact exponent merely to check whether it fits the target type.
+		BigDecimal normalized = value;
+		if (value.scale() > 0) {
+			if (value.scale() < value.precision())
+				normalized = value.stripTrailingZeros();
+			if (normalized.scale() > 0)
+				throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
+						McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER, path);
+		}
+
+		long expandedLength = (long) normalized.precision() - normalized.scale()
+				+ (normalized.signum() < 0 ? 1 : 0);
+		if (expandedLength > limits.maximumExpandedIntegerLengthInCharacters()
+				|| (scalar != McpTypedSchemaScalar.BIG_INTEGER
+						&& (normalized.compareTo(scalar.minimum().orElseThrow()) < 0
+								|| normalized.compareTo(scalar.maximum().orElseThrow()) > 0)))
 			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
 					McpTypedJsonBindingException.Reason.NUMBER_OUT_OF_RANGE, path);
-		return integer;
-	}
 
-	@NonNull
-	private BigInteger integral(@NonNull BigDecimal value,
-			@NonNull McpTypedSchemaPath path) {
-		try {
-			return value.toBigIntegerExact();
-		} catch (ArithmeticException exception) {
-			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
-					McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER, path);
-		}
+		// Charge each conversion, including repeated values, before allocating
+		// its magnitude. Nested containers share this per-binding budget.
+		context.chargeIntegerLength((int) expandedLength, path);
+		return normalized.toBigIntegerExact();
 	}
 
 	@NonNull
@@ -633,6 +645,7 @@ final class McpTypedJsonBinder {
 		private final IdentityHashMap<@NonNull Object, @NonNull Boolean> activeComposites =
 				new IdentityHashMap<>();
 		private int nodeCount;
+		private int totalExpandedIntegerLength;
 
 		private ConversionContext(
 				McpTypedJsonBindingException.@NonNull Operation operation) {
@@ -675,6 +688,15 @@ final class McpTypedJsonBinder {
 			if ((long) nodeCount + count > limits.maximumNodeCount())
 				throw limit(McpTypedJsonBindingException.Limit.NODE_COUNT, path);
 			nodeCount += count;
+		}
+
+		private void chargeIntegerLength(int count,
+				@NonNull McpTypedSchemaPath path) {
+			if ((long) totalExpandedIntegerLength + count
+					> limits.maximumTotalExpandedIntegerLengthInCharacters())
+				throw limit(McpTypedJsonBindingException.Limit.TOTAL_EXPANDED_INTEGER_LENGTH,
+						path);
+			totalExpandedIntegerLength += count;
 		}
 
 		private void enterComposite(@NonNull Object value,

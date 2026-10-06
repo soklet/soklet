@@ -30,14 +30,20 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This value is operational metadata only, not an authentication input. It
  * exposes neither raw key material nor per-key fingerprint tags.
+ * <p>
+ * Version {@code v2} includes exact raw key bytes in the configuration
+ * comparison, including bytes that HMAC would otherwise pad or hash when
+ * used directly as a key. Compare version, protection profile, and value
+ * together across servers. The fingerprint version is independent of the
+ * request-state protection profile and does not change sealed state.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public final class McpProtectionKeyringFingerprint {
-	/** Fingerprint encoding version. */
+	/** Diagnostic fingerprint encoding version, independent of the protection profile. */
 	@NonNull
-	public static final String VERSION = "v1";
+	public static final String VERSION = "v2";
 
 	/** Built-in protection profile included in the fingerprint. */
 	@NonNull

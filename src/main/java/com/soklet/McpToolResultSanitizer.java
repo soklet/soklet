@@ -42,6 +42,11 @@ import static java.util.Objects.requireNonNull;
  * Implementations must be safe for concurrent invocation, deterministic and
  * idempotent for repeated equivalent calls, and free of one-shot side effects.
  * Applications may compose a sanitizer chain behind this one hook.
+ * Framework-generated tool input-validation and Java binding errors for
+ * {@link McpProtocolVersion#V2025_11_25} and
+ * {@link McpProtocolVersion#V2026_07_28} also traverse this hook with fixed,
+ * instance-free error text. Their raw arguments remain application-owned
+ * input; sanitizers must not copy unsafe input into client-visible feedback.
  *
  * <p>For selective changes, start with {@link McpCompleteResult#toBuilder()}
  * and, when changing tool output, {@link McpToolOutput#toBuilder()}. Result

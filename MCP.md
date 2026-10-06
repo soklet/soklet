@@ -724,6 +724,13 @@ does. Use `McpJsonArray.emptyInstance()` for the shared empty value. Its builder
 accepts JSON values plus `String`, `BigDecimal`, `Integer`, `Long`, `Double`,
 and `Boolean`, and `addNull()` appends JSON `null`. A `Double` must be finite.
 
+`McpJsonNumber` equality and hashing use numeric value, so `1`, `1.0` and
+`1E+0` are equal and have the same hash code. Object and array equality follow
+that rule for numeric leaves. `getValue()` retains the supplied `BigDecimal`,
+including its scale; ordinary request parsing and JSON conversion do not
+remove trailing zeros. If scale is meaningful to an application, inspect the
+returned decimal explicitly rather than relying on JSON-value equality.
+
 The five `McpContentBlock` variants expose `getAnnotations()` and
 `getMetadata()` through the common interface. Their equality and hashing cover
 the complete value, including annotations, metadata, ordered icons, embedded
@@ -784,6 +791,28 @@ Typed derivation accepts this closed Java shape family:
 Derived `float` and `double` schemas publish finite minimum and maximum values,
 matching the binder's rejection of non-finite results. `BigDecimal` remains an
 unbounded JSON number subject to the ordinary JSON number limits.
+
+Typed integer input conversion, including `BigInteger`, accepts at most 1,024
+characters in the expanded decimal spelling, counting a minus sign. Each
+JSON-to-Java binding also permits at most 4,194,304 expanded integer characters
+in total across its records, arrays, lists and maps. Repeated values count each
+time they are converted. Soklet checks these bounds and fixed-width Java ranges
+before integer allocation; a compact spelling such as `1e9999` cannot bypass
+them. These are runtime binding limits in addition to schema validation and
+ordinary JSON limits. `BigDecimal` input is retained without integer expansion.
+
+For `tools/call` using `2025-11-25` or `2026-07-28`, input-schema validation
+and Java binding failures return HTTP 200 with a completed `isError: true`
+tool result. Its fixed text is "Arguments do not match the tool's inputSchema."
+Submitted values, property names and exception details are not included. The
+handler is not invoked; interception still precedes complete input validation,
+and the generated error result passes through `McpToolResultSanitizer` and the
+normal output limits. This includes binding failures when an interceptor tries
+to create a task. A `2025-06-18` call retains its JSON-RPC `-32602` response.
+Malformed request envelopes/params and unknown tools remain protocol errors
+for every revision. Application handler exceptions retain their existing
+failure behavior; applications can return `McpCompleteResult.fromToolErrorText`
+for safe, actionable business-validation feedback.
 
 A typed tool input root must be a record, a `Map<String, T>`, or the synthetic
 object formed from annotated tool arguments. A bare typed `String` output is
@@ -1231,12 +1260,21 @@ applications read their value directly without constructing a carrier or
 performing a type cast. `McpInputRequiredResult` exposes the same two typed
 accessors for application tests and result inspection.
 
+Framework-protected state uses canonical numbers on a verified retry:
+`100` returns as `1E+2`, `1.50` as `1.5`, and `0.0` as `0`. Soklet removes
+trailing decimal zeros and gives zero scale zero. Numeric value, JSON-tree
+equality and hash lookup are preserved; the original `BigDecimal` scale and
+number spelling are not. Use exact numeric conversion or `compareTo` for
+numeric comparisons. `toPlainString()` avoids exponent notation but does not
+recover the original scale. Store identifiers or text requiring an exact
+decimal spelling as JSON strings, such as `"5000"` or `"1.50"`.
+
 Choose framework protection explicitly:
 
 - `McpProtectionConfig.withKeyring(...)` is the production built-in. Supply
   operator-generated `McpProtectionKey` material through an initial
   `McpProtectionKeyring`; each server copies the ring and exposes live rotation
-  through `McpServer.getProtectionControl()`.
+  through `McpServer.getProtectionKeyringManager()`.
 - `withDevelopmentEphemeralProtection()` creates process-local keys and emits
   a startup diagnostic. State cannot survive a restart or move between server
   instances, so this mode is for development only.
@@ -3604,6 +3642,18 @@ and rotation can create high-cardinality values, so fingerprints should not be
 used as metric labels or emitted per request. The diagnostics vertical adds no
 metric family, event type, wire field, label, or other observation dimension,
 and collector reset cannot alter it.
+
+The production protection-ring fingerprint uses diagnostic encoding `v2`
+and protection profile `soklet-mcp-protection-v1`. It compares the exact raw
+bytes of every active and verification-only key, including trailing zero bytes
+and keys longer than HMAC's block size. For fleet convergence, compare
+`getVersion()`, `getProfile()`, and `getValue()` together. The earlier `v1`
+fingerprint could conflate different raw keys that cannot open each other's
+state; it is not sufficient evidence of convergence. During a software rollout,
+different fingerprint versions are incomparable. Finish updating the fleet
+before relying on a matching `v2` fingerprint for key rotation. This diagnostic
+change requires no secret rotation and changes neither sealed request state
+nor trace-correlation fingerprints or tokens.
 
 The sixth bounded Phase 6 vertical established one context-aware, server-wide
 deferred FIFO for the first 16 semantic event variants produced by the runtime:

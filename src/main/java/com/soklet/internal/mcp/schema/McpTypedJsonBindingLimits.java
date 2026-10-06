@@ -27,20 +27,37 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 record McpTypedJsonBindingLimits(int maximumNodeCount,
-		int maximumNestingDepth, int maximumContainerEntryCount) {
+		int maximumNestingDepth, int maximumContainerEntryCount,
+		int maximumExpandedIntegerLengthInCharacters,
+		int maximumTotalExpandedIntegerLengthInCharacters) {
 	private static final int MAXIMUM_SUPPORTED_NODE_COUNT = 1_000_000;
 	private static final int MAXIMUM_SUPPORTED_NESTING_DEPTH = 256;
 	private static final int MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT =
 			1_000_000;
+	private static final int MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS =
+			1_024;
+	private static final int MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS =
+			4 * 1_024 * 1_024;
 	@NonNull
 	private static final McpTypedJsonBindingLimits PRODUCTION_DEFAULTS =
 			new McpTypedJsonBindingLimits(100_000, 128, 100_000);
+
+	McpTypedJsonBindingLimits(int maximumNodeCount, int maximumNestingDepth,
+			int maximumContainerEntryCount) {
+		this(maximumNodeCount, maximumNestingDepth, maximumContainerEntryCount,
+				MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS,
+				MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS);
+	}
 
 	McpTypedJsonBindingLimits {
 		requirePositive(maximumNodeCount, "maximumNodeCount");
 		requirePositive(maximumNestingDepth, "maximumNestingDepth");
 		requirePositive(maximumContainerEntryCount,
 				"maximumContainerEntryCount");
+		requirePositive(maximumExpandedIntegerLengthInCharacters,
+				"maximumExpandedIntegerLengthInCharacters");
+		requirePositive(maximumTotalExpandedIntegerLengthInCharacters,
+				"maximumTotalExpandedIntegerLengthInCharacters");
 		requireAtMost(maximumNodeCount, MAXIMUM_SUPPORTED_NODE_COUNT,
 				"maximumNodeCount");
 		requireAtMost(maximumNestingDepth,
@@ -48,6 +65,12 @@ record McpTypedJsonBindingLimits(int maximumNodeCount,
 		requireAtMost(maximumContainerEntryCount,
 				MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT,
 				"maximumContainerEntryCount");
+		requireAtMost(maximumExpandedIntegerLengthInCharacters,
+				MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS,
+				"maximumExpandedIntegerLengthInCharacters");
+		requireAtMost(maximumTotalExpandedIntegerLengthInCharacters,
+				MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS,
+				"maximumTotalExpandedIntegerLengthInCharacters");
 	}
 
 	@NonNull

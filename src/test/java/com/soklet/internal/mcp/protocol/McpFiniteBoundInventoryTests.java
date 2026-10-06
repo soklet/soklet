@@ -404,6 +404,16 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "binding.container-entries.hard", staticNumber(
 				"com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
 				"MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT"));
+		put(values, "binding.expanded-integer-characters.production", reflectedNumber(binding,
+				"maximumExpandedIntegerLengthInCharacters"));
+		put(values, "binding.expanded-integer-characters.hard", staticNumber(
+				"com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
+				"MAXIMUM_SUPPORTED_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS"));
+		put(values, "binding.total-expanded-integer-characters.production", reflectedNumber(binding,
+				"maximumTotalExpandedIntegerLengthInCharacters"));
+		put(values, "binding.total-expanded-integer-characters.hard", staticNumber(
+				"com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits",
+				"MAXIMUM_SUPPORTED_TOTAL_EXPANDED_INTEGER_LENGTH_IN_CHARACTERS"));
 		put(values, "binding.enum-class-file-bytes", staticNumber(
 				"com.soklet.internal.mcp.schema.McpRuntimeEnumNameReader",
 				"MAXIMUM_CLASS_FILE_SIZE_IN_BYTES"));
@@ -513,9 +523,14 @@ public class McpFiniteBoundInventoryTests {
 				McpTaskManager.fromInMemoryDefaults();
 		put(values, "queue.task-manager-retained-capacity",
 				taskManager.getMaximumRetainedTasks());
-		put(values, "queue.task-notification-projection-capacity", staticNumber(
-				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
-				"MAXIMUM_TASK_NOTIFICATION_PROJECTION_QUEUE_CAPACITY"));
+		put(values, "queue.task-notification-projection-owner-capacity.default",
+				(long) transport.maximumConnections() * staticNumber(
+						"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+						"SUBSCRIPTION_PROJECTION_OWNER_COUNT").longValue()
+						+ staticNumber("com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+								"MAXIMUM_LEGACY_MAINTENANCE_JOBS").longValue());
+		put(values, "queue.metric-events.pending", staticNumber(
+				"com.soklet.DefaultMcpServer", "MAXIMUM_PENDING_MCP_METRIC_EVENTS"));
 		put(values, "queue.task-notification-projection-concurrency", staticNumber(
 				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
 				"MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY"));
@@ -580,6 +595,17 @@ public class McpFiniteBoundInventoryTests {
 				McpLegacySessionStore.class.getName(), "MINIMUM_EVICTION_IDLE_NANOS"));
 		put(values, "session.maximum-active-calls", staticNumber(
 				McpLegacySessionStore.class.getName(), "MAXIMUM_ACTIVE_CALLS_PER_SESSION"));
+		put(values, "session.maximum-control-calls-per-session", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_CONTROL_CALLS_PER_SESSION"));
+		put(values, "session.maximum-control-calls-per-owner", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_CONTROL_CALLS_PER_OWNER"));
+		put(values, "session.maximum-control-calls-global", staticNumber(
+				McpLegacySessionStore.class.getName(), "MAXIMUM_CONTROL_CALLS_GLOBAL"));
+		put(values, "session.maximum-control-body-bytes", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime", "MAXIMUM_LEGACY_CONTROL_BODY_BYTES"));
+		put(values, "session.maximum-consecutive-authorization-failures", staticNumber(
+				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime$LegacyUriGrantControl",
+				"MAXIMUM_CONSECUTIVE_AUTHORIZATION_FAILURES"));
 		put(values, "session.maximum-anonymous-sessions", staticNumber(
 				McpLegacySessionStore.class.getName(), "MAXIMUM_ANONYMOUS_SESSIONS"));
 		put(values, "session.maximum-logical-gets", staticNumber(

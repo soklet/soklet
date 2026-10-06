@@ -73,6 +73,16 @@ The fingerprint covers all key IDs, roles, profile identifiers, and key
 material without exposing raw material. It proves ring equality, not key
 provenance, node identity, readiness, or reservation drain.
 
+Use diagnostic fingerprint encoding `v2`, whose comparison includes exact raw
+key bytes, and the protection profile `soklet-mcp-protection-v1`. The earlier
+`v1` fingerprint could match for different keys because it used raw material
+directly as an HMAC key; some HMAC-equivalent keys seal state differently.
+Fingerprint versions are incomparable. During a software rollout, finish
+updating all nodes before using matching `v2` fingerprints to approve staging
+or activation. This diagnostic change requires no secret rotation and changes
+neither the protection profile nor existing sealed state. Always compare the
+version, profile, and value together.
+
 ## Phase 1: stage everywhere
 
 On each node, call:

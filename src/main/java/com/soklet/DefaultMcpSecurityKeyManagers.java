@@ -137,10 +137,13 @@ final class DefaultMcpSecurityKeyManagers
 			TRACE_ALGORITHM + "\0");
 	@NonNull
 	private static final byte[] PROTECTION_ENTRY_DOMAIN = bytes(
-			"soklet-mcp-key-fingerprint-v1\0");
+			"soklet-mcp-key-fingerprint-v2\0");
+	@NonNull
+	private static final byte[] PROTECTION_FINGERPRINT_SALT = sha256(bytes(
+			"soklet-mcp-key-fingerprint-extract-v2\0"));
 	@NonNull
 	private static final byte[] PROTECTION_RING_DOMAIN = bytes(
-			"soklet-mcp-keyring-fingerprint-v1\0");
+			"soklet-mcp-keyring-fingerprint-v2\0");
 	@NonNull
 	private static final byte[] TRACE_ENTRY_DOMAIN = bytes(
 			"soklet-mcp-trace-key-fingerprint-v1\0");
@@ -1145,13 +1148,10 @@ final class DefaultMcpSecurityKeyManagers
 			@NonNull OwnedSecretKey activeKey,
 			@NonNull Iterable<@NonNull OwnedSecretKey> verificationKeys) {
 		List<FingerprintRecord> records = new ArrayList<>();
-		records.add(fingerprintRecord(activeKey.keyId(),
-				McpProtectionKeyringFingerprint.PROFILE, ACTIVE_ROLE,
-				activeKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
+		records.add(protectionFingerprintRecord(activeKey, ACTIVE_ROLE));
 		for (OwnedSecretKey verificationKey : verificationKeys)
-			records.add(fingerprintRecord(verificationKey.keyId(),
-					McpProtectionKeyringFingerprint.PROFILE, VERIFICATION_ROLE,
-					verificationKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
+			records.add(protectionFingerprintRecord(verificationKey,
+					VERIFICATION_ROLE));
 		records.sort(Comparator.comparing(FingerprintRecord::metadata,
 				DefaultMcpSecurityKeyManagers::compareUnsigned));
 		ByteArrayOutputStream aggregate = new ByteArrayOutputStream();
@@ -1160,6 +1160,23 @@ final class DefaultMcpSecurityKeyManagers
 		records.forEach(record -> aggregate.writeBytes(record.encoded()));
 		return new McpProtectionKeyringFingerprint(base64Url(sha256(
 				aggregate.toByteArray())));
+	}
+
+	@NonNull
+	private static FingerprintRecord protectionFingerprintRecord(
+			@NonNull OwnedSecretKey key, byte role) {
+		byte[] keyMaterial = key.copyKeyMaterial();
+		try {
+			// Raw bytes are the HMAC message, not its key: zero padding and
+			// long-key hashing must not merge distinct sealing configurations.
+			// fingerprintRecord consumes and wipes the derived fingerprint key.
+			return fingerprintRecord(key.keyId(),
+					McpProtectionKeyringFingerprint.PROFILE, role,
+					hmacSha256(PROTECTION_FINGERPRINT_SALT, keyMaterial),
+					PROTECTION_ENTRY_DOMAIN);
+		} finally {
+			Arrays.fill(keyMaterial, (byte) 0);
+		}
 	}
 
 	@NonNull

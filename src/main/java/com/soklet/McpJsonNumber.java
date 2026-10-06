@@ -26,6 +26,10 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An immutable, exactly represented JSON number.
+ * <p>Equality and hashing compare numeric values regardless of decimal scale.
+ * For example, {@code 1}, {@code 1.0} and {@code 1E+0} are equal. The supplied
+ * {@link BigDecimal}, including its scale, remains available from
+ * {@link #getValue()}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -49,26 +53,35 @@ public final class McpJsonNumber implements McpJsonValue {
 		this.value = requireNonNull(value);
 	}
 
-	/** @return exactly represented numeric value */
+	/** @return exactly represented numeric value, retaining the supplied scale */
 	@NonNull
 	public BigDecimal getValue() {
 		return this.value;
 	}
 
-	/** @return whether this object contains the same exact numeric value */
+	/** @return whether this object contains the same numeric value regardless of scale */
 	@Override
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
 			return true;
 		if (!(other instanceof McpJsonNumber number))
 			return false;
-		return this.value.equals(number.value);
+		return this.value.compareTo(number.value) == 0;
 	}
 
-	/** @return value-based hash code */
+	/** @return numeric hash code independent of decimal scale */
 	@Override
 	public int hashCode() {
-		return this.value.hashCode();
+		if (this.value.signum() == 0)
+			return 0;
+		// Normalize the coefficient with a zero starting scale. Stripping the
+		// original decimal can underflow an extreme supplied scale; keeping the
+		// combined scale in a long handles every supported BigDecimal value
+		// without rendering or expanding its exponent.
+		BigDecimal coefficient = new BigDecimal(this.value.unscaledValue())
+				.stripTrailingZeros();
+		long normalizedScale = (long) this.value.scale() + coefficient.scale();
+		return 31 * coefficient.unscaledValue().hashCode() + Long.hashCode(normalizedScale);
 	}
 
 	/** @return redacted diagnostic rendering */

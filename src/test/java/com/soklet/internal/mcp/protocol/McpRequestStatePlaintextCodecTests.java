@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -227,6 +228,11 @@ public class McpRequestStatePlaintextCodecTests {
 		assertInvalidPlaintext(replacing(fields, "issuedAtEpochSecond",
 				new McpJsonNumber(new BigDecimal(
 						BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)))));
+		for (String field : List.of("version", "round", "issuedAtEpochSecond",
+				"issuedAtNanoAdjustment", "expiresAtEpochSecond", "expiresAtNanoAdjustment"))
+			for (String value : List.of("1e9999", "-1e9999", "1e-9999"))
+				assertInvalidPlaintext(replacing(fields, field,
+						new McpJsonNumber(new BigDecimal(value))));
 
 		String digest = ((McpJsonString) fields.get("bindingDigest")).value();
 		char last = digest.charAt(digest.length() - 1);

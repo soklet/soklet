@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class McpSecurityControlsTests {
 	private static final String PROTECTION_GOLDEN_FINGERPRINT =
-			"OWPmy_Ur2pTh8YYC4DR3dErezwsBfW_g7WdC0DbZnm0";
+			"JXu-Td1vDi5VOz0j_tqs2oFOGGKM_p6sbWRRfBTbE1A";
 	private static final String TRACE_GOLDEN_FINGERPRINT =
 			"q6lgRnXgzPRK0yoi_va7Qcax0EjCUuFum3A38-Vp4J4";
 	private static final String TRACE_TOKEN_PRIMARY_FULL_HMAC =
@@ -186,7 +186,8 @@ public class McpSecurityControlsTests {
 		McpProtectionKeyringFingerprint fingerprint = controls(ring, null)
 				.getKeyringSnapshot().orElseThrow().getFingerprint();
 
-		Assertions.assertEquals("v1", fingerprint.getVersion());
+		Assertions.assertEquals("v2", fingerprint.getVersion());
+		Assertions.assertEquals("v2", McpProtectionKeyringFingerprint.VERSION);
 		Assertions.assertEquals("soklet-mcp-protection-v1",
 				fingerprint.getProfile());
 		Assertions.assertEquals(PROTECTION_GOLDEN_FINGERPRINT,
@@ -197,6 +198,13 @@ public class McpSecurityControlsTests {
 				.getKeyringSnapshot().orElseThrow().getFingerprint());
 		Assertions.assertEquals(fingerprint.hashCode(), controls(ring, null)
 				.getKeyringSnapshot().orElseThrow().getFingerprint().hashCode());
+		Assertions.assertEquals(fingerprint, controls(McpProtectionKeyring
+				.withActiveKey(protectionKey("active", 0))
+				.addVerificationKeys(List.of(
+						protectionKey("verify-a", 32),
+						protectionKey("verify-b", 64)))
+				.build(), null).getKeyringSnapshot().orElseThrow()
+				.getFingerprint());
 		Assertions.assertNotEquals(fingerprint, controls(McpProtectionKeyring
 				.withActiveKey(protectionKey("active", 1))
 				.addVerificationKeys(List.of(
@@ -204,6 +212,80 @@ public class McpSecurityControlsTests {
 						protectionKey("verify-b", 64)))
 				.build(), null).getKeyringSnapshot().orElseThrow()
 				.getFingerprint());
+	}
+
+	@Test
+	public void protectionFingerprintDistinguishesZeroPaddedRawKeys()
+			throws Exception {
+		byte[] key = bytesFromLength(1, 32);
+		assertProtectionFingerprintDistinguishesHmacEquivalentKeys(key,
+				Arrays.copyOf(key, 33));
+	}
+
+	@Test
+	public void protectionFingerprintDistinguishesLongRawKeyFromItsHash()
+			throws Exception {
+		byte[] key = bytesFromLength(1, 65);
+		assertProtectionFingerprintDistinguishesHmacEquivalentKeys(key,
+				MessageDigest.getInstance("SHA-256").digest(key));
+	}
+
+	private static void assertProtectionFingerprintDistinguishesHmacEquivalentKeys(
+			byte[] firstMaterial, byte[] secondMaterial) throws Exception {
+		Assertions.assertArrayEquals(hmacSha256(firstMaterial, new byte[]{1}),
+				hmacSha256(secondMaterial, new byte[]{1}),
+				"The regression keys must be equivalent when used directly by HMAC.");
+		McpProtectionKey firstKey = McpProtectionKey.fromIdAndBytes(
+				"same-id", firstMaterial);
+		McpProtectionKey secondKey = McpProtectionKey.fromIdAndBytes(
+				"same-id", secondMaterial);
+		McpProtectionKeyring firstRing = McpProtectionKeyring
+				.withActiveKey(firstKey).build();
+		McpProtectionKeyring secondRing = McpProtectionKeyring
+				.withActiveKey(secondKey).build();
+		DefaultMcpSecurityKeyManagers first = deterministicControls(
+				McpProtectionConfig.withKeyring(firstRing).build(),
+				bytesFromLength(64, 24), bytesFromLength(96, 12));
+		DefaultMcpSecurityKeyManagers second = deterministicControls(
+				McpProtectionConfig.withKeyring(secondRing).build(),
+				bytesFromLength(64, 24), bytesFromLength(96, 12));
+		McpRequestStateProtectionContext context = protectionContext(32);
+		byte[] plaintext = new byte[]{1, 2, 3};
+		String firstState = first.sealRequestState(context, plaintext);
+		String secondState = second.sealRequestState(context, plaintext);
+		Assertions.assertNotEquals(firstState, secondState);
+		Assertions.assertArrayEquals(plaintext,
+				first.openRequestState(context, firstState));
+		Assertions.assertArrayEquals(plaintext,
+				second.openRequestState(context, secondState));
+		assertInvalidState(() -> first.openRequestState(context, secondState));
+		assertInvalidState(() -> second.openRequestState(context, firstState));
+
+		McpProtectionKeyringSnapshot firstSnapshot = first.getKeyringSnapshot()
+				.orElseThrow();
+		McpProtectionKeyringSnapshot secondSnapshot = second.getKeyringSnapshot()
+				.orElseThrow();
+		Assertions.assertNotEquals(firstSnapshot.getFingerprint(),
+				secondSnapshot.getFingerprint(),
+				"Different sealing keys must not report fingerprint convergence.");
+		Assertions.assertNotEquals(firstSnapshot, secondSnapshot);
+		Assertions.assertEquals(firstSnapshot, controls(firstRing, null)
+				.getKeyringSnapshot().orElseThrow());
+		Assertions.assertArrayEquals(plaintext,
+				controls(firstRing, null).openRequestState(context, firstState));
+
+		McpProtectionKey active = protectionKey("active", 96);
+		McpProtectionKeyring firstVerificationRing = McpProtectionKeyring
+				.withActiveKey(active).addVerificationKey(firstKey).build();
+		McpProtectionKeyring secondVerificationRing = McpProtectionKeyring
+				.withActiveKey(active).addVerificationKey(secondKey).build();
+		Assertions.assertNotEquals(controls(firstVerificationRing, null)
+				.getKeyringSnapshot().orElseThrow().getFingerprint(),
+				controls(secondVerificationRing, null)
+						.getKeyringSnapshot().orElseThrow().getFingerprint(),
+				"Verification-only keys must also participate by exact raw bytes.");
+		Assertions.assertArrayEquals(firstMaterial, firstKey.copyKeyMaterial());
+		Assertions.assertArrayEquals(secondMaterial, secondKey.copyKeyMaterial());
 	}
 
 	@Test

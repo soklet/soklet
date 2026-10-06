@@ -48,10 +48,16 @@ public class McpBootstrapValueTests {
 		Assertions.assertEquals(URI.create("https://catalog.example/mcp"),
 				implementation.getWebsiteUrl().orElseThrow());
 
+		McpImplementation blankClientName = McpImplementation.withNameAndVersion(" ", "4.0.0").build();
+		McpImplementation blankClientVersion = McpImplementation.withNameAndVersion("catalog", "").build();
+		Assertions.assertEquals(" ", blankClientName.getName());
+		Assertions.assertEquals("", blankClientVersion.getVersion());
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpImplementation.withNameAndVersion(" ", "4.0.0"));
+				() -> McpEndpoint.withPath("/mcp", blankClientName,
+						java.util.Set.of(McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpImplementation.withNameAndVersion("catalog", ""));
+				() -> McpEndpoint.withPath("/mcp", blankClientVersion,
+						java.util.Set.of(McpProtocolVersion.V2026_07_28)));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpImplementation.withNameAndVersion("catalog", "4.0.0")
 						.websiteUrl(URI.create("relative")));
@@ -197,7 +203,7 @@ public class McpBootstrapValueTests {
 		Assertions.assertEquals(java.math.BigDecimal.valueOf(42), number.getValue());
 		Assertions.assertEquals(number, sameNumber);
 		Assertions.assertEquals(number.hashCode(), sameNumber.hashCode());
-		Assertions.assertNotEquals(number, McpJsonNumber.fromValue(
+		Assertions.assertEquals(number, McpJsonNumber.fromValue(
 				new java.math.BigDecimal("42.0")));
 		Assertions.assertEquals("McpJsonString{value=<redacted>}", string.toString());
 		Assertions.assertEquals("McpJsonBoolean{value=<redacted>}", bool.toString());
@@ -253,11 +259,11 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
-	public void operationFreeEndpointIsValidAndNormalizesItsPath() {
+	public void operationFreeEndpointIsValidAndPreservesItsPath() {
 		McpImplementation serverInformation = McpImplementation
 				.withNameAndVersion("catalog", "4.0.0")
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ", serverInformation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", serverInformation, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.instructions("Use this endpoint for catalog discovery.")
 				.build();
 
@@ -266,6 +272,9 @@ public class McpBootstrapValueTests {
 		Assertions.assertTrue(endpoint.isServerInfoIncluded());
 		Assertions.assertEquals("Use this endpoint for catalog discovery.",
 				endpoint.getInstructions().orElseThrow());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpEndpoint.withPath(" /mcp// ", serverInformation,
+						java.util.Set.of(McpProtocolVersion.V2026_07_28)));
 	}
 
 	@Test

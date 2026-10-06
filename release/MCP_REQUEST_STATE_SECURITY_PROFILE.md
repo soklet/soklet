@@ -268,6 +268,13 @@ as a metric label, emit it per request, or retain it without bounds. Follow
 [the key-rotation runbook](MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md) for live
 production changes.
 
+Diagnostic fingerprint encoding `v2` includes exact raw key bytes through a
+separate derivation. Its version is independent of this `v1` protection
+profile: changing the fingerprint does not change any label, envelope, key
+derivation, associated data, or ciphertext defined here. Compare fingerprint
+version, profile, and value together; earlier `v1` fingerprints are not proof
+of convergence because HMAC-equivalent raw keys may seal state differently.
+
 This profile does not supply authentication, OAuth, authorization policy,
 TLS, one-time workflow consumption, durable state storage, or protection for
 application-owned cursors. Those remain deployment or application concerns.

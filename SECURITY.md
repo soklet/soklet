@@ -350,7 +350,7 @@ Production deployments should use
 key material containing at least 256 bits of cryptographic entropy. Soklet's
 built-in versioned envelope uses authenticated encryption, copies the initial
 ring into server-owned state, redacts key material from public surfaces, and
-supports live stage/activate/remove rotation through `McpProtectionControl`.
+supports live stage/activate/remove rotation through `McpProtectionKeyringManager`.
 The initial `McpProtectionKeyring` exposes only its non-secret active and
 verification key IDs; live inspection likewise returns only a secret-free
 `McpProtectionKeyringSnapshot`.
@@ -1203,6 +1203,15 @@ independent of protection mode and present exactly when trace correlation was
 enabled at construction. Successful live ring/key rotations appear in fresh
 snapshots, survive listener lifecycle transitions, and do not change retained
 snapshots.
+
+Protection-ring fingerprint encoding `v2` compares exact raw key bytes under
+the unchanged `soklet-mcp-protection-v1` profile. Its separate derivation treats
+raw key material as the HMAC message, avoiding the zero-padding and long-key
+hashing equivalence of directly keyed HMAC. Compare fingerprint version,
+profile, and value together. Earlier `v1` fingerprints can merge different
+sealing keys and must not be used as proof of fleet convergence. A fingerprint
+version change affects diagnostic comparison only; it requires no key rotation
+and does not change request-state encryption or trace correlation.
 
 Both fingerprints are deterministic operational deployment-comparison
 metadata, not authentication, authorization, or token-derivation inputs. The

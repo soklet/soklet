@@ -61,7 +61,8 @@ final class McpTypedJsonBindingException extends IllegalArgumentException {
 	enum Limit {
 		NODE_COUNT,
 		NESTING_DEPTH,
-		CONTAINER_ENTRY_COUNT
+		CONTAINER_ENTRY_COUNT,
+		TOTAL_EXPANDED_INTEGER_LENGTH
 	}
 
 	@NonNull
@@ -133,7 +134,7 @@ final class McpTypedJsonBindingException extends IllegalArgumentException {
 			case NON_INTEGER_NUMBER ->
 					"The JSON number is not mathematically integral.";
 			case NUMBER_OUT_OF_RANGE ->
-					"The number is outside the declared Java type's range.";
+					"The number exceeds the declared Java type's range or the typed integer size limit.";
 			case NON_FINITE_NUMBER ->
 					"NaN and infinite numbers cannot be represented as JSON.";
 			case JAVA_TYPE_MISMATCH ->

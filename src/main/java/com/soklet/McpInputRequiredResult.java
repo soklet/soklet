@@ -121,6 +121,11 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	/**
 	 * Returns application-defined JSON for Soklet to protect as request state.
 	 *
+	 * <p>This inspection value retains the supplied representation. After
+	 * protection and a verified retry, numeric leaves returned by
+	 * {@link McpRequestContext#getFrameworkRequestState()} use the canonical
+	 * numeric form and do not retain the original decimal scale.
+	 *
 	 * @return framework-protected request-state value, or empty when absent
 	 */
 	@NonNull

@@ -20,6 +20,7 @@ import com.soklet.internal.microhttp.Header;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -189,16 +190,19 @@ final class McpCustomMirroredHeaderValidator {
 		if (!decimalInteger(decodedValue))
 			return false;
 
-		BigInteger bodyInteger;
+		// Check the declared safe range before exact conversion. A compact
+		// exponent must not allocate an expanded integer just to be rejected.
+		BigDecimal decimal = bodyValue.value();
+		if (decimal.compareTo(new BigDecimal(MINIMUM_SAFE_INTEGER)) < 0
+				|| decimal.compareTo(new BigDecimal(MAXIMUM_SAFE_INTEGER)) > 0)
+			return false;
+		long bodyInteger;
 		try {
-			bodyInteger = bodyValue.value().toBigIntegerExact();
+			bodyInteger = decimal.longValueExact();
 		} catch (ArithmeticException exception) {
 			return false;
 		}
-		if (bodyInteger.compareTo(MINIMUM_SAFE_INTEGER) < 0
-				|| bodyInteger.compareTo(MAXIMUM_SAFE_INTEGER) > 0)
-			return false;
-		return new BigInteger(decodedValue).equals(bodyInteger);
+		return Long.parseLong(decodedValue) == bodyInteger;
 	}
 
 	private boolean decimalInteger(@NonNull String value) {

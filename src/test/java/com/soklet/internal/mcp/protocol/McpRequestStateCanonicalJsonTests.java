@@ -83,6 +83,24 @@ public class McpRequestStateCanonicalJsonTests {
 	}
 
 	@Test
+	public void publicNumericTreesRemainEqualAfterTheUnchangedCanonicalEncoding() {
+		com.soklet.McpJsonObject original = com.soklet.McpJsonObject.builder()
+				.put("integer", new BigDecimal("100.00"))
+				.put("decimal", new BigDecimal("1.50"))
+				.put("nested", com.soklet.McpJsonArray.builder()
+						.add(new BigDecimal("1000.00")).add(new BigDecimal("-0.000")).build())
+				.put("tiny", new BigDecimal("0.00000010")).build();
+		byte[] bytes = McpRequestStateCanonicalJson.canonicalize(
+				McpPublicJsonValueConverter.toInternal(original), 4_096);
+		Assertions.assertEquals("{\"decimal\":1.5,\"integer\":1E+2,\"nested\":[1E+3,0],\"tiny\":1E-7}",
+				new String(bytes, StandardCharsets.UTF_8));
+		com.soklet.McpJsonValue restored = McpPublicJsonValueConverter.toPublic(
+				McpRequestStateCanonicalJson.parseCanonical(bytes, 4_096));
+		Assertions.assertEquals(original, restored);
+		Assertions.assertEquals(original.hashCode(), restored.hashCode());
+	}
+
+	@Test
 	public void preservesCanonicallyDistinctUnicodeAndRejectsMalformedUtf8() {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("é", new McpJsonString("é"));
